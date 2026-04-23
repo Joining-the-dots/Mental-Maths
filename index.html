@@ -1036,8 +1036,15 @@ function explain(a, b) {
       `${l} × 5 = ${l*5}. ${l} × 2 = ${l*2}. ${l*5} + ${l*2} = ${product}.`
     ]};
   }
+  if (s === 12) {
+    return { title: '× 12 (×10 + ×2)', steps: [
+      `× 12 is one ten-lot plus one two-lot.`,
+      `${l} × 10 = ${l*10}. ${l} × 2 = ${l*2}.`,
+      `Add: ${l*10} + ${l*2} = ${product}.`
+    ]};
+  }
 
-  // Squares (a === b) — special trick for numbers ending in 5
+  // Squares (a === b)
   if (a === b) {
     if (a % 10 === 5 && a >= 5 && a <= 95) {
       const n = Math.floor(a / 10);
@@ -1047,28 +1054,139 @@ function explain(a, b) {
         `Answer: ${n*(n+1)}25 = ${product}.`
       ]};
     }
+    if (a % 10 === 0 && a >= 10 && a <= 90) {
+      const n = a / 10;
+      return { title: 'Squaring a round ten', steps: [
+        `${a} = ${n} × 10.`,
+        `${n}² = ${n*n}. Stick 00 on the end: ${product}.`
+      ]};
+    }
+    if (a >= 11 && a <= 99) {
+      const round = Math.round(a / 10) * 10;
+      const d = a - round;
+      const other = a + d;
+      return { title: 'Close-pair square trick', steps: [
+        `${a} is ${Math.abs(d)} ${d > 0 ? 'more' : 'less'} than ${round}.`,
+        `Do ${round} × ${other} = ${round * other}.`,
+        `Add ${Math.abs(d)}² = ${d*d}. Total: ${round*other} + ${d*d} = ${product}.`
+      ]};
+    }
     return { title: 'A square number', steps: [
-      `${a} × ${a} is called "${a} squared".`,
-      `Try the close-pair trick: (${a}−1) × (${a}+1) + 1 = ${(a-1)*(a+1)} + 1 = ${product}.`
+      `${a} × ${a} = ${product}.`
     ]};
   }
 
-  // Near a round number (within 2 of a multiple of 10), smallish other side
+  // Both end in 5 (and both >= 15): multiply front digits, add their average, ×100, +25
+  if (s >= 15 && s <= 95 && l <= 95 && s % 10 === 5 && l % 10 === 5) {
+    const x = Math.floor(s / 10), y = Math.floor(l / 10);
+    const prodXY = x * y;
+    const avg = (x + y) / 2;
+    const sum = prodXY + avg;
+    return { title: 'Both end in 5', steps: [
+      `Front digits: ${x} and ${y}. Multiply: ${x} × ${y} = ${prodXY}.`,
+      `Average them: (${x}+${y})÷2 = ${avg}. Add: ${prodXY} + ${avg} = ${sum}.`,
+      `× 100 then + 25: ${sum*100} + 25 = ${product}.`
+    ]};
+  }
+
+  // Teens × Teens (both 12–19, not equal)
+  if (s >= 12 && l <= 19) {
+    const u1 = s - 10, u2 = l - 10;
+    const tensPart = (s + u2) * 10;
+    const backDigit = u1 * u2;
+    return { title: 'Teens × Teens', steps: [
+      `Add the other's ones to ${s}: ${s} + ${u2} = ${s+u2}.`,
+      `Stick a 0 on the end: ${tensPart}.`,
+      `Multiply the ones: ${u1} × ${u2} = ${backDigit}. Add: ${tensPart} + ${backDigit} = ${product}.`
+    ]};
+  }
+
+  // Same tens, ones sum to 10
+  if (s >= 11 && l <= 99 && Math.floor(s/10) === Math.floor(l/10) && (s%10 + l%10) === 10) {
+    const t = Math.floor(s/10);
+    const u1 = s % 10, u2 = l % 10;
+    const front = t * (t + 1);
+    const back = u1 * u2;
+    const backStr = back < 10 ? '0' + back : '' + back;
+    return { title: 'Same tens, ones add to 10', steps: [
+      `Both start with ${t}. Ones add to 10 (${u1}+${u2}=10).`,
+      `${t} × ${t+1} = ${front} — that's the front.`,
+      `${u1} × ${u2} = ${back} → "${backStr}" — that's the back.`,
+      `Answer: ${product}.`
+    ]};
+  }
+
+  // Tens add to 10, same ones
+  if (s >= 11 && l <= 99 && (Math.floor(s/10) + Math.floor(l/10)) === 10 && s%10 === l%10) {
+    const a_t = Math.floor(s/10), b_t = Math.floor(l/10);
+    const u = s % 10;
+    const front = a_t * b_t + u;
+    const back = u * u;
+    const backStr = back < 10 ? '0' + back : '' + back;
+    return { title: 'Tens add to 10, same ones', steps: [
+      `Tens digits (${a_t} and ${b_t}) add to 10. Same ones: ${u}.`,
+      `${a_t} × ${b_t} + ${u} = ${front} — that's the front.`,
+      `${u}² = ${back} → "${backStr}" — that's the back.`,
+      `Answer: ${product}.`
+    ]};
+  }
+
+  // Both close to 100 (Nikhilam). Fires before the general "same tens digit"
+  // trick so 97×98 uses the cleaner cross-subtract instead of 105 × 9.
+  // Restricted to cases where the product of differences stays < 100 so the
+  // "back" stays a tidy two digits with no carry narrative.
+  if (s >= 85 && l <= 99) {
+    const da = 100 - s, db = 100 - l;
+    const back = da * db;
+    if (back < 100) {
+      const front = s - db;
+      const backStr = back < 10 ? '0' + back : '' + back;
+      return { title: 'Close to 100', steps: [
+        `${s} is ${da} below 100, ${l} is ${db} below 100.`,
+        `Cross-subtract: ${s} − ${db} = ${front} (or ${l} − ${da}, same answer).`,
+        `${da} × ${db} = ${back} → "${backStr}".`,
+        `Answer: ${product}.`
+      ]};
+    }
+  }
+
+  // Same tens digit, any ones (general — catches same-tens cases not covered above)
+  if (s >= 12 && l <= 99 && Math.floor(s/10) === Math.floor(l/10)) {
+    const t = Math.floor(s/10);
+    const u1 = s % 10, u2 = l % 10;
+    const step1 = t * (s + u2);
+    const back = u1 * u2;
+    return { title: 'Same tens digit', steps: [
+      `Both start with ${t}. Add one's ones to the other: ${s} + ${u2} = ${s+u2}.`,
+      `Times the shared tens ${t}: ${s+u2} × ${t} = ${step1}. Stick a 0 on: ${step1*10}.`,
+      `${u1} × ${u2} = ${back}. Add: ${step1*10} + ${back} = ${product}.`
+    ]};
+  }
+
+  // Near a round number (within 2 of a multiple of 10) — either side counts
   if (l >= 10) {
-    const round = Math.round(l/10)*10;
-    const diff = l - round;
-    if (Math.abs(diff) <= 2 && s <= 12 && round > 0) {
+    const roundL = Math.round(l/10)*10;
+    const diffL = l - roundL;
+    const roundS = s >= 10 ? Math.round(s/10)*10 : 0;
+    const diffS = s - roundS;
+    let target = null, other = 0, round = 0, diff = 0;
+    if (Math.abs(diffL) >= 1 && Math.abs(diffL) <= 2 && roundL > 0) {
+      target = l; other = s; round = roundL; diff = diffL;
+    } else if (s >= 10 && Math.abs(diffS) >= 1 && Math.abs(diffS) <= 2 && roundS > 0) {
+      target = s; other = l; round = roundS; diff = diffS;
+    }
+    if (target !== null) {
       if (diff > 0) {
         return { title: 'Round then adjust', steps: [
-          `${l} is just ${diff} more than ${round}.`,
-          `${round} × ${s} = ${round*s}.`,
-          `Add ${diff} × ${s} = ${diff*s}. Total: ${product}.`
+          `${target} is just ${diff} more than ${round}.`,
+          `${round} × ${other} = ${round*other}.`,
+          `Add ${diff} × ${other} = ${diff*other}. Total: ${product}.`
         ]};
-      } else if (diff < 0) {
+      } else {
         return { title: 'Round then adjust', steps: [
-          `${l} is just ${-diff} less than ${round}.`,
-          `${round} × ${s} = ${round*s}.`,
-          `Subtract ${-diff} × ${s} = ${-diff*s}. Total: ${product}.`
+          `${target} is just ${-diff} less than ${round}.`,
+          `${round} × ${other} = ${round*other}.`,
+          `Subtract ${-diff} × ${other} = ${-diff*other}. Total: ${product}.`
         ]};
       }
     }

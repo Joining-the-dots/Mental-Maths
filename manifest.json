@@ -1,0 +1,16 @@
+{
+  "name": "Times Table Quest",
+  "short_name": "Times Tables",
+  "description": "A fun mental-maths times tables game for kids.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "theme_color": "#6c5ce7",
+  "background_color": "#6c5ce7",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-256.png", "sizes": "256x256", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}

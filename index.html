@@ -2,8 +2,27 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
-<title>Times Table Quest</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover" />
+<title>Times Table Quest — V3</title>
+
+<!-- PWA -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#6c5ce7">
+<meta name="description" content="A fun mental-maths times tables game for kids.">
+<link rel="icon" href="icons/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/icon-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+
+<!-- iOS home-screen app -->
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="apple-touch-icon" sizes="152x152" href="icons/icon-152.png">
+<link rel="apple-touch-icon" sizes="167x167" href="icons/icon-167.png">
+<link rel="apple-touch-icon" sizes="180x180" href="icons/icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Times Tables">
+<meta name="mobile-web-app-capable" content="yes">
+
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Baloo+2:wght@600;700;800&display=swap" rel="stylesheet">
@@ -786,7 +805,7 @@
 
 <script>
 /* ================================================================
-   Times Table Quest
+   Times Table Quest — V3 (Golden Run + commutative grid + PWA)
    Single-file app. Data persists in localStorage.
    ================================================================ */
 
@@ -808,6 +827,39 @@ function saveState() {
   catch (e) { console.warn('Failed to save:', e); }
 }
 let state = loadState();
+
+/* Migration: older versions stored "aXb" and "bXa" as separate records.
+   Fold each reversed pair into a single canonical key so existing stats survive. */
+(function migrateCanonicalKeys() {
+  if (!state || !state.users) return;
+  let changed = false;
+  for (const name in state.users) {
+    const u = state.users[name];
+    if (!u || !u.cells) continue;
+    const merged = {};
+    for (const k in u.cells) {
+      const m = /^(\d+)x(\d+)$/.exec(k);
+      if (!m) { merged[k] = u.cells[k]; continue; }
+      const a = +m[1], b = +m[2];
+      const canon = Math.min(a,b) + 'x' + Math.max(a,b);
+      if (canon !== k) changed = true;
+      const rec = u.cells[k];
+      if (!merged[canon]) {
+        merged[canon] = rec;
+      } else {
+        const base = merged[canon];
+        base.attempts = (base.attempts||0) + (rec.attempts||0);
+        base.correct  = (base.correct||0)  + (rec.correct||0);
+        if (rec.bestTime != null && (base.bestTime == null || rec.bestTime < base.bestTime)) base.bestTime = rec.bestTime;
+        const baseLast = base.lastAt ? Date.parse(base.lastAt) : 0;
+        const recLast  = rec.lastAt  ? Date.parse(rec.lastAt)  : 0;
+        if (recLast > baseLast) { base.streak = rec.streak || 0; base.lastAt = rec.lastAt; }
+      }
+    }
+    u.cells = merged;
+  }
+  if (changed) saveState();
+})();
 
 function currentUser() {
   if (!state.activeUser) return null;
@@ -835,7 +887,11 @@ function makeUser(name, avatar) {
     goldenRuns: []   // history: { date, xMin, xMax, yMin, yMax, won, reached }
   };
 }
-function cellKey(a, b) { return a + 'x' + b; }
+function cellKey(a, b) {
+  // Canonical key — a×b and b×a share the same record so commutative pairs fill in together.
+  const lo = Math.min(a, b), hi = Math.max(a, b);
+  return lo + 'x' + hi;
+}
 function cellRecord(u, a, b) {
   const k = cellKey(a, b);
   if (!u.cells[k]) u.cells[k] = { attempts: 0, correct: 0, streak: 0, bestTime: null, lastAt: null };
@@ -1740,6 +1796,17 @@ if (Object.keys(state.users).length === 1 && state.users.Guest && !state.users.G
     renderUserModal();
     userOverlay.classList.add('show');
   }, 400);
+}
+</script>
+
+<!-- Service worker registration (PWA offline + install) -->
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch((err) => {
+      console.warn('Service worker registration failed:', err);
+    });
+  });
 }
 </script>
 </body>

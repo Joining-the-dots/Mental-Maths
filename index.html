@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover" />
-<title>Times Table Quest — V3</title>
+<title>Times Table Quest — V4</title>
 
 <!-- PWA -->
 <link rel="manifest" href="manifest.json">
@@ -224,25 +224,35 @@
     font-variant-numeric: tabular-nums;
   }
   .hdr {
-    background: var(--header);
+    background-color: #ffdd9e;          /* explicit hex so it's opaque even if var fails */
     color: #7a4a00;
     font-weight: 700;
     position: sticky;
-    z-index: 2;
+    position: -webkit-sticky;            /* Safari fallback */
   }
-  .hdr.top { top: 0; }
-  .hdr.left { left: 0; }
+  .hdr.top {
+    top: 0;
+    z-index: 10;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.06);
+  }
+  .hdr.left {
+    left: 0;
+    z-index: 10;
+    box-shadow: 2px 0 4px rgba(0,0,0,0.06);
+  }
   .hdr.corner {
-    top: 0; left: 0;
-    z-index: 3;
+    top: 0;
+    left: 0;
+    z-index: 20;                         /* above both top + left sticky headers */
     background: linear-gradient(135deg, var(--accent), var(--accent-2));
     color: white;
     font-family: 'Baloo 2', sans-serif;
     font-size: 14px;
+    box-shadow: 2px 2px 6px rgba(0,0,0,0.08);
   }
   /* Highlight columns that are multiples of 10 for readability */
   .hdr.top.tenth, .hdr.left.tenth {
-    background: #ffcf74;
+    background-color: #ffcf74;
     color: #5a3700;
   }
   .cell {
@@ -607,29 +617,53 @@
   }
   .range-row input:focus { border-color: var(--accent-2); }
 
-  .range-presets {
-    display: flex;
-    gap: 6px;
-    flex-wrap: wrap;
-    margin: 8px 0 14px;
+  .difficulty-picker {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin: 10px 0 16px;
   }
-  .range-presets button {
+  .difficulty-picker button {
     border: 2px solid #e8e2f6;
     background: white;
-    padding: 6px 12px;
-    border-radius: 999px;
+    padding: 12px 12px;
+    border-radius: 14px;
     cursor: pointer;
     font-family: inherit;
-    font-weight: 600;
-    font-size: 13px;
-    color: var(--ink-soft);
+    text-align: left;
     transition: all .15s;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
   }
-  .range-presets button:hover { background: var(--neutral); }
-  .range-presets button.selected {
+  .difficulty-picker .diff-emoji {
+    font-size: 22px;
+    line-height: 1;
+  }
+  .difficulty-picker .diff-title {
+    font-weight: 700;
+    font-size: 14px;
+    color: var(--ink);
+    font-family: 'Baloo 2', 'Fredoka', sans-serif;
+    letter-spacing: 0.2px;
+  }
+  .difficulty-picker .diff-desc {
+    font-size: 11px;
+    color: var(--ink-soft);
+    line-height: 1.3;
+  }
+  .difficulty-picker button:hover {
+    background: var(--neutral);
+    transform: translateY(-1px);
+  }
+  .difficulty-picker button.selected {
     border-color: var(--accent-2);
-    background: #f4efff;
-    color: var(--accent-2);
+    background: linear-gradient(135deg, #f4efff, #fef4fb);
+    box-shadow: 0 4px 12px rgba(108,92,231,0.15);
+  }
+  .difficulty-picker button.selected .diff-title { color: var(--accent-2); }
+  @media (max-width: 480px) {
+    .difficulty-picker { grid-template-columns: 1fr; }
   }
 
   .golden-celebration {
@@ -646,6 +680,527 @@
     70%  { transform: rotate(10deg)   scale(1.15); opacity: 1; }
     100% { transform: rotate(0)       scale(1); opacity: 1; }
   }
+
+  /* ========= Lightning Round ========= */
+  .lr-score {
+    font-family: 'Baloo 2', sans-serif;
+    font-size: 44px;
+    font-weight: 800;
+    color: var(--accent-2);
+    text-align: center;
+    margin: 6px 0 4px;
+  }
+  .lr-best {
+    font-size: 13px;
+    color: var(--ink-soft);
+    text-align: center;
+    margin-bottom: 10px;
+  }
+  .lr-penalty {
+    position: fixed;
+    top: 30%;
+    left: 50%;
+    transform: translateX(-50%);
+    pointer-events: none;
+    font-family: 'Baloo 2', sans-serif;
+    font-weight: 800;
+    font-size: 42px;
+    color: #e74c3c;
+    text-shadow: 0 2px 8px rgba(255,0,0,0.3);
+    z-index: 220;
+    animation: lr-penalty 1s ease-out forwards;
+  }
+  @keyframes lr-penalty {
+    0%   { opacity: 0; transform: translate(-50%, 20px) scale(0.5); }
+    20%  { opacity: 1; transform: translate(-50%, 0)   scale(1.1); }
+    100% { opacity: 0; transform: translate(-50%, -40px) scale(1); }
+  }
+  .btn-lightning {
+    background: linear-gradient(135deg, #ffb400, #ff6b6b);
+    color: white;
+    box-shadow: 0 4px 14px rgba(255, 100, 80, 0.25);
+  }
+  .btn-lightning:hover { transform: translateY(-2px); filter: brightness(1.05); }
+
+  /* ========= Trick Master ========= */
+  .btn-tm {
+    background: linear-gradient(135deg, #5ec4b6, #3aa7e0);
+    color: white;
+    box-shadow: 0 4px 14px rgba(58, 167, 224, 0.28);
+  }
+  .btn-tm:hover { transform: translateY(-2px); filter: brightness(1.05); }
+  .tm-picker-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+    gap: 12px;
+    margin: 10px 0;
+    max-height: 60vh;
+    overflow-y: auto;
+    padding: 4px 2px 8px;
+  }
+  .tm-pick-card {
+    background: #fff;
+    border-radius: 14px;
+    padding: 12px 10px;
+    text-align: center;
+    box-shadow: 0 3px 10px rgba(0,0,0,0.08);
+    cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.15s;
+    border: 2px solid transparent;
+    position: relative;
+    user-select: none;
+  }
+  .tm-pick-card:hover:not(.locked) {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 20px rgba(58,167,224,0.22);
+    border-color: #5ec4b6;
+  }
+  .tm-pick-card.locked {
+    cursor: not-allowed;
+    opacity: 0.45;
+    filter: grayscale(0.7);
+  }
+  .tm-pick-card.locked::after {
+    content: '🔒';
+    position: absolute; top: 6px; right: 8px; font-size: 16px;
+  }
+  .tm-pick-emoji { font-size: 36px; line-height: 1; margin-bottom: 4px; }
+  .tm-pick-name { font-weight: 700; font-size: 13px; color: var(--ink); }
+  .tm-pick-rarity {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-top: 2px;
+    opacity: 0.75;
+  }
+  .tm-pick-card[data-rarity="common"]    .tm-pick-rarity { color: #6b7a8f; }
+  .tm-pick-card[data-rarity="uncommon"]  .tm-pick-rarity { color: #2ecc71; }
+  .tm-pick-card[data-rarity="rare"]      .tm-pick-rarity { color: #3498db; }
+  .tm-pick-card[data-rarity="epic"]      .tm-pick-rarity { color: #9b59b6; }
+  .tm-pick-card[data-rarity="legendary"] .tm-pick-rarity { color: #e67e22; }
+  .tm-pick-stars {
+    margin-top: 4px;
+    font-size: 14px;
+    letter-spacing: 2px;
+    line-height: 1;
+  }
+  .tm-header {
+    text-align: center;
+    margin: 2px 0 10px;
+  }
+  .tm-header .tm-trick-emoji { font-size: 46px; line-height: 1; }
+  .tm-header .tm-trick-name  { font-weight: 800; font-size: 18px; margin-top: 2px; }
+  .tm-progress {
+    display: flex;
+    justify-content: center;
+    gap: 6px;
+    margin: 4px 0 10px;
+  }
+  .tm-dot {
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    background: #e4e8ee;
+    transition: background 0.2s, transform 0.2s;
+  }
+  .tm-dot.good { background: #2ecc71; transform: scale(1.15); }
+  .tm-dot.bad  { background: #e74c3c; transform: scale(1.15); }
+  .tm-dot.cur  { background: #3aa7e0; box-shadow: 0 0 0 3px rgba(58,167,224,0.25); }
+  .tm-explain {
+    background: #f3f7fb;
+    border-left: 4px solid #3aa7e0;
+    border-radius: 8px;
+    padding: 8px 10px;
+    margin-top: 8px;
+    font-size: 13px;
+    color: var(--ink);
+  }
+  .tm-explain b { color: #3aa7e0; }
+  .tm-explain ol { margin: 4px 0 0 18px; padding: 0; }
+  .tm-explain li { margin: 2px 0; }
+  .tm-mastery-note {
+    font-size: 12px;
+    color: var(--ink-soft);
+    text-align: center;
+    margin-top: 4px;
+  }
+
+  /* ========= Challenges ========= */
+  .btn-challenge {
+    background: linear-gradient(135deg, #ff7eb3, #ff5576);
+    color: white;
+    box-shadow: 0 4px 14px rgba(255, 85, 118, 0.28);
+  }
+  .btn-challenge:hover { transform: translateY(-2px); filter: brightness(1.05); }
+  .challenge-link-box {
+    background: #fff6f9;
+    border: 2px dashed #ff7eb3;
+    border-radius: 10px;
+    padding: 10px;
+    margin: 10px 0;
+    font-family: monospace;
+    font-size: 12px;
+    word-break: break-all;
+    color: var(--ink);
+  }
+  .challenge-banner {
+    background: linear-gradient(135deg, #ffd6e4, #fff);
+    border-left: 4px solid #ff5576;
+    border-radius: 10px;
+    padding: 10px 14px;
+    margin-bottom: 10px;
+    text-align: center;
+  }
+  .challenge-banner b { color: #ff5576; }
+
+  /* ========= Family leaderboard ========= */
+  .family-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 12px;
+    margin: 10px 0 8px;
+  }
+  .family-card {
+    background: #fff;
+    border-radius: 14px;
+    padding: 12px;
+    box-shadow: 0 3px 10px rgba(0,0,0,0.08);
+    position: relative;
+    border: 2px solid transparent;
+  }
+  .family-card.me { border-color: var(--accent-1); background: linear-gradient(160deg, #fff, #eef3ff); }
+  .family-card .fc-header {
+    display: flex; align-items: center; gap: 10px; margin-bottom: 6px;
+  }
+  .family-card .fc-avatar {
+    width: 40px; height: 40px; border-radius: 50%;
+    background: var(--card-2); display: flex; align-items: center; justify-content: center;
+    font-size: 24px; flex-shrink: 0;
+  }
+  .family-card .fc-name { font-weight: 700; font-size: 16px; color: var(--ink); }
+  .family-card .fc-sub  { font-size: 12px; color: var(--ink-soft); }
+  .family-card .fc-stats {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px;
+    font-size: 13px; margin-top: 4px;
+  }
+  .family-card .fc-stats b { color: var(--ink); }
+  .family-trophy {
+    position: absolute; top: -10px; right: -10px;
+    font-size: 32px;
+    filter: drop-shadow(0 3px 6px rgba(246,194,68,0.5));
+    animation: trophy-bob 2.5s ease-in-out infinite;
+  }
+  @keyframes trophy-bob {
+    0%, 100% { transform: translateY(0) rotate(-6deg); }
+    50%      { transform: translateY(-4px) rotate(6deg); }
+  }
+  .family-trophy-banner {
+    background: linear-gradient(135deg, #fff5d0, #ffe58a);
+    border-radius: 10px;
+    padding: 8px 12px;
+    margin: 4px 0 12px;
+    text-align: center;
+    font-size: 13px;
+    color: #8a6914;
+  }
+
+  /* ========= Creatures gallery ========= */
+  .creatures-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 14px;
+    margin: 8px 0 12px;
+  }
+  .creature-card {
+    background: linear-gradient(160deg, #fff, #f7f3ff);
+    border-radius: 14px;
+    padding: 14px 14px 12px;
+    box-shadow: 0 3px 10px rgba(108,92,231,0.10);
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+  }
+  .creature-card.full {
+    background: linear-gradient(160deg, #fff5d0, #ffe58a);
+    box-shadow: 0 6px 18px rgba(246,194,68,0.35);
+  }
+  .creature-card.full::before {
+    content: '👑';
+    position: absolute; top: 6px; right: 8px;
+    font-size: 22px;
+  }
+  .creature-emoji {
+    font-size: 50px;
+    line-height: 1;
+    margin: 2px 0 6px;
+    filter: drop-shadow(0 3px 6px rgba(0,0,0,0.15));
+  }
+  .creature-card.stage-0 .creature-emoji { animation: egg-wobble 2.4s ease-in-out infinite; }
+  @keyframes egg-wobble {
+    0%, 100% { transform: rotate(-3deg); }
+    50%      { transform: rotate(3deg); }
+  }
+  .creature-name {
+    font-family: 'Baloo 2', sans-serif;
+    font-weight: 800;
+    font-size: 18px;
+    color: var(--ink);
+    margin: 0;
+  }
+  .creature-table {
+    font-size: 12px;
+    color: var(--ink-soft);
+    margin: 0 0 6px;
+  }
+  .creature-stage {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--accent-2);
+    margin: 4px 0 6px;
+  }
+  .creature-bar {
+    height: 8px;
+    background: #eee;
+    border-radius: 4px;
+    overflow: hidden;
+    margin: 4px 0 4px;
+  }
+  .creature-bar > div {
+    height: 100%;
+    background: linear-gradient(90deg, #2ecc71, #6c5ce7);
+    transition: width .4s ease;
+  }
+  .creature-card.full .creature-bar > div {
+    background: linear-gradient(90deg, #ff9f43, #ffb400);
+  }
+  .creature-progress {
+    font-size: 12px;
+    color: var(--ink-soft);
+  }
+
+  /* ========= Trick Cards gallery ========= */
+  .modal-wide {
+    max-width: 920px;
+    width: 96vw;
+    max-height: 90vh;
+    overflow-y: auto;
+  }
+  .gallery-stats {
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+    margin: 8px 0 14px;
+    padding: 10px 14px;
+    background: linear-gradient(135deg, #f4efff, #fef4fb);
+    border-radius: 12px;
+    font-size: 13px;
+  }
+  .gallery-stats b {
+    color: var(--accent-2);
+    font-size: 16px;
+    margin-right: 4px;
+  }
+  .gallery-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 12px;
+    margin: 4px 0 10px;
+  }
+  .tc-card {
+    border-radius: 14px;
+    padding: 12px 10px 10px;
+    background: linear-gradient(155deg, var(--card-c1), var(--card-c2));
+    box-shadow: 0 3px 8px rgba(0,0,0,0.08), 0 0 0 2px rgba(255,255,255,0.35);
+    position: relative;
+    text-align: center;
+    overflow: hidden;
+    transition: transform .15s ease, box-shadow .2s ease;
+  }
+  .tc-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 20px var(--card-glow), 0 0 0 2px rgba(255,255,255,0.5);
+  }
+  .tc-card.locked {
+    background: linear-gradient(155deg, #e6e6ef, #f4f4f9);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.04), 0 0 0 2px rgba(255,255,255,0.5);
+    opacity: 0.7;
+  }
+  .tc-card.locked .tc-emoji,
+  .tc-card.locked .tc-name,
+  .tc-card.locked .tc-flavor { filter: blur(2px) grayscale(1); }
+  .tc-card.locked::after {
+    content: '🔒';
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    font-size: 30px;
+    opacity: 0.6;
+  }
+  .tc-emoji { font-size: 40px; line-height: 1; margin: 4px 0 4px; }
+  .tc-name {
+    font-family: 'Baloo 2', sans-serif;
+    font-weight: 700;
+    font-size: 14px;
+    color: #1a0d3a;
+    margin: 2px 0 2px;
+  }
+  .tc-rarity {
+    display: inline-block;
+    padding: 1px 7px;
+    background: rgba(26,13,58,0.8);
+    color: white;
+    border-radius: 999px;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .tc-flavor {
+    font-size: 11px;
+    color: #3a265e;
+    font-style: italic;
+    line-height: 1.3;
+    min-height: 28px;
+  }
+  .rarity-filter {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin: 2px 0 10px;
+  }
+  .rarity-filter button {
+    border: 2px solid #e8e2f6;
+    background: white;
+    padding: 4px 12px;
+    border-radius: 999px;
+    cursor: pointer;
+    font-family: inherit;
+    font-weight: 600;
+    font-size: 12px;
+    color: var(--ink-soft);
+    transition: all .15s;
+  }
+  .rarity-filter button:hover { background: var(--neutral); }
+  .rarity-filter button.selected {
+    border-color: var(--accent-2);
+    background: #f4efff;
+    color: var(--accent-2);
+  }
+
+  /* ========= Trick Card rarities ========= */
+  .card-rarity-common    { --card-c1: #c9c9d6; --card-c2: #eeeef5; --card-glow: rgba(160,160,180,0.4); }
+  .card-rarity-uncommon  { --card-c1: #74d47a; --card-c2: #c5f2b4; --card-glow: rgba(46,204,113,0.45); }
+  .card-rarity-rare      { --card-c1: #4aa8ff; --card-c2: #b6def5; --card-glow: rgba(52,152,219,0.55); }
+  .card-rarity-epic      { --card-c1: #a257f0; --card-c2: #e1c9ff; --card-glow: rgba(142,68,173,0.6); }
+  .card-rarity-legendary { --card-c1: #ffb400; --card-c2: #ffe58a; --card-glow: rgba(246,194,68,0.75); }
+
+  /* ========= "A wild X appeared!" overlay ========= */
+  .wild-overlay {
+    position: fixed; inset: 0;
+    display: none;
+    place-items: center;
+    background: radial-gradient(ellipse at center, rgba(10,5,40,0.85), rgba(10,5,40,0.95));
+    z-index: 300;
+    padding: 20px;
+    animation: wild-bg-in .25s ease;
+  }
+  .wild-overlay.show { display: grid; }
+  @keyframes wild-bg-in { from { opacity: 0; } to { opacity: 1; } }
+
+  .wild-card {
+    width: min(360px, 90vw);
+    background: linear-gradient(155deg, var(--card-c1), var(--card-c2));
+    border-radius: 22px;
+    padding: 20px 18px 16px;
+    box-shadow: 0 0 0 4px rgba(255,255,255,0.35), 0 0 40px 8px var(--card-glow);
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+    animation: wild-pop .6s cubic-bezier(.2,.9,.3,1.3);
+  }
+  @keyframes wild-pop {
+    0%   { transform: scale(0) rotate(-15deg); opacity: 0; }
+    60%  { transform: scale(1.08) rotate(2deg); opacity: 1; }
+    100% { transform: scale(1) rotate(0); opacity: 1; }
+  }
+  /* Shine sweep across card */
+  .wild-card::before {
+    content: '';
+    position: absolute; inset: 0;
+    background: linear-gradient(110deg, transparent 40%, rgba(255,255,255,0.55) 50%, transparent 60%);
+    transform: translateX(-100%);
+    animation: wild-shine 1.4s ease 0.45s;
+  }
+  @keyframes wild-shine {
+    to { transform: translateX(100%); }
+  }
+
+  .wild-heading {
+    font-family: 'Baloo 2', sans-serif;
+    font-weight: 800;
+    font-size: 15px;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.95);
+    text-shadow: 0 2px 6px rgba(0,0,0,0.3);
+    margin-bottom: 4px;
+  }
+  .wild-emoji {
+    font-size: 80px;
+    line-height: 1;
+    display: inline-block;
+    margin: 6px 0 4px;
+    filter: drop-shadow(0 4px 12px rgba(0,0,0,0.25));
+    animation: wild-bob 2s ease-in-out infinite;
+  }
+  @keyframes wild-bob {
+    0%, 100% { transform: translateY(0) rotate(-2deg); }
+    50%      { transform: translateY(-6px) rotate(2deg); }
+  }
+  .wild-name {
+    font-family: 'Baloo 2', sans-serif;
+    font-weight: 800;
+    font-size: 26px;
+    color: #1a0d3a;
+    margin: 2px 0 4px;
+  }
+  .wild-rarity-chip {
+    display: inline-block;
+    padding: 3px 10px;
+    background: rgba(26,13,58,0.85);
+    color: white;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  .wild-flavor {
+    font-size: 13px;
+    color: #2b1a58;
+    font-style: italic;
+    margin: 4px 6px 14px;
+    line-height: 1.4;
+  }
+  .wild-card .btn-dismiss {
+    border: none;
+    background: #1a0d3a;
+    color: white;
+    padding: 10px 22px;
+    border-radius: 999px;
+    font-family: inherit;
+    font-weight: 700;
+    font-size: 14px;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+    position: relative;
+    z-index: 2;
+  }
+  .wild-card .btn-dismiss:hover { transform: translateY(-1px); }
 </style>
 </head>
 <body>
@@ -654,7 +1209,7 @@
   <div class="brand">
     <span class="logo">×</span>
     Times Table Quest
-    <span style="font-family: 'Fredoka', sans-serif; font-size: 13px; font-weight: 600; color: var(--ink-soft); -webkit-text-fill-color: var(--ink-soft); background: var(--neutral); padding: 2px 8px; border-radius: 999px; margin-left: 6px; letter-spacing: 0.5px;">v2</span>
+    <span style="font-family: 'Fredoka', sans-serif; font-size: 13px; font-weight: 600; color: var(--ink-soft); -webkit-text-fill-color: var(--ink-soft); background: var(--neutral); padding: 2px 8px; border-radius: 999px; margin-left: 6px; letter-spacing: 0.5px;">v4</span>
   </div>
 
   <button class="user-pill" id="userPill" title="Switch player">
@@ -676,6 +1231,13 @@
     <button class="btn btn-primary" id="challengeBtn">🎲 Random challenge</button>
     <button class="btn btn-ghost" id="weakBtn">🎯 Practise weak spots</button>
     <button class="btn btn-golden" id="goldenBtn">✨ Golden Run</button>
+    <button class="btn btn-ghost" id="lightningBtn">⚡ Lightning</button>
+    <button class="btn btn-ghost" id="trickMasterBtn">🎓 Trick Master</button>
+    <button class="btn btn-ghost" id="cardsBtn">🎴 Trick Cards</button>
+    <button class="btn btn-ghost" id="creaturesBtn">🐣 Creatures</button>
+    <button class="btn btn-ghost" id="familyBtn">👨‍👩‍👧 Family</button>
+    <button class="btn btn-ghost" id="challengeShareBtn">📮 Send challenge</button>
+    <button class="btn btn-ghost" id="muteBtn" title="Mute sounds">🔊</button>
     <div class="group">
       <label for="jumpRow">Jump to</label>
       <input type="number" id="jumpRow" min="1" max="100" placeholder="row" />
@@ -743,32 +1305,8 @@
     <h2 id="grSetupTitle">✨ Golden Run</h2>
     <p class="sub">10 questions · 20 seconds each · one wrong and it's over. Survive all 10 to earn a golden star.</p>
 
-    <div style="margin-top: 10px; font-weight: 600;">Quick picks</div>
-    <div class="range-presets" id="rangePresets"></div>
-
-    <div style="font-weight: 600; margin-top: 4px;">Or choose your own range</div>
-    <div class="range-row">
-      <div>
-        <label for="grXMin">First number from</label>
-        <input type="number" id="grXMin" min="1" max="100" value="1" />
-      </div>
-      <div class="sep">to</div>
-      <div>
-        <label for="grXMax">to</label>
-        <input type="number" id="grXMax" min="1" max="100" value="12" />
-      </div>
-    </div>
-    <div class="range-row">
-      <div>
-        <label for="grYMin">Second number from</label>
-        <input type="number" id="grYMin" min="1" max="100" value="1" />
-      </div>
-      <div class="sep">to</div>
-      <div>
-        <label for="grYMax">to</label>
-        <input type="number" id="grYMax" min="1" max="100" value="12" />
-      </div>
-    </div>
+    <div style="margin-top: 10px; font-weight: 600;">Pick your difficulty</div>
+    <div class="difficulty-picker" id="difficultyPicker"></div>
 
     <div class="modal-actions">
       <button class="btn btn-ghost" id="grSetupClose">Cancel</button>
@@ -800,6 +1338,164 @@
     <div class="modal-actions" id="grActions">
       <button class="btn btn-ghost" id="grForfeit">Give up</button>
     </div>
+  </div>
+</div>
+
+<!-- Lightning Round — Setup -->
+<div class="overlay" id="lrSetupOverlay">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="lrSetupTitle">
+    <h2 id="lrSetupTitle">⚡ Lightning Round</h2>
+    <p class="sub">60 seconds. Unlimited questions. Each wrong answer costs 5 seconds. Beat your best.</p>
+    <div style="margin-top: 10px; font-weight: 600;">Pick your difficulty</div>
+    <div class="difficulty-picker" id="lrDifficultyPicker"></div>
+    <div id="lrBestDisplay" style="text-align:center; font-size: 13px; color: var(--ink-soft);"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="lrSetupClose">Cancel</button>
+      <button class="btn btn-lightning" id="lrStart">Start ⚡</button>
+    </div>
+  </div>
+</div>
+
+<!-- Lightning Round — Quiz -->
+<div class="overlay" id="lrQuizOverlay">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="lrTitle">
+    <h2 id="lrTitle">⚡ Lightning Round</h2>
+    <div class="lr-score" id="lrScore">0</div>
+    <div class="lr-best"   id="lrBest">Best: —</div>
+    <div class="gr-timer-wrap">
+      <div class="gr-timer-bar" id="lrTimerBar"></div>
+    </div>
+    <div class="question" id="lrQText">— × —</div>
+    <div class="answer-row">
+      <input class="answer-input" id="lrInput" type="number" inputmode="numeric" autocomplete="off" placeholder="?" />
+      <button class="btn btn-lightning" id="lrSubmit">Check</button>
+    </div>
+    <div id="lrFeedback"></div>
+    <div class="modal-actions" id="lrActions">
+      <button class="btn btn-ghost" id="lrForfeit">Give up</button>
+    </div>
+  </div>
+</div>
+
+<!-- Trick Master — Setup -->
+<div class="overlay" id="tmSetupOverlay">
+  <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="tmSetupTitle">
+    <h2 id="tmSetupTitle">🎓 Trick Master</h2>
+    <p class="sub">Pick a trick. Ten problems. All use that trick. Get 10/10 to earn a mastery star (up to 3 per trick).</p>
+    <div class="tm-picker-grid" id="tmPickerGrid"></div>
+    <div class="tm-mastery-note" id="tmMasteryNote"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="tmSetupClose">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Trick Master — Quiz -->
+<div class="overlay" id="tmQuizOverlay">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="tmQuizTitle">
+    <h2 id="tmQuizTitle" style="margin-bottom:2px;">🎓 Trick Master</h2>
+    <div class="tm-header">
+      <div class="tm-trick-emoji" id="tmTrickEmoji">🎓</div>
+      <div class="tm-trick-name"  id="tmTrickName">—</div>
+    </div>
+    <div class="tm-progress" id="tmProgress"></div>
+    <div class="question" id="tmQText">— × —</div>
+    <div class="answer-row">
+      <input class="answer-input" id="tmInput" type="number" inputmode="numeric" autocomplete="off" placeholder="?" />
+      <button class="btn btn-tm" id="tmSubmit">Check</button>
+    </div>
+    <div id="tmFeedback"></div>
+    <div class="modal-actions" id="tmActions">
+      <button class="btn btn-ghost" id="tmForfeit">Give up</button>
+    </div>
+  </div>
+</div>
+
+<!-- Family leaderboard -->
+<div class="overlay" id="familyOverlay">
+  <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="familyTitle">
+    <h2 id="familyTitle">👨‍👩‍👧 Family</h2>
+    <p class="sub">Everyone's progress in one place. The 🏆 goes to today's top answerer.</p>
+    <div id="familyTrophyBanner"></div>
+    <div class="family-grid" id="familyGrid"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="familyClose">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Challenge — Send (sender picks difficulty, gets shareable link) -->
+<div class="overlay" id="challengeSendOverlay">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="challengeSendTitle">
+    <h2 id="challengeSendTitle">📮 Send a Challenge</h2>
+    <p class="sub">Pick a difficulty, get a secret link, and send it to a sibling. 5 questions each. Beat-my-score stakes.</p>
+    <div style="margin-top: 10px; font-weight: 600;">Difficulty</div>
+    <div class="difficulty-picker" id="cxSendDifficultyPicker"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="cxSendClose">Cancel</button>
+      <button class="btn btn-challenge" id="cxSendGenerate">Generate link 📮</button>
+    </div>
+    <div id="cxSendResult"></div>
+  </div>
+</div>
+
+<!-- Challenge — Play (recipient opens the link) -->
+<div class="overlay" id="challengePlayOverlay">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="challengePlayTitle">
+    <h2 id="challengePlayTitle">🎯 You've been challenged!</h2>
+    <div class="challenge-banner" id="cxPlayBanner">Loading…</div>
+    <div id="cxPlayArea">
+      <!-- Populated dynamically -->
+    </div>
+  </div>
+</div>
+
+<!-- Challenge — Result (sender opens the return link) -->
+<div class="overlay" id="challengeResultOverlay">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="challengeResultTitle">
+    <h2 id="challengeResultTitle">📬 Challenge result</h2>
+    <div id="cxResultArea"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="cxResultClose">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Creatures gallery -->
+<div class="overlay" id="creaturesOverlay">
+  <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="creaturesTitle">
+    <h2 id="creaturesTitle">🐣 Creatures</h2>
+    <p class="sub">Each times-table hatches a creature. Master every cell in a table to fully evolve it.</p>
+    <div class="creatures-grid" id="creaturesGrid"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="creaturesClose">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Trick Cards gallery -->
+<div class="overlay" id="cardsOverlay">
+  <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="cardsTitle">
+    <h2 id="cardsTitle">🎴 Trick Cards</h2>
+    <p class="sub">Answer problems to discover tricks. Every new trick adds a card to your collection.</p>
+    <div class="gallery-stats" id="cardsStats"></div>
+    <div class="rarity-filter" id="rarityFilter"></div>
+    <div class="gallery-grid" id="cardsGrid"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="cardsClose">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- "A wild X appeared!" first-unlock celebration -->
+<div class="wild-overlay" id="wildOverlay" role="dialog" aria-modal="true" aria-labelledby="wildName">
+  <div class="wild-card" id="wildCard">
+    <div class="wild-heading">A wild trick appeared!</div>
+    <div class="wild-emoji" id="wildEmoji">✨</div>
+    <div class="wild-name" id="wildName">Trick</div>
+    <div class="wild-rarity-chip" id="wildRarity">Common</div>
+    <div class="wild-flavor" id="wildFlavor">Flavor</div>
+    <button class="btn-dismiss" id="wildDismiss">Add to collection ✨</button>
   </div>
 </div>
 
@@ -867,7 +1563,7 @@ function currentUser() {
 }
 function ensureUser() {
   const u = currentUser();
-  if (u) return u;
+  if (u) return migrateUser(u);
   // create default guest
   const name = 'Guest';
   state.users[name] = makeUser(name, '😀');
@@ -884,9 +1580,1257 @@ function makeUser(name, avatar) {
     cells: {},       // "a x b" -> { attempts, correct, streak, bestTime, lastAt }
     stats: { totalAttempts: 0, totalCorrect: 0, currentStreak: 0, bestStreak: 0 },
     stars: 0,        // Golden Run stars
-    goldenRuns: []   // history: { date, xMin, xMax, yMin, yMax, won, reached }
+    goldenRuns: [],  // history: { date, difficulty, won, reached }
+    tricks: {},      // trickId -> { firstSeenAt }
+    trickMastery: {},// trickId -> { stars: 0..3, runs: [{date, score}] }
+    lightning: { best: 0, lastPlayed: null },  // Lightning Round high score
+    daily: {},       // yyyy-mm-dd -> questionsAnswered
+    muted: false,    // sound mute toggle
+    challenges: []   // received challenges history
   };
 }
+
+/* Ensure older save files have the new fields without blowing away progress. */
+function migrateUser(u) {
+  if (!u.tricks)     u.tricks = {};
+  if (!u.trickMastery) u.trickMastery = {};
+  if (!u.lightning)  u.lightning = { best: 0, lastPlayed: null };
+  if (!u.daily)      u.daily = {};
+  if (typeof u.muted !== 'boolean') u.muted = false;
+  if (!u.challenges) u.challenges = [];
+  if (!u.stars)      u.stars = 0;
+  if (!u.goldenRuns) u.goldenRuns = [];
+  return u;
+}
+
+/* Record that a trick has been seen. Returns true if this is the first time
+   (so the caller can fire a "Wild X appeared!" celebration). */
+function unlockTrick(trickId) {
+  if (!trickId || !TRICK_CATALOG[trickId]) return false;
+  const u = ensureUser();
+  migrateUser(u);
+  if (u.tricks[trickId]) return false;
+  u.tricks[trickId] = { firstSeenAt: new Date().toISOString() };
+  saveState();
+  return true;
+}
+
+/* Today's date as yyyy-mm-dd in local time, used as the daily-trophy key. */
+function todayKey() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+function bumpDailyCount() {
+  const u = ensureUser();
+  migrateUser(u);
+  const k = todayKey();
+  u.daily[k] = (u.daily[k] || 0) + 1;
+}
+
+/* --------------- "A wild X appeared!" overlay --------------- */
+const wildOverlay = document.getElementById('wildOverlay');
+const wildCard    = document.getElementById('wildCard');
+
+function showWildAppeared(trickId) {
+  const cat = TRICK_CATALOG[trickId];
+  if (!cat) return;
+  document.getElementById('wildEmoji').textContent  = cat.emoji;
+  document.getElementById('wildName').textContent   = cat.name;
+  document.getElementById('wildRarity').textContent = cat.rarity;
+  document.getElementById('wildFlavor').textContent = '"' + cat.flavor + '"';
+  // Swap the rarity colour class on the card itself.
+  wildCard.className = 'wild-card card-rarity-' + cat.rarity;
+  wildOverlay.classList.add('show');
+  playSfx(cat.rarity === 'legendary' ? 'fanfare' : 'unlock');
+  // Extra confetti for legendary unlocks
+  if (cat.rarity === 'legendary' || cat.rarity === 'epic') {
+    if (typeof popConfetti === 'function') popConfetti();
+  }
+}
+
+document.getElementById('wildDismiss').addEventListener('click', () => {
+  wildOverlay.classList.remove('show');
+});
+wildOverlay.addEventListener('click', (e) => {
+  if (e.target === wildOverlay) wildOverlay.classList.remove('show');
+});
+
+/* --------------- Sound effects ---------------
+   Synthesized via Web Audio — no external files, keeps the PWA self-contained.
+   AudioContext is lazily created on the first real user-triggered sound so
+   the browser autoplay policy doesn't nuke it. */
+let _audioCtx = null;
+function getAudioCtx() {
+  if (_audioCtx) return _audioCtx;
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC) return null;
+  _audioCtx = new AC();
+  return _audioCtx;
+}
+function _beep(ctx, freq, startAt, durMs, { wave = 'sine', vol = 0.18, attack = 10, release = 60 } = {}) {
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = wave;
+  osc.frequency.setValueAtTime(freq, startAt);
+  gain.gain.setValueAtTime(0, startAt);
+  gain.gain.linearRampToValueAtTime(vol, startAt + attack / 1000);
+  gain.gain.linearRampToValueAtTime(0, startAt + durMs / 1000);
+  osc.connect(gain).connect(ctx.destination);
+  osc.start(startAt);
+  osc.stop(startAt + durMs / 1000 + release / 1000);
+}
+function _slide(ctx, fStart, fEnd, startAt, durMs, { wave = 'sawtooth', vol = 0.15 } = {}) {
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = wave;
+  osc.frequency.setValueAtTime(fStart, startAt);
+  osc.frequency.linearRampToValueAtTime(fEnd, startAt + durMs / 1000);
+  gain.gain.setValueAtTime(vol, startAt);
+  gain.gain.linearRampToValueAtTime(0, startAt + durMs / 1000);
+  osc.connect(gain).connect(ctx.destination);
+  osc.start(startAt);
+  osc.stop(startAt + durMs / 1000 + 0.05);
+}
+
+function playSfx(name) {
+  const u = ensureUser();
+  if (u.muted) return;
+  const ctx = getAudioCtx();
+  if (!ctx) return;
+  // Resume if suspended (mobile Safari often suspends between gestures).
+  if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+  const t = ctx.currentTime;
+
+  switch (name) {
+    case 'correct':
+      // C5 → E5 happy skip
+      _beep(ctx, 523.25, t,          120, { wave: 'sine', vol: 0.22 });
+      _beep(ctx, 659.25, t + 0.10,   160, { wave: 'sine', vol: 0.22 });
+      break;
+
+    case 'wrong':
+      // Descending sweep — gentle cartoon "boing"
+      _slide(ctx, 300, 130, t, 240, { wave: 'square', vol: 0.14 });
+      break;
+
+    case 'unlock':
+      // Bright two-note sparkle
+      _beep(ctx, 880,  t,          120, { wave: 'triangle', vol: 0.18 });
+      _beep(ctx, 1318, t + 0.09,   180, { wave: 'triangle', vol: 0.18 });
+      _beep(ctx, 1760, t + 0.20,   220, { wave: 'sine',     vol: 0.14 });
+      break;
+
+    case 'fanfare':
+      // Mini fanfare — C-E-G-C
+      _beep(ctx, 523.25, t,          140, { wave: 'triangle', vol: 0.22 });
+      _beep(ctx, 659.25, t + 0.13,   140, { wave: 'triangle', vol: 0.22 });
+      _beep(ctx, 783.99, t + 0.26,   180, { wave: 'triangle', vol: 0.22 });
+      _beep(ctx, 1046.5, t + 0.42,   280, { wave: 'triangle', vol: 0.24 });
+      break;
+
+    case 'tick':
+      _beep(ctx, 660, t, 50, { wave: 'square', vol: 0.08 });
+      break;
+
+    default:
+      /* unknown effect — silent */
+  }
+}
+
+/* Mute toggle in the top toolbar */
+function renderMuteBtn() {
+  const u = ensureUser();
+  migrateUser(u);
+  const btn = document.getElementById('muteBtn');
+  if (btn) btn.textContent = u.muted ? '🔇' : '🔊';
+}
+document.getElementById('muteBtn').addEventListener('click', () => {
+  const u = ensureUser();
+  migrateUser(u);
+  u.muted = !u.muted;
+  saveState();
+  renderMuteBtn();
+  if (!u.muted) playSfx('correct');   // feedback chime when turning back on
+});
+
+/* --------------- Trick Cards gallery --------------- */
+const RARITY_ORDER = ['common', 'uncommon', 'rare', 'epic', 'legendary'];
+const cardsOverlay = document.getElementById('cardsOverlay');
+let activeRarityFilter = 'all';
+
+function renderGalleryStats() {
+  const u = ensureUser();
+  migrateUser(u);
+  const wrap = document.getElementById('cardsStats');
+  const byRarity = {};
+  RARITY_ORDER.forEach(r => byRarity[r] = { total: 0, owned: 0 });
+  for (const [id, cat] of Object.entries(TRICK_CATALOG)) {
+    byRarity[cat.rarity].total++;
+    if (u.tricks[id]) byRarity[cat.rarity].owned++;
+  }
+  const totalOwned = Object.values(byRarity).reduce((s,r) => s + r.owned, 0);
+  const total      = Object.values(byRarity).reduce((s,r) => s + r.total, 0);
+  wrap.innerHTML = `
+    <div><b>${totalOwned}/${total}</b> unlocked</div>
+    ${RARITY_ORDER.map(r => {
+      const { owned, total } = byRarity[r];
+      if (total === 0) return '';
+      const label = r[0].toUpperCase() + r.slice(1);
+      return `<div><b>${owned}/${total}</b>${label}</div>`;
+    }).join('')}
+  `;
+}
+
+function renderRarityFilter() {
+  const wrap = document.getElementById('rarityFilter');
+  const options = [['all', 'All']].concat(RARITY_ORDER.map(r => [r, r[0].toUpperCase() + r.slice(1)]));
+  wrap.innerHTML = '';
+  options.forEach(([id, label]) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = label;
+    if (id === activeRarityFilter) b.classList.add('selected');
+    b.addEventListener('click', () => {
+      activeRarityFilter = id;
+      renderGallery();
+    });
+    wrap.appendChild(b);
+  });
+}
+
+function renderGallery() {
+  const u = ensureUser();
+  migrateUser(u);
+  const grid = document.getElementById('cardsGrid');
+  grid.innerHTML = '';
+  // Sort: rarity ascending, then alphabetical
+  const ids = Object.keys(TRICK_CATALOG).sort((x, y) => {
+    const rx = RARITY_ORDER.indexOf(TRICK_CATALOG[x].rarity);
+    const ry = RARITY_ORDER.indexOf(TRICK_CATALOG[y].rarity);
+    if (rx !== ry) return rx - ry;
+    return TRICK_CATALOG[x].name.localeCompare(TRICK_CATALOG[y].name);
+  });
+  for (const id of ids) {
+    const cat = TRICK_CATALOG[id];
+    if (activeRarityFilter !== 'all' && cat.rarity !== activeRarityFilter) continue;
+    const owned = !!u.tricks[id];
+    const el = document.createElement('div');
+    el.className = `tc-card card-rarity-${cat.rarity}${owned ? '' : ' locked'}`;
+    el.innerHTML = `
+      <div class="tc-emoji">${cat.emoji}</div>
+      <div class="tc-name">${cat.name}</div>
+      <div class="tc-rarity">${cat.rarity}</div>
+      <div class="tc-flavor">${owned ? '"' + cat.flavor + '"' : '???'}</div>
+    `;
+    grid.appendChild(el);
+  }
+  renderRarityFilter();
+  renderGalleryStats();
+}
+
+function openCardsGallery() {
+  renderGallery();
+  cardsOverlay.classList.add('show');
+}
+
+document.getElementById('cardsBtn').addEventListener('click', openCardsGallery);
+document.getElementById('cardsClose').addEventListener('click', () => cardsOverlay.classList.remove('show'));
+cardsOverlay.addEventListener('click', (e) => {
+  if (e.target === cardsOverlay) cardsOverlay.classList.remove('show');
+});
+
+/* --------------- Creatures collection ---------------
+   One creature per times-table (×1..×10). Each has three stages (egg,
+   juvenile, adult) driven by how many of its 100 cells are mastered. */
+const CREATURES = [
+  { table: 1,  name: 'Uno',        stages: ['🥚', '🐤', '🐥'], tag: 'The starter' },
+  { table: 2,  name: 'Twinwing',   stages: ['🐛', '🐞', '🦋'], tag: 'Doubles into beauty' },
+  { table: 3,  name: 'Tripp',      stages: ['🦎', '🐊', '🐲'], tag: 'Three steps to dragon' },
+  { table: 4,  name: 'Quatro',     stages: ['🐱', '🐯', '🦁'], tag: 'From purr to roar' },
+  { table: 5,  name: 'Fionna',     stages: ['🌱', '🌿', '🌳'], tag: 'Grows a forest' },
+  { table: 6,  name: 'Hexxy',      stages: ['🐚', '🐌', '🐙'], tag: 'Six arms, six skills' },
+  { table: 7,  name: 'Lucky',      stages: ['🐣', '🦆', '🦢'], tag: 'Lucky number swan' },
+  { table: 8,  name: 'Octie',      stages: ['🥚', '🦂', '🐍'], tag: 'Eight-legged marvel' },
+  { table: 9,  name: 'Niner',      stages: ['🕯️', '🦉', '🧙'], tag: 'Wisest of them all' },
+  { table: 10, name: 'Decka',      stages: ['🥚', '🦖', '🐉'], tag: 'The mighty Decka' }
+];
+const STAGE_NAMES = ['Egg', 'Juvenile', 'Adult'];
+
+/* Count mastered cells in the ×N table. Commutative (1×N counts once). */
+function masteredForTable(u, n) {
+  let count = 0;
+  for (let m = 1; m <= 100; m++) {
+    const rec = u.cells[cellKey(n, m)];
+    if (rec && masteryLevel(rec) === 'mastered') count++;
+  }
+  return count;
+}
+function creatureStage(mastered) {
+  if (mastered >= 67) return 2;
+  if (mastered >= 34) return 1;
+  return 0;
+}
+
+const creaturesOverlay = document.getElementById('creaturesOverlay');
+
+function renderCreatures() {
+  const u = ensureUser();
+  migrateUser(u);
+  const grid = document.getElementById('creaturesGrid');
+  grid.innerHTML = '';
+  for (const c of CREATURES) {
+    const mastered = masteredForTable(u, c.table);
+    const stage = creatureStage(mastered);
+    const full = mastered >= 100;
+    const pct = mastered;
+    const el = document.createElement('div');
+    el.className = `creature-card stage-${stage}${full ? ' full' : ''}`;
+    el.innerHTML = `
+      <div class="creature-emoji">${c.stages[stage]}</div>
+      <div class="creature-name">${c.name}</div>
+      <div class="creature-table">The ×${c.table} table · ${c.tag}</div>
+      <div class="creature-stage">${full ? '★ Fully evolved ★' : STAGE_NAMES[stage]}</div>
+      <div class="creature-bar"><div style="width:${pct}%"></div></div>
+      <div class="creature-progress">${mastered} / 100 mastered</div>
+    `;
+    grid.appendChild(el);
+  }
+}
+
+function openCreaturesGallery() {
+  renderCreatures();
+  creaturesOverlay.classList.add('show');
+}
+
+document.getElementById('creaturesBtn').addEventListener('click', openCreaturesGallery);
+document.getElementById('creaturesClose').addEventListener('click', () => creaturesOverlay.classList.remove('show'));
+creaturesOverlay.addEventListener('click', (e) => {
+  if (e.target === creaturesOverlay) creaturesOverlay.classList.remove('show');
+});
+
+/* --------------- Lightning Round ---------------
+   60 seconds. Unlimited questions from the picked difficulty pool.
+   Correct = +1 point. Wrong = −5 seconds and show the real answer. */
+const lrSetupOverlay = document.getElementById('lrSetupOverlay');
+const lrQuizOverlay  = document.getElementById('lrQuizOverlay');
+let lrSelectedDiffId = 'beginner';
+let lr = null;
+
+function renderLrDifficultyPicker() {
+  const wrap = document.getElementById('lrDifficultyPicker');
+  wrap.innerHTML = '';
+  DIFFICULTIES.forEach(d => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.innerHTML = `
+      <span class="diff-emoji">${d.emoji}</span>
+      <span class="diff-title">${d.title}</span>
+      <span class="diff-desc">${d.desc}</span>
+    `;
+    if (d.id === lrSelectedDiffId) b.classList.add('selected');
+    b.addEventListener('click', () => {
+      lrSelectedDiffId = d.id;
+      wrap.querySelectorAll('button').forEach(x => x.classList.remove('selected'));
+      b.classList.add('selected');
+      renderLrBestForDiff();
+    });
+    wrap.appendChild(b);
+  });
+  renderLrBestForDiff();
+}
+function renderLrBestForDiff() {
+  const u = ensureUser(); migrateUser(u);
+  const best = (u.lightning.bestByDiff && u.lightning.bestByDiff[lrSelectedDiffId]) || 0;
+  document.getElementById('lrBestDisplay').textContent =
+    best ? `Your best at this difficulty: ${best}` : 'No record yet — set one!';
+}
+
+function openLightningSetup() {
+  renderLrDifficultyPicker();
+  lrSetupOverlay.classList.add('show');
+}
+
+document.getElementById('lightningBtn').addEventListener('click', openLightningSetup);
+document.getElementById('lrSetupClose').addEventListener('click', () => lrSetupOverlay.classList.remove('show'));
+lrSetupOverlay.addEventListener('click', (e) => {
+  if (e.target === lrSetupOverlay) lrSetupOverlay.classList.remove('show');
+});
+
+document.getElementById('lrStart').addEventListener('click', () => {
+  const diff = DIFFICULTIES.find(d => d.id === lrSelectedDiffId) || DIFFICULTIES[0];
+  lrSetupOverlay.classList.remove('show');
+  startLightning(diff);
+});
+
+function startLightning(difficulty) {
+  const pool = difficulty.pool();
+  lr = {
+    pool,
+    difficulty: { id: difficulty.id, title: difficulty.title, emoji: difficulty.emoji },
+    score: 0,
+    deadline: performance.now() + 60_000,
+    totalMs: 60_000,
+    timer: null,
+    finished: false,
+    current: null
+  };
+  document.getElementById('lrScore').textContent = '0';
+  const u = ensureUser(); migrateUser(u);
+  const best = (u.lightning.bestByDiff && u.lightning.bestByDiff[difficulty.id]) || 0;
+  document.getElementById('lrBest').textContent = best ? `Best: ${best} (${difficulty.title})` : `First run — set the bar! (${difficulty.title})`;
+  document.getElementById('lrFeedback').innerHTML = '';
+  document.getElementById('lrActions').style.display = '';
+  document.querySelector('#lrQuizOverlay .answer-row').style.display = '';
+  document.getElementById('lrInput').disabled = false;
+  document.getElementById('lrSubmit').disabled = false;
+  lrQuizOverlay.classList.add('show');
+  nextLrQuestion();
+  tickLrTimer();
+}
+
+function nextLrQuestion() {
+  if (!lr || lr.finished) return;
+  const pick = lr.pool[Math.floor(Math.random() * lr.pool.length)];
+  lr.current = pick;
+  const [a, b] = pick;
+  document.getElementById('lrQText').textContent = `${a} × ${b}`;
+  const inp = document.getElementById('lrInput');
+  inp.value = '';
+  inp.disabled = false;
+  setTimeout(() => inp.focus(), 40);
+  document.getElementById('lrFeedback').innerHTML = '';
+}
+
+function tickLrTimer() {
+  if (lr.timer) clearInterval(lr.timer);
+  const bar = document.getElementById('lrTimerBar');
+  bar.classList.remove('warn', 'danger');
+  const update = () => {
+    if (!lr || lr.finished) return;
+    const remaining = lr.deadline - performance.now();
+    const pct = Math.max(0, (remaining / lr.totalMs) * 100);
+    bar.style.width = pct + '%';
+    if (pct < 25)      { bar.classList.remove('warn'); bar.classList.add('danger'); }
+    else if (pct < 50) { bar.classList.add('warn'); }
+    else               { bar.classList.remove('warn', 'danger'); }
+    if (remaining <= 0) finishLightning();
+  };
+  update();
+  lr.timer = setInterval(update, 100);
+}
+
+function submitLrAnswer() {
+  if (!lr || lr.finished) return;
+  const inp = document.getElementById('lrInput');
+  const val = inp.value.trim();
+  if (val === '') {
+    inp.classList.remove('shake'); void inp.offsetWidth; inp.classList.add('shake');
+    return;
+  }
+  const [a, b] = lr.current;
+  const correct = a * b;
+  const given = parseInt(val, 10);
+
+  const ex = explain(a, b);
+  const newlyUnlocked = unlockTrick(ex.id);
+  bumpDailyCount();
+
+  if (given === correct) {
+    lr.score++;
+    document.getElementById('lrScore').textContent = lr.score;
+    playSfx('correct');
+    document.getElementById('lrFeedback').innerHTML = `<div class="feedback good" style="padding:6px 10px"><b>✅ ${a}×${b}=${correct}</b></div>`;
+    if (newlyUnlocked) setTimeout(() => showWildAppeared(ex.id), 100);
+    setTimeout(nextLrQuestion, 250);
+  } else {
+    playSfx('wrong');
+    // −5 second penalty
+    lr.deadline -= 5000;
+    showLrPenalty();
+    document.getElementById('lrFeedback').innerHTML = `<div class="feedback bad" style="padding:6px 10px"><b>❌ ${a}×${b}=${correct}</b> · −5s</div>`;
+    setTimeout(nextLrQuestion, 700);
+  }
+}
+function showLrPenalty() {
+  const el = document.createElement('div');
+  el.className = 'lr-penalty';
+  el.textContent = '−5s';
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 1000);
+}
+
+function finishLightning() {
+  if (!lr || lr.finished) return;
+  lr.finished = true;
+  if (lr.timer) { clearInterval(lr.timer); lr.timer = null; }
+  document.getElementById('lrInput').disabled = true;
+  document.getElementById('lrSubmit').disabled = true;
+  document.querySelector('#lrQuizOverlay .answer-row').style.display = 'none';
+
+  const u = ensureUser(); migrateUser(u);
+  if (!u.lightning.bestByDiff) u.lightning.bestByDiff = {};
+  const prevBest = u.lightning.bestByDiff[lr.difficulty.id] || 0;
+  const isBest = lr.score > prevBest;
+  if (isBest) u.lightning.bestByDiff[lr.difficulty.id] = lr.score;
+  if (lr.score > (u.lightning.best || 0)) u.lightning.best = lr.score;
+  u.lightning.lastPlayed = new Date().toISOString();
+  saveState();
+  updateStats();
+
+  if (isBest) {
+    playSfx('fanfare');
+    popConfetti();
+    setTimeout(popConfetti, 450);
+  }
+
+  document.getElementById('lrFeedback').innerHTML = `
+    <div class="golden-celebration" style="padding: 8px 0;">
+      <div style="font-size: 60px;">⚡</div>
+      <h3 style="margin: 4px 0;">${isBest ? 'NEW BEST!' : 'Time up!'}</h3>
+      <div>You scored <b>${lr.score}</b> ${lr.score === 1 ? 'answer' : 'answers'}.</div>
+      ${isBest ? '' : `<div style="color: var(--ink-soft); font-size: 13px; margin-top: 4px;">Your best at ${lr.difficulty.title}: ${prevBest}.</div>`}
+    </div>
+  `;
+
+  const actions = document.getElementById('lrActions');
+  actions.innerHTML = `
+    <button class="btn btn-ghost" id="lrClose">Close</button>
+    <button class="btn btn-lightning" id="lrAgain">Again ⚡</button>
+  `;
+  document.getElementById('lrClose').addEventListener('click', closeLightning);
+  document.getElementById('lrAgain').addEventListener('click', () => {
+    closeLightning();
+    openLightningSetup();
+  });
+}
+
+function closeLightning() {
+  if (lr && lr.timer) { clearInterval(lr.timer); lr.timer = null; }
+  lr = null;
+  lrQuizOverlay.classList.remove('show');
+  // restore action row for next time
+  document.getElementById('lrActions').innerHTML = '<button class="btn btn-ghost" id="lrForfeit">Give up</button>';
+  document.getElementById('lrForfeit').addEventListener('click', () => {
+    if (confirm('Give up this run?')) closeLightning();
+  });
+}
+
+document.getElementById('lrSubmit').addEventListener('click', submitLrAnswer);
+document.getElementById('lrInput').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') submitLrAnswer();
+});
+document.getElementById('lrForfeit').addEventListener('click', () => {
+  if (confirm('Give up this run?')) closeLightning();
+});
+
+/* --------------- Trick Master ---------------
+   Pick a trick → get 10 problems that all use that trick. 10/10 earns a mastery
+   star for that trick (up to 3). Locked tricks must be unlocked via normal
+   play first (they're shown greyed out). */
+const tmSetupOverlay = document.getElementById('tmSetupOverlay');
+const tmQuizOverlay  = document.getElementById('tmQuizOverlay');
+let tm = null;              // active trick-master run
+let _trickSampleMap = null; // cached reverse map: trickId -> [[a,b], ...]
+
+/* Walk the whole 100×100 grid once and bucket each cell by the trick id
+   that explain(a,b) picks. Cached after first build. */
+function buildTrickSampleMap() {
+  if (_trickSampleMap) return _trickSampleMap;
+  const map = {};
+  for (let a = 1; a <= 100; a++) {
+    for (let b = 1; b <= 100; b++) {
+      const ex = explain(a, b);
+      if (!ex || !ex.id) continue;
+      if (!map[ex.id]) map[ex.id] = [];
+      map[ex.id].push([a, b]);
+    }
+  }
+  _trickSampleMap = map;
+  return map;
+}
+
+/* Stars for a trick: 0..3 earned from previous perfect rounds. */
+function tmStarsFor(trickId) {
+  const u = ensureUser(); migrateUser(u);
+  const rec = u.trickMastery[trickId];
+  return (rec && rec.stars) || 0;
+}
+
+function renderTmPicker() {
+  const grid = document.getElementById('tmPickerGrid');
+  grid.innerHTML = '';
+  const u = ensureUser(); migrateUser(u);
+  const map = buildTrickSampleMap();
+
+  // Only show tricks that actually have sample problems in the grid.
+  // Sort: unlocked first, then by rarity weight (legendary last for wow-factor),
+  // then alphabetically by name.
+  const rarityOrder = { common: 0, uncommon: 1, rare: 2, epic: 3, legendary: 4 };
+  const entries = Object.entries(TRICK_CATALOG)
+    .filter(([id]) => map[id] && map[id].length > 0)
+    .sort((a, b) => {
+      const ua = !!u.tricks[a[0]], ub = !!u.tricks[b[0]];
+      if (ua !== ub) return ua ? -1 : 1;
+      const ra = rarityOrder[a[1].rarity] ?? 99;
+      const rb = rarityOrder[b[1].rarity] ?? 99;
+      if (ra !== rb) return ra - rb;
+      return a[1].name.localeCompare(b[1].name);
+    });
+
+  let masteredCount = 0, unlockedCount = 0;
+  entries.forEach(([id, cat]) => {
+    const isUnlocked = !!u.tricks[id];
+    const stars = tmStarsFor(id);
+    if (isUnlocked) unlockedCount++;
+    if (stars >= 3) masteredCount++;
+    const card = document.createElement('div');
+    card.className = 'tm-pick-card' + (isUnlocked ? '' : ' locked');
+    card.dataset.rarity = cat.rarity;
+    const starStr = stars > 0 ? '★'.repeat(stars) + '☆'.repeat(3 - stars) : '';
+    card.innerHTML = `
+      <div class="tm-pick-emoji">${cat.emoji}</div>
+      <div class="tm-pick-name">${cat.name}</div>
+      <div class="tm-pick-rarity">${cat.rarity}</div>
+      ${starStr ? `<div class="tm-pick-stars" style="color:#f6c244">${starStr}</div>` : '<div class="tm-pick-stars" style="color:#d7dbe1">☆☆☆</div>'}
+    `;
+    if (isUnlocked) {
+      card.addEventListener('click', () => {
+        tmSetupOverlay.classList.remove('show');
+        startTrickMaster(id);
+      });
+    } else {
+      card.title = 'Unlock this trick in normal play first';
+    }
+    grid.appendChild(card);
+  });
+
+  const note = document.getElementById('tmMasteryNote');
+  note.textContent = `${unlockedCount} of ${entries.length} tricks unlocked · ${masteredCount} fully mastered (3★)`;
+}
+
+function openTrickMasterSetup() {
+  renderTmPicker();
+  tmSetupOverlay.classList.add('show');
+}
+
+function startTrickMaster(trickId) {
+  const cat = TRICK_CATALOG[trickId];
+  const map = buildTrickSampleMap();
+  const samples = (map[trickId] || []).slice();
+  if (!cat || samples.length === 0) return;
+
+  // Fisher-Yates shuffle then take up to 10 (sample with replacement if fewer).
+  for (let i = samples.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [samples[i], samples[j]] = [samples[j], samples[i]];
+  }
+  const questions = [];
+  for (let i = 0; i < 10; i++) {
+    questions.push(samples[i % samples.length]);
+  }
+
+  tm = {
+    trickId,
+    cat,
+    questions,
+    idx: 0,
+    correct: 0,
+    perfect: true,
+    finished: false
+  };
+
+  document.getElementById('tmTrickEmoji').textContent = cat.emoji;
+  document.getElementById('tmTrickName').textContent  = cat.name;
+  document.getElementById('tmFeedback').innerHTML = '';
+  document.getElementById('tmActions').style.display = '';
+  document.getElementById('tmActions').innerHTML = '<button class="btn btn-ghost" id="tmForfeit">Give up</button>';
+  document.getElementById('tmForfeit').addEventListener('click', () => {
+    if (confirm('Give up this run? Progress in this round is lost.')) closeTrickMaster();
+  });
+  document.querySelector('#tmQuizOverlay .answer-row').style.display = '';
+  document.getElementById('tmInput').disabled = false;
+  document.getElementById('tmSubmit').disabled = false;
+
+  renderTmProgress();
+  tmQuizOverlay.classList.add('show');
+  nextTmQuestion();
+}
+
+function renderTmProgress() {
+  const wrap = document.getElementById('tmProgress');
+  wrap.innerHTML = '';
+  for (let i = 0; i < 10; i++) {
+    const d = document.createElement('div');
+    d.className = 'tm-dot';
+    if (i < tm.results?.length) {
+      d.classList.add(tm.results[i] ? 'good' : 'bad');
+    } else if (i === tm.idx) {
+      d.classList.add('cur');
+    }
+    wrap.appendChild(d);
+  }
+}
+
+function nextTmQuestion() {
+  if (!tm || tm.finished) return;
+  if (tm.idx >= tm.questions.length) { finishTrickMaster(); return; }
+  const [a, b] = tm.questions[tm.idx];
+  document.getElementById('tmQText').textContent = `${a} × ${b}`;
+  const inp = document.getElementById('tmInput');
+  inp.value = '';
+  inp.disabled = false;
+  setTimeout(() => inp.focus(), 40);
+  document.getElementById('tmFeedback').innerHTML = '';
+  if (!tm.results) tm.results = [];
+  renderTmProgress();
+}
+
+function submitTmAnswer() {
+  if (!tm || tm.finished) return;
+  const inp = document.getElementById('tmInput');
+  const val = inp.value.trim();
+  if (val === '') {
+    inp.classList.remove('shake'); void inp.offsetWidth; inp.classList.add('shake');
+    return;
+  }
+  const [a, b] = tm.questions[tm.idx];
+  const correct = a * b;
+  const given = parseInt(val, 10);
+  const ex = explain(a, b);
+  bumpDailyCount();
+
+  if (!tm.results) tm.results = [];
+
+  if (given === correct) {
+    tm.correct++;
+    tm.results.push(true);
+    playSfx('correct');
+    document.getElementById('tmFeedback').innerHTML = `<div class="feedback good"><b>✅ ${a}×${b}=${correct}</b></div>`;
+  } else {
+    tm.perfect = false;
+    tm.results.push(false);
+    playSfx('wrong');
+    const stepsHtml = (ex.steps || []).map(s => `<li>${s}</li>`).join('');
+    document.getElementById('tmFeedback').innerHTML = `
+      <div class="feedback bad"><b>❌ ${a}×${b}=${correct}</b></div>
+      <div class="tm-explain">
+        <b>${ex.title || tm.cat.name}</b>
+        <ol>${stepsHtml}</ol>
+      </div>
+    `;
+  }
+
+  tm.idx++;
+  renderTmProgress();
+  // Pause longer on a wrong answer so the kid reads the explanation.
+  const pause = given === correct ? 500 : 2200;
+  setTimeout(() => {
+    if (tm.idx >= tm.questions.length) finishTrickMaster();
+    else nextTmQuestion();
+  }, pause);
+}
+
+function finishTrickMaster() {
+  if (!tm || tm.finished) return;
+  tm.finished = true;
+  document.getElementById('tmInput').disabled = true;
+  document.getElementById('tmSubmit').disabled = true;
+  document.querySelector('#tmQuizOverlay .answer-row').style.display = 'none';
+
+  const u = ensureUser(); migrateUser(u);
+  if (!u.trickMastery[tm.trickId]) u.trickMastery[tm.trickId] = { stars: 0, runs: [] };
+  const rec = u.trickMastery[tm.trickId];
+  rec.runs.push({ date: new Date().toISOString(), score: tm.correct });
+  const earnedStar = tm.perfect && tm.correct === 10 && rec.stars < 3;
+  if (earnedStar) rec.stars++;
+  saveState();
+
+  const stars = rec.stars;
+  const starStr = '★'.repeat(stars) + '☆'.repeat(3 - stars);
+
+  if (earnedStar) {
+    playSfx('fanfare');
+    popConfetti();
+    setTimeout(popConfetti, 450);
+  }
+
+  const headline = earnedStar
+    ? (stars === 3 ? 'MASTERED! 3 stars!' : 'PERFECT RUN! +1 star')
+    : (tm.correct === 10 ? 'Perfect — max stars already' : `${tm.correct} / 10`);
+
+  document.getElementById('tmFeedback').innerHTML = `
+    <div class="golden-celebration" style="padding: 8px 0;">
+      <div style="font-size: 56px;">${tm.cat.emoji}</div>
+      <h3 style="margin: 4px 0;">${headline}</h3>
+      <div style="font-size:22px; color:#f6c244; letter-spacing:3px;">${starStr}</div>
+      <div style="color: var(--ink-soft); font-size: 13px; margin-top: 6px;">${tm.cat.name}</div>
+    </div>
+  `;
+
+  const actions = document.getElementById('tmActions');
+  actions.innerHTML = `
+    <button class="btn btn-ghost" id="tmClose">Close</button>
+    <button class="btn btn-tm" id="tmAgain">Another trick</button>
+  `;
+  document.getElementById('tmClose').addEventListener('click', closeTrickMaster);
+  document.getElementById('tmAgain').addEventListener('click', () => {
+    closeTrickMaster();
+    openTrickMasterSetup();
+  });
+
+  updateStats();
+}
+
+function closeTrickMaster() {
+  tm = null;
+  tmQuizOverlay.classList.remove('show');
+  const actions = document.getElementById('tmActions');
+  actions.innerHTML = '<button class="btn btn-ghost" id="tmForfeit">Give up</button>';
+  document.getElementById('tmForfeit').addEventListener('click', () => {
+    if (confirm('Give up this run? Progress in this round is lost.')) closeTrickMaster();
+  });
+}
+
+document.getElementById('trickMasterBtn').addEventListener('click', openTrickMasterSetup);
+document.getElementById('tmSetupClose').addEventListener('click', () => tmSetupOverlay.classList.remove('show'));
+tmSetupOverlay.addEventListener('click', (e) => {
+  if (e.target === tmSetupOverlay) tmSetupOverlay.classList.remove('show');
+});
+document.getElementById('tmSubmit').addEventListener('click', submitTmAnswer);
+document.getElementById('tmInput').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') submitTmAnswer();
+});
+document.getElementById('tmForfeit').addEventListener('click', () => {
+  if (confirm('Give up this run? Progress in this round is lost.')) closeTrickMaster();
+});
+
+/* --------------- Challenges (serverless, via URL hash) --------------- */
+const cxSendOverlay   = document.getElementById('challengeSendOverlay');
+const cxPlayOverlay   = document.getElementById('challengePlayOverlay');
+const cxResultOverlay = document.getElementById('challengeResultOverlay');
+let cxSendSelectedDiffId = 'beginner';
+let cxPlay = null;
+
+function cxEncode(obj) {
+  const json = JSON.stringify(obj);
+  const b64  = btoa(unescape(encodeURIComponent(json)));
+  return b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+function cxDecode(str) {
+  try {
+    let b64 = str.replace(/-/g, '+').replace(/_/g, '/');
+    while (b64.length % 4) b64 += '=';
+    const json = decodeURIComponent(escape(atob(b64)));
+    return JSON.parse(json);
+  } catch (e) {
+    return null;
+  }
+}
+
+function renderCxSendDifficultyPicker() {
+  const wrap = document.getElementById('cxSendDifficultyPicker');
+  wrap.innerHTML = '';
+  DIFFICULTIES.forEach(d => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.innerHTML = `
+      <span class="diff-emoji">${d.emoji}</span>
+      <span class="diff-title">${d.title}</span>
+      <span class="diff-desc">${d.desc}</span>
+    `;
+    if (d.id === cxSendSelectedDiffId) b.classList.add('selected');
+    b.addEventListener('click', () => {
+      cxSendSelectedDiffId = d.id;
+      wrap.querySelectorAll('button').forEach(x => x.classList.remove('selected'));
+      b.classList.add('selected');
+    });
+    wrap.appendChild(b);
+  });
+}
+
+function openChallengeSend() {
+  cxSendSelectedDiffId = 'beginner';
+  renderCxSendDifficultyPicker();
+  document.getElementById('cxSendResult').innerHTML = '';
+  cxSendOverlay.classList.add('show');
+}
+
+function generateChallengeLink() {
+  const u = ensureUser(); migrateUser(u);
+  const diff = DIFFICULTIES.find(d => d.id === cxSendSelectedDiffId) || DIFFICULTIES[0];
+  const pool = diff.pool();
+  const picks = [];
+  const used = new Set();
+  while (picks.length < 5 && picks.length < pool.length) {
+    const p = pool[Math.floor(Math.random() * pool.length)];
+    const key = p[0] + ',' + p[1];
+    if (used.has(key)) continue;
+    used.add(key);
+    picks.push(p);
+  }
+  while (picks.length < 5) picks.push(pool[Math.floor(Math.random() * pool.length)]);
+
+  const payload = { v: 1, s: u.name, q: picks, d: diff.title };
+  const hash = '#c=' + cxEncode(payload);
+  const baseUrl = window.location.origin + window.location.pathname;
+  const link = baseUrl + hash;
+
+  const area = document.getElementById('cxSendResult');
+  area.innerHTML = `
+    <p style="margin-top:14px;"><b>Your challenge is ready.</b> Send this link to a sibling:</p>
+    <div class="challenge-link-box" id="cxLinkBox">${link}</div>
+    <div class="modal-actions" style="margin-top:6px;">
+      <button class="btn btn-ghost" id="cxCopyLink">📋 Copy link</button>
+      <button class="btn btn-challenge" id="cxCopiedOk" style="display:none;">Copied ✓</button>
+    </div>
+  `;
+  document.getElementById('cxCopyLink').addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(link);
+      document.getElementById('cxCopyLink').style.display = 'none';
+      document.getElementById('cxCopiedOk').style.display = '';
+      playSfx('correct');
+    } catch (e) {
+      const r = document.createRange();
+      r.selectNodeContents(document.getElementById('cxLinkBox'));
+      const s = window.getSelection();
+      s.removeAllRanges();
+      s.addRange(r);
+    }
+  });
+}
+
+function startChallengePlay(payload) {
+  const u = ensureUser(); migrateUser(u);
+  cxPlay = {
+    sender: payload.s || 'A friend',
+    diffTitle: payload.d || '',
+    questions: payload.q,
+    idx: 0,
+    correct: 0,
+    answers: []
+  };
+  document.getElementById('cxPlayBanner').innerHTML =
+    `<b>${cxPlay.sender}</b> has challenged you to <b>${cxPlay.questions.length}</b> questions${cxPlay.diffTitle ? ` (<i>${cxPlay.diffTitle}</i>)` : ''}.`;
+
+  document.getElementById('cxPlayArea').innerHTML = `
+    <div style="text-align:center; padding: 6px 0 10px;">
+      <div style="font-size: 60px;">🎯</div>
+      <p>Good luck, <b>${u.name}</b>!</p>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="cxPlayDecline">Not now</button>
+      <button class="btn btn-challenge" id="cxPlayStart">Start ▶</button>
+    </div>
+  `;
+  document.getElementById('cxPlayDecline').addEventListener('click', closeChallengePlay);
+  document.getElementById('cxPlayStart').addEventListener('click', nextCxQuestion);
+  cxPlayOverlay.classList.add('show');
+}
+
+function nextCxQuestion() {
+  if (!cxPlay) return;
+  if (cxPlay.idx >= cxPlay.questions.length) { finishChallengePlay(); return; }
+  const [a, b] = cxPlay.questions[cxPlay.idx];
+  const dots = cxPlay.questions.map((_, i) => {
+    if (i < cxPlay.idx) {
+      const [qa, qb] = cxPlay.questions[i];
+      const ok = cxPlay.answers[i] === qa * qb;
+      return `<span class="tm-dot ${ok ? 'good' : 'bad'}"></span>`;
+    }
+    if (i === cxPlay.idx) return '<span class="tm-dot cur"></span>';
+    return '<span class="tm-dot"></span>';
+  }).join('');
+
+  document.getElementById('cxPlayArea').innerHTML = `
+    <div class="tm-progress">${dots}</div>
+    <div class="question" id="cxQText">${a} × ${b}</div>
+    <div class="answer-row">
+      <input class="answer-input" id="cxInput" type="number" inputmode="numeric" autocomplete="off" placeholder="?" />
+      <button class="btn btn-challenge" id="cxSubmit">Check</button>
+    </div>
+    <div id="cxFeedback"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="cxForfeit">Give up</button>
+    </div>
+  `;
+  document.getElementById('cxSubmit').addEventListener('click', submitCxAnswer);
+  document.getElementById('cxInput').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') submitCxAnswer();
+  });
+  document.getElementById('cxForfeit').addEventListener('click', () => {
+    if (confirm('Give up the challenge?')) closeChallengePlay();
+  });
+  setTimeout(() => document.getElementById('cxInput').focus(), 40);
+}
+
+function submitCxAnswer() {
+  if (!cxPlay) return;
+  const inp = document.getElementById('cxInput');
+  const val = inp.value.trim();
+  if (val === '') {
+    inp.classList.remove('shake'); void inp.offsetWidth; inp.classList.add('shake');
+    return;
+  }
+  const [a, b] = cxPlay.questions[cxPlay.idx];
+  const correct = a * b;
+  const given = parseInt(val, 10);
+  cxPlay.answers.push(given);
+  bumpDailyCount();
+
+  if (given === correct) {
+    cxPlay.correct++;
+    playSfx('correct');
+    document.getElementById('cxFeedback').innerHTML = `<div class="feedback good"><b>✅ ${a}×${b}=${correct}</b></div>`;
+  } else {
+    playSfx('wrong');
+    document.getElementById('cxFeedback').innerHTML = `<div class="feedback bad"><b>❌ ${a}×${b}=${correct}</b></div>`;
+  }
+  cxPlay.idx++;
+  setTimeout(() => {
+    if (cxPlay.idx >= cxPlay.questions.length) finishChallengePlay();
+    else nextCxQuestion();
+  }, given === correct ? 500 : 1100);
+}
+
+function finishChallengePlay() {
+  if (!cxPlay) return;
+  const u = ensureUser(); migrateUser(u);
+  u.challenges.push({
+    date: new Date().toISOString(),
+    from: cxPlay.sender,
+    score: cxPlay.correct,
+    of: cxPlay.questions.length
+  });
+  saveState();
+
+  const returnPayload = {
+    v: 1,
+    s: cxPlay.sender,
+    r: u.name,
+    sc: cxPlay.correct,
+    ans: cxPlay.answers,
+    q: cxPlay.questions,
+    d: cxPlay.diffTitle
+  };
+  const hash = '#r=' + cxEncode(returnPayload);
+  const returnLink = window.location.origin + window.location.pathname + hash;
+
+  const perfect = cxPlay.correct === cxPlay.questions.length;
+  if (perfect) {
+    playSfx('fanfare');
+    popConfetti();
+  }
+
+  document.getElementById('cxPlayArea').innerHTML = `
+    <div style="text-align:center; padding: 8px 0;">
+      <div style="font-size: 64px;">${perfect ? '🏆' : '🎯'}</div>
+      <h3 style="margin: 4px 0;">${cxPlay.correct} / ${cxPlay.questions.length}</h3>
+      <p style="color: var(--ink-soft); font-size: 13px;">Send this back to <b>${cxPlay.sender}</b> so they can see your score:</p>
+      <div class="challenge-link-box" id="cxReturnBox">${returnLink}</div>
+      <div class="modal-actions" style="margin-top:6px;">
+        <button class="btn btn-ghost" id="cxReturnCopy">📋 Copy return link</button>
+        <button class="btn btn-challenge" id="cxReturnCopied" style="display:none;">Copied ✓</button>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="cxDoneBtn">Done</button>
+    </div>
+  `;
+  document.getElementById('cxReturnCopy').addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(returnLink);
+      document.getElementById('cxReturnCopy').style.display = 'none';
+      document.getElementById('cxReturnCopied').style.display = '';
+      playSfx('correct');
+    } catch (e) {
+      const r = document.createRange();
+      r.selectNodeContents(document.getElementById('cxReturnBox'));
+      const s = window.getSelection();
+      s.removeAllRanges();
+      s.addRange(r);
+    }
+  });
+  document.getElementById('cxDoneBtn').addEventListener('click', closeChallengePlay);
+}
+
+function closeChallengePlay() {
+  cxPlay = null;
+  cxPlayOverlay.classList.remove('show');
+  if (location.hash.startsWith('#c=')) {
+    history.replaceState(null, '', location.pathname + location.search);
+  }
+}
+
+function showChallengeResult(payload) {
+  const area = document.getElementById('cxResultArea');
+  const perfect = payload.sc === (payload.q ? payload.q.length : 0);
+  const rows = (payload.q || []).map((pair, i) => {
+    const [a, b] = pair;
+    const correct = a * b;
+    const ans = (payload.ans || [])[i];
+    const ok = ans === correct;
+    return `
+      <div style="display:flex; justify-content:space-between; padding:4px 8px; background:${ok ? '#e6f8ec' : '#fdecea'}; border-radius:6px; margin:3px 0; font-size:14px;">
+        <span>${a} × ${b} = <b>${correct}</b></span>
+        <span>${ok ? '✅' : `❌ wrote ${ans}`}</span>
+      </div>
+    `;
+  }).join('');
+
+  area.innerHTML = `
+    <div class="challenge-banner">
+      <b>${payload.r || 'Someone'}</b> scored <b>${payload.sc}/${(payload.q||[]).length}</b> on your challenge${payload.d ? ` (<i>${payload.d}</i>)` : ''}.
+    </div>
+    ${perfect ? '<div style="text-align:center; font-size:40px;">🏆</div>' : ''}
+    <div style="margin-top:6px;">${rows}</div>
+  `;
+  cxResultOverlay.classList.add('show');
+  if (perfect) popConfetti();
+}
+
+function maybeHandleChallengeHash() {
+  const h = location.hash || '';
+  if (h.startsWith('#c=')) {
+    const payload = cxDecode(h.substring(3));
+    if (payload && payload.q && payload.q.length) {
+      const u = (state && state.activeUser) ? ensureUser() : null;
+      if (!u) {
+        alert('Create or pick a profile first, then come back to this challenge link.');
+        return;
+      }
+      startChallengePlay(payload);
+    }
+  } else if (h.startsWith('#r=')) {
+    const payload = cxDecode(h.substring(3));
+    if (payload && payload.q) {
+      showChallengeResult(payload);
+      history.replaceState(null, '', location.pathname + location.search);
+    }
+  }
+}
+
+document.getElementById('challengeShareBtn').addEventListener('click', openChallengeSend);
+document.getElementById('cxSendClose').addEventListener('click', () => cxSendOverlay.classList.remove('show'));
+document.getElementById('cxSendGenerate').addEventListener('click', generateChallengeLink);
+cxSendOverlay.addEventListener('click', (e) => {
+  if (e.target === cxSendOverlay) cxSendOverlay.classList.remove('show');
+});
+document.getElementById('cxResultClose').addEventListener('click', () => {
+  cxResultOverlay.classList.remove('show');
+});
+cxResultOverlay.addEventListener('click', (e) => {
+  if (e.target === cxResultOverlay) cxResultOverlay.classList.remove('show');
+});
+
+window.addEventListener('DOMContentLoaded', maybeHandleChallengeHash);
+window.addEventListener('hashchange', maybeHandleChallengeHash);
+if (document.readyState === 'complete' || document.readyState === 'interactive') {
+  setTimeout(maybeHandleChallengeHash, 0);
+}
+
+/* --------------- Family leaderboard ---------------
+   Everyone's profiles, side-by-side. Today's top answerer gets the trophy. */
+const familyOverlay = document.getElementById('familyOverlay');
+
+function bestGoldenRunSec(u) {
+  if (!u.goldenRuns || !u.goldenRuns.length) return null;
+  const wins = u.goldenRuns.filter(r => r.won && r.durationSec);
+  if (!wins.length) return null;
+  return Math.min(...wins.map(r => r.durationSec));
+}
+
+function openFamily() {
+  renderFamily();
+  familyOverlay.classList.add('show');
+}
+
+function renderFamily() {
+  const grid = document.getElementById('familyGrid');
+  const banner = document.getElementById('familyTrophyBanner');
+  grid.innerHTML = '';
+  const names = Object.keys(state.users);
+  if (!names.length) {
+    grid.innerHTML = '<div style="color: var(--ink-soft); padding: 8px;">No profiles yet — create one to get started.</div>';
+    banner.innerHTML = '';
+    return;
+  }
+
+  // Determine today's leader by question count
+  const today = todayKey();
+  let trophyName = null;
+  let trophyCount = 0;
+  names.forEach(n => {
+    const u = state.users[n];
+    migrateUser(u);
+    const c = (u.daily && u.daily[today]) || 0;
+    if (c > trophyCount) {
+      trophyCount = c;
+      trophyName = n;
+    } else if (c === trophyCount && c > 0) {
+      // tie — no single winner today
+      trophyName = null;
+    }
+  });
+
+  if (trophyName && trophyCount > 0) {
+    banner.innerHTML = `<div class="family-trophy-banner">🏆 Today's leader: <b>${trophyName}</b> with <b>${trophyCount}</b> questions.</div>`;
+  } else if (trophyCount > 0) {
+    banner.innerHTML = `<div class="family-trophy-banner">It's a tie today! Top answerers have <b>${trophyCount}</b> questions each.</div>`;
+  } else {
+    banner.innerHTML = `<div class="family-trophy-banner">Nobody's answered anything today. Go get the trophy 🏆</div>`;
+  }
+
+  // Sort by stars desc, then today's count desc
+  names.sort((a, b) => {
+    const ua = state.users[a], ub = state.users[b];
+    if ((ub.stars || 0) !== (ua.stars || 0)) return (ub.stars || 0) - (ua.stars || 0);
+    const da = (ua.daily && ua.daily[today]) || 0;
+    const db = (ub.daily && ub.daily[today]) || 0;
+    return db - da;
+  });
+
+  names.forEach(name => {
+    const u = state.users[name];
+    migrateUser(u);
+    const isMe = name === state.activeUser;
+    const isTrophy = name === trophyName;
+    const tricksCount = Object.keys(u.tricks || {}).length;
+    const totalTricks = Object.keys(TRICK_CATALOG).length;
+    const dailyCount = (u.daily && u.daily[today]) || 0;
+    const bestGrSec = bestGoldenRunSec(u);
+    const lightningBest = (u.lightning && u.lightning.best) || 0;
+
+    const card = document.createElement('div');
+    card.className = 'family-card' + (isMe ? ' me' : '');
+    card.innerHTML = `
+      ${isTrophy ? '<div class="family-trophy">🏆</div>' : ''}
+      <div class="fc-header">
+        <div class="fc-avatar" style="background:${u.color || 'var(--card-2)'};">${u.avatar || '🙂'}</div>
+        <div>
+          <div class="fc-name">${name}${isMe ? ' <span style="font-size:11px;color:var(--accent-1);">(you)</span>' : ''}</div>
+          <div class="fc-sub">${dailyCount} today · streak ${u.stats?.bestStreak || 0}</div>
+        </div>
+      </div>
+      <div class="fc-stats">
+        <div>✨ Stars</div><div><b>${u.stars || 0}</b></div>
+        <div>🎴 Tricks</div><div><b>${tricksCount}</b> / ${totalTricks}</div>
+        <div>⚡ Lightning</div><div><b>${lightningBest}</b></div>
+        <div>🏁 Best run</div><div><b>${bestGrSec ? bestGrSec.toFixed(1) + 's' : '—'}</b></div>
+      </div>
+    `;
+    grid.appendChild(card);
+  });
+}
+
+document.getElementById('familyBtn').addEventListener('click', openFamily);
+document.getElementById('familyClose').addEventListener('click', () => familyOverlay.classList.remove('show'));
+familyOverlay.addEventListener('click', (e) => {
+  if (e.target === familyOverlay) familyOverlay.classList.remove('show');
+});
 function cellKey(a, b) {
   // Canonical key — a×b and b×a share the same record so commutative pairs fill in together.
   const lo = Math.min(a, b), hi = Math.max(a, b);
@@ -905,67 +2849,103 @@ function masteryLevel(rec) {
   return 'wrong';
 }
 
+/* --------------- Trick catalog ---------------
+   Central registry of every trick explain() can emit. Each trick has a stable
+   id (never rename — it's a save-state key), a kid-friendly name, a mascot,
+   a rarity, and a flavor line used on the collectible card. */
+const TRICK_CATALOG = {
+  zero:            { name: 'Zero the Hero',       emoji: '🦸', rarity: 'common',    flavor: 'One touch and everything vanishes.' },
+  one:             { name: 'Solo Sam',            emoji: '1️⃣', rarity: 'common',    flavor: 'Whatever walks in, walks right back out.' },
+  double:          { name: 'Double Dora',         emoji: '👯', rarity: 'common',    flavor: 'Sees everything twice. Literally.' },
+  three:           { name: 'Triple Trevor',       emoji: '🎲', rarity: 'uncommon',  flavor: 'Double it, then sneak one more on top.' },
+  four:            { name: 'Double-Double Dash',  emoji: '🐕', rarity: 'uncommon',  flavor: 'Twice the double. Four the win.' },
+  five:            { name: 'High-Five Hugo',      emoji: '✋', rarity: 'uncommon',  flavor: 'Bumps it up to ten, then splits the difference.' },
+  six:             { name: 'Sixy Sally',          emoji: '6️⃣', rarity: 'uncommon',  flavor: 'Five lots plus one more, easy as pie.' },
+  seven_split:     { name: 'Seven-Split Sven',    emoji: '7️⃣', rarity: 'uncommon',  flavor: 'Chops the tricky seven into five plus two.' },
+  eight:           { name: 'Triple-Double Tess',  emoji: '🎱', rarity: 'uncommon',  flavor: 'Double, double, double. Done.' },
+  nine_finger:     { name: 'Finger Fred',         emoji: '🖐️', rarity: 'uncommon',  flavor: 'Bends one finger and the answer appears.' },
+  nine:            { name: 'Nifty Nine Ninja',    emoji: '🥷', rarity: 'rare',      flavor: 'Ten lots. Then one stealthy subtract.' },
+  ten:             { name: 'Ten-der Ted',         emoji: '🔟', rarity: 'common',    flavor: 'Just drops a zero on the end. Job done.' },
+  eleven_split:    { name: 'Splitter Sid',        emoji: '✂️', rarity: 'rare',      flavor: 'Pulls the digits apart and slides the sum between.' },
+  eleven_carry:    { name: 'Carry Carol',         emoji: '📤', rarity: 'rare',      flavor: 'When the sum spills over, she carries it up.' },
+  twelve:          { name: 'Dozen Dot',           emoji: '🥚', rarity: 'rare',      flavor: 'One big ten-lot and one little two-lot.' },
+  twentyfive:      { name: 'Quarter Quinn',       emoji: '🍀', rarity: 'rare',      flavor: 'A quarter of a hundred. Divide by 4 and dust off.' },
+  fifty:           { name: 'Half-Ton Hal',        emoji: '⚖️', rarity: 'rare',      flavor: 'Hundred lots, then chop in half.' },
+  ninetynine:      { name: 'Nearly-Hundred Nell', emoji: '🎯', rarity: 'rare',      flavor: 'Does a hundred lots, then hands one back.' },
+  hundred:         { name: 'Century Ciaran',      emoji: '💯', rarity: 'common',    flavor: 'Two zeros and call it a day.' },
+  round_adjust:    { name: 'Round-Up Ruby',       emoji: '🔄', rarity: 'rare',      flavor: 'Rounds to the nearest ten, tidies the leftovers.' },
+  split_tens:      { name: 'Ten-Slide Theo',      emoji: '⬇️', rarity: 'uncommon',  flavor: 'Rolls out a ten and slides the zero on at the end.' },
+  split_place:     { name: 'Place-Value Pippa',   emoji: '📦', rarity: 'uncommon',  flavor: 'Breaks the big number into tidy tens and ones.' },
+  square_five:     { name: 'Five-Square Finn',    emoji: '🐟', rarity: 'rare',      flavor: 'Anything ending in 5, squared, ends in 25. Magic.' },
+  square_ten:      { name: 'Rounded Ron',         emoji: '🟡', rarity: 'rare',      flavor: 'Square the tens digit, stick 00 on. Clean.' },
+  square_close:    { name: 'Twin-Square Tara',    emoji: '🪞', rarity: 'epic',      flavor: 'Shifts to the nearest ten and patches the gap.' },
+  both_five:       { name: 'Fivesies Fiona',      emoji: '🎣', rarity: 'epic',      flavor: 'When both end in 5, she hooks the front and drops a 25 on back.' },
+  teens:           { name: 'Teen Titan',          emoji: '🦸', rarity: 'epic',      flavor: 'Owns the 13–19 corner. Both hands. No contest.' },
+  same_tens:       { name: 'Same-Tens Sam',       emoji: '🪩', rarity: 'epic',      flavor: 'When the tens match, Sam steps in with a sly one-line shortcut.' },
+  same_tens_ones10:{ name: 'Matching Mika',       emoji: '👯‍♀️', rarity: 'legendary', flavor: 'Same tens, ones add to ten — answer appears like a card trick.' },
+  tens10_same_ones:{ name: 'Opposite Ollie',      emoji: '⚔️', rarity: 'legendary', flavor: 'Tens add to ten, ones match. A mirror-image miracle.' },
+  nikhilam:        { name: 'Nikhilam Nick',       emoji: '🧙', rarity: 'legendary', flavor: 'Ancient Vedic wizardry for numbers near 100.' },
+};
+
 /* --------------- Mental-math explanation engine ---------------
    Given a × b, pick the best trick and produce a short, kid-friendly
-   step-by-step explanation. Return { title, steps: [string...] }.
-*/
+   step-by-step explanation. Return { id, title, steps: [string...] }. */
 function explain(a, b) {
   const [s, l] = a <= b ? [a, b] : [b, a];   // s small, l large
   const product = a * b;
 
   if (s === 0) {
-    return { title: 'Multiplying by 0', steps: [
+    return { id: 'zero', title: 'Multiplying by 0', steps: [
       'Anything times zero is zero. Always!',
       `So ${a} × ${b} = 0.`
     ]};
   }
   if (s === 1) {
-    return { title: 'Multiplying by 1', steps: [
+    return { id: 'one', title: 'Multiplying by 1', steps: [
       'Times-one leaves a number unchanged.',
       `${a} × ${b} = ${l}.`
     ]};
   }
   if (s === 2) {
-    return { title: 'Doubling', steps: [
+    return { id: 'double', title: 'Doubling', steps: [
       `× 2 means "double it".`,
       `${l} + ${l} = ${product}.`
     ]};
   }
   if (s === 10) {
-    return { title: '× 10 trick', steps: [
+    return { id: 'ten', title: '× 10 trick', steps: [
       `For × 10, just add a zero to the end of the other number.`,
       `${l} → ${l}0 = ${product}.`
     ]};
   }
   if (s === 100) {
-    return { title: '× 100 trick', steps: [
+    return { id: 'hundred', title: '× 100 trick', steps: [
       `For × 100, add two zeros.`,
       `${l} → ${l}00 = ${product}.`
     ]};
   }
   if (s === 5) {
-    // × 5 = × 10 ÷ 2
-    return { title: '× 5 trick (×10, then halve)', steps: [
+    return { id: 'five', title: '× 5 trick (×10, then halve)', steps: [
       `Multiply by 10 first: ${l} × 10 = ${l*10}.`,
       `Then halve it: ${l*10} ÷ 2 = ${product}.`
     ]};
   }
   if (s === 9 && l < 10) {
-    return { title: '× 9 finger trick', steps: [
+    return { id: 'nine_finger', title: '× 9 finger trick', steps: [
       `Hold up 10 fingers. Bend down finger number ${l}.`,
       `Fingers to the left = tens digit (${l-1}). Fingers to the right = ones digit (${10-l}).`,
       `Answer: ${product}.`
     ]};
   }
   if (s === 9) {
-    return { title: '× 9 trick (×10 minus the number)', steps: [
+    return { id: 'nine', title: '× 9 trick (×10 minus the number)', steps: [
       `9 is just one less than 10.`,
       `${l} × 10 = ${l*10}.`,
       `Subtract one lot of ${l}: ${l*10} − ${l} = ${product}.`
     ]};
   }
   if (s === 11 && l < 10) {
-    return { title: '× 11 trick (single digit)', steps: [
+    return { id: 'eleven_single', title: '× 11 trick (single digit)', steps: [
       `For × 11 with a single digit, write the digit twice.`,
       `${l}${l} = ${product}.`
     ]};
@@ -974,13 +2954,13 @@ function explain(a, b) {
     const d1 = Math.floor(l/10), d2 = l % 10;
     const sum = d1 + d2;
     if (sum < 10) {
-      return { title: '× 11 split trick', steps: [
+      return { id: 'eleven_split', title: '× 11 split trick', steps: [
         `Split ${l} into ${d1} and ${d2}. Add them: ${d1} + ${d2} = ${sum}.`,
         `Slip the ${sum} between the ${d1} and ${d2}: ${d1}-${sum}-${d2}.`,
         `So ${l} × 11 = ${product}.`
       ]};
     } else {
-      return { title: '× 11 split trick (with carry)', steps: [
+      return { id: 'eleven_carry', title: '× 11 split trick (with carry)', steps: [
         `Split ${l} into ${d1} and ${d2}. Add them: ${d1} + ${d2} = ${sum}.`,
         `${sum} is 10 or more, so carry the 1. Tens digit becomes ${d1}+1 = ${d1+1}, middle becomes ${sum-10}.`,
         `So ${l} × 11 = ${product}.`
@@ -988,56 +2968,56 @@ function explain(a, b) {
     }
   }
   if (s === 25) {
-    return { title: '× 25 trick', steps: [
+    return { id: 'twentyfive', title: '× 25 trick', steps: [
       `× 25 is the same as × 100 ÷ 4.`,
       `${l} × 100 = ${l*100}.`,
       `Divide by 4: ${l*100} ÷ 4 = ${product}.`
     ]};
   }
   if (s === 50) {
-    return { title: '× 50 trick', steps: [
+    return { id: 'fifty', title: '× 50 trick', steps: [
       `× 50 is × 100 then halve.`,
       `${l} × 100 = ${l*100}. Halve it: ${product}.`
     ]};
   }
   if (s === 99) {
-    return { title: '× 99 trick', steps: [
+    return { id: 'ninetynine', title: '× 99 trick', steps: [
       `99 is one less than 100.`,
       `${l} × 100 = ${l*100}. Subtract ${l}: ${l*100} − ${l} = ${product}.`
     ]};
   }
   if (s === 4) {
-    return { title: '× 4 trick (double, double)', steps: [
+    return { id: 'four', title: '× 4 trick (double, double)', steps: [
       `× 4 = double, then double again.`,
       `${l} + ${l} = ${l*2}. Then ${l*2} + ${l*2} = ${product}.`
     ]};
   }
   if (s === 8) {
-    return { title: '× 8 trick (double three times)', steps: [
+    return { id: 'eight', title: '× 8 trick (double three times)', steps: [
       `× 8 = double, double, double.`,
       `${l} → ${l*2} → ${l*4} → ${product}.`
     ]};
   }
   if (s === 3) {
-    return { title: '× 3 trick', steps: [
+    return { id: 'three', title: '× 3 trick', steps: [
       `Double it, then add one more lot.`,
       `${l} + ${l} = ${l*2}. Plus ${l} more = ${product}.`
     ]};
   }
   if (s === 6) {
-    return { title: '× 6 trick', steps: [
+    return { id: 'six', title: '× 6 trick', steps: [
       `× 6 = × 3 then double. (Or × 5 plus one more lot.)`,
       `${l} × 5 = ${l*5}. Plus ${l} = ${product}.`
     ]};
   }
   if (s === 7 && l <= 10) {
-    return { title: '× 7 — split it', steps: [
+    return { id: 'seven_split', title: '× 7 — split it', steps: [
       `Split 7 into 5 + 2. Do each, then add.`,
       `${l} × 5 = ${l*5}. ${l} × 2 = ${l*2}. ${l*5} + ${l*2} = ${product}.`
     ]};
   }
   if (s === 12) {
-    return { title: '× 12 (×10 + ×2)', steps: [
+    return { id: 'twelve', title: '× 12 (×10 + ×2)', steps: [
       `× 12 is one ten-lot plus one two-lot.`,
       `${l} × 10 = ${l*10}. ${l} × 2 = ${l*2}.`,
       `Add: ${l*10} + ${l*2} = ${product}.`
@@ -1048,7 +3028,7 @@ function explain(a, b) {
   if (a === b) {
     if (a % 10 === 5 && a >= 5 && a <= 95) {
       const n = Math.floor(a / 10);
-      return { title: 'Squaring a number ending in 5', steps: [
+      return { id: 'square_five', title: 'Squaring a number ending in 5', steps: [
         `Trick: n × (n+1), then stick 25 on the end.`,
         `For ${a}²: n = ${n}. ${n} × ${n+1} = ${n*(n+1)}.`,
         `Answer: ${n*(n+1)}25 = ${product}.`
@@ -1056,7 +3036,7 @@ function explain(a, b) {
     }
     if (a % 10 === 0 && a >= 10 && a <= 90) {
       const n = a / 10;
-      return { title: 'Squaring a round ten', steps: [
+      return { id: 'square_ten', title: 'Squaring a round ten', steps: [
         `${a} = ${n} × 10.`,
         `${n}² = ${n*n}. Stick 00 on the end: ${product}.`
       ]};
@@ -1065,13 +3045,13 @@ function explain(a, b) {
       const round = Math.round(a / 10) * 10;
       const d = a - round;
       const other = a + d;
-      return { title: 'Close-pair square trick', steps: [
+      return { id: 'square_close', title: 'Close-pair square trick', steps: [
         `${a} is ${Math.abs(d)} ${d > 0 ? 'more' : 'less'} than ${round}.`,
         `Do ${round} × ${other} = ${round * other}.`,
         `Add ${Math.abs(d)}² = ${d*d}. Total: ${round*other} + ${d*d} = ${product}.`
       ]};
     }
-    return { title: 'A square number', steps: [
+    return { id: 'square_plain', title: 'A square number', steps: [
       `${a} × ${a} = ${product}.`
     ]};
   }
@@ -1082,7 +3062,7 @@ function explain(a, b) {
     const prodXY = x * y;
     const avg = (x + y) / 2;
     const sum = prodXY + avg;
-    return { title: 'Both end in 5', steps: [
+    return { id: 'both_five', title: 'Both end in 5', steps: [
       `Front digits: ${x} and ${y}. Multiply: ${x} × ${y} = ${prodXY}.`,
       `Average them: (${x}+${y})÷2 = ${avg}. Add: ${prodXY} + ${avg} = ${sum}.`,
       `× 100 then + 25: ${sum*100} + 25 = ${product}.`
@@ -1094,7 +3074,7 @@ function explain(a, b) {
     const u1 = s - 10, u2 = l - 10;
     const tensPart = (s + u2) * 10;
     const backDigit = u1 * u2;
-    return { title: 'Teens × Teens', steps: [
+    return { id: 'teens', title: 'Teens × Teens', steps: [
       `Add the other's ones to ${s}: ${s} + ${u2} = ${s+u2}.`,
       `Stick a 0 on the end: ${tensPart}.`,
       `Multiply the ones: ${u1} × ${u2} = ${backDigit}. Add: ${tensPart} + ${backDigit} = ${product}.`
@@ -1108,7 +3088,7 @@ function explain(a, b) {
     const front = t * (t + 1);
     const back = u1 * u2;
     const backStr = back < 10 ? '0' + back : '' + back;
-    return { title: 'Same tens, ones add to 10', steps: [
+    return { id: 'same_tens_ones10', title: 'Same tens, ones add to 10', steps: [
       `Both start with ${t}. Ones add to 10 (${u1}+${u2}=10).`,
       `${t} × ${t+1} = ${front} — that's the front.`,
       `${u1} × ${u2} = ${back} → "${backStr}" — that's the back.`,
@@ -1123,7 +3103,7 @@ function explain(a, b) {
     const front = a_t * b_t + u;
     const back = u * u;
     const backStr = back < 10 ? '0' + back : '' + back;
-    return { title: 'Tens add to 10, same ones', steps: [
+    return { id: 'tens10_same_ones', title: 'Tens add to 10, same ones', steps: [
       `Tens digits (${a_t} and ${b_t}) add to 10. Same ones: ${u}.`,
       `${a_t} × ${b_t} + ${u} = ${front} — that's the front.`,
       `${u}² = ${back} → "${backStr}" — that's the back.`,
@@ -1133,15 +3113,13 @@ function explain(a, b) {
 
   // Both close to 100 (Nikhilam). Fires before the general "same tens digit"
   // trick so 97×98 uses the cleaner cross-subtract instead of 105 × 9.
-  // Restricted to cases where the product of differences stays < 100 so the
-  // "back" stays a tidy two digits with no carry narrative.
   if (s >= 85 && l <= 99) {
     const da = 100 - s, db = 100 - l;
     const back = da * db;
     if (back < 100) {
       const front = s - db;
       const backStr = back < 10 ? '0' + back : '' + back;
-      return { title: 'Close to 100', steps: [
+      return { id: 'nikhilam', title: 'Close to 100', steps: [
         `${s} is ${da} below 100, ${l} is ${db} below 100.`,
         `Cross-subtract: ${s} − ${db} = ${front} (or ${l} − ${da}, same answer).`,
         `${da} × ${db} = ${back} → "${backStr}".`,
@@ -1156,7 +3134,7 @@ function explain(a, b) {
     const u1 = s % 10, u2 = l % 10;
     const step1 = t * (s + u2);
     const back = u1 * u2;
-    return { title: 'Same tens digit', steps: [
+    return { id: 'same_tens', title: 'Same tens digit', steps: [
       `Both start with ${t}. Add one's ones to the other: ${s} + ${u2} = ${s+u2}.`,
       `Times the shared tens ${t}: ${s+u2} × ${t} = ${step1}. Stick a 0 on: ${step1*10}.`,
       `${u1} × ${u2} = ${back}. Add: ${step1*10} + ${back} = ${product}.`
@@ -1177,13 +3155,13 @@ function explain(a, b) {
     }
     if (target !== null) {
       if (diff > 0) {
-        return { title: 'Round then adjust', steps: [
+        return { id: 'round_adjust', title: 'Round then adjust', steps: [
           `${target} is just ${diff} more than ${round}.`,
           `${round} × ${other} = ${round*other}.`,
           `Add ${diff} × ${other} = ${diff*other}. Total: ${product}.`
         ]};
       } else {
-        return { title: 'Round then adjust', steps: [
+        return { id: 'round_adjust', title: 'Round then adjust', steps: [
           `${target} is just ${-diff} less than ${round}.`,
           `${round} × ${other} = ${round*other}.`,
           `Subtract ${-diff} × ${other} = ${-diff*other}. Total: ${product}.`
@@ -1198,12 +3176,12 @@ function explain(a, b) {
     const ones = l % 10;
     if (ones === 0) {
       const n = l / 10;
-      return { title: 'Split into tens', steps: [
+      return { id: 'split_tens', title: 'Split into tens', steps: [
         `${l} = ${n} × 10.`,
         `${n} × ${s} = ${n*s}. Then × 10: ${product}.`
       ]};
     }
-    return { title: 'Split by place value', steps: [
+    return { id: 'split_place', title: 'Split by place value', steps: [
       `Break ${l} into ${tens} + ${ones}.`,
       `${tens} × ${s} = ${tens*s}.`,
       `${ones} × ${s} = ${ones*s}.`,
@@ -1212,7 +3190,7 @@ function explain(a, b) {
   }
 
   // Final fallback — small × small — just describe repeated addition
-  return { title: 'Repeated addition', steps: [
+  return { id: 'repeated_add', title: 'Repeated addition', steps: [
     `${s} × ${l} means ${s} lots of ${l}.`,
     `${Array(s).fill(l).join(' + ')} = ${product}.`
   ]};
@@ -1360,6 +3338,11 @@ function submitAnswer() {
   rec.attempts++;
   rec.lastAt = new Date().toISOString();
   u.stats.totalAttempts++;
+  bumpDailyCount();
+
+  // Every answer "uses" a trick — unlock the card either way.
+  const ex = explain(a, b);
+  const newlyUnlocked = unlockTrick(ex.id);
 
   if (given === correct) {
     rec.correct++;
@@ -1370,6 +3353,7 @@ function submitAnswer() {
     if (u.stats.currentStreak > u.stats.bestStreak) u.stats.bestStreak = u.stats.currentStreak;
 
     const nowMastered = masteryLevel(rec) === 'mastered';
+    playSfx('correct');
     qFeedback.innerHTML = `
       <div class="feedback good">
         <h3>✅ Correct!</h3>
@@ -1382,7 +3366,7 @@ function submitAnswer() {
   } else {
     rec.streak = 0;
     u.stats.currentStreak = 0;
-    const ex = explain(a, b);
+    playSfx('wrong');
     qFeedback.innerHTML = `
       <div class="feedback bad">
         <h3>❌ Not quite — the answer is ${correct}</h3>
@@ -1403,6 +3387,10 @@ function submitAnswer() {
 
   saveState();
   refreshCells();
+
+  if (newlyUnlocked) {
+    setTimeout(() => showWildAppeared(ex.id), 500);
+  }
 }
 
 function pickNext() {
@@ -1598,30 +3586,105 @@ document.getElementById('newUserName').addEventListener('keydown', (e) => {
 });
 
 /* --------------- Golden Run --------------- */
-const RANGE_PRESETS = [
-  { label: 'Up to 5',      xMin:1, xMax:5,  yMin:1, yMax:5 },
-  { label: 'Up to 10',     xMin:1, xMax:10, yMin:1, yMax:10 },
-  { label: 'Up to 12',     xMin:1, xMax:12, yMin:1, yMax:12 },
-  { label: '2 – 9 tables', xMin:2, xMax:9,  yMin:2, yMax:9 },
-  { label: 'Teens (×2–12)',xMin:13,xMax:19, yMin:2, yMax:12 },
-  { label: 'Full 1 – 100', xMin:1, xMax:100,yMin:1, yMax:100 }
+
+/* Difficulty tiers. Each tier builds an explicit pool of [a,b] pairs that
+   questions are drawn from. */
+function poolBeginner() {
+  // 1..10 × 1..10
+  const pool = [];
+  for (let a = 1; a <= 10; a++) for (let b = 1; b <= 10; b++) pool.push([a, b]);
+  return pool;
+}
+function poolKnowMyStuff() {
+  // (1..20 ∪ 90..100) on each axis
+  const axis = [];
+  for (let i = 1;  i <= 20;  i++) axis.push(i);
+  for (let i = 90; i <= 100; i++) axis.push(i);
+  const pool = [];
+  for (const a of axis) for (const b of axis) pool.push([a, b]);
+  return pool;
+}
+function poolGod() {
+  // Union of: 10..30 × 10..30, 90..100 × 90..100, all squares n×n (1..100),
+  // all pairs with same tens digit whose ones digits sum to 10.
+  const seen = new Set();
+  const pool = [];
+  const add = (a, b) => {
+    const k = a + 'x' + b;
+    if (seen.has(k)) return;
+    seen.add(k);
+    pool.push([a, b]);
+  };
+  for (let a = 10; a <= 30;  a++) for (let b = 10; b <= 30;  b++) add(a, b);
+  for (let a = 90; a <= 100; a++) for (let b = 90; b <= 100; b++) add(a, b);
+  for (let n = 1;  n <= 100; n++) add(n, n);
+  // Same-tens, ones-sum-to-10 — e.g. 47 × 43, 62 × 68. Two-digit numbers only.
+  for (let tens = 1; tens <= 9; tens++) {
+    for (let b1 = 1; b1 <= 9; b1++) {
+      const b2 = 10 - b1;               // b1 + b2 = 10
+      add(tens * 10 + b1, tens * 10 + b2);
+    }
+  }
+  return pool;
+}
+function poolSavant() {
+  // Everything on the grid.
+  const pool = [];
+  for (let a = 1; a <= 100; a++) for (let b = 1; b <= 100; b++) pool.push([a, b]);
+  return pool;
+}
+
+const DIFFICULTIES = [
+  {
+    id: 'beginner',
+    emoji: '🌱',
+    title: 'Just getting started',
+    desc: '1 – 10 on both sides. Builds the foundation.',
+    pool: poolBeginner
+  },
+  {
+    id: 'knowmystuff',
+    emoji: '💪',
+    title: 'I know my stuff',
+    desc: '1 – 20 and 90 – 100 on each side. Tricks kick in.',
+    pool: poolKnowMyStuff
+  },
+  {
+    id: 'god',
+    emoji: '⚡',
+    title: 'Mathematics God',
+    desc: '10 – 30, 90 – 100, every square, and same-tens/ones-add-to-10.',
+    pool: poolGod
+  },
+  {
+    id: 'savant',
+    emoji: '🧠',
+    title: 'Savant',
+    desc: 'Anything on the grid. No mercy.',
+    pool: poolSavant
+  }
 ];
 
 const grSetupOverlay = document.getElementById('grSetupOverlay');
 const grQuizOverlay  = document.getElementById('grQuizOverlay');
-let gr = null;   // active run state
+let gr = null;                            // active run state
+let selectedDifficultyId = 'beginner';    // last-picked tier
 
-function renderRangePresets() {
-  const wrap = document.getElementById('rangePresets');
+function renderDifficultyPicker() {
+  const wrap = document.getElementById('difficultyPicker');
   wrap.innerHTML = '';
-  RANGE_PRESETS.forEach(p => {
+  DIFFICULTIES.forEach(d => {
     const b = document.createElement('button');
-    b.textContent = p.label;
+    b.type = 'button';
+    b.dataset.id = d.id;
+    b.innerHTML = `
+      <span class="diff-emoji">${d.emoji}</span>
+      <span class="diff-title">${d.title}</span>
+      <span class="diff-desc">${d.desc}</span>
+    `;
+    if (d.id === selectedDifficultyId) b.classList.add('selected');
     b.addEventListener('click', () => {
-      document.getElementById('grXMin').value = p.xMin;
-      document.getElementById('grXMax').value = p.xMax;
-      document.getElementById('grYMin').value = p.yMin;
-      document.getElementById('grYMax').value = p.yMax;
+      selectedDifficultyId = d.id;
       wrap.querySelectorAll('button').forEach(x => x.classList.remove('selected'));
       b.classList.add('selected');
     });
@@ -1630,7 +3693,7 @@ function renderRangePresets() {
 }
 
 function openGoldenSetup() {
-  renderRangePresets();
+  renderDifficultyPicker();
   grSetupOverlay.classList.add('show');
 }
 
@@ -1643,45 +3706,36 @@ grSetupOverlay.addEventListener('click', (e) => {
 });
 
 document.getElementById('grStart').addEventListener('click', () => {
-  const xMin = +document.getElementById('grXMin').value;
-  const xMax = +document.getElementById('grXMax').value;
-  const yMin = +document.getElementById('grYMin').value;
-  const yMax = +document.getElementById('grYMax').value;
-  const bad = [xMin, xMax, yMin, yMax].some(v => !Number.isFinite(v) || v < 1 || v > 100);
-  if (bad || xMin > xMax || yMin > yMax) {
-    alert('Please pick numbers between 1 and 100, with "from" ≤ "to".');
-    return;
-  }
+  const diff = DIFFICULTIES.find(d => d.id === selectedDifficultyId) || DIFFICULTIES[0];
   grSetupOverlay.classList.remove('show');
-  startGoldenRun(xMin, xMax, yMin, yMax);
+  startGoldenRun(diff);
 });
 
 function randInt(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-function startGoldenRun(xMin, xMax, yMin, yMax) {
-  const used = new Set();
+function startGoldenRun(difficulty) {
+  const pool = difficulty.pool();
+  // Fisher-Yates partial shuffle: pick 10 unique pairs from the pool.
+  const picks = pool.slice();
   const questions = [];
-  const totalPossible = (xMax - xMin + 1) * (yMax - yMin + 1);
-  const uniqueTarget = Math.min(10, totalPossible);
-  while (questions.length < uniqueTarget) {
-    const a = randInt(xMin, xMax);
-    const b = randInt(yMin, yMax);
-    const k = a + 'x' + b;
-    if (used.has(k)) continue;
-    used.add(k);
-    questions.push([a, b]);
+  const target = Math.min(10, picks.length);
+  for (let i = 0; i < target; i++) {
+    const j = i + Math.floor(Math.random() * (picks.length - i));
+    [picks[i], picks[j]] = [picks[j], picks[i]];
+    questions.push(picks[i]);
   }
-  // If the pool is smaller than 10, pad with repeats
+  // If pool somehow has < 10 pairs, pad with repeats (shouldn't happen in practice).
   while (questions.length < 10) {
-    questions.push([randInt(xMin, xMax), randInt(yMin, yMax)]);
+    questions.push(pool[randInt(0, pool.length - 1)]);
   }
 
   gr = {
     questions, index: 0, finished: false,
     timer: null, deadline: null,
-    range: { xMin, xMax, yMin, yMax }
+    startedAt: performance.now(),
+    difficulty: { id: difficulty.id, title: difficulty.title, emoji: difficulty.emoji }
   };
   resetGrModalUI();
   document.getElementById('grFeedback').innerHTML = '';
@@ -1709,7 +3763,8 @@ function nextGrQuestion() {
   if (gr.index >= 10) { finishGoldenRun(true); return; }
   const [a, b] = gr.questions[gr.index];
   document.getElementById('grQText').textContent = `${a} × ${b}`;
-  document.getElementById('grSub').textContent = `Question ${gr.index + 1} of 10`;
+  const diffLabel = gr.difficulty ? `${gr.difficulty.emoji} ${gr.difficulty.title} · ` : '';
+  document.getElementById('grSub').textContent = `${diffLabel}Question ${gr.index + 1} of 10`;
   const inp = document.getElementById('grInput');
   inp.value = '';
   inp.disabled = false;
@@ -1754,7 +3809,12 @@ function submitGrAnswer() {
   const given = parseInt(val, 10);
   const correct = a * b;
 
+  const ex = explain(a, b);
+  const newlyUnlocked = unlockTrick(ex.id);
+  bumpDailyCount();
+
   if (given === correct) {
+    playSfx('correct');
     if (gr.timer) { clearInterval(gr.timer); gr.timer = null; }
     gr.index++;
     if (gr.index >= 10) {
@@ -1764,12 +3824,16 @@ function submitGrAnswer() {
       inp.disabled = true;
       document.getElementById('grSubmit').disabled = true;
       renderGrProgress();
+      const delay = newlyUnlocked ? 1500 : 550;
+      if (newlyUnlocked) setTimeout(() => showWildAppeared(ex.id), 250);
       setTimeout(() => {
         if (gr && !gr.finished) nextGrQuestion();
-      }, 550);
+      }, delay);
     }
   } else {
+    playSfx('wrong');
     handleGrFail(`❌ You said ${given}. The answer was ${correct}.`);
+    if (newlyUnlocked) setTimeout(() => showWildAppeared(ex.id), 700);
   }
 }
 
@@ -1788,7 +3852,7 @@ function handleGrFail(reason) {
   if (!u.goldenRuns) u.goldenRuns = [];
   u.goldenRuns.push({
     date: new Date().toISOString(),
-    range: gr.range,
+    difficulty: gr.difficulty,
     reached: gr.index,
     won: false
   });
@@ -1830,9 +3894,10 @@ function finishGoldenRun(win) {
   if (!u.goldenRuns) u.goldenRuns = [];
   u.goldenRuns.push({
     date: new Date().toISOString(),
-    range: gr.range,
+    difficulty: gr.difficulty,
     reached: 10,
-    won: true
+    won: true,
+    durationSec: gr.startedAt ? (performance.now() - gr.startedAt) / 1000 : null
   });
   saveState();
   updateStats();
@@ -1907,6 +3972,7 @@ document.getElementById('grForfeit').addEventListener('click', onGrForfeit);
 ensureUser();
 buildGrid();
 refreshCells();
+renderMuteBtn();
 
 // First-run: if only Guest exists, pop the user modal so they can add their kids
 if (Object.keys(state.users).length === 1 && state.users.Guest && !state.users.Guest.stats.totalAttempts) {

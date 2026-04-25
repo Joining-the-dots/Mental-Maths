@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover" />
-<title>Times Table Quest — V7</title>
+<title>Times Table Quest — V10</title>
 
 <!-- PWA -->
 <link rel="manifest" href="manifest.json">
@@ -210,12 +210,148 @@
 
   .grid {
     display: grid;
-    /* 1 header col + 100 data cols */
+    /* 1 header col + 100 data cols (overridden in ladder mode below) */
     grid-template-columns: var(--cell) repeat(100, var(--cell));
     grid-auto-rows: var(--cell);
     gap: 2px;
     font-size: 12px;
   }
+  /* Ladder mode: only 10 cols for the unlocked rungs */
+  .grid.ladder-mode {
+    grid-template-columns: var(--cell) repeat(10, var(--cell));
+    gap: 4px;
+    font-size: 14px;
+  }
+  .grid.ladder-mode .cell,
+  .grid.ladder-mode .hdr {
+    width: calc(var(--cell) * 1.4);
+    height: calc(var(--cell) * 1.4);
+    border-radius: 10px;
+  }
+  .grid.ladder-mode .hdr.left.current-rung {
+    background: linear-gradient(135deg, #FFD23F, #FF9500);
+    color: #fff;
+    box-shadow: 0 0 0 2px #FFD23F, 0 0 18px rgba(255, 210, 63, 0.6);
+    animation: rung-pulse 1.6s ease-in-out infinite;
+  }
+  @keyframes rung-pulse {
+    0%, 100% { transform: scale(1); }
+    50%      { transform: scale(1.06); }
+  }
+  .grid.ladder-mode .row-just-unlocked {
+    animation: row-slide-in 0.7s cubic-bezier(.2,.9,.3,1.3) both;
+  }
+  @keyframes row-slide-in {
+    0%   { opacity: 0; transform: translateY(-24px) scale(0.96); }
+    60%  { opacity: 1; transform: translateY(4px)   scale(1.02); }
+    100% { opacity: 1; transform: translateY(0)     scale(1); }
+  }
+
+  /* Ladder streak indicator in toolbar */
+  .ladder-pill {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 6px 12px; border-radius: 999px;
+    background: linear-gradient(135deg, #6c5ce7, #00b4d8);
+    color: #fff;
+    font-weight: 700; font-size: 13px;
+    box-shadow: 0 2px 8px rgba(108, 92, 231, 0.35);
+  }
+  .ladder-pill .ladder-rung {
+    background: rgba(255, 255, 255, 0.22);
+    padding: 2px 8px; border-radius: 999px;
+    font-size: 12px;
+  }
+  .ladder-pill .ladder-streak-bar {
+    width: 70px; height: 8px; border-radius: 999px;
+    background: rgba(255, 255, 255, 0.25); overflow: hidden;
+    position: relative;
+  }
+  .ladder-pill .ladder-streak-bar > div {
+    height: 100%; width: 0%;
+    background: linear-gradient(90deg, #FFD23F, #fff);
+    border-radius: 999px;
+    transition: width 0.35s cubic-bezier(.2,.9,.3,1.3);
+    box-shadow: 0 0 8px rgba(255, 210, 63, 0.7);
+  }
+  .ladder-pill.complete {
+    background: linear-gradient(135deg, #FFD23F, #FF9500);
+    color: #5d3a00;
+  }
+
+  /* Ladder unlock celebration overlay */
+  .ladder-overlay {
+    position: fixed; inset: 0;
+    background: radial-gradient(circle at center, rgba(108, 92, 231, 0.45), rgba(0, 0, 0, 0.75));
+    display: none; align-items: center; justify-content: center;
+    z-index: 110;
+    animation: ladder-bg 0.3s ease;
+  }
+  .ladder-overlay.show { display: flex; }
+  @keyframes ladder-bg { from { opacity: 0; } to { opacity: 1; } }
+  .ladder-card {
+    background: linear-gradient(160deg, #1c2238, #14182a);
+    color: #e6e9f5;
+    border: 1px solid rgba(255, 215, 64, 0.5);
+    border-radius: 22px;
+    padding: 28px 32px 22px;
+    text-align: center;
+    max-width: 420px; min-width: 320px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 0 2px rgba(255, 215, 64, 0.4);
+    position: relative; overflow: hidden;
+    animation: ladder-pop 0.55s cubic-bezier(.2,.9,.3,1.3);
+  }
+  @keyframes ladder-pop {
+    0%   { transform: scale(0.5) rotate(-6deg); opacity: 0; }
+    60%  { transform: scale(1.08) rotate(2deg); opacity: 1; }
+    100% { transform: scale(1) rotate(0); opacity: 1; }
+  }
+  .ladder-card::before {
+    content: ''; position: absolute; inset: -50% -50%;
+    background: conic-gradient(from 0deg, transparent, rgba(255, 215, 64, 0.18), transparent 50%);
+    animation: ladder-shine 2s linear infinite;
+    pointer-events: none;
+  }
+  @keyframes ladder-shine {
+    to { transform: rotate(360deg); }
+  }
+  .ladder-heading {
+    font-size: 14px; letter-spacing: 0.18em; text-transform: uppercase;
+    color: #FFD23F; margin-bottom: 6px;
+  }
+  .ladder-digit {
+    font-size: 92px; font-weight: 900; line-height: 1;
+    background: linear-gradient(180deg, #fff 0%, #FFD23F 60%, #FF9500 100%);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin: 8px 0 6px;
+    text-shadow: 0 0 30px rgba(255, 210, 63, 0.5);
+  }
+  .ladder-msg {
+    font-size: 18px; font-weight: 700; margin-bottom: 4px;
+  }
+  .ladder-sub {
+    font-size: 13px; color: rgba(230, 233, 245, 0.7);
+    margin-bottom: 16px;
+  }
+  .ladder-peg {
+    width: 130px; height: 130px; margin: 0 auto 12px;
+    background: linear-gradient(160deg, #2a2050, #15192a);
+    border-radius: 18px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    display: flex; align-items: center; justify-content: center;
+    position: relative; z-index: 1;
+  }
+  .ladder-peg svg { width: 110px; height: 110px; }
+  .ladder-card .btn-dismiss {
+    background: linear-gradient(135deg, #FFD23F, #FF9500);
+    color: #5d3a00; border: none;
+    padding: 10px 22px; border-radius: 12px;
+    font-weight: 800; font-size: 15px; cursor: pointer;
+    box-shadow: 0 4px 14px rgba(255, 152, 0, 0.4);
+    position: relative; z-index: 1;
+  }
+  .ladder-card .btn-dismiss:hover { transform: translateY(-1px); }
+
   .cell, .hdr {
     display: grid;
     place-items: center;
@@ -868,106 +1004,6 @@
     margin-bottom: 8px;
   }
 
-  /* ========= Realms ========= */
-  .btn-realms {
-    background: linear-gradient(135deg, #6c5ce7, #a29bfe);
-    color: white;
-    box-shadow: 0 4px 14px rgba(108, 92, 231, 0.28);
-  }
-  .btn-realms:hover { transform: translateY(-2px); filter: brightness(1.05); }
-  .realms-path {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    max-height: 65vh;
-    overflow-y: auto;
-    padding: 4px 2px 8px;
-  }
-  .realm-card {
-    position: relative;
-    display: grid;
-    grid-template-columns: 64px 1fr auto;
-    align-items: center;
-    gap: 14px;
-    padding: 12px 14px;
-    background: #fff;
-    border: 2px solid #eae5d6;
-    border-radius: 14px;
-    transition: all .18s ease;
-  }
-  .realm-card.current   { border-color: #6c5ce7; box-shadow: 0 4px 14px rgba(108,92,231,0.16); }
-  .realm-card.cleared   { background: linear-gradient(135deg, #eafff1, #fdfdff); border-color: #7fd399; }
-  .realm-card.mastered  { background: linear-gradient(135deg, #fff5d8, #fffbee); border-color: #e4a83a; }
-  .realm-card.locked    { opacity: 0.55; filter: grayscale(0.6); }
-  .realm-card:not(.locked):hover { transform: translateY(-1px); box-shadow: 0 6px 16px rgba(0,0,0,0.08); }
-  .realm-emoji {
-    width: 64px; height: 64px;
-    display: grid;
-    place-items: center;
-    font-size: 44px;
-    background: linear-gradient(135deg, #f4f0ff, #fff);
-    border-radius: 14px;
-    border: 2px dashed #d7cef3;
-  }
-  .realm-card.cleared .realm-emoji  { border-color: #7fd399; background: linear-gradient(135deg, #eafff1, #fff); }
-  .realm-card.mastered .realm-emoji { border-color: #e4a83a; background: linear-gradient(135deg, #fff5d8, #fff); }
-  .realm-title {
-    font-family: 'Baloo 2', sans-serif;
-    font-size: 22px;
-    color: var(--ink);
-    line-height: 1.1;
-  }
-  .realm-sub {
-    font-size: 13px;
-    color: var(--ink-soft);
-    margin-top: 2px;
-  }
-  .realm-progress {
-    margin-top: 8px;
-    height: 8px;
-    background: #eee6d4;
-    border-radius: 999px;
-    overflow: hidden;
-  }
-  .realm-progress-bar {
-    height: 100%;
-    background: linear-gradient(90deg, #6c5ce7, #a29bfe);
-    border-radius: 999px;
-    transition: width .35s ease;
-  }
-  .realm-card.cleared .realm-progress-bar { background: linear-gradient(90deg, #2ecc71, #7fd399); }
-  .realm-card.mastered .realm-progress-bar { background: linear-gradient(90deg, #e4a83a, #ffd87a); }
-  .realm-action {
-    display: grid;
-    place-items: center;
-    gap: 4px;
-  }
-  .realm-status-badge {
-    font-size: 11px;
-    font-weight: 800;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    padding: 3px 8px;
-    border-radius: 999px;
-    color: white;
-  }
-  .realm-status-badge.locked   { background: #95a5a6; }
-  .realm-status-badge.current  { background: #6c5ce7; }
-  .realm-status-badge.cleared  { background: #2ecc71; }
-  .realm-status-badge.mastered { background: #e4a83a; }
-  .realm-cleared-celebrate {
-    background: linear-gradient(135deg, #2ecc71, #7fd399);
-    color: white;
-    padding: 18px;
-    border-radius: 14px;
-    text-align: center;
-  }
-  .realm-cleared-celebrate h3 {
-    font-family: 'Baloo 2', sans-serif;
-    font-size: 24px;
-    margin: 0 0 6px;
-  }
-
   /* ========= Trick Master ========= */
   .btn-tm {
     background: linear-gradient(135deg, #5ec4b6, #3aa7e0);
@@ -1070,34 +1106,6 @@
     margin-top: 4px;
   }
 
-  /* ========= Challenges ========= */
-  .btn-challenge {
-    background: linear-gradient(135deg, #ff7eb3, #ff5576);
-    color: white;
-    box-shadow: 0 4px 14px rgba(255, 85, 118, 0.28);
-  }
-  .btn-challenge:hover { transform: translateY(-2px); filter: brightness(1.05); }
-  .challenge-link-box {
-    background: #fff6f9;
-    border: 2px dashed #ff7eb3;
-    border-radius: 10px;
-    padding: 10px;
-    margin: 10px 0;
-    font-family: monospace;
-    font-size: 12px;
-    word-break: break-all;
-    color: var(--ink);
-  }
-  .challenge-banner {
-    background: linear-gradient(135deg, #ffd6e4, #fff);
-    border-left: 4px solid #ff5576;
-    border-radius: 10px;
-    padding: 10px 14px;
-    margin-bottom: 10px;
-    text-align: center;
-  }
-  .challenge-banner b { color: #ff5576; }
-
   /* ========= Family leaderboard ========= */
   .family-grid {
     display: grid;
@@ -1150,6 +1158,90 @@
   }
 
   /* ========= Creatures gallery ========= */
+
+  /* ========= Peg gallery + picker (Phase 2) ========= */
+  .peg-svg {
+    width: 96px; height: 96px; margin: 0 auto 4px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .peg-svg svg { width: 100%; height: 100%; }
+  .peg-svg.peg-faint svg  { opacity: 0.30; filter: grayscale(0.5); }
+  .peg-svg.peg-on svg     { opacity: 0.92; }
+  .peg-svg.peg-full svg   { opacity: 1; filter: drop-shadow(0 0 6px rgba(255, 215, 64, 0.6)); }
+  .peg-svg.peg-empty {
+    font-size: 56px; font-weight: 900; color: var(--ink-soft);
+    background: rgba(176, 132, 255, 0.08);
+    border: 2px dashed rgba(176, 132, 255, 0.35);
+    border-radius: 16px;
+  }
+  .peg-card {
+    background: linear-gradient(160deg, #1c2238, #14182a);
+    color: #e6e9f5;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+  .peg-card.peg-unpicked {
+    background: linear-gradient(160deg, #f5f0ff, #fff5f8);
+    color: var(--ink);
+    border: 2px dashed rgba(176, 132, 255, 0.45);
+  }
+  .peg-card .creature-name { color: inherit; }
+  .peg-card .creature-table,
+  .peg-card .creature-stage,
+  .peg-card .creature-progress { color: rgba(230, 233, 245, 0.7); }
+  .peg-card.peg-unpicked .creature-table,
+  .peg-card.peg-unpicked .creature-stage,
+  .peg-card.peg-unpicked .creature-progress { color: var(--ink-soft); }
+  .peg-card.full {
+    background: linear-gradient(160deg, #2a1f48, #14182a);
+    box-shadow: 0 0 0 2px rgba(255, 215, 64, 0.5), 0 8px 22px rgba(255, 215, 64, 0.15);
+  }
+  .peg-card .creature-bar {
+    background: rgba(255, 255, 255, 0.12);
+  }
+  .peg-card.peg-unpicked .creature-bar { background: rgba(0,0,0,0.06); }
+
+  /* ----- Peg picker wizard ----- */
+  .peg-pick-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    gap: 12px; margin: 14px 0 8px;
+  }
+  .peg-pick-opt {
+    background: linear-gradient(160deg, #1c2238, #14182a);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: #e6e9f5;
+    border-radius: 14px; padding: 10px;
+    text-align: center; cursor: pointer;
+    transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease;
+    position: relative;
+  }
+  .peg-pick-opt:hover {
+    transform: translateY(-3px);
+    border-color: rgba(0, 229, 255, 0.55);
+    box-shadow: 0 8px 22px rgba(0, 229, 255, 0.18);
+  }
+  .peg-pick-opt.selected {
+    border-color: #FFD23F;
+    box-shadow: 0 0 0 2px #FFD23F, 0 8px 22px rgba(255, 215, 64, 0.25);
+  }
+  .peg-pick-opt svg { width: 100px; height: 100px; }
+  .peg-pick-name {
+    font-size: 13px; margin-top: 4px;
+    text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  .peg-picker-progress {
+    text-align: center; font-size: 13px; color: var(--ink-soft);
+    margin-top: 6px;
+  }
+  .peg-picker-dots {
+    display: flex; gap: 4px; justify-content: center; margin: 8px 0 4px;
+  }
+  .peg-picker-dots span {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: rgba(0,0,0,0.18);
+  }
+  .peg-picker-dots span.done   { background: #B084FF; }
+  .peg-picker-dots span.active { background: #FFD23F; box-shadow: 0 0 6px #FFD23F; }
+
   .creatures-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
@@ -1475,16 +1567,15 @@
 <main>
   <div class="toolbar">
     <button class="btn btn-daily" id="dailyBtn">🔥 Today's 10 <span class="daily-streak-badge" id="dailyStreakBadge" style="display:none;"></span></button>
-    <button class="btn btn-realms" id="realmsBtn">🗺️ Realms</button>
     <button class="btn btn-primary" id="challengeBtn">🎲 Random challenge</button>
     <button class="btn btn-ghost" id="weakBtn">🎯 Practise weak spots</button>
     <button class="btn btn-golden" id="goldenBtn">✨ Golden Run</button>
     <button class="btn btn-ghost" id="lightningBtn">⚡ Lightning</button>
     <button class="btn btn-ghost" id="trickMasterBtn">🎓 Trick Master</button>
     <button class="btn btn-ghost" id="cardsBtn">🎴 Trick Cards</button>
-    <button class="btn btn-ghost" id="creaturesBtn">🐣 Creatures</button>
+    <button class="btn btn-ghost" id="creaturesBtn">✦ My Pegs</button>
+    <span class="ladder-pill" id="ladderPill" style="display:none;"><span class="ladder-rung" id="ladderRung">×1</span><span id="ladderStreakText">0/10</span><span class="ladder-streak-bar"><div id="ladderStreakFill"></div></span></span>
     <button class="btn btn-ghost" id="familyBtn">👨‍👩‍👧 Family</button>
-    <button class="btn btn-ghost" id="challengeShareBtn">📮 Send challenge</button>
     <button class="btn btn-ghost" id="muteBtn" title="Mute sounds">🔊</button>
     <div class="group">
       <label for="jumpRow">Jump to</label>
@@ -1610,37 +1701,6 @@
   </div>
 </div>
 
-<!-- Realms — map + detail -->
-<div class="overlay" id="realmsOverlay">
-  <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="realmsTitle">
-    <h2 id="realmsTitle">🗺️ Realms</h2>
-    <p class="sub">Clear each realm by mastering its times table. Beat the boss to earn the crown 👑.</p>
-    <div class="realms-path" id="realmsPath"></div>
-    <div class="modal-actions">
-      <button class="btn btn-ghost" id="realmsClose">Close</button>
-    </div>
-  </div>
-</div>
-
-<!-- Realm Boss -->
-<div class="overlay" id="realmBossOverlay">
-  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="rbTitle">
-    <h2 id="rbTitle">🐲 Realm Boss</h2>
-    <p class="sub" id="rbSub">Get all 5 correct to master this realm.</p>
-    <div class="dd-progress" id="rbProgress"></div>
-    <div class="question" id="rbQText">— × —</div>
-    <div class="answer-row" id="rbAnswerRow">
-      <input class="answer-input" id="rbInput" type="number" inputmode="numeric" autocomplete="off" placeholder="?" />
-      <button class="btn btn-primary" id="rbSubmit">Check</button>
-    </div>
-    <div id="rbFeedback"></div>
-    <div class="modal-actions" id="rbActions">
-      <button class="btn btn-ghost" id="rbClose">Close</button>
-      <button class="btn btn-primary" id="rbNext" style="display:none;">Next ➜</button>
-    </div>
-  </div>
-</div>
-
 <!-- Lightning Round — Setup -->
 <div class="overlay" id="lrSetupOverlay">
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="lrSetupTitle">
@@ -1724,48 +1784,14 @@
   </div>
 </div>
 
-<!-- Challenge — Send (sender picks difficulty, gets shareable link) -->
-<div class="overlay" id="challengeSendOverlay">
-  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="challengeSendTitle">
-    <h2 id="challengeSendTitle">📮 Send a Challenge</h2>
-    <p class="sub">Pick a difficulty, get a secret link, and send it to a sibling. 5 questions each. Beat-my-score stakes.</p>
-    <div style="margin-top: 10px; font-weight: 600;">Difficulty</div>
-    <div class="difficulty-picker" id="cxSendDifficultyPicker"></div>
-    <div class="modal-actions">
-      <button class="btn btn-ghost" id="cxSendClose">Cancel</button>
-      <button class="btn btn-challenge" id="cxSendGenerate">Generate link 📮</button>
-    </div>
-    <div id="cxSendResult"></div>
-  </div>
-</div>
-
-<!-- Challenge — Play (recipient opens the link) -->
-<div class="overlay" id="challengePlayOverlay">
-  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="challengePlayTitle">
-    <h2 id="challengePlayTitle">🎯 You've been challenged!</h2>
-    <div class="challenge-banner" id="cxPlayBanner">Loading…</div>
-    <div id="cxPlayArea">
-      <!-- Populated dynamically -->
-    </div>
-  </div>
-</div>
-
-<!-- Challenge — Result (sender opens the return link) -->
-<div class="overlay" id="challengeResultOverlay">
-  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="challengeResultTitle">
-    <h2 id="challengeResultTitle">📬 Challenge result</h2>
-    <div id="cxResultArea"></div>
-    <div class="modal-actions">
-      <button class="btn btn-ghost" id="cxResultClose">Close</button>
-    </div>
-  </div>
-</div>
-
 <!-- Creatures gallery -->
 <div class="overlay" id="creaturesOverlay">
   <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="creaturesTitle">
-    <h2 id="creaturesTitle">🐣 Creatures</h2>
-    <p class="sub">Each times-table hatches a creature. Master every cell in a table to fully evolve it.</p>
+    <h2 id="creaturesTitle">✦ My Pegs</h2>
+    <p class="sub">Your memory-palace pegs — one per digit, 1 to 10. Pick a peg the first time you open this; master cells in that table to bring it from a faint sketch to full color and finally to glowing &quot;mastered&quot;.</p>
+    <div style="margin: 8px 0 12px;">
+      <button class="btn btn-primary" id="pickPegsBtn" style="font-size:13px;">✦ Pick / change my pegs</button>
+    </div>
     <div class="creatures-grid" id="creaturesGrid"></div>
     <div class="modal-actions">
       <button class="btn btn-ghost" id="creaturesClose">Close</button>
@@ -1784,6 +1810,35 @@
     <div class="modal-actions">
       <button class="btn btn-ghost" id="cardsClose">Close</button>
     </div>
+  </div>
+</div>
+
+
+<!-- Peg picker wizard (Phase 2) -->
+<div class="overlay" id="pegPickerOverlay">
+  <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="pegPickerTitle">
+    <h2 id="pegPickerTitle">✦ Pick your peg for digit <span id="pegPickerDigit">1</span></h2>
+    <p class="sub">Pick the picture you want to remember for this digit. You'll picture it in your head when this digit shows up — so go with the one that feels coolest. Tap one to lock it in.</p>
+    <div class="peg-picker-dots" id="pegPickerDots"></div>
+    <div class="peg-pick-grid" id="pegPickerGrid"></div>
+    <div class="peg-picker-progress" id="pegPickerProgress">Digit 1 of 10</div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="pegPickerBack">← Back</button>
+      <button class="btn btn-ghost" id="pegPickerSkip">Skip for now</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- Ladder unlock celebration -->
+<div class="ladder-overlay" id="ladderOverlay" role="dialog" aria-modal="true" aria-labelledby="ladderMsg">
+  <div class="ladder-card" id="ladderCard">
+    <div class="ladder-heading">★ Rung cleared ★</div>
+    <div class="ladder-digit" id="ladderDigit">×1</div>
+    <div class="ladder-peg" id="ladderPeg"></div>
+    <div class="ladder-msg" id="ladderMsg">Locked in!</div>
+    <div class="ladder-sub" id="ladderSub">Next up: ×10. Stay sharp.</div>
+    <button class="btn-dismiss" id="ladderDismiss">Let's go ➜</button>
   </div>
 </div>
 
@@ -1807,6 +1862,8 @@
 
 const STORAGE_KEY = 'timesTableQuest_v1';
 const GRID_N = 100;
+const LADDER = [1, 10, 2, 5, 3, 4, 9, 6, 8, 7];
+const LADDER_GOAL = 10;  // consecutive correct answers needed to unlock the next rung
 const AVATARS = ['😀','😎','🦄','🐯','🐼','🐵','🦊','🐸','🐙','🦖','🦕','🐳','🐝','🦉','🐨','🦁','🐶','🐱','⭐','🚀','🌈','🍭','🍕','🎈'];
 const COLORS  = ['#ff5aa3','#6c5ce7','#2ecc71','#f6c244','#00b4d8','#ff9f43','#a55eea','#26de81'];
 
@@ -1886,12 +1943,12 @@ function makeUser(name, avatar, password) {
     lightning: { best: 0, lastPlayed: null },  // Lightning Round high score
     daily: {},       // yyyy-mm-dd -> questionsAnswered
     muted: false,    // sound mute toggle
-    challenges: [],  // received challenges history
     dailyDrills: {}, // yyyy-mm-dd -> { correct, total, at }
     drillStreak: 0,  // consecutive days completed
     drillLastDate: null,  // yyyy-mm-dd of last drill completion
-    realms: {},      // N (2..12) -> { cleared, mastered, clearedAt, masteredAt }
-    password: password || ''   // optional per-user password. Master password "JC" always unlocks.
+    password: password || '',  // optional per-user password. Master password "JC" always unlocks.
+    pegs: {},    // digit (1..10) -> chosen peg option index (0..2). Empty until kid picks.
+    ladder: null // { unlocked: [...], current: digit|null, streak: 0 }. Filled in by migrateUser.
   };
 }
 
@@ -1924,14 +1981,16 @@ function migrateUser(u) {
   if (!u.lightning)  u.lightning = { best: 0, lastPlayed: null };
   if (!u.daily)      u.daily = {};
   if (typeof u.muted !== 'boolean') u.muted = false;
-  if (!u.challenges) u.challenges = [];
   if (!u.stars)      u.stars = 0;
   if (!u.goldenRuns) u.goldenRuns = [];
   if (!u.dailyDrills) u.dailyDrills = {};
   if (typeof u.drillStreak !== 'number') u.drillStreak = 0;
   if (typeof u.drillLastDate === 'undefined') u.drillLastDate = null;
-  if (!u.realms)     u.realms = {};
   if (typeof u.password !== 'string') u.password = '';
+  if (!u.pegs || typeof u.pegs !== 'object') u.pegs = {};
+  if (!u.ladder || typeof u.ladder !== 'object' || !Array.isArray(u.ladder.unlocked)) {
+    u.ladder = autoGrantLadder(u);
+  }
   return u;
 }
 
@@ -2174,6 +2233,511 @@ cardsOverlay.addEventListener('click', (e) => {
   if (e.target === cardsOverlay) cardsOverlay.classList.remove('show');
 });
 
+
+/* --------------- Pegs (memory-palace style) ---------------
+   30 SVG pegs grouped by digit (1..10), 3 design options each. The kid
+   picks one option per digit on first run (or via the picker button). The
+   chosen peg shows in the gallery alongside their mastery progress for
+   that times-table. Same mastery model as the old creatures. */
+const PEGS = {
+  1: [
+    { name: 'Pencil', svg: `<svg viewBox="0 0 110 110">
+      <defs>
+        <linearGradient id="p1a" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#FF2E63"/><stop offset="1" stop-color="#9B0F3D"/></linearGradient>
+      </defs>
+      <rect x="42" y="22" width="26" height="60" fill="#1a1f30" stroke="#fff" stroke-width="2.5" rx="3"/>
+      <rect x="46" y="26" width="4" height="52" fill="#fff" opacity="0.25"/>
+      <rect x="42" y="22" width="26" height="8" fill="#FFD23F" stroke="#fff" stroke-width="2.5"/>
+      <polygon points="42,82 68,82 55,104" fill="#FFE4B5" stroke="#fff" stroke-width="2.5"/>
+      <polygon points="48,93 62,93 55,104" fill="url(#p1a)"/>
+      <line x1="32" y1="50" x2="38" y2="50" stroke="#00E5FF" stroke-width="2"/>
+      <line x1="72" y1="50" x2="78" y2="50" stroke="#00E5FF" stroke-width="2"/>
+      <line x1="32" y1="60" x2="36" y2="60" stroke="#00E5FF" stroke-width="2" opacity="0.5"/>
+      <line x1="74" y1="60" x2="78" y2="60" stroke="#00E5FF" stroke-width="2" opacity="0.5"/>
+    </svg>` },
+    { name: 'Candle', svg: `<svg viewBox="0 0 110 110">
+      <defs>
+        <linearGradient id="p1b" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#00E5FF"/><stop offset="0.5" stop-color="#B084FF"/><stop offset="1" stop-color="#FF2E63"/></linearGradient>
+        <radialGradient id="p1bf" cx="0.5" cy="0.5"><stop offset="0" stop-color="#fff"/><stop offset="0.4" stop-color="#00E5FF"/><stop offset="1" stop-color="#9B5DE5"/></radialGradient>
+      </defs>
+      <rect x="40" y="40" width="30" height="50" fill="#0f1320" stroke="#fff" stroke-width="2.5" rx="2"/>
+      <rect x="40" y="40" width="30" height="50" fill="url(#p1b)" opacity="0.6" rx="2"/>
+      <rect x="36" y="86" width="38" height="6" fill="#1a1f30" stroke="#fff" stroke-width="2.5"/>
+      <line x1="55" y1="40" x2="55" y2="32" stroke="#fff" stroke-width="2"/>
+      <ellipse cx="55" cy="22" rx="9" ry="13" fill="url(#p1bf)" opacity="0.95"/>
+      <ellipse cx="55" cy="20" rx="4" ry="6" fill="#fff" opacity="0.7"/>
+      <circle cx="30" cy="30" r="1.5" fill="#00E5FF"/>
+      <circle cx="80" cy="50" r="1.5" fill="#FF2E63"/>
+      <circle cx="84" cy="78" r="1" fill="#FFD23F"/>
+    </svg>` },
+    { name: 'Magic wand', svg: `<svg viewBox="0 0 110 110">
+      <defs>
+        <linearGradient id="p1c" x1="0" x2="1"><stop offset="0" stop-color="#FFD23F"/><stop offset="1" stop-color="#FF9500"/></linearGradient>
+      </defs>
+      <rect x="44" y="46" width="6" height="54" fill="#1a1f30" stroke="#fff" stroke-width="2" transform="rotate(-15 47 73)"/>
+      <polygon points="55,10 60,28 78,28 64,40 70,58 55,48 40,58 46,40 32,28 50,28" fill="url(#p1c)" stroke="#fff" stroke-width="2.5"/>
+      <circle cx="55" cy="32" r="4" fill="#fff" opacity="0.8"/>
+      <circle cx="20" cy="20" r="1" fill="#FFD23F"/>
+      <circle cx="88" cy="18" r="1.5" fill="#FFD23F"/>
+      <circle cx="92" cy="50" r="1" fill="#FFD23F"/>
+      <circle cx="14" cy="70" r="1" fill="#FFD23F"/>
+    </svg>` },
+  ],
+  2: [
+    { name: 'Swan', svg: `<svg viewBox="0 0 110 110">
+      <defs>
+        <linearGradient id="p2a" x1="0" x2="1"><stop offset="0" stop-color="#1a1f30"/><stop offset="1" stop-color="#3a2050"/></linearGradient>
+      </defs>
+      <ellipse cx="55" cy="78" rx="32" ry="10" fill="#0a0e1a"/>
+      <path d="M 28 78 Q 35 50 60 50 Q 78 50 80 38 Q 82 30 76 24 Q 70 22 70 28 Q 70 34 76 36" fill="url(#p2a)" stroke="#fff" stroke-width="2.5"/>
+      <path d="M 35 70 Q 50 60 65 64" fill="none" stroke="#B084FF" stroke-width="1.5" opacity="0.7"/>
+      <path d="M 38 75 Q 52 67 66 70" fill="none" stroke="#00E5FF" stroke-width="1.2" opacity="0.5"/>
+      <polygon points="76,28 84,28 80,33" fill="#FFD23F" stroke="#fff" stroke-width="1.5"/>
+      <circle cx="73" cy="27" r="1.5" fill="#fff"/>
+    </svg>` },
+    { name: 'Snake', svg: `<svg viewBox="0 0 110 110">
+      <defs>
+        <linearGradient id="p2b" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#1f3a1f"/><stop offset="1" stop-color="#0a1a0a"/></linearGradient>
+      </defs>
+      <path d="M 25 90 Q 25 70 45 70 Q 65 70 65 50 Q 65 30 85 30 Q 92 30 92 22" fill="none" stroke="url(#p2b)" stroke-width="14" stroke-linecap="round"/>
+      <path d="M 25 90 Q 25 70 45 70 Q 65 70 65 50 Q 65 30 85 30 Q 92 30 92 22" fill="none" stroke="#39FF6A" stroke-width="2" stroke-linecap="round" stroke-dasharray="3 4" opacity="0.8"/>
+      <ellipse cx="92" cy="20" rx="9" ry="6" fill="url(#p2b)" stroke="#39FF6A" stroke-width="1.5"/>
+      <circle cx="95" cy="18" r="1.8" fill="#FF2E63"/>
+      <line x1="86" y1="22" x2="80" y2="28" stroke="#FF2E63" stroke-width="1.5"/>
+      <line x1="86" y1="20" x2="78" y2="22" stroke="#FF2E63" stroke-width="1.5"/>
+    </svg>` },
+    { name: 'Big "2"', svg: `<svg viewBox="0 0 110 110">
+      <defs>
+        <linearGradient id="p2c" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stop-color="#00E5FF"/><stop offset="0.5" stop-color="#B084FF"/><stop offset="1" stop-color="#FF2E63"/></linearGradient>
+      </defs>
+      <text x="22" y="92" font-size="92" font-weight="900" font-family="Inter, sans-serif" fill="url(#p2c)" stroke="#fff" stroke-width="1.5">2</text>
+      <circle cx="20" cy="22" r="1.5" fill="#fff"/>
+      <circle cx="92" cy="40" r="1" fill="#fff"/>
+    </svg>` },
+  ],
+  3: [
+    { name: 'Heart', svg: `<svg viewBox="0 0 110 110">
+      <defs>
+        <linearGradient id="p3a" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stop-color="#FF2E63"/><stop offset="0.5" stop-color="#B084FF"/><stop offset="1" stop-color="#00E5FF"/></linearGradient>
+      </defs>
+      <path d="M 55 92 C 25 70 18 45 32 32 C 42 22 52 28 55 38 C 58 28 68 22 78 32 C 92 45 85 70 55 92 Z" fill="url(#p3a)" stroke="#fff" stroke-width="2.5"/>
+      <path d="M 55 92 C 25 70 18 45 32 32 C 42 22 52 28 55 38" fill="none" stroke="#fff" stroke-width="2" opacity="0.4"/>
+      <ellipse cx="40" cy="42" rx="5" ry="3" fill="#fff" opacity="0.5" transform="rotate(-30 40 42)"/>
+    </svg>` },
+    { name: 'Butterfly', svg: `<svg viewBox="0 0 110 110">
+      <defs>
+        <linearGradient id="p3b1" x1="0" x2="1"><stop offset="0" stop-color="#00E5FF"/><stop offset="1" stop-color="#9B5DE5"/></linearGradient>
+        <linearGradient id="p3b2" x1="0" x2="1"><stop offset="0" stop-color="#FF2E63"/><stop offset="1" stop-color="#FFD23F"/></linearGradient>
+      </defs>
+      <line x1="55" y1="30" x2="55" y2="80" stroke="#fff" stroke-width="2.5"/>
+      <path d="M 55 38 Q 30 22 22 40 Q 18 58 36 58 Q 50 58 55 50" fill="url(#p3b1)" stroke="#fff" stroke-width="2.5"/>
+      <path d="M 55 38 Q 80 22 88 40 Q 92 58 74 58 Q 60 58 55 50" fill="url(#p3b2)" stroke="#fff" stroke-width="2.5"/>
+      <path d="M 55 60 Q 32 60 26 78 Q 22 88 38 86 Q 50 84 55 76" fill="url(#p3b2)" stroke="#fff" stroke-width="2.5"/>
+      <path d="M 55 60 Q 78 60 84 78 Q 88 88 72 86 Q 60 84 55 76" fill="url(#p3b1)" stroke="#fff" stroke-width="2.5"/>
+      <circle cx="55" cy="32" r="3" fill="#1a1f30" stroke="#fff" stroke-width="2"/>
+    </svg>` },
+    { name: 'Mountains', svg: `<svg viewBox="0 0 110 110">
+      <defs>
+        <linearGradient id="p3c" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#FF2E63"/><stop offset="0.5" stop-color="#9B5DE5"/><stop offset="1" stop-color="#1a1f30"/></linearGradient>
+      </defs>
+      <rect x="0" y="0" width="110" height="110" fill="url(#p3c)" opacity="0.15" rx="6"/>
+      <circle cx="78" cy="28" r="9" fill="#FFD23F" opacity="0.9"/>
+      <polygon points="10,90 35,40 55,68 70,50 100,90" fill="#1a1f30" stroke="#fff" stroke-width="2.5"/>
+      <polygon points="35,40 42,52 30,52" fill="#fff" opacity="0.9"/>
+      <polygon points="70,50 75,58 65,58" fill="#fff" opacity="0.7"/>
+      <line x1="0" y1="92" x2="110" y2="92" stroke="#FF2E63" stroke-width="1.5" opacity="0.5"/>
+    </svg>` },
+  ],
+  4: [
+    { name: 'Sailboat', svg: `<svg viewBox="0 0 110 110">
+      <defs>
+        <linearGradient id="p4a" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#FF2E63"/><stop offset="1" stop-color="#9B5DE5"/></linearGradient>
+      </defs>
+      <path d="M 18 72 Q 55 78 92 72 L 86 88 L 24 88 Z" fill="#1a1f30" stroke="#fff" stroke-width="2.5"/>
+      <line x1="55" y1="20" x2="55" y2="72" stroke="#fff" stroke-width="2.5"/>
+      <polygon points="55,20 55,68 22,68" fill="url(#p4a)" stroke="#fff" stroke-width="2.5"/>
+      <polygon points="55,28 80,68 55,68" fill="#00E5FF" stroke="#fff" stroke-width="2.5" opacity="0.85"/>
+      <line x1="0" y1="94" x2="110" y2="94" stroke="#00E5FF" stroke-width="1" opacity="0.4"/>
+    </svg>` },
+    { name: 'Kite', svg: `<svg viewBox="0 0 110 110">
+      <defs>
+        <linearGradient id="p4b" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stop-color="#00E5FF"/><stop offset="0.5" stop-color="#B084FF"/><stop offset="1" stop-color="#FF2E63"/></linearGradient>
+      </defs>
+      <polygon points="55,12 90,46 55,80 20,46" fill="url(#p4b)" stroke="#fff" stroke-width="2.5"/>
+      <line x1="55" y1="12" x2="55" y2="80" stroke="#fff" stroke-width="1.5" opacity="0.5"/>
+      <line x1="20" y1="46" x2="90" y2="46" stroke="#fff" stroke-width="1.5" opacity="0.5"/>
+      <path d="M 55 80 Q 50 90 55 96 Q 60 102 55 104" fill="none" stroke="#fff" stroke-width="2"/>
+      <line x1="50" y1="86" x2="46" y2="86" stroke="#FFD23F" stroke-width="2"/>
+      <line x1="58" y1="92" x2="62" y2="92" stroke="#FFD23F" stroke-width="2"/>
+      <line x1="52" y1="100" x2="48" y2="100" stroke="#FFD23F" stroke-width="2"/>
+    </svg>` },
+    { name: 'Throne', svg: `<svg viewBox="0 0 110 110">
+      <defs>
+        <linearGradient id="p4c" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#3a2a50"/><stop offset="1" stop-color="#1a1f30"/></linearGradient>
+      </defs>
+      <rect x="28" y="14" width="54" height="50" fill="url(#p4c)" stroke="#fff" stroke-width="2.5" rx="3"/>
+      <polygon points="28,14 38,4 72,4 82,14" fill="#FFD23F" stroke="#fff" stroke-width="2.5"/>
+      <circle cx="45" cy="9" r="2" fill="#FF2E63"/>
+      <circle cx="55" cy="9" r="2" fill="#00E5FF"/>
+      <circle cx="65" cy="9" r="2" fill="#FFD23F"/>
+      <rect x="32" y="60" width="46" height="38" fill="#1a1f30" stroke="#fff" stroke-width="2.5"/>
+      <rect x="38" y="68" width="34" height="6" fill="#FF2E63" opacity="0.7"/>
+      <rect x="32" y="98" width="46" height="6" fill="#1a1f30" stroke="#fff" stroke-width="2.5"/>
+      <rect x="36" y="104" width="6" height="4" fill="#1a1f30" stroke="#fff" stroke-width="2"/>
+      <rect x="68" y="104" width="6" height="4" fill="#1a1f30" stroke="#fff" stroke-width="2"/>
+    </svg>` },
+  ],
+  5: [
+    { name: 'Gauntlet', svg: `<svg viewBox="0 0 110 110">
+      <defs>
+        <linearGradient id="p5a" x1="0" x2="1"><stop offset="0" stop-color="#9aa6c0"/><stop offset="0.5" stop-color="#fff"/><stop offset="1" stop-color="#5a6680"/></linearGradient>
+      </defs>
+      <path d="M 38 90 L 38 50 Q 38 38 50 38 L 50 30 Q 50 22 58 22 Q 66 22 66 30 L 66 38 Q 78 38 78 50 L 78 90 Z" fill="url(#p5a)" stroke="#1a1f30" stroke-width="2.5"/>
+      <rect x="42" y="60" width="32" height="3" fill="#1a1f30"/>
+      <rect x="42" y="68" width="32" height="3" fill="#1a1f30"/>
+      <rect x="42" y="76" width="32" height="3" fill="#1a1f30"/>
+      <circle cx="48" cy="56" r="2" fill="#FF2E63"/>
+      <circle cx="58" cy="56" r="2" fill="#FF2E63"/>
+      <circle cx="68" cy="56" r="2" fill="#FF2E63"/>
+      <line x1="58" y1="22" x2="58" y2="14" stroke="#00E5FF" stroke-width="2"/>
+      <line x1="50" y1="20" x2="46" y2="14" stroke="#00E5FF" stroke-width="2"/>
+      <line x1="66" y1="20" x2="70" y2="14" stroke="#00E5FF" stroke-width="2"/>
+    </svg>` },
+    { name: 'Seahorse', svg: `<svg viewBox="0 0 110 110">
+      <defs>
+        <linearGradient id="p5b" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#00E5FF"/><stop offset="1" stop-color="#9B5DE5"/></linearGradient>
+      </defs>
+      <path d="M 60 18 Q 75 18 75 32 Q 75 42 65 48 Q 55 54 55 68 Q 55 80 45 84 Q 38 86 38 92 Q 38 98 44 98" fill="none" stroke="url(#p5b)" stroke-width="11" stroke-linecap="round"/>
+      <circle cx="68" cy="28" r="3" fill="#FF2E63"/>
+      <line x1="58" y1="32" x2="55" y2="36" stroke="#fff" stroke-width="2"/>
+      <line x1="62" y1="42" x2="58" y2="44" stroke="#fff" stroke-width="2"/>
+      <line x1="58" y1="56" x2="54" y2="58" stroke="#fff" stroke-width="2"/>
+      <line x1="46" y1="74" x2="42" y2="76" stroke="#fff" stroke-width="2"/>
+      <path d="M 75 22 L 82 18 L 80 24 L 86 22" fill="none" stroke="#FFD23F" stroke-width="2" stroke-linecap="round"/>
+    </svg>` },
+    { name: 'Star', svg: `<svg viewBox="0 0 110 110">
+      <defs>
+        <linearGradient id="p5c" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stop-color="#FFD23F"/><stop offset="1" stop-color="#FF9500"/></linearGradient>
+        <radialGradient id="p5cg" cx="0.5" cy="0.5"><stop offset="0" stop-color="#FFD23F" stop-opacity="0.5"/><stop offset="1" stop-color="#FFD23F" stop-opacity="0"/></radialGradient>
+      </defs>
+      <circle cx="55" cy="55" r="50" fill="url(#p5cg)"/>
+      <polygon points="55,8 67,42 102,42 73,62 84,96 55,76 26,96 37,62 8,42 43,42" fill="url(#p5c)" stroke="#fff" stroke-width="2.5"/>
+      <polygon points="55,20 62,42 84,42 67,55 73,76 55,64" fill="#fff" opacity="0.35"/>
+    </svg>` },
+  ],
+  6: [
+    { name: 'Cherries', svg: `<svg viewBox="0 0 110 110">
+      <defs>
+        <radialGradient id="p6a" cx="0.35" cy="0.3"><stop offset="0" stop-color="#fff"/><stop offset="0.3" stop-color="#FF2E63"/><stop offset="1" stop-color="#7a0a2a"/></radialGradient>
+        <radialGradient id="p6a2" cx="0.35" cy="0.3"><stop offset="0" stop-color="#fff"/><stop offset="0.3" stop-color="#9B5DE5"/><stop offset="1" stop-color="#3a1a5a"/></radialGradient>
+      </defs>
+      <path d="M 35 78 Q 30 50 50 25" fill="none" stroke="#39FF6A" stroke-width="2.5"/>
+      <path d="M 75 78 Q 80 50 60 25" fill="none" stroke="#39FF6A" stroke-width="2.5"/>
+      <path d="M 50 25 Q 55 20 60 25" fill="none" stroke="#39FF6A" stroke-width="2.5"/>
+      <ellipse cx="35" cy="78" rx="18" ry="20" fill="url(#p6a)" stroke="#fff" stroke-width="2.5"/>
+      <ellipse cx="75" cy="78" rx="18" ry="20" fill="url(#p6a2)" stroke="#fff" stroke-width="2.5"/>
+      <ellipse cx="28" cy="70" rx="5" ry="3" fill="#fff" opacity="0.6"/>
+      <ellipse cx="68" cy="70" rx="5" ry="3" fill="#fff" opacity="0.6"/>
+    </svg>` },
+    { name: 'Elephant', svg: `<svg viewBox="0 0 110 110">
+      <defs>
+        <linearGradient id="p6b" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#3a3550"/><stop offset="1" stop-color="#1a1530"/></linearGradient>
+      </defs>
+      <path d="M 22 76 Q 22 50 42 46 Q 50 30 65 32 Q 85 34 88 56 Q 90 80 75 86 L 75 96 L 65 96 L 65 88 L 50 88 L 50 96 L 40 96 L 40 86 Q 28 84 22 76 Z" fill="url(#p6b)" stroke="#fff" stroke-width="2.5"/>
+      <path d="M 32 60 L 28 50 L 24 56 M 38 50 L 36 38 L 30 44" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
+      <circle cx="78" cy="50" r="2.5" fill="#FF2E63"/>
+      <circle cx="84" cy="56" r="1.5" fill="#FFD23F"/>
+      <line x1="80" y1="64" x2="86" y2="62" stroke="#00E5FF" stroke-width="1.5"/>
+      <line x1="82" y1="70" x2="88" y2="70" stroke="#00E5FF" stroke-width="1.5"/>
+    </svg>` },
+    { name: 'Golf club', svg: `<svg viewBox="0 0 110 110">
+      <defs>
+        <linearGradient id="p6c" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#9aa6c0"/></linearGradient>
+      </defs>
+      <line x1="22" y1="14" x2="60" y2="100" stroke="#1a1f30" stroke-width="6" stroke-linecap="round"/>
+      <line x1="22" y1="14" x2="60" y2="100" stroke="#fff" stroke-width="2" stroke-linecap="round" opacity="0.4"/>
+      <path d="M 14 8 Q 14 26 30 22 Q 32 14 26 6 Z" fill="url(#p6c)" stroke="#1a1f30" stroke-width="2.5"/>
+      <line x1="18" y1="14" x2="26" y2="14" stroke="#1a1f30" stroke-width="1.2"/>
+      <line x1="20" y1="18" x2="24" y2="18" stroke="#1a1f30" stroke-width="1.2"/>
+      <circle cx="60" cy="100" r="4" fill="#FFD23F" stroke="#1a1f30" stroke-width="1.5"/>
+      <circle cx="78" cy="20" r="2" fill="#00E5FF"/>
+      <circle cx="84" cy="40" r="1.5" fill="#FF2E63"/>
+    </svg>` },
+  ],
+  7: [
+    { name: 'Boomerang', svg: `<svg viewBox="0 0 110 110">
+      <defs>
+        <linearGradient id="p7a" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stop-color="#FF2E63"/><stop offset="1" stop-color="#9B5DE5"/></linearGradient>
+      </defs>
+      <path d="M 18 50 Q 18 22 50 22 L 92 22 Q 70 30 60 50 Q 52 38 36 38 Q 22 38 22 50 Z" fill="url(#p7a)" stroke="#fff" stroke-width="2.5"/>
+      <path d="M 30 36 L 86 26" stroke="#fff" stroke-width="1.5" opacity="0.4"/>
+      <path d="M 14 60 Q 30 70 50 65" fill="none" stroke="#00E5FF" stroke-width="2" stroke-dasharray="4 3" opacity="0.7"/>
+      <path d="M 12 72 Q 28 82 48 78" fill="none" stroke="#00E5FF" stroke-width="1.5" stroke-dasharray="3 3" opacity="0.5"/>
+      <path d="M 10 84 Q 26 92 46 90" fill="none" stroke="#00E5FF" stroke-width="1" stroke-dasharray="2 3" opacity="0.4"/>
+    </svg>` },
+    { name: 'Lightsaber', svg: `<svg viewBox="0 0 110 110">
+      <defs>
+        <linearGradient id="p7b" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#fff"/><stop offset="0.4" stop-color="#39FF6A"/><stop offset="1" stop-color="#0a3a18"/></linearGradient>
+      </defs>
+      <rect x="50" y="60" width="10" height="34" fill="#1a1f30" stroke="#fff" stroke-width="2.5" rx="2"/>
+      <rect x="48" y="86" width="14" height="6" fill="#9aa6c0" stroke="#fff" stroke-width="2"/>
+      <rect x="52" y="68" width="6" height="2" fill="#FFD23F"/>
+      <rect x="52" y="74" width="6" height="2" fill="#FFD23F"/>
+      <rect x="46" y="58" width="18" height="4" fill="#5a6680" stroke="#fff" stroke-width="2"/>
+      <rect x="51" y="6" width="8" height="54" fill="url(#p7b)" stroke="#fff" stroke-width="2" rx="3"/>
+      <rect x="53" y="10" width="2" height="44" fill="#fff" opacity="0.7"/>
+      <ellipse cx="55" cy="6" rx="6" ry="3" fill="#fff" opacity="0.9"/>
+    </svg>` },
+    { name: 'Cliff', svg: `<svg viewBox="0 0 110 110">
+      <defs>
+        <linearGradient id="p7c" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#FFD23F"/><stop offset="0.5" stop-color="#FF9500"/><stop offset="1" stop-color="#5a1a0a"/></linearGradient>
+      </defs>
+      <rect x="0" y="0" width="110" height="110" fill="url(#p7c)" opacity="0.18" rx="6"/>
+      <circle cx="20" cy="20" r="8" fill="#FFD23F" opacity="0.85"/>
+      <polygon points="0,98 20,70 30,80 45,55 60,75 75,60 95,82 110,72 110,110 0,110" fill="#1a1f30" stroke="#fff" stroke-width="2.5"/>
+      <path d="M 30 80 L 32 75 L 28 78 Z" fill="#fff" opacity="0.3"/>
+      <path d="M 60 75 L 62 70 L 58 73 Z" fill="#fff" opacity="0.3"/>
+      <line x1="0" y1="100" x2="110" y2="100" stroke="#FF2E63" stroke-width="1.5" opacity="0.4"/>
+    </svg>` },
+  ],
+  8: [
+    { name: 'Snowman', svg: `<svg viewBox="0 0 110 110">
+      <defs>
+        <radialGradient id="p8a" cx="0.5" cy="0.4"><stop offset="0" stop-color="#fff"/><stop offset="0.7" stop-color="#d8e0f5"/><stop offset="1" stop-color="#8090b0"/></radialGradient>
+      </defs>
+      <ellipse cx="55" cy="86" rx="26" ry="14" fill="url(#p8a)" stroke="#1a1f30" stroke-width="2.5"/>
+      <ellipse cx="55" cy="58" rx="20" ry="14" fill="url(#p8a)" stroke="#1a1f30" stroke-width="2.5"/>
+      <ellipse cx="55" cy="32" rx="14" ry="13" fill="url(#p8a)" stroke="#1a1f30" stroke-width="2.5"/>
+      <rect x="40" y="20" width="30" height="6" fill="#1a1f30"/>
+      <rect x="36" y="14" width="38" height="6" fill="#FF2E63" stroke="#1a1f30" stroke-width="2"/>
+      <rect x="38" y="29" width="34" height="6" fill="#1a1f30" rx="2"/>
+      <rect x="40" y="30" width="12" height="4" fill="#00E5FF" rx="1"/>
+      <rect x="58" y="30" width="12" height="4" fill="#00E5FF" rx="1"/>
+      <line x1="52" y1="32" x2="58" y2="32" stroke="#1a1f30" stroke-width="2"/>
+      <polygon points="55,40 53,44 57,44" fill="#FF9500"/>
+      <circle cx="48" cy="56" r="2" fill="#1a1f30"/>
+      <circle cx="62" cy="56" r="2" fill="#1a1f30"/>
+      <circle cx="50" cy="84" r="1.5" fill="#1a1f30"/>
+      <circle cx="60" cy="84" r="1.5" fill="#1a1f30"/>
+    </svg>` },
+    { name: 'Hourglass', svg: `<svg viewBox="0 0 110 110">
+      <defs>
+        <linearGradient id="p8b" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#FFD23F"/><stop offset="1" stop-color="#FF2E63"/></linearGradient>
+      </defs>
+      <rect x="22" y="14" width="66" height="6" fill="#9aa6c0" stroke="#fff" stroke-width="2"/>
+      <rect x="22" y="90" width="66" height="6" fill="#9aa6c0" stroke="#fff" stroke-width="2"/>
+      <path d="M 28 20 L 82 20 Q 60 50 55 55 Q 50 50 28 20 Z" fill="#1a1f30" stroke="#fff" stroke-width="2.5"/>
+      <path d="M 28 90 L 82 90 Q 60 60 55 55 Q 50 60 28 90 Z" fill="#1a1f30" stroke="#fff" stroke-width="2.5"/>
+      <path d="M 32 24 L 78 24 Q 60 48 55 53 Q 50 48 32 24 Z" fill="url(#p8b)" opacity="0.85"/>
+      <circle cx="55" cy="60" r="3" fill="#FFD23F"/>
+      <circle cx="55" cy="68" r="2.5" fill="#FFD23F"/>
+      <circle cx="55" cy="76" r="2" fill="#FFD23F"/>
+      <circle cx="55" cy="82" r="1.5" fill="#FFD23F"/>
+    </svg>` },
+    { name: 'Octopus', svg: `<svg viewBox="0 0 110 110">
+      <defs>
+        <radialGradient id="p8c" cx="0.5" cy="0.3"><stop offset="0" stop-color="#FF2E63"/><stop offset="1" stop-color="#5a0a2a"/></radialGradient>
+      </defs>
+      <path d="M 30 80 Q 28 50 55 40 Q 82 50 80 80" fill="url(#p8c)" stroke="#fff" stroke-width="2.5"/>
+      <path d="M 30 80 Q 22 90 16 96 Q 22 88 26 84" fill="url(#p8c)" stroke="#fff" stroke-width="2"/>
+      <path d="M 40 88 Q 32 100 26 104" fill="url(#p8c)" stroke="#fff" stroke-width="2"/>
+      <path d="M 50 92 Q 46 104 42 108" fill="url(#p8c)" stroke="#fff" stroke-width="2"/>
+      <path d="M 60 92 Q 64 104 68 108" fill="url(#p8c)" stroke="#fff" stroke-width="2"/>
+      <path d="M 70 88 Q 78 100 84 104" fill="url(#p8c)" stroke="#fff" stroke-width="2"/>
+      <path d="M 80 80 Q 88 90 94 96 Q 88 88 84 84" fill="url(#p8c)" stroke="#fff" stroke-width="2"/>
+      <ellipse cx="44" cy="58" rx="3.5" ry="4" fill="#fff"/><ellipse cx="44" cy="59" rx="2" ry="2.5" fill="#1a1f30"/>
+      <ellipse cx="64" cy="58" rx="3.5" ry="4" fill="#fff"/><ellipse cx="64" cy="59" rx="2" ry="2.5" fill="#1a1f30"/>
+      <path d="M 48 70 Q 54 73 60 70" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
+      <ellipse cx="48" cy="48" rx="6" ry="2" fill="#fff" opacity="0.4"/>
+    </svg>` },
+  ],
+  9: [
+    { name: 'Balloon', svg: `<svg viewBox="0 0 110 110">
+      <defs>
+        <radialGradient id="p9a" cx="0.4" cy="0.3"><stop offset="0" stop-color="#fff"/><stop offset="0.3" stop-color="#FF2E63"/><stop offset="1" stop-color="#5a0a2a"/></radialGradient>
+      </defs>
+      <ellipse cx="55" cy="40" rx="26" ry="32" fill="url(#p9a)" stroke="#fff" stroke-width="2.5"/>
+      <polygon points="50,70 60,70 55,80" fill="#1a1f30" stroke="#fff" stroke-width="2"/>
+      <path d="M 55 80 Q 60 90 50 96 Q 60 98 55 108" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
+      <ellipse cx="44" cy="28" rx="6" ry="9" fill="#fff" opacity="0.55"/>
+      <circle cx="20" cy="22" r="1.5" fill="#fff"/>
+      <circle cx="92" cy="50" r="1" fill="#fff"/>
+    </svg>` },
+    { name: 'Tadpole', svg: `<svg viewBox="0 0 110 110">
+      <defs>
+        <linearGradient id="p9b" x1="0" x2="1"><stop offset="0" stop-color="#1a1f30"/><stop offset="1" stop-color="#3a3550"/></linearGradient>
+      </defs>
+      <ellipse cx="40" cy="60" rx="22" ry="18" fill="url(#p9b)" stroke="#fff" stroke-width="2.5"/>
+      <path d="M 60 60 Q 78 50 88 60 Q 84 64 88 70 Q 80 64 60 64" fill="url(#p9b)" stroke="#fff" stroke-width="2.5"/>
+      <ellipse cx="32" cy="54" rx="3" ry="4" fill="#fff"/>
+      <circle cx="32" cy="55" r="1.8" fill="#1a1f30"/>
+      <ellipse cx="30" cy="52" rx="0.8" ry="1" fill="#fff"/>
+      <path d="M 25 68 Q 32 71 38 68" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/>
+      <line x1="22" y1="46" x2="28" y2="42" stroke="#00E5FF" stroke-width="1.5"/>
+      <line x1="56" y1="50" x2="60" y2="46" stroke="#00E5FF" stroke-width="1.2"/>
+      <line x1="56" y1="74" x2="60" y2="78" stroke="#00E5FF" stroke-width="1.2"/>
+    </svg>` },
+    { name: 'Lollipop', svg: `<svg viewBox="0 0 110 110">
+      <defs>
+        <linearGradient id="p9c" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#FF2E63"/><stop offset="0.5" stop-color="#FFD23F"/><stop offset="1" stop-color="#00E5FF"/></linearGradient>
+      </defs>
+      <line x1="55" y1="60" x2="55" y2="100" stroke="#9aa6c0" stroke-width="4"/>
+      <line x1="55" y1="60" x2="55" y2="100" stroke="#fff" stroke-width="1.5" opacity="0.6"/>
+      <circle cx="55" cy="40" r="32" fill="#1a1f30" stroke="#fff" stroke-width="2.5"/>
+      <path d="M 55 40 m -22 0 a 22 22 0 1 1 44 0 a 14 14 0 1 1 -28 0 a 8 8 0 1 1 16 0" fill="none" stroke="url(#p9c)" stroke-width="5" stroke-linecap="round"/>
+      <ellipse cx="44" cy="28" rx="5" ry="3" fill="#fff" opacity="0.4"/>
+    </svg>` },
+  ],
+  10: [
+    { name: 'Bat & ball', svg: `<svg viewBox="0 0 110 110">
+      <defs>
+        <linearGradient id="p10a" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#9aa6c0"/><stop offset="1" stop-color="#3a3550"/></linearGradient>
+        <radialGradient id="p10ab" cx="0.4" cy="0.3"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#aab5c8"/></radialGradient>
+      </defs>
+      <rect x="30" y="80" width="60" height="10" fill="url(#p10a)" stroke="#fff" stroke-width="2.5" rx="3" transform="rotate(-30 60 85)"/>
+      <rect x="20" y="92" width="14" height="14" fill="#1a1f30" stroke="#fff" stroke-width="2" rx="2" transform="rotate(-30 27 99)"/>
+      <circle cx="32" cy="32" r="18" fill="url(#p10ab)" stroke="#1a1f30" stroke-width="2.5"/>
+      <path d="M 22 28 Q 32 36 42 28" fill="none" stroke="#FF2E63" stroke-width="2" stroke-linecap="round"/>
+      <path d="M 22 36 Q 32 42 42 36" fill="none" stroke="#FF2E63" stroke-width="2" stroke-linecap="round"/>
+      <line x1="20" y1="22" x2="44" y2="42" stroke="#FF2E63" stroke-width="1.5" opacity="0.5"/>
+    </svg>` },
+    { name: 'Knight (chess)', svg: `<svg viewBox="0 0 110 110">
+      <defs>
+        <linearGradient id="p10b" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#1a1f30"/><stop offset="1" stop-color="#0a0e1a"/></linearGradient>
+      </defs>
+      <rect x="20" y="92" width="70" height="12" fill="#1a1f30" stroke="#fff" stroke-width="2.5" rx="3"/>
+      <rect x="22" y="95" width="66" height="2" fill="#FFD23F"/>
+      <path d="M 30 92 L 30 60 Q 30 40 48 30 Q 52 26 50 22 Q 48 18 52 18 L 80 18 Q 86 18 86 28 Q 86 38 80 42 Q 74 46 78 56 Q 80 64 80 92" fill="url(#p10b)" stroke="#fff" stroke-width="2.5"/>
+      <circle cx="74" cy="32" r="1.8" fill="#fff"/>
+      <ellipse cx="68" cy="38" rx="4" ry="2" fill="#FF2E63" transform="rotate(-15 68 38)"/>
+      <line x1="60" y1="50" x2="74" y2="50" stroke="#fff" stroke-width="1.5" opacity="0.6"/>
+      <line x1="55" y1="60" x2="76" y2="60" stroke="#fff" stroke-width="1.5" opacity="0.4"/>
+    </svg>` },
+    { name: 'Robot', svg: `<svg viewBox="0 0 110 110">
+      <defs>
+        <linearGradient id="p10c" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#9aa6c0"/><stop offset="1" stop-color="#3a3550"/></linearGradient>
+      </defs>
+      <rect x="32" y="22" width="46" height="38" fill="url(#p10c)" stroke="#fff" stroke-width="2.5" rx="6"/>
+      <rect x="42" y="60" width="26" height="6" fill="#1a1f30" stroke="#fff" stroke-width="2"/>
+      <rect x="36" y="66" width="38" height="32" fill="url(#p10c)" stroke="#fff" stroke-width="2.5" rx="4"/>
+      <rect x="38" y="32" width="34" height="14" fill="#1a1f30" rx="3"/>
+      <rect x="48" y="36" width="14" height="6" fill="#00E5FF" rx="2"/>
+      <line x1="44" y1="38" x2="50" y2="38" stroke="#fff" stroke-width="0.8" opacity="0.6"/>
+      <circle cx="50" cy="78" r="3" fill="#FF2E63"/>
+      <circle cx="60" cy="78" r="3" fill="#FFD23F"/>
+      <line x1="42" y1="88" x2="68" y2="88" stroke="#fff" stroke-width="1.5" opacity="0.5"/>
+      <rect x="40" y="14" width="3" height="10" fill="#fff"/>
+      <circle cx="41.5" cy="13" r="2.5" fill="#FF2E63"/>
+      <rect x="68" y="14" width="3" height="10" fill="#fff"/>
+      <circle cx="69.5" cy="13" r="2.5" fill="#00E5FF"/>
+    </svg>` },
+  ],
+};
+
+/* Returns true if the user has picked all 10 pegs. */
+function pegsAllPicked(u) {
+  if (!u || !u.pegs) return false;
+  for (let d = 1; d <= 10; d++) {
+    if (typeof u.pegs[d] !== 'number') return false;
+  }
+  return true;
+}
+
+/* Get the chosen peg for digit d, or null if not picked. */
+function chosenPeg(u, d) {
+  if (!u || !u.pegs) return null;
+  const idx = u.pegs[d];
+  if (typeof idx !== 'number') return null;
+  return PEGS[d] && PEGS[d][idx] ? PEGS[d][idx] : null;
+}
+
+
+/* --------------- Trick Ladder (Phase 3) ---------------
+   The kid climbs through the times tables in this order:
+     1 → 10 → 2 → 5 → 3 → 4 → 9 → 6 → 8 → 7
+   Streak of LADDER_GOAL consecutive correct answers on the current rung
+   unlocks the next. While the ladder is active the grid hides everything
+   except the unlocked + current rungs (rows) and cols 1..10. */
+
+function ladderActive(u) {
+  return !!(u && u.ladder && u.ladder.current != null);
+}
+
+/* Returns a Set of digits whose row is currently playable, or null when the
+   ladder is fully cleared (signaling: full 100×100 grid is back). */
+function ladderTables(u) {
+  if (!ladderActive(u)) return null;
+  const ts = new Set(u.ladder.unlocked);
+  if (u.ladder.current != null) ts.add(u.ladder.current);
+  return ts;
+}
+
+/* Is this (a, b) cell currently playable? */
+function ladderEligible(u, a, b) {
+  const tables = ladderTables(u);
+  if (tables === null) return true;             // ladder complete -> full grid
+  if (a < 1 || b < 1 || a > 10 || b > 10) return false;
+  return tables.has(a) || tables.has(b);
+}
+
+/* Auto-grant: existing users with mastered cells in higher-rung rows get all
+   prior rungs unlocked. Threshold: ≥3 mastered cells in the row of digit d
+   bumps the highest-unlocked index up to that rung's position. */
+function autoGrantLadder(u) {
+  let highestIdx = -1;
+  for (let i = 0; i < LADDER.length; i++) {
+    const d = LADDER[i];
+    let mastered = 0;
+    for (let m = 1; m <= 10; m++) {
+      const rec = u.cells ? u.cells[cellKey(d, m)] : null;
+      if (rec && masteryLevel(rec) === 'mastered') mastered++;
+    }
+    if (mastered >= 3) highestIdx = i;
+  }
+  if (highestIdx === LADDER.length - 1) {
+    return { unlocked: LADDER.slice(), current: null, streak: 0 };
+  }
+  if (highestIdx < 0) {
+    // First-time player: nothing unlocked yet, ×1 is the active rung.
+    return { unlocked: [], current: LADDER[0], streak: 0 };
+  }
+  return {
+    unlocked: LADDER.slice(0, highestIdx + 1),
+    current: LADDER[highestIdx + 1],
+    streak: 0
+  };
+}
+
+/* Record a quiz answer's contribution to the ladder streak.
+   Only counts answers that target the current rung digit. Wrong answers on
+   the current rung reset the streak. Returns the digit that just unlocked
+   (i.e. moved from current to unlocked), or null. */
+function recordLadderAnswer(a, b, correct) {
+  const u = ensureUser(); migrateUser(u);
+  if (!ladderActive(u)) return null;
+  const cur = u.ladder.current;
+  if (a !== cur && b !== cur) return null;       // not a current-rung question
+  if (correct) {
+    u.ladder.streak++;
+    if (u.ladder.streak >= LADDER_GOAL) {
+      const cleared = cur;
+      u.ladder.unlocked.push(cleared);
+      const idx = LADDER.indexOf(cleared);
+      u.ladder.current = (idx < LADDER.length - 1) ? LADDER[idx + 1] : null;
+      u.ladder.streak = 0;
+      saveState();
+      return cleared;
+    }
+    saveState();
+  } else {
+    if (u.ladder.streak > 0) {
+      u.ladder.streak = 0;
+      saveState();
+    }
+  }
+  return null;
+}
+
 /* --------------- Creatures collection ---------------
    One creature per times-table (×1..×10). Each has three stages (egg,
    juvenile, adult) driven by how many of its 100 cells are mastered. */
@@ -2218,16 +2782,30 @@ function renderCreatures() {
     const stage = creatureStage(mastered);
     const full = mastered >= 100;
     const pct = mastered;
+    const peg = chosenPeg(u, c.table);
     const el = document.createElement('div');
-    el.className = `creature-card stage-${stage}${full ? ' full' : ''}`;
-    el.innerHTML = `
-      <div class="creature-emoji">${c.stages[stage]}</div>
-      <div class="creature-name">${c.name}</div>
-      <div class="creature-table">The ×${c.table} table · ${c.tag}</div>
-      <div class="creature-stage">${full ? '★ Fully evolved ★' : STAGE_NAMES[stage]}</div>
-      <div class="creature-bar"><div style="width:${pct}%"></div></div>
-      <div class="creature-progress">${mastered} / 100 mastered</div>
-    `;
+    el.className = `creature-card peg-card stage-${stage}${full ? ' full' : ''}` + (peg ? '' : ' peg-unpicked');
+    if (peg) {
+      // Locked-silhouette tint when stage is 0; full color from stage 1+; glowing when full.
+      const tintClass = full ? 'peg-svg peg-full' : (stage === 0 ? 'peg-svg peg-faint' : 'peg-svg peg-on');
+      el.innerHTML = `
+        <div class="${tintClass}">${peg.svg}</div>
+        <div class="creature-name">${peg.name}</div>
+        <div class="creature-table">×${c.table} peg · ${c.tag}</div>
+        <div class="creature-stage">${full ? '★ Mastered ★' : STAGE_NAMES[stage]}</div>
+        <div class="creature-bar"><div style="width:${pct}%"></div></div>
+        <div class="creature-progress">${mastered} / 100 mastered</div>
+      `;
+    } else {
+      el.innerHTML = `
+        <div class="peg-svg peg-empty">?</div>
+        <div class="creature-name">×${c.table} peg</div>
+        <div class="creature-table">Not picked yet · ${c.tag}</div>
+        <div class="creature-stage">Tap &quot;Pick my pegs&quot; above</div>
+        <div class="creature-bar"><div style="width:${pct}%"></div></div>
+        <div class="creature-progress">${mastered} / 100 mastered</div>
+      `;
+    }
     grid.appendChild(el);
   }
 }
@@ -2739,331 +3317,6 @@ document.getElementById('tmForfeit').addEventListener('click', () => {
   if (confirm('Give up this run? Progress in this round is lost.')) closeTrickMaster();
 });
 
-/* --------------- Challenges (serverless, via URL hash) --------------- */
-const cxSendOverlay   = document.getElementById('challengeSendOverlay');
-const cxPlayOverlay   = document.getElementById('challengePlayOverlay');
-const cxResultOverlay = document.getElementById('challengeResultOverlay');
-let cxSendSelectedDiffId = 'beginner';
-let cxPlay = null;
-
-function cxEncode(obj) {
-  const json = JSON.stringify(obj);
-  const b64  = btoa(unescape(encodeURIComponent(json)));
-  return b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
-function cxDecode(str) {
-  try {
-    let b64 = str.replace(/-/g, '+').replace(/_/g, '/');
-    while (b64.length % 4) b64 += '=';
-    const json = decodeURIComponent(escape(atob(b64)));
-    return JSON.parse(json);
-  } catch (e) {
-    return null;
-  }
-}
-
-function renderCxSendDifficultyPicker() {
-  const wrap = document.getElementById('cxSendDifficultyPicker');
-  wrap.innerHTML = '';
-  DIFFICULTIES.forEach(d => {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.innerHTML = `
-      <span class="diff-emoji">${d.emoji}</span>
-      <span class="diff-title">${d.title}</span>
-      <span class="diff-desc">${d.desc}</span>
-    `;
-    if (d.id === cxSendSelectedDiffId) b.classList.add('selected');
-    b.addEventListener('click', () => {
-      cxSendSelectedDiffId = d.id;
-      wrap.querySelectorAll('button').forEach(x => x.classList.remove('selected'));
-      b.classList.add('selected');
-    });
-    wrap.appendChild(b);
-  });
-}
-
-function openChallengeSend() {
-  cxSendSelectedDiffId = 'beginner';
-  renderCxSendDifficultyPicker();
-  document.getElementById('cxSendResult').innerHTML = '';
-  cxSendOverlay.classList.add('show');
-}
-
-function generateChallengeLink() {
-  const u = ensureUser(); migrateUser(u);
-  const diff = DIFFICULTIES.find(d => d.id === cxSendSelectedDiffId) || DIFFICULTIES[0];
-  const pool = diff.pool();
-  const picks = [];
-  const used = new Set();
-  while (picks.length < 5 && picks.length < pool.length) {
-    const p = pool[Math.floor(Math.random() * pool.length)];
-    const key = p[0] + ',' + p[1];
-    if (used.has(key)) continue;
-    used.add(key);
-    picks.push(p);
-  }
-  while (picks.length < 5) picks.push(pool[Math.floor(Math.random() * pool.length)]);
-
-  const payload = { v: 1, s: u.name, q: picks, d: diff.title };
-  const hash = '#c=' + cxEncode(payload);
-  const baseUrl = window.location.origin + window.location.pathname;
-  const link = baseUrl + hash;
-
-  const area = document.getElementById('cxSendResult');
-  area.innerHTML = `
-    <p style="margin-top:14px;"><b>Your challenge is ready.</b> Send this link to a sibling:</p>
-    <div class="challenge-link-box" id="cxLinkBox">${link}</div>
-    <div class="modal-actions" style="margin-top:6px;">
-      <button class="btn btn-ghost" id="cxCopyLink">📋 Copy link</button>
-      <button class="btn btn-challenge" id="cxCopiedOk" style="display:none;">Copied ✓</button>
-    </div>
-  `;
-  document.getElementById('cxCopyLink').addEventListener('click', async () => {
-    try {
-      await navigator.clipboard.writeText(link);
-      document.getElementById('cxCopyLink').style.display = 'none';
-      document.getElementById('cxCopiedOk').style.display = '';
-      playSfx('correct');
-    } catch (e) {
-      const r = document.createRange();
-      r.selectNodeContents(document.getElementById('cxLinkBox'));
-      const s = window.getSelection();
-      s.removeAllRanges();
-      s.addRange(r);
-    }
-  });
-}
-
-function startChallengePlay(payload) {
-  const u = ensureUser(); migrateUser(u);
-  cxPlay = {
-    sender: payload.s || 'A friend',
-    diffTitle: payload.d || '',
-    questions: payload.q,
-    idx: 0,
-    correct: 0,
-    answers: []
-  };
-  document.getElementById('cxPlayBanner').innerHTML =
-    `<b>${cxPlay.sender}</b> has challenged you to <b>${cxPlay.questions.length}</b> questions${cxPlay.diffTitle ? ` (<i>${cxPlay.diffTitle}</i>)` : ''}.`;
-
-  document.getElementById('cxPlayArea').innerHTML = `
-    <div style="text-align:center; padding: 6px 0 10px;">
-      <div style="font-size: 60px;">🎯</div>
-      <p>Good luck, <b>${u.name}</b>!</p>
-    </div>
-    <div class="modal-actions">
-      <button class="btn btn-ghost" id="cxPlayDecline">Not now</button>
-      <button class="btn btn-challenge" id="cxPlayStart">Start ▶</button>
-    </div>
-  `;
-  document.getElementById('cxPlayDecline').addEventListener('click', closeChallengePlay);
-  document.getElementById('cxPlayStart').addEventListener('click', nextCxQuestion);
-  cxPlayOverlay.classList.add('show');
-}
-
-function nextCxQuestion() {
-  if (!cxPlay) return;
-  if (cxPlay.idx >= cxPlay.questions.length) { finishChallengePlay(); return; }
-  const [a, b] = cxPlay.questions[cxPlay.idx];
-  const dots = cxPlay.questions.map((_, i) => {
-    if (i < cxPlay.idx) {
-      const [qa, qb] = cxPlay.questions[i];
-      const ok = cxPlay.answers[i] === qa * qb;
-      return `<span class="tm-dot ${ok ? 'good' : 'bad'}"></span>`;
-    }
-    if (i === cxPlay.idx) return '<span class="tm-dot cur"></span>';
-    return '<span class="tm-dot"></span>';
-  }).join('');
-
-  document.getElementById('cxPlayArea').innerHTML = `
-    <div class="tm-progress">${dots}</div>
-    <div class="question" id="cxQText">${a} × ${b}</div>
-    <div class="answer-row">
-      <input class="answer-input" id="cxInput" type="number" inputmode="numeric" autocomplete="off" placeholder="?" />
-      <button class="btn btn-challenge" id="cxSubmit">Check</button>
-    </div>
-    <div id="cxFeedback"></div>
-    <div class="modal-actions">
-      <button class="btn btn-ghost" id="cxForfeit">Give up</button>
-    </div>
-  `;
-  document.getElementById('cxSubmit').addEventListener('click', submitCxAnswer);
-  document.getElementById('cxInput').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') submitCxAnswer();
-  });
-  document.getElementById('cxForfeit').addEventListener('click', () => {
-    if (confirm('Give up the challenge?')) closeChallengePlay();
-  });
-  setTimeout(() => document.getElementById('cxInput').focus(), 40);
-}
-
-function submitCxAnswer() {
-  if (!cxPlay) return;
-  const inp = document.getElementById('cxInput');
-  const val = inp.value.trim();
-  if (val === '') {
-    inp.classList.remove('shake'); void inp.offsetWidth; inp.classList.add('shake');
-    return;
-  }
-  const [a, b] = cxPlay.questions[cxPlay.idx];
-  const correct = a * b;
-  const given = parseInt(val, 10);
-  cxPlay.answers.push(given);
-  bumpDailyCount();
-
-  if (given === correct) {
-    cxPlay.correct++;
-    playSfx('correct');
-    document.getElementById('cxFeedback').innerHTML = `<div class="feedback good"><b>✅ ${a}×${b}=${correct}</b></div>`;
-  } else {
-    playSfx('wrong');
-    document.getElementById('cxFeedback').innerHTML = `<div class="feedback bad"><b>❌ ${a}×${b}=${correct}</b></div>`;
-  }
-  cxPlay.idx++;
-  setTimeout(() => {
-    if (cxPlay.idx >= cxPlay.questions.length) finishChallengePlay();
-    else nextCxQuestion();
-  }, given === correct ? 500 : 1100);
-}
-
-function finishChallengePlay() {
-  if (!cxPlay) return;
-  const u = ensureUser(); migrateUser(u);
-  u.challenges.push({
-    date: new Date().toISOString(),
-    from: cxPlay.sender,
-    score: cxPlay.correct,
-    of: cxPlay.questions.length
-  });
-  saveState();
-
-  const returnPayload = {
-    v: 1,
-    s: cxPlay.sender,
-    r: u.name,
-    sc: cxPlay.correct,
-    ans: cxPlay.answers,
-    q: cxPlay.questions,
-    d: cxPlay.diffTitle
-  };
-  const hash = '#r=' + cxEncode(returnPayload);
-  const returnLink = window.location.origin + window.location.pathname + hash;
-
-  const perfect = cxPlay.correct === cxPlay.questions.length;
-  if (perfect) {
-    playSfx('fanfare');
-    popConfetti();
-  }
-
-  document.getElementById('cxPlayArea').innerHTML = `
-    <div style="text-align:center; padding: 8px 0;">
-      <div style="font-size: 64px;">${perfect ? '🏆' : '🎯'}</div>
-      <h3 style="margin: 4px 0;">${cxPlay.correct} / ${cxPlay.questions.length}</h3>
-      <p style="color: var(--ink-soft); font-size: 13px;">Send this back to <b>${cxPlay.sender}</b> so they can see your score:</p>
-      <div class="challenge-link-box" id="cxReturnBox">${returnLink}</div>
-      <div class="modal-actions" style="margin-top:6px;">
-        <button class="btn btn-ghost" id="cxReturnCopy">📋 Copy return link</button>
-        <button class="btn btn-challenge" id="cxReturnCopied" style="display:none;">Copied ✓</button>
-      </div>
-    </div>
-    <div class="modal-actions">
-      <button class="btn btn-ghost" id="cxDoneBtn">Done</button>
-    </div>
-  `;
-  document.getElementById('cxReturnCopy').addEventListener('click', async () => {
-    try {
-      await navigator.clipboard.writeText(returnLink);
-      document.getElementById('cxReturnCopy').style.display = 'none';
-      document.getElementById('cxReturnCopied').style.display = '';
-      playSfx('correct');
-    } catch (e) {
-      const r = document.createRange();
-      r.selectNodeContents(document.getElementById('cxReturnBox'));
-      const s = window.getSelection();
-      s.removeAllRanges();
-      s.addRange(r);
-    }
-  });
-  document.getElementById('cxDoneBtn').addEventListener('click', closeChallengePlay);
-}
-
-function closeChallengePlay() {
-  cxPlay = null;
-  cxPlayOverlay.classList.remove('show');
-  if (location.hash.startsWith('#c=')) {
-    history.replaceState(null, '', location.pathname + location.search);
-  }
-}
-
-function showChallengeResult(payload) {
-  const area = document.getElementById('cxResultArea');
-  const perfect = payload.sc === (payload.q ? payload.q.length : 0);
-  const rows = (payload.q || []).map((pair, i) => {
-    const [a, b] = pair;
-    const correct = a * b;
-    const ans = (payload.ans || [])[i];
-    const ok = ans === correct;
-    return `
-      <div style="display:flex; justify-content:space-between; padding:4px 8px; background:${ok ? '#e6f8ec' : '#fdecea'}; border-radius:6px; margin:3px 0; font-size:14px;">
-        <span>${a} × ${b} = <b>${correct}</b></span>
-        <span>${ok ? '✅' : `❌ wrote ${ans}`}</span>
-      </div>
-    `;
-  }).join('');
-
-  area.innerHTML = `
-    <div class="challenge-banner">
-      <b>${payload.r || 'Someone'}</b> scored <b>${payload.sc}/${(payload.q||[]).length}</b> on your challenge${payload.d ? ` (<i>${payload.d}</i>)` : ''}.
-    </div>
-    ${perfect ? '<div style="text-align:center; font-size:40px;">🏆</div>' : ''}
-    <div style="margin-top:6px;">${rows}</div>
-  `;
-  cxResultOverlay.classList.add('show');
-  if (perfect) popConfetti();
-}
-
-function maybeHandleChallengeHash() {
-  const h = location.hash || '';
-  if (h.startsWith('#c=')) {
-    const payload = cxDecode(h.substring(3));
-    if (payload && payload.q && payload.q.length) {
-      const u = (state && state.activeUser) ? ensureUser() : null;
-      if (!u) {
-        alert('Create or pick a profile first, then come back to this challenge link.');
-        return;
-      }
-      startChallengePlay(payload);
-    }
-  } else if (h.startsWith('#r=')) {
-    const payload = cxDecode(h.substring(3));
-    if (payload && payload.q) {
-      showChallengeResult(payload);
-      history.replaceState(null, '', location.pathname + location.search);
-    }
-  }
-}
-
-document.getElementById('challengeShareBtn').addEventListener('click', openChallengeSend);
-document.getElementById('cxSendClose').addEventListener('click', () => cxSendOverlay.classList.remove('show'));
-document.getElementById('cxSendGenerate').addEventListener('click', generateChallengeLink);
-cxSendOverlay.addEventListener('click', (e) => {
-  if (e.target === cxSendOverlay) cxSendOverlay.classList.remove('show');
-});
-document.getElementById('cxResultClose').addEventListener('click', () => {
-  cxResultOverlay.classList.remove('show');
-});
-cxResultOverlay.addEventListener('click', (e) => {
-  if (e.target === cxResultOverlay) cxResultOverlay.classList.remove('show');
-});
-
-window.addEventListener('DOMContentLoaded', maybeHandleChallengeHash);
-window.addEventListener('hashchange', maybeHandleChallengeHash);
-if (document.readyState === 'complete' || document.readyState === 'interactive') {
-  setTimeout(maybeHandleChallengeHash, 0);
-}
-
 /* --------------- Family leaderboard ---------------
    Everyone's profiles, side-by-side. Today's top answerer gets the trophy. */
 const familyOverlay = document.getElementById('familyOverlay');
@@ -3135,13 +3388,6 @@ function renderFamily() {
     const dailyCount = (u.daily && u.daily[today]) || 0;
     const bestGrSec = bestGoldenRunSec(u);
     const lightningBest = (u.lightning && u.lightning.best) || 0;
-    // Realms progress: count realms that are at least 'cleared'
-    let realmsCleared = 0;
-    if (u.realms) {
-      for (const k in u.realms) {
-        if (u.realms[k] && (u.realms[k].cleared || u.realms[k].mastered)) realmsCleared++;
-      }
-    }
     const drillStreak = u.drillStreak || 0;
 
     const card = document.createElement('div');
@@ -3160,7 +3406,6 @@ function renderFamily() {
         <div>🎴 Tricks</div><div><b>${tricksCount}</b> / ${totalTricks}</div>
         <div>⚡ Lightning</div><div><b>${lightningBest}</b></div>
         <div>🏁 Best run</div><div><b>${bestGrSec ? bestGrSec.toFixed(1) + 's' : '—'}</b></div>
-        <div>🗺️ Realms</div><div><b>${realmsCleared}</b> / 11</div>
         <div>🔥 Streak</div><div><b>${drillStreak}</b></div>
       </div>
     `;
@@ -3894,8 +4139,17 @@ function renderWhiteboard(a, b) {
 const gridEl = document.getElementById('grid');
 const gridFrame = document.getElementById('gridFrame');
 
-function buildGrid() {
+function buildGrid(opts) {
+  opts = opts || {};
+  const u = ensureUser();
+  const tables = ladderTables(u);
+  const isLadder = tables !== null;
+  const cols = isLadder ? 10 : GRID_N;
+
   gridEl.innerHTML = '';
+  if (isLadder) gridEl.classList.add('ladder-mode');
+  else gridEl.classList.remove('ladder-mode');
+
   const frag = document.createDocumentFragment();
 
   // corner
@@ -3904,27 +4158,41 @@ function buildGrid() {
   corner.textContent = '×';
   frag.appendChild(corner);
 
-  // top row of headers (1..100)
-  for (let c = 1; c <= GRID_N; c++) {
+  // top row of headers
+  for (let c = 1; c <= cols; c++) {
     const h = document.createElement('div');
     h.className = 'hdr top' + (c % 10 === 0 ? ' tenth' : '');
     h.textContent = c;
     frag.appendChild(h);
   }
 
-  // rows: left header + 100 cells
-  for (let r = 1; r <= GRID_N; r++) {
+  // Determine which rows to render
+  let rowDigits;
+  if (isLadder) {
+    // Render unlocked rungs in ladder order, then the current rung at the bottom.
+    rowDigits = u.ladder.unlocked.slice();
+    if (u.ladder.current != null) rowDigits.push(u.ladder.current);
+  } else {
+    rowDigits = [];
+    for (let r = 1; r <= GRID_N; r++) rowDigits.push(r);
+  }
+
+  for (const r of rowDigits) {
     const rh = document.createElement('div');
     rh.className = 'hdr left' + (r % 10 === 0 ? ' tenth' : '');
+    if (isLadder && r === u.ladder.current) rh.classList.add('current-rung');
     rh.textContent = r;
+    rh.dataset.rowDigit = r;
+    if (opts.justUnlockedDigit && r === opts.justUnlockedDigit) rh.classList.add('row-just-unlocked');
     frag.appendChild(rh);
 
-    for (let c = 1; c <= GRID_N; c++) {
+    for (let c = 1; c <= cols; c++) {
       const cell = document.createElement('div');
       cell.className = 'cell';
       cell.dataset.r = r;
       cell.dataset.c = c;
-      cell.textContent = '·';   // compact placeholder; product shown once tried
+      cell.textContent = '·';
+      if (opts.justUnlockedDigit && r === opts.justUnlockedDigit) cell.classList.add('row-just-unlocked');
       frag.appendChild(cell);
     }
   }
@@ -4012,6 +4280,8 @@ function openQuiz(a, b) {
   current = { a, b, startedAt: performance.now(), answered: false };
   qText.textContent = `${a} × ${b}`;
   qInput.value = '';
+  qInput.disabled = false;       // defensive: previous quiz may have left it disabled
+  qSubmit.disabled = false;
   qInput.classList.remove('shake');
   qFeedback.innerHTML = '';
   qNext.style.display = 'none';
@@ -4044,7 +4314,6 @@ function submitAnswer() {
   const correct = a * b;
   const given = parseInt(val, 10);
   const elapsed = (performance.now() - current.startedAt) / 1000;
-  current.answered = true;
 
   const u = ensureUser();
   const rec = cellRecord(u, a, b);
@@ -4060,12 +4329,17 @@ function submitAnswer() {
   let newlyUnlocked = false;
 
   if (given === correct) {
+    current.answered = true;     // lock further submissions on this question
     rec.correct++;
     rec.streak = (rec.streak || 0) + 1;
     if (rec.bestTime == null || elapsed < rec.bestTime) rec.bestTime = +elapsed.toFixed(2);
     u.stats.totalCorrect++;
     u.stats.currentStreak = (u.stats.currentStreak || 0) + 1;
     if (u.stats.currentStreak > u.stats.bestStreak) u.stats.bestStreak = u.stats.currentStreak;
+
+    // Ladder streak (Phase 3): record correct answer; may unlock next rung.
+    var __ladderUnlocked = recordLadderAnswer(a, b, true);
+    refreshLadderPill();
 
     newlyUnlocked = unlockTrick(ex.id);
 
@@ -4083,6 +4357,9 @@ function submitAnswer() {
   } else {
     rec.streak = 0;
     u.stats.currentStreak = 0;
+    // Ladder streak (Phase 3): wrong answer on the current rung resets the streak.
+    recordLadderAnswer(a, b, false);
+    refreshLadderPill();
     playSfx('wrong');
     // Don't reveal the correct answer — let them think and try again.
     qFeedback.innerHTML = `
@@ -4104,6 +4381,7 @@ function submitAnswer() {
     qNext.style.display = 'none';
     setTimeout(() => qInput.focus(), 60);
     document.getElementById('qShowMe').addEventListener('click', () => {
+      current.answered = true;
       qFeedback.innerHTML = `
         <div class="feedback bad">
           <h3>The answer is <b>${correct}</b></h3>
@@ -4119,19 +4397,32 @@ function submitAnswer() {
   saveState();
   refreshCells();
 
+  if (typeof __ladderUnlocked !== 'undefined' && __ladderUnlocked != null) {
+    // Wait a beat so the kid sees the correct-answer feedback first.
+    setTimeout(() => showLadderUnlocked(__ladderUnlocked), 700);
+  }
   if (newlyUnlocked) {
     setTimeout(() => showWildAppeared(ex.id), 500);
   }
 }
 
 function pickNext() {
-  // Prefer cells that are not mastered; favour recent wrongs and untried
-  const u = ensureUser();
+  // Prefer cells that are not mastered; favour recent wrongs and untried.
+  // Restricted to ladder-eligible cells while the ladder is active so we
+  // never throw a locked-table question at the kid.
+  const u = ensureUser(); migrateUser(u);
   const notMastered = [];
   const recentWrong = [];
   const untried = [];
-  for (let r = 1; r <= GRID_N; r++) {
-    for (let c = 1; c <= GRID_N; c++) {
+  const tables = ladderTables(u);
+  const isLadder = tables !== null;
+  // Iterate only over playable rows in ladder mode; full grid otherwise.
+  const rowDigits = isLadder
+    ? [...tables]
+    : (() => { const a = []; for (let r = 1; r <= GRID_N; r++) a.push(r); return a; })();
+  const colMax = isLadder ? 10 : GRID_N;
+  for (const r of rowDigits) {
+    for (let c = 1; c <= colMax; c++) {
       const rec = u.cells[cellKey(r,c)];
       if (!rec) { untried.push([r,c]); continue; }
       const level = masteryLevel(rec);
@@ -4140,9 +4431,25 @@ function pickNext() {
       notMastered.push([r,c]);
     }
   }
+  // While ladder is active, prefer the CURRENT rung so the streak can grow.
+  if (isLadder && u.ladder.current != null) {
+    const cur = u.ladder.current;
+    const onRung = (p) => p[0] === cur || p[1] === cur;
+    const cw = recentWrong.filter(onRung);
+    const cu = untried.filter(onRung);
+    const cn = notMastered.filter(onRung);
+    const pool = cw.length ? cw : (cu.length ? cu : (cn.length ? cn : notMastered));
+    if (pool.length) return pool[Math.floor(Math.random() * pool.length)];
+  }
   const pool = recentWrong.length ? recentWrong
              : (untried.length ? untried : notMastered);
-  if (!pool.length) return [Math.ceil(Math.random()*12), Math.ceil(Math.random()*12)];
+  if (!pool.length) {
+    // Fallback to the active rung × random col.
+    if (isLadder && u.ladder.current != null) {
+      return [u.ladder.current, 1 + Math.floor(Math.random() * 10)];
+    }
+    return [Math.ceil(Math.random()*12), Math.ceil(Math.random()*12)];
+  }
   return pool[Math.floor(Math.random() * pool.length)];
 }
 
@@ -4190,13 +4497,14 @@ document.getElementById('challengeBtn').addEventListener('click', () => {
 });
 
 document.getElementById('weakBtn').addEventListener('click', () => {
-  const u = ensureUser();
+  const u = ensureUser(); migrateUser(u);
   const weak = [];
   for (const k in u.cells) {
     const rec = u.cells[k];
     if (masteryLevel(rec) === 'wrong' || masteryLevel(rec) === 'tried') {
       const [r, c] = k.split('x').map(Number);
-      weak.push([r, c]);
+      // Only surface weak cells that are still playable under the ladder.
+      if (ladderEligible(u, r, c)) weak.push([r, c]);
     }
   }
   if (!weak.length) {
@@ -4254,7 +4562,9 @@ function renderUserModal() {
       if (state.activeUser !== name && !requestUserAccess(u, 'switch to this account')) return;
       state.activeUser = name;
       saveState();
+      buildGrid();           // ladder state may differ between users
       refreshCells();
+      refreshLadderPill();
       renderUserModal();
     });
     row.querySelector('.delete').addEventListener('click', (e) => {
@@ -4264,8 +4574,10 @@ function renderUserModal() {
       delete state.users[name];
       if (state.activeUser === name) state.activeUser = Object.keys(state.users)[0] || null;
       saveState();
-      renderUserModal();
+      buildGrid();           // active user may have changed -> ladder state differs
       refreshCells();
+      refreshLadderPill();
+      renderUserModal();
     });
     userList.appendChild(row);
   });
@@ -4321,8 +4633,10 @@ document.getElementById('createUserBtn').addEventListener('click', () => {
   input.value = '';
   if (passInput) passInput.value = '';
   saveState();
-  renderUserModal();
+  buildGrid();           // fresh user -> ladder starts at ×1
   refreshCells();
+  refreshLadderPill();
+  renderUserModal();
 });
 document.getElementById('newUserName').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') {
@@ -4931,14 +5245,6 @@ function submitDdAnswer() {
   nextBtn.textContent = (dd.index === dd.questions.length - 1) ? 'Finish ➜' : 'Next ➜';
   nextBtn.focus();
 
-  // If this answer cleared a realm, queue a celebration after the drill ends.
-  const cleared = checkRealmClear(u);
-  if (cleared !== null) {
-    dd.realmsClearedDuringDrill = dd.realmsClearedDuringDrill || [];
-    dd.realmsClearedDuringDrill.push(cleared);
-    saveState();
-  }
-
   renderDdProgress();
 }
 
@@ -4997,9 +5303,6 @@ function finishDailyDrill() {
       <div class="dd-summary-score">${score}/${total}</div>
       ${streakLine}
     </div>
-    ${(dd.realmsClearedDuringDrill && dd.realmsClearedDuringDrill.length) ?
-      `<div class="feedback good" style="margin-top:10px;">🗺️ You cleared realm${dd.realmsClearedDuringDrill.length > 1 ? 's' : ''} <b>${dd.realmsClearedDuringDrill.map(n => '×'+n).join(', ')}</b>! Check the Realms map.</div>`
-      : ''}
   `;
   if (score === total && !alreadyDone) popConfetti();
   if (score >= 7) playSfx('fanfare');
@@ -5008,16 +5311,8 @@ function finishDailyDrill() {
   const actions = document.getElementById('ddActions');
   actions.innerHTML = `
     <button class="btn btn-ghost" id="ddDoneClose">Close</button>
-    ${(dd.realmsClearedDuringDrill && dd.realmsClearedDuringDrill.length) ?
-      '<button class="btn btn-primary" id="ddGoRealms">Open Realms 🗺️</button>' : ''}
   `;
   document.getElementById('ddDoneClose').addEventListener('click', closeDailyDrill);
-  const goBtn = document.getElementById('ddGoRealms');
-  if (goBtn) goBtn.addEventListener('click', () => {
-    closeDailyDrill();
-    openRealms();
-  });
-
   updateDailyStreakBadge();
 }
 
@@ -5030,7 +5325,6 @@ function openDailyDrill() {
     finished: false,
     correct: 0,
     results: [],          // per-question true/false
-    realmsClearedDuringDrill: []
   };
   document.getElementById('ddAnswerRow').style.display = '';
   document.getElementById('ddActions').innerHTML =
@@ -5057,350 +5351,6 @@ document.getElementById('ddInput').addEventListener('keydown', (e) => {
 });
 dailyDrillOverlay.addEventListener('click', (e) => {
   if (e.target === dailyDrillOverlay) closeDailyDrill();
-});
-
-
-/* ============================================================
-   Realms — progression spine across ×2 .. ×12
-   ============================================================ */
-
-const REALM_NUMBERS = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
-
-/* Count mastered cells in a realm. For realm ×N, the cells are
-   N×1, N×2, …, N×10 — 10 cells total (cellKey normalises N×i and i×N). */
-function realmCellsMastered(u, n) {
-  let count = 0;
-  for (let i = 1; i <= 10; i++) {
-    const rec = u.cells[cellKey(n, i)];
-    if (masteryLevel(rec) === 'mastered') count++;
-  }
-  return count;
-}
-
-function realmStatus(u, n) {
-  const entry = (u.realms && u.realms[n]) || {};
-  if (entry.mastered) return 'mastered';
-  if (entry.cleared)  return 'cleared';
-  const idx = REALM_NUMBERS.indexOf(n);
-  if (idx === 0) return 'current';
-  const prev = REALM_NUMBERS[idx - 1];
-  const prevEntry = (u.realms && u.realms[prev]) || {};
-  if (prevEntry.cleared || prevEntry.mastered) return 'current';
-  return 'locked';
-}
-
-/* After an answer, detect the first realm that just reached "cleared"
-   status this pass. Returns the realm number, or null. Idempotent. */
-function checkRealmClear(u) {
-  if (!u.realms) u.realms = {};
-  for (const n of REALM_NUMBERS) {
-    const entry = u.realms[n] || {};
-    if (entry.cleared) continue;
-    if (realmCellsMastered(u, n) >= 10) {
-      u.realms[n] = Object.assign(entry, {
-        cleared: true,
-        clearedAt: new Date().toISOString()
-      });
-      return n;
-    }
-  }
-  return null;
-}
-
-/* Realm theme — emoji drawn from the existing creature catalog where
-   available, with simple fallbacks for ×11 and ×12. */
-const REALM_EMOJIS = {
-  2: '🐣', 3: '🦊', 4: '🐻', 5: '✋', 6: '🐝',
-  7: '🌈', 8: '🐙', 9: '🥷', 10: '🔟', 11: '✂️', 12: '🥚'
-};
-
-function renderRealmsPath() {
-  const u = ensureUser();
-  const path = document.getElementById('realmsPath');
-  path.innerHTML = '';
-
-  for (const n of REALM_NUMBERS) {
-    const status = realmStatus(u, n);
-    const mastered = realmCellsMastered(u, n);
-    const pct = Math.min(100, Math.round(100 * mastered / 10));
-    const card = document.createElement('div');
-    card.className = 'realm-card ' + status;
-    const emoji = (status === 'locked') ? '🔒' : (REALM_EMOJIS[n] || '🌟');
-    const subLine = status === 'mastered' ? 'Realm mastered 👑' :
-                    status === 'cleared'  ? 'Cleared — face the boss to master' :
-                    status === 'locked'   ? 'Clear the previous realm to unlock' :
-                                            `${mastered} of 10 cells mastered`;
-    const badgeLabel = status.charAt(0).toUpperCase() + status.slice(1);
-
-    card.innerHTML = `
-      <div class="realm-emoji">${emoji}</div>
-      <div>
-        <div class="realm-title">×${n} realm</div>
-        <div class="realm-sub">${subLine}</div>
-        <div class="realm-progress"><div class="realm-progress-bar" style="width:${pct}%"></div></div>
-      </div>
-      <div class="realm-action">
-        <span class="realm-status-badge ${status}">${badgeLabel}</span>
-        ${status === 'current'  ? '<button class="btn btn-primary" data-action="practise">Practise</button>' : ''}
-        ${status === 'cleared'  ? '<button class="btn btn-golden"  data-action="boss">Boss 🐲</button>'     : ''}
-        ${status === 'mastered' ? '<button class="btn btn-ghost"   data-action="boss">Replay boss</button>' : ''}
-      </div>
-    `;
-    const btn = card.querySelector('button[data-action]');
-    if (btn) {
-      btn.addEventListener('click', () => {
-        const action = btn.dataset.action;
-        if (action === 'practise') startRealmPractice(n);
-        else if (action === 'boss') startRealmBoss(n);
-      });
-    }
-    path.appendChild(card);
-  }
-}
-
-function openRealms() {
-  renderRealmsPath();
-  document.getElementById('realmsOverlay').classList.add('show');
-}
-
-function closeRealms() {
-  document.getElementById('realmsOverlay').classList.remove('show');
-}
-
-/* "Practise" the realm — open the grid highlight on an unmastered cell in the
-   realm's row so the kid can keep chipping away. Tries to pick one they've
-   seen before (streak 0 or near-mastery) before untried. */
-function startRealmPractice(n) {
-  const u = ensureUser();
-  const candidates = [];
-  for (let i = 1; i <= 10; i++) {
-    const rec = u.cells[cellKey(n, i)];
-    if (masteryLevel(rec) !== 'mastered') candidates.push([n, i]);
-  }
-  if (!candidates.length) { closeRealms(); return; }
-  // Prefer cells with some history
-  candidates.sort((x, y) => {
-    const rx = u.cells[cellKey(x[0], x[1])];
-    const ry = u.cells[cellKey(y[0], y[1])];
-    return (ry ? ry.attempts : 0) - (rx ? rx.attempts : 0);
-  });
-  const [a, b] = candidates[0];
-  closeRealms();
-  // Re-use main quiz by calling the cell's click path.
-  openQuizFor(a, b);
-}
-
-/* Fallback — if the app's main quiz opener isn't globally named openQuizFor,
-   wire through the grid cell click by scrolling+clicking. Safe if either
-   variant is present. */
-function openQuizFor(a, b) {
-  // Prefer a direct hook if the app defines one.
-  if (typeof startQuiz === 'function') { startQuiz(a, b); return; }
-  // Otherwise synthesize a click on the grid cell so the existing handler fires.
-  const cell = document.querySelector(`.cell[data-r="${a}"][data-c="${b}"]`)
-            || document.querySelector(`.cell[data-r="${b}"][data-c="${a}"]`);
-  if (cell) { cell.scrollIntoView({block: 'center', inline: 'center'}); cell.click(); }
-}
-
-/* --------------- Realm Boss (5 hard questions) --------------- */
-let rb = null;
-const realmBossOverlay = document.getElementById('realmBossOverlay');
-
-function bossQuestions(n) {
-  // Five of the harder cells for this realm: ×7, ×8, ×9, ×11, ×12.
-  const picks = [7, 8, 9, 11, 12].map(i => [n, i]);
-  return picks.slice().sort(() => Math.random() - 0.5);
-}
-
-function renderRbProgress() {
-  const wrap = document.getElementById('rbProgress');
-  if (!rb) { wrap.innerHTML = ''; return; }
-  wrap.innerHTML = '';
-  for (let i = 0; i < rb.questions.length; i++) {
-    const dot = document.createElement('div');
-    dot.className = 'dd-dot';
-    if (rb.results[i] === true) dot.classList.add('good');
-    else if (rb.results[i] === false) dot.classList.add('bad');
-    else if (i === rb.index && !rb.finished) dot.classList.add('current');
-    wrap.appendChild(dot);
-  }
-}
-
-function startRealmBoss(n) {
-  closeRealms();
-  rb = {
-    realm: n,
-    questions: bossQuestions(n),
-    index: 0,
-    finished: false,
-    correct: 0,
-    results: []
-  };
-  document.getElementById('rbTitle').textContent = `🐲 ×${n} Realm Boss`;
-  document.getElementById('rbSub').textContent = 'Get all 5 correct to earn the crown. One slip and the boss wins this round.';
-  document.getElementById('rbAnswerRow').style.display = '';
-  document.getElementById('rbActions').innerHTML =
-    '<button class="btn btn-ghost" id="rbClose">Retreat</button>' +
-    '<button class="btn btn-primary" id="rbNext" style="display:none;">Next ➜</button>';
-  document.getElementById('rbClose').addEventListener('click', closeRealmBoss);
-  document.getElementById('rbNext').addEventListener('click', advanceRb);
-  realmBossOverlay.classList.add('show');
-  nextRbQuestion();
-}
-
-function nextRbQuestion() {
-  if (!rb) return;
-  if (rb.index >= rb.questions.length) { finishRealmBoss(true); return; }
-  const [a, b] = rb.questions[rb.index];
-  document.getElementById('rbSub').textContent = `Question ${rb.index + 1} of ${rb.questions.length} — ×${rb.realm} realm`;
-  document.getElementById('rbQText').textContent = `${a} × ${b}`;
-  const input = document.getElementById('rbInput');
-  input.value = '';
-  input.disabled = false;
-  document.getElementById('rbSubmit').disabled = false;
-  document.getElementById('rbSubmit').style.display = '';
-  document.getElementById('rbNext').style.display = 'none';
-  document.getElementById('rbFeedback').innerHTML = '';
-  renderRbProgress();
-  setTimeout(() => input.focus(), 30);
-}
-
-function submitRbAnswer() {
-  if (!rb || rb.finished) return;
-  const input = document.getElementById('rbInput');
-  const raw = input.value.trim();
-  if (raw === '') return;
-  const given = parseInt(raw, 10);
-  if (Number.isNaN(given)) return;
-
-  const [a, b] = rb.questions[rb.index];
-  const correct = a * b;
-  const isRight = given === correct;
-
-  // Record in cells so boss answers still feed mastery
-  const u = ensureUser();
-  const k = cellKey(a, b);
-  if (!u.cells[k]) u.cells[k] = { attempts: 0, correct: 0, streak: 0, bestTime: null, lastAt: null };
-  const rec = u.cells[k];
-  rec.attempts++;
-  u.stats.totalAttempts++;
-  bumpDailyCount();
-  const ex = explain(a, b);
-
-  if (isRight) {
-    rec.correct++;
-    rec.streak = (rec.streak || 0) + 1;
-    u.stats.totalCorrect++;
-    u.stats.currentStreak = (u.stats.currentStreak || 0) + 1;
-    if (u.stats.currentStreak > u.stats.bestStreak) u.stats.bestStreak = u.stats.currentStreak;
-    rb.results[rb.index] = true;
-    rb.correct++;
-    unlockTrick(ex.id);
-    playSfx('correct');
-    document.getElementById('rbFeedback').innerHTML =
-      `<div class="feedback good"><h3>✅ ${a} × ${b} = <b>${correct}</b></h3></div>`;
-  } else {
-    rec.streak = 0;
-    u.stats.currentStreak = 0;
-    rb.results[rb.index] = false;
-    playSfx('wrong');
-    document.getElementById('rbFeedback').innerHTML = `
-      <div class="feedback bad">
-        <h3>❌ Not quite — the boss wins this round.</h3>
-        <div>You said <b>${given}</b>. Train the ×${a === Math.min(a, b) ? Math.max(a, b) : Math.min(a, b)} cells on the grid and try again.</div>
-      </div>`;
-    input.classList.remove('shake');
-    void input.offsetWidth;
-    input.classList.add('shake');
-  }
-  rec.lastAt = new Date().toISOString();
-  saveState();
-  refreshCells();
-
-  input.disabled = true;
-  document.getElementById('rbSubmit').style.display = 'none';
-  const nextBtn = document.getElementById('rbNext');
-  nextBtn.style.display = '';
-  nextBtn.textContent = (!isRight) ? 'See result' :
-                        (rb.index === rb.questions.length - 1) ? 'Finish ➜' : 'Next ➜';
-  nextBtn.focus();
-  renderRbProgress();
-}
-
-function advanceRb() {
-  if (!rb) return;
-  // Any wrong answer ends the boss attempt
-  if (rb.results[rb.index] === false) { finishRealmBoss(false); return; }
-  rb.index++;
-  if (rb.index >= rb.questions.length) finishRealmBoss(true);
-  else nextRbQuestion();
-}
-
-function finishRealmBoss(won) {
-  if (!rb) return;
-  rb.finished = true;
-  const u = ensureUser();
-  const n = rb.realm;
-  if (won) {
-    u.realms[n] = Object.assign(u.realms[n] || {}, {
-      mastered: true,
-      masteredAt: new Date().toISOString(),
-      cleared: true
-    });
-    saveState();
-    popConfetti();
-    playSfx('fanfare');
-    document.getElementById('rbSub').textContent = `×${n} Realm mastered!`;
-    document.getElementById('rbQText').textContent = '👑';
-    document.getElementById('rbAnswerRow').style.display = 'none';
-    document.getElementById('rbFeedback').innerHTML = `
-      <div class="realm-cleared-celebrate">
-        <h3>👑 ×${n} Realm mastered!</h3>
-        <div>You beat the boss all 5 in a row. Nice.</div>
-      </div>`;
-  } else {
-    document.getElementById('rbSub').textContent = `×${n} Realm — defeated this time.`;
-    document.getElementById('rbAnswerRow').style.display = 'none';
-    document.getElementById('rbFeedback').innerHTML = `
-      <div class="feedback bad">
-        <h3>The boss wins this round.</h3>
-        <div>You got ${rb.correct} out of ${rb.questions.length}. Train the ×${n} cells on the grid and try again.</div>
-      </div>`;
-  }
-  const actions = document.getElementById('rbActions');
-  actions.innerHTML = `
-    <button class="btn btn-ghost" id="rbDoneClose">Close</button>
-    <button class="btn btn-primary" id="rbBackRealms">Back to Realms</button>
-    ${!won ? '<button class="btn btn-golden" id="rbRetry">Try again</button>' : ''}
-  `;
-  document.getElementById('rbDoneClose').addEventListener('click', closeRealmBoss);
-  document.getElementById('rbBackRealms').addEventListener('click', () => {
-    closeRealmBoss();
-    openRealms();
-  });
-  const retryBtn = document.getElementById('rbRetry');
-  if (retryBtn) retryBtn.addEventListener('click', () => { const realm = rb.realm; closeRealmBoss(); startRealmBoss(realm); });
-}
-
-function closeRealmBoss() {
-  rb = null;
-  realmBossOverlay.classList.remove('show');
-}
-
-document.getElementById('realmsBtn').addEventListener('click', openRealms);
-document.getElementById('realmsClose').addEventListener('click', closeRealms);
-document.getElementById('realmsOverlay').addEventListener('click', (e) => {
-  if (e.target === document.getElementById('realmsOverlay')) closeRealms();
-});
-document.getElementById('rbSubmit').addEventListener('click', submitRbAnswer);
-document.getElementById('rbInput').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') {
-    if (document.getElementById('rbSubmit').style.display === 'none') advanceRb();
-    else submitRbAnswer();
-  }
-});
-realmBossOverlay.addEventListener('click', (e) => {
-  if (e.target === realmBossOverlay) closeRealmBoss();
 });
 
 
@@ -5432,6 +5382,151 @@ if ('serviceWorker' in navigator) {
     });
   });
 }
+
+/* --------------- Peg picker (Phase 2) ---------------
+   Walks digits 1..10. Three SVG options per digit. Tapping an option saves it
+   and advances to the next digit. Skip leaves remaining picks for next time. */
+const pegPickerOverlay = document.getElementById('pegPickerOverlay');
+const pegPickerGrid    = document.getElementById('pegPickerGrid');
+let pegPickerDigit = 1;
+
+function openPegPicker(startDigit) {
+  pegPickerDigit = startDigit || 1;
+  renderPegPicker();
+  pegPickerOverlay.classList.add('show');
+}
+function closePegPicker() {
+  pegPickerOverlay.classList.remove('show');
+  // Re-render gallery in case it's open behind.
+  if (creaturesOverlay && creaturesOverlay.classList.contains('show')) renderCreatures();
+}
+function renderPegPicker() {
+  const u = ensureUser(); migrateUser(u);
+  const d = pegPickerDigit;
+  document.getElementById('pegPickerDigit').textContent = d;
+  document.getElementById('pegPickerProgress').textContent = `Digit ${d} of 10`;
+  // Dots row
+  const dots = document.getElementById('pegPickerDots');
+  dots.innerHTML = '';
+  for (let i = 1; i <= 10; i++) {
+    const s = document.createElement('span');
+    if (typeof u.pegs[i] === 'number') s.classList.add('done');
+    if (i === d) s.classList.add('active');
+    dots.appendChild(s);
+  }
+  // Three options
+  pegPickerGrid.innerHTML = '';
+  const options = PEGS[d] || [];
+  options.forEach((opt, idx) => {
+    const card = document.createElement('div');
+    card.className = 'peg-pick-opt' + (u.pegs[d] === idx ? ' selected' : '');
+    card.innerHTML = `${opt.svg}<div class="peg-pick-name">${opt.name}</div>`;
+    card.addEventListener('click', () => {
+      const cu = ensureUser(); migrateUser(cu);
+      cu.pegs[d] = idx;
+      saveState();
+      // Advance to next unpicked digit, or close on the 10th.
+      if (d < 10) {
+        pegPickerDigit = d + 1;
+        renderPegPicker();
+      } else {
+        closePegPicker();
+      }
+    });
+    pegPickerGrid.appendChild(card);
+  });
+  // Back button visibility
+  document.getElementById('pegPickerBack').style.visibility = (d > 1) ? 'visible' : 'hidden';
+}
+document.getElementById('pegPickerBack').addEventListener('click', () => {
+  if (pegPickerDigit > 1) { pegPickerDigit--; renderPegPicker(); }
+});
+document.getElementById('pegPickerSkip').addEventListener('click', closePegPicker);
+pegPickerOverlay.addEventListener('click', (e) => {
+  if (e.target === pegPickerOverlay) closePegPicker();
+});
+
+/* "Pick / change my pegs" button inside the My Pegs gallery */
+document.getElementById('pickPegsBtn').addEventListener('click', () => {
+  const u = ensureUser(); migrateUser(u);
+  // Resume on the first unpicked digit; if all picked, start from 1.
+  let start = 1;
+  for (let d = 1; d <= 10; d++) {
+    if (typeof u.pegs[d] !== 'number') { start = d; break; }
+    if (d === 10) start = 1;
+  }
+  openPegPicker(start);
+});
+
+
+/* --------------- Ladder UI (Phase 3) --------------- */
+function refreshLadderPill() {
+  const u = ensureUser(); migrateUser(u);
+  const pill = document.getElementById('ladderPill');
+  if (!pill) return;
+  if (!ladderActive(u)) {
+    pill.style.display = 'none';
+    pill.classList.add('complete');
+    return;
+  }
+  pill.style.display = '';
+  pill.classList.remove('complete');
+  document.getElementById('ladderRung').textContent = '×' + u.ladder.current;
+  document.getElementById('ladderStreakText').textContent = u.ladder.streak + '/' + LADDER_GOAL;
+  const pct = Math.min(100, Math.round(100 * u.ladder.streak / LADDER_GOAL));
+  document.getElementById('ladderStreakFill').style.width = pct + '%';
+}
+
+const ladderOverlay = document.getElementById('ladderOverlay');
+
+function showLadderUnlocked(digit) {
+  const u = ensureUser(); migrateUser(u);
+  const next = u.ladder.current;  // already advanced to next rung at this point
+  const allDone = next == null;
+  document.getElementById('ladderDigit').textContent = '×' + digit;
+  document.getElementById('ladderMsg').textContent = allDone
+    ? 'You cleared the whole ladder!'
+    : 'Locked in!';
+  document.getElementById('ladderSub').textContent = allDone
+    ? 'Big numbers and the full grid are unlocked. Show off.'
+    : 'Next up: ×' + next + '. Stay sharp.';
+  // Show the kid's chosen peg for this digit if they've picked it.
+  const pegSlot = document.getElementById('ladderPeg');
+  const peg = chosenPeg(u, digit);
+  pegSlot.innerHTML = peg ? peg.svg : '<div style="font-size:64px; opacity:.6;">★</div>';
+  ladderOverlay.classList.add('show');
+  playSfx('fanfare');
+  popConfetti();
+  refreshLadderPill();
+}
+
+function dismissLadderOverlay() {
+  ladderOverlay.classList.remove('show');
+  const u = ensureUser(); migrateUser(u);
+  // Highlight the NEW current rung — that's the row that just appeared in
+  // the grid. The previous current graduated to "unlocked" and was already
+  // visible. When the ladder is fully done u.ladder.current is null and we
+  // just rebuild without a targeted animation.
+  const newRowDigit = u.ladder.current;
+  buildGrid({ justUnlockedDigit: newRowDigit });
+  refreshCells();
+  // Scroll to the bottom-most row (the new one) so the kid can see it.
+  setTimeout(() => {
+    const u = ensureUser();
+    if (ladderActive(u) && u.ladder.current != null) {
+      const tgt = gridEl.querySelector('.cell[data-r="' + u.ladder.current + '"][data-c="1"]');
+      if (tgt) tgt.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, 80);
+}
+document.getElementById('ladderDismiss').addEventListener('click', dismissLadderOverlay);
+ladderOverlay.addEventListener('click', (e) => {
+  if (e.target === ladderOverlay) dismissLadderOverlay();
+});
+
+// Initial render: pill + grid both reflect ladder state on first load.
+refreshLadderPill();
+
 </script>
 </body>
 </html>

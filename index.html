@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover" />
-<title>Times Table Quest — V4</title>
+<title>Times Table Quest — V6</title>
 
 <!-- PWA -->
 <link rel="manifest" href="manifest.json">
@@ -25,7 +25,7 @@
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Baloo+2:wght@600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Baloo+2:wght@600;700;800&family=Patrick+Hand&display=swap" rel="stylesheet">
 <style>
   :root {
     --bg-1: #fff6e0;
@@ -227,28 +227,33 @@
     background-color: #ffdd9e;          /* explicit hex so it's opaque even if var fails */
     color: #7a4a00;
     font-weight: 700;
-    position: sticky;
-    position: -webkit-sticky;            /* Safari fallback */
+    position: relative;
   }
+  /* Header pinning is driven by --sx and --sy on .grid, updated on scroll by
+     JS. This avoids a CSS Grid quirk where position: sticky's containing
+     block is the single grid cell — so sticky headers fall off when scrolled
+     past their own cell width (~48px). */
   .hdr.top {
-    top: 0;
     z-index: 10;
+    transform: translateY(var(--sy, 0));
     box-shadow: 0 2px 4px rgba(0,0,0,0.06);
+    will-change: transform;
   }
   .hdr.left {
-    left: 0;
-    z-index: 10;
+    z-index: 11;
+    transform: translateX(var(--sx, 0));
     box-shadow: 2px 0 4px rgba(0,0,0,0.06);
+    will-change: transform;
   }
   .hdr.corner {
-    top: 0;
-    left: 0;
-    z-index: 20;                         /* above both top + left sticky headers */
+    z-index: 20;                         /* above both top + left pinned headers */
+    transform: translate(var(--sx, 0), var(--sy, 0));
     background: linear-gradient(135deg, var(--accent), var(--accent-2));
     color: white;
     font-family: 'Baloo 2', sans-serif;
     font-size: 14px;
     box-shadow: 2px 2px 6px rgba(0,0,0,0.08);
+    will-change: transform;
   }
   /* Highlight columns that are multiples of 10 for readability */
   .hdr.top.tenth, .hdr.left.tenth {
@@ -398,6 +403,93 @@
     line-height: 1.55;
   }
   .trick b { color: var(--accent-2); }
+
+  /* Whiteboard — shown after a wrong answer to teach ALL applicable tricks */
+  .whiteboard {
+    position: relative;
+    background: #fdfcf5;
+    background-image:
+      linear-gradient(rgba(74, 143, 237, 0.05) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(74, 143, 237, 0.05) 1px, transparent 1px);
+    background-size: 28px 28px;
+    border: 2px solid #e1dcc9;
+    border-radius: 14px;
+    padding: 20px 18px 22px;
+    margin-top: 14px;
+    box-shadow: 0 4px 12px rgba(60, 50, 30, 0.08), inset 0 0 0 3px #fffef8;
+  }
+  .whiteboard::after {
+    content: '';
+    position: absolute;
+    left: -6px; right: -6px; bottom: -10px; height: 10px;
+    background: linear-gradient(#d0c8ae, #9a9277);
+    border-radius: 0 0 8px 8px;
+    box-shadow: 0 3px 6px rgba(0,0,0,0.15);
+  }
+  .wb-eq {
+    font-family: 'Patrick Hand', 'Baloo 2', cursive;
+    font-size: 38px;
+    color: #2a4778;
+    text-align: center;
+    margin: 0 0 10px;
+    letter-spacing: 1px;
+    line-height: 1.1;
+  }
+  .wb-answer {
+    color: #c0392b;
+    border-bottom: 3px wavy solid #c0392b;
+    padding: 0 4px;
+  }
+  .wb-count {
+    font-family: 'Patrick Hand', cursive;
+    font-size: 17px;
+    color: #7a6a2e;
+    text-align: center;
+    margin: 0 0 12px;
+  }
+  .wb-tricks {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .wb-trick {
+    background: #ffffff;
+    border: 1.5px dashed #c3bfae;
+    border-radius: 10px;
+    padding: 10px 14px 12px;
+    border-left-width: 5px;
+    border-left-style: solid;
+  }
+  .wb-trick-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: 'Baloo 2', sans-serif;
+    font-weight: 700;
+    font-size: 16px;
+    color: var(--ink);
+    line-height: 1.2;
+  }
+  .wb-trick-emoji { font-size: 22px; flex-shrink: 0; }
+  .wb-trick-sub {
+    font-size: 12px;
+    color: #7a7466;
+    margin-top: 3px;
+    font-style: italic;
+  }
+  .wb-trick-steps {
+    margin: 8px 0 0;
+    padding-left: 22px;
+    font-size: 14.5px;
+    line-height: 1.55;
+    color: #2d2a24;
+  }
+  .wb-trick-steps li { margin-bottom: 3px; }
+  .wb-rarity-common    { border-left-color: #8aa5c0; }
+  .wb-rarity-uncommon  { border-left-color: #5ab06a; }
+  .wb-rarity-rare      { border-left-color: #4a7fd4; }
+  .wb-rarity-epic      { border-left-color: #a56edc; }
+  .wb-rarity-legendary { border-left-color: #e4a83a; }
 
   .confetti {
     position: fixed;
@@ -721,6 +813,160 @@
     box-shadow: 0 4px 14px rgba(255, 100, 80, 0.25);
   }
   .btn-lightning:hover { transform: translateY(-2px); filter: brightness(1.05); }
+
+  /* ========= Daily Drill ("Today's 10") ========= */
+  .btn-daily {
+    background: linear-gradient(135deg, #ff7a3d, #ffaa00);
+    color: white;
+    box-shadow: 0 4px 14px rgba(255, 122, 61, 0.3);
+    position: relative;
+  }
+  .btn-daily:hover { transform: translateY(-2px); filter: brightness(1.05); }
+  .btn-daily.done {
+    background: linear-gradient(135deg, #95a5a6, #7f8c8d);
+    filter: saturate(0.6);
+  }
+  .daily-streak-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255,255,255,0.28);
+    border-radius: 999px;
+    padding: 2px 8px;
+    font-size: 12px;
+    margin-left: 4px;
+    font-weight: 800;
+  }
+  .dd-progress {
+    display: flex;
+    gap: 6px;
+    justify-content: center;
+    margin: 14px 0 6px;
+  }
+  .dd-dot {
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    background: #e0dcd0;
+    transition: all .2s ease;
+  }
+  .dd-dot.good    { background: #2ecc71; transform: scale(1.15); }
+  .dd-dot.bad     { background: #e74c3c; transform: scale(1.15); }
+  .dd-dot.current { background: var(--accent-2); transform: scale(1.25); box-shadow: 0 0 0 3px rgba(108,92,231,0.25); }
+  .dd-summary {
+    text-align: center;
+    padding: 10px 0 4px;
+  }
+  .dd-summary-score {
+    font-family: 'Baloo 2', sans-serif;
+    font-size: 32px;
+    color: var(--accent-2);
+    margin: 8px 0 4px;
+  }
+  .dd-summary-streak {
+    font-size: 16px;
+    color: var(--ink);
+    margin-bottom: 8px;
+  }
+
+  /* ========= Realms ========= */
+  .btn-realms {
+    background: linear-gradient(135deg, #6c5ce7, #a29bfe);
+    color: white;
+    box-shadow: 0 4px 14px rgba(108, 92, 231, 0.28);
+  }
+  .btn-realms:hover { transform: translateY(-2px); filter: brightness(1.05); }
+  .realms-path {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    max-height: 65vh;
+    overflow-y: auto;
+    padding: 4px 2px 8px;
+  }
+  .realm-card {
+    position: relative;
+    display: grid;
+    grid-template-columns: 64px 1fr auto;
+    align-items: center;
+    gap: 14px;
+    padding: 12px 14px;
+    background: #fff;
+    border: 2px solid #eae5d6;
+    border-radius: 14px;
+    transition: all .18s ease;
+  }
+  .realm-card.current   { border-color: #6c5ce7; box-shadow: 0 4px 14px rgba(108,92,231,0.16); }
+  .realm-card.cleared   { background: linear-gradient(135deg, #eafff1, #fdfdff); border-color: #7fd399; }
+  .realm-card.mastered  { background: linear-gradient(135deg, #fff5d8, #fffbee); border-color: #e4a83a; }
+  .realm-card.locked    { opacity: 0.55; filter: grayscale(0.6); }
+  .realm-card:not(.locked):hover { transform: translateY(-1px); box-shadow: 0 6px 16px rgba(0,0,0,0.08); }
+  .realm-emoji {
+    width: 64px; height: 64px;
+    display: grid;
+    place-items: center;
+    font-size: 44px;
+    background: linear-gradient(135deg, #f4f0ff, #fff);
+    border-radius: 14px;
+    border: 2px dashed #d7cef3;
+  }
+  .realm-card.cleared .realm-emoji  { border-color: #7fd399; background: linear-gradient(135deg, #eafff1, #fff); }
+  .realm-card.mastered .realm-emoji { border-color: #e4a83a; background: linear-gradient(135deg, #fff5d8, #fff); }
+  .realm-title {
+    font-family: 'Baloo 2', sans-serif;
+    font-size: 22px;
+    color: var(--ink);
+    line-height: 1.1;
+  }
+  .realm-sub {
+    font-size: 13px;
+    color: var(--ink-soft);
+    margin-top: 2px;
+  }
+  .realm-progress {
+    margin-top: 8px;
+    height: 8px;
+    background: #eee6d4;
+    border-radius: 999px;
+    overflow: hidden;
+  }
+  .realm-progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, #6c5ce7, #a29bfe);
+    border-radius: 999px;
+    transition: width .35s ease;
+  }
+  .realm-card.cleared .realm-progress-bar { background: linear-gradient(90deg, #2ecc71, #7fd399); }
+  .realm-card.mastered .realm-progress-bar { background: linear-gradient(90deg, #e4a83a, #ffd87a); }
+  .realm-action {
+    display: grid;
+    place-items: center;
+    gap: 4px;
+  }
+  .realm-status-badge {
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 3px 8px;
+    border-radius: 999px;
+    color: white;
+  }
+  .realm-status-badge.locked   { background: #95a5a6; }
+  .realm-status-badge.current  { background: #6c5ce7; }
+  .realm-status-badge.cleared  { background: #2ecc71; }
+  .realm-status-badge.mastered { background: #e4a83a; }
+  .realm-cleared-celebrate {
+    background: linear-gradient(135deg, #2ecc71, #7fd399);
+    color: white;
+    padding: 18px;
+    border-radius: 14px;
+    text-align: center;
+  }
+  .realm-cleared-celebrate h3 {
+    font-family: 'Baloo 2', sans-serif;
+    font-size: 24px;
+    margin: 0 0 6px;
+  }
 
   /* ========= Trick Master ========= */
   .btn-tm {
@@ -1209,7 +1455,7 @@
   <div class="brand">
     <span class="logo">×</span>
     Times Table Quest
-    <span style="font-family: 'Fredoka', sans-serif; font-size: 13px; font-weight: 600; color: var(--ink-soft); -webkit-text-fill-color: var(--ink-soft); background: var(--neutral); padding: 2px 8px; border-radius: 999px; margin-left: 6px; letter-spacing: 0.5px;">v4</span>
+    <span style="font-family: 'Fredoka', sans-serif; font-size: 13px; font-weight: 600; color: var(--ink-soft); -webkit-text-fill-color: var(--ink-soft); background: var(--neutral); padding: 2px 8px; border-radius: 999px; margin-left: 6px; letter-spacing: 0.5px;">v6</span>
   </div>
 
   <button class="user-pill" id="userPill" title="Switch player">
@@ -1228,6 +1474,8 @@
 
 <main>
   <div class="toolbar">
+    <button class="btn btn-daily" id="dailyBtn">🔥 Today's 10 <span class="daily-streak-badge" id="dailyStreakBadge" style="display:none;"></span></button>
+    <button class="btn btn-realms" id="realmsBtn">🗺️ Realms</button>
     <button class="btn btn-primary" id="challengeBtn">🎲 Random challenge</button>
     <button class="btn btn-ghost" id="weakBtn">🎯 Practise weak spots</button>
     <button class="btn btn-golden" id="goldenBtn">✨ Golden Run</button>
@@ -1290,8 +1538,10 @@
       <div class="avatar-picker" id="avatarPicker"></div>
       <div class="create-row">
         <input type="text" id="newUserName" maxlength="20" placeholder="Name (e.g. Lily)" />
+        <input type="password" id="newUserPass" maxlength="32" placeholder="Password (optional)" style="flex:0 1 160px;" />
         <button class="btn btn-primary" id="createUserBtn">Add</button>
       </div>
+      <div style="font-size:12px; color: var(--ink-soft); margin-top:4px;">Tip: a password keeps your siblings out of your account. Leave blank for no password.</div>
     </div>
     <div class="modal-actions">
       <button class="btn btn-ghost" id="userClose">Done</button>
@@ -1337,6 +1587,56 @@
 
     <div class="modal-actions" id="grActions">
       <button class="btn btn-ghost" id="grForfeit">Give up</button>
+    </div>
+  </div>
+</div>
+
+<!-- Daily Drill — "Today's 10" -->
+<div class="overlay" id="dailyDrillOverlay">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="ddTitle">
+    <h2 id="ddTitle">🔥 Today's 10</h2>
+    <p class="sub" id="ddSub">Personal practice picked just for you.</p>
+    <div class="dd-progress" id="ddProgress"></div>
+    <div class="question" id="ddQText">— × —</div>
+    <div class="answer-row" id="ddAnswerRow">
+      <input class="answer-input" id="ddInput" type="number" inputmode="numeric" autocomplete="off" placeholder="?" />
+      <button class="btn btn-primary" id="ddSubmit">Check</button>
+    </div>
+    <div id="ddFeedback"></div>
+    <div class="modal-actions" id="ddActions">
+      <button class="btn btn-ghost" id="ddClose">Close</button>
+      <button class="btn btn-primary" id="ddNext" style="display:none;">Next ➜</button>
+    </div>
+  </div>
+</div>
+
+<!-- Realms — map + detail -->
+<div class="overlay" id="realmsOverlay">
+  <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="realmsTitle">
+    <h2 id="realmsTitle">🗺️ Realms</h2>
+    <p class="sub">Clear each realm by mastering its times table. Beat the boss to earn the crown 👑.</p>
+    <div class="realms-path" id="realmsPath"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="realmsClose">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Realm Boss -->
+<div class="overlay" id="realmBossOverlay">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="rbTitle">
+    <h2 id="rbTitle">🐲 Realm Boss</h2>
+    <p class="sub" id="rbSub">Get all 5 correct to master this realm.</p>
+    <div class="dd-progress" id="rbProgress"></div>
+    <div class="question" id="rbQText">— × —</div>
+    <div class="answer-row" id="rbAnswerRow">
+      <input class="answer-input" id="rbInput" type="number" inputmode="numeric" autocomplete="off" placeholder="?" />
+      <button class="btn btn-primary" id="rbSubmit">Check</button>
+    </div>
+    <div id="rbFeedback"></div>
+    <div class="modal-actions" id="rbActions">
+      <button class="btn btn-ghost" id="rbClose">Close</button>
+      <button class="btn btn-primary" id="rbNext" style="display:none;">Next ➜</button>
     </div>
   </div>
 </div>
@@ -1571,7 +1871,7 @@ function ensureUser() {
   saveState();
   return state.users[name];
 }
-function makeUser(name, avatar) {
+function makeUser(name, avatar, password) {
   return {
     name,
     avatar: avatar || AVATARS[Math.floor(Math.random()*AVATARS.length)],
@@ -1586,8 +1886,35 @@ function makeUser(name, avatar) {
     lightning: { best: 0, lastPlayed: null },  // Lightning Round high score
     daily: {},       // yyyy-mm-dd -> questionsAnswered
     muted: false,    // sound mute toggle
-    challenges: []   // received challenges history
+    challenges: [],  // received challenges history
+    dailyDrills: {}, // yyyy-mm-dd -> { correct, total, at }
+    drillStreak: 0,  // consecutive days completed
+    drillLastDate: null,  // yyyy-mm-dd of last drill completion
+    realms: {},      // N (2..12) -> { cleared, mastered, clearedAt, masteredAt }
+    password: password || ''   // optional per-user password. Master password "JC" always unlocks.
   };
+}
+
+/* Master password — unlocks any account. */
+const MASTER_PASSWORD = 'JC';
+
+/* Returns true if the attempt matches the user's password OR the master
+   password, OR the user has no password at all. */
+function checkUserPassword(u, attempt) {
+  if (!u || !u.password) return true;
+  return attempt === u.password || attempt === MASTER_PASSWORD;
+}
+
+/* Prompt for a password if the account has one. Returns true on success
+   (or if no password is set), false if the user cancelled or got it wrong. */
+function requestUserAccess(u, purpose) {
+  if (!u || !u.password) return true;
+  const label = purpose ? `Enter password for ${u.name} (${purpose}):` : `Enter password for ${u.name}:`;
+  const attempt = prompt(label);
+  if (attempt === null) return false;  // user cancelled
+  if (checkUserPassword(u, attempt)) return true;
+  alert('Wrong password. Try again.');
+  return false;
 }
 
 /* Ensure older save files have the new fields without blowing away progress. */
@@ -1600,6 +1927,11 @@ function migrateUser(u) {
   if (!u.challenges) u.challenges = [];
   if (!u.stars)      u.stars = 0;
   if (!u.goldenRuns) u.goldenRuns = [];
+  if (!u.dailyDrills) u.dailyDrills = {};
+  if (typeof u.drillStreak !== 'number') u.drillStreak = 0;
+  if (typeof u.drillLastDate === 'undefined') u.drillLastDate = null;
+  if (!u.realms)     u.realms = {};
+  if (typeof u.password !== 'string') u.password = '';
   return u;
 }
 
@@ -2803,6 +3135,14 @@ function renderFamily() {
     const dailyCount = (u.daily && u.daily[today]) || 0;
     const bestGrSec = bestGoldenRunSec(u);
     const lightningBest = (u.lightning && u.lightning.best) || 0;
+    // Realms progress: count realms that are at least 'cleared'
+    let realmsCleared = 0;
+    if (u.realms) {
+      for (const k in u.realms) {
+        if (u.realms[k] && (u.realms[k].cleared || u.realms[k].mastered)) realmsCleared++;
+      }
+    }
+    const drillStreak = u.drillStreak || 0;
 
     const card = document.createElement('div');
     card.className = 'family-card' + (isMe ? ' me' : '');
@@ -2820,6 +3160,8 @@ function renderFamily() {
         <div>🎴 Tricks</div><div><b>${tricksCount}</b> / ${totalTricks}</div>
         <div>⚡ Lightning</div><div><b>${lightningBest}</b></div>
         <div>🏁 Best run</div><div><b>${bestGrSec ? bestGrSec.toFixed(1) + 's' : '—'}</b></div>
+        <div>🗺️ Realms</div><div><b>${realmsCleared}</b> / 11</div>
+        <div>🔥 Streak</div><div><b>${drillStreak}</b></div>
       </div>
     `;
     grid.appendChild(card);
@@ -3196,7 +3538,359 @@ function explain(a, b) {
   ]};
 }
 
+/* Gather ALL the tricks that apply to a × b (not just the first one explain()
+   returns). Used by the whiteboard UI so kids can see every shortcut that fits.
+   Each rule is checked independently; order below is the order of display. */
+function allExplanations(a, b) {
+  const [s, l] = a <= b ? [a, b] : [b, a];
+  const product = a * b;
+  const out = [];
+  const add = (t) => { if (t && !out.some(x => x.id === t.id)) out.push(t); };
+  const has = (n) => s === n || l === n;
+  const other = (n) => (a === n ? b : a);
+
+  // --- Single-factor specials ---
+  if (has(0)) add({ id: 'zero', title: 'Multiplying by 0', steps: [
+    'Anything times zero is zero. Always!',
+    `So ${a} × ${b} = 0.`
+  ]});
+  if (has(1)) {
+    const L = other(1);
+    add({ id: 'one', title: 'Multiplying by 1', steps: [
+      'Times-one leaves a number unchanged.',
+      `${a} × ${b} = ${L}.`
+    ]});
+  }
+  if (has(2)) {
+    const L = other(2);
+    add({ id: 'double', title: 'Doubling', steps: [
+      `× 2 means "double it".`,
+      `${L} + ${L} = ${product}.`
+    ]});
+  }
+  if (has(3) && !(s === 3 && l === 3)) {
+    const L = other(3);
+    add({ id: 'three', title: '× 3 trick', steps: [
+      `Double it, then add one more lot.`,
+      `${L} + ${L} = ${L*2}. Plus ${L} more = ${product}.`
+    ]});
+  }
+  if (has(4) && !(s === 4 && l === 4)) {
+    const L = other(4);
+    add({ id: 'four', title: '× 4 trick (double, double)', steps: [
+      `× 4 = double, then double again.`,
+      `${L} + ${L} = ${L*2}. Then ${L*2} + ${L*2} = ${product}.`
+    ]});
+  }
+  if (has(5)) {
+    const L = other(5);
+    add({ id: 'five', title: '× 5 trick (×10, then halve)', steps: [
+      `Multiply by 10 first: ${L} × 10 = ${L*10}.`,
+      `Then halve it: ${L*10} ÷ 2 = ${product}.`
+    ]});
+  }
+  if (has(6) && !(s === 6 && l === 6)) {
+    const L = other(6);
+    add({ id: 'six', title: '× 6 trick', steps: [
+      `× 6 = × 3 then double. (Or × 5 plus one more lot.)`,
+      `${L} × 5 = ${L*5}. Plus ${L} = ${product}.`
+    ]});
+  }
+  if (has(7)) {
+    const L = other(7);
+    if (L <= 10) {
+      add({ id: 'seven_split', title: '× 7 — split it', steps: [
+        `Split 7 into 5 + 2. Do each, then add.`,
+        `${L} × 5 = ${L*5}. ${L} × 2 = ${L*2}. ${L*5} + ${L*2} = ${product}.`
+      ]});
+    }
+  }
+  if (has(8) && !(s === 8 && l === 8)) {
+    const L = other(8);
+    add({ id: 'eight', title: '× 8 trick (double three times)', steps: [
+      `× 8 = double, double, double.`,
+      `${L} → ${L*2} → ${L*4} → ${product}.`
+    ]});
+  }
+  if (has(9)) {
+    const L = other(9);
+    if (L < 10) {
+      add({ id: 'nine_finger', title: '× 9 finger trick', steps: [
+        `Hold up 10 fingers. Bend down finger number ${L}.`,
+        `Fingers to the left = tens digit (${L-1}). Fingers to the right = ones digit (${10-L}).`,
+        `Answer: ${product}.`
+      ]});
+    } else {
+      add({ id: 'nine', title: '× 9 trick (×10 minus the number)', steps: [
+        `9 is just one less than 10.`,
+        `${L} × 10 = ${L*10}.`,
+        `Subtract one lot of ${L}: ${L*10} − ${L} = ${product}.`
+      ]});
+    }
+  }
+  if (has(10)) {
+    const L = other(10);
+    add({ id: 'ten', title: '× 10 trick', steps: [
+      `For × 10, just add a zero to the end of the other number.`,
+      `${L} → ${L}0 = ${product}.`
+    ]});
+  }
+  if (has(11)) {
+    const L = other(11);
+    if (L < 10) {
+      add({ id: 'eleven_single', title: '× 11 trick (single digit)', steps: [
+        `For × 11 with a single digit, write the digit twice.`,
+        `${L}${L} = ${product}.`
+      ]});
+    } else if (L >= 10 && L < 100) {
+      const d1 = Math.floor(L/10), d2 = L % 10;
+      const sum = d1 + d2;
+      if (sum < 10) {
+        add({ id: 'eleven_split', title: '× 11 split trick', steps: [
+          `Split ${L} into ${d1} and ${d2}. Add them: ${d1} + ${d2} = ${sum}.`,
+          `Slip the ${sum} between the ${d1} and ${d2}: ${d1}-${sum}-${d2}.`,
+          `So ${L} × 11 = ${product}.`
+        ]});
+      } else {
+        add({ id: 'eleven_carry', title: '× 11 split trick (with carry)', steps: [
+          `Split ${L} into ${d1} and ${d2}. Add them: ${d1} + ${d2} = ${sum}.`,
+          `${sum} is 10 or more, so carry the 1. Tens digit becomes ${d1}+1 = ${d1+1}, middle becomes ${sum-10}.`,
+          `So ${L} × 11 = ${product}.`
+        ]});
+      }
+    }
+  }
+  if (has(12)) {
+    const L = other(12);
+    add({ id: 'twelve', title: '× 12 (×10 + ×2)', steps: [
+      `× 12 is one ten-lot plus one two-lot.`,
+      `${L} × 10 = ${L*10}. ${L} × 2 = ${L*2}.`,
+      `Add: ${L*10} + ${L*2} = ${product}.`
+    ]});
+  }
+  if (has(25)) {
+    const L = other(25);
+    add({ id: 'twentyfive', title: '× 25 trick', steps: [
+      `× 25 is the same as × 100 ÷ 4.`,
+      `${L} × 100 = ${L*100}.`,
+      `Divide by 4: ${L*100} ÷ 4 = ${product}.`
+    ]});
+  }
+  if (has(50)) {
+    const L = other(50);
+    add({ id: 'fifty', title: '× 50 trick', steps: [
+      `× 50 is × 100 then halve.`,
+      `${L} × 100 = ${L*100}. Halve it: ${product}.`
+    ]});
+  }
+  if (has(99)) {
+    const L = other(99);
+    add({ id: 'ninetynine', title: '× 99 trick', steps: [
+      `99 is one less than 100.`,
+      `${L} × 100 = ${L*100}. Subtract ${L}: ${L*100} − ${L} = ${product}.`
+    ]});
+  }
+  if (has(100)) {
+    const L = other(100);
+    add({ id: 'hundred', title: '× 100 trick', steps: [
+      `For × 100, add two zeros.`,
+      `${L} → ${L}00 = ${product}.`
+    ]});
+  }
+
+  // --- Square tricks ---
+  if (a === b) {
+    if (a % 10 === 5 && a >= 5 && a <= 95) {
+      const n = Math.floor(a / 10);
+      add({ id: 'square_five', title: 'Squaring a number ending in 5', steps: [
+        `Trick: n × (n+1), then stick 25 on the end.`,
+        `For ${a}²: n = ${n}. ${n} × ${n+1} = ${n*(n+1)}.`,
+        `Answer: ${n*(n+1)}25 = ${product}.`
+      ]});
+    }
+    if (a % 10 === 0 && a >= 10 && a <= 90) {
+      const n = a / 10;
+      add({ id: 'square_ten', title: 'Squaring a round ten', steps: [
+        `${a} = ${n} × 10.`,
+        `${n}² = ${n*n}. Stick 00 on the end: ${product}.`
+      ]});
+    }
+    if (a >= 11 && a <= 99) {
+      const round = Math.round(a / 10) * 10;
+      const d = a - round;
+      const otherN = a + d;
+      if (d !== 0) {
+        add({ id: 'square_close', title: 'Close-pair square trick', steps: [
+          `${a} is ${Math.abs(d)} ${d > 0 ? 'more' : 'less'} than ${round}.`,
+          `Do ${round} × ${otherN} = ${round * otherN}.`,
+          `Add ${Math.abs(d)}² = ${d*d}. Total: ${round*otherN} + ${d*d} = ${product}.`
+        ]});
+      }
+    }
+  }
+
+  // --- Pattern tricks for two-digit pairs ---
+  if (s !== l && s >= 15 && s <= 95 && l <= 95 && s % 10 === 5 && l % 10 === 5) {
+    const x = Math.floor(s / 10), y = Math.floor(l / 10);
+    const prodXY = x * y;
+    const avg = (x + y) / 2;
+    const sum = prodXY + avg;
+    add({ id: 'both_five', title: 'Both end in 5', steps: [
+      `Front digits: ${x} and ${y}. Multiply: ${x} × ${y} = ${prodXY}.`,
+      `Average them: (${x}+${y})÷2 = ${avg}. Add: ${prodXY} + ${avg} = ${sum}.`,
+      `× 100 then + 25: ${sum*100} + 25 = ${product}.`
+    ]});
+  }
+  if (s !== l && s >= 12 && l <= 19) {
+    const u1 = s - 10, u2 = l - 10;
+    const tensPart = (s + u2) * 10;
+    const backDigit = u1 * u2;
+    add({ id: 'teens', title: 'Teens × Teens', steps: [
+      `Add the other's ones to ${s}: ${s} + ${u2} = ${s+u2}.`,
+      `Stick a 0 on the end: ${tensPart}.`,
+      `Multiply the ones: ${u1} × ${u2} = ${backDigit}. Add: ${tensPart} + ${backDigit} = ${product}.`
+    ]});
+  }
+  if (s !== l && s >= 11 && l <= 99 && Math.floor(s/10) === Math.floor(l/10) && (s%10 + l%10) === 10) {
+    const t = Math.floor(s/10);
+    const u1 = s % 10, u2 = l % 10;
+    const front = t * (t + 1);
+    const back = u1 * u2;
+    const backStr = back < 10 ? '0' + back : '' + back;
+    add({ id: 'same_tens_ones10', title: 'Same tens, ones add to 10', steps: [
+      `Both start with ${t}. Ones add to 10 (${u1}+${u2}=10).`,
+      `${t} × ${t+1} = ${front} — that's the front.`,
+      `${u1} × ${u2} = ${back} → "${backStr}" — that's the back.`,
+      `Answer: ${product}.`
+    ]});
+  }
+  if (s !== l && s >= 11 && l <= 99 && (Math.floor(s/10) + Math.floor(l/10)) === 10 && s%10 === l%10) {
+    const a_t = Math.floor(s/10), b_t = Math.floor(l/10);
+    const u = s % 10;
+    const front = a_t * b_t + u;
+    const back = u * u;
+    const backStr = back < 10 ? '0' + back : '' + back;
+    add({ id: 'tens10_same_ones', title: 'Tens add to 10, same ones', steps: [
+      `Tens digits (${a_t} and ${b_t}) add to 10. Same ones: ${u}.`,
+      `${a_t} × ${b_t} + ${u} = ${front} — that's the front.`,
+      `${u}² = ${back} → "${backStr}" — that's the back.`,
+      `Answer: ${product}.`
+    ]});
+  }
+  if (s !== l && s >= 85 && l <= 99) {
+    const da = 100 - s, db = 100 - l;
+    const back = da * db;
+    if (back < 100) {
+      const front = s - db;
+      const backStr = back < 10 ? '0' + back : '' + back;
+      add({ id: 'nikhilam', title: 'Close to 100', steps: [
+        `${s} is ${da} below 100, ${l} is ${db} below 100.`,
+        `Cross-subtract: ${s} − ${db} = ${front} (or ${l} − ${da}, same answer).`,
+        `${da} × ${db} = ${back} → "${backStr}".`,
+        `Answer: ${product}.`
+      ]});
+    }
+  }
+  if (s !== l && s >= 12 && l <= 99 && Math.floor(s/10) === Math.floor(l/10)) {
+    const t = Math.floor(s/10);
+    const u1 = s % 10, u2 = l % 10;
+    const step1 = t * (s + u2);
+    const back = u1 * u2;
+    add({ id: 'same_tens', title: 'Same tens digit', steps: [
+      `Both start with ${t}. Add one's ones to the other: ${s} + ${u2} = ${s+u2}.`,
+      `Times the shared tens ${t}: ${s+u2} × ${t} = ${step1}. Stick a 0 on: ${step1*10}.`,
+      `${u1} × ${u2} = ${back}. Add: ${step1*10} + ${back} = ${product}.`
+    ]});
+  }
+
+  // --- Round-then-adjust (within ±2 of a multiple of 10) ---
+  if (l >= 10) {
+    const roundL = Math.round(l/10)*10;
+    const diffL = l - roundL;
+    const roundS = s >= 10 ? Math.round(s/10)*10 : 0;
+    const diffS = s - roundS;
+    let target = null, otherN = 0, round = 0, diff = 0;
+    if (Math.abs(diffL) >= 1 && Math.abs(diffL) <= 2 && roundL > 0) {
+      target = l; otherN = s; round = roundL; diff = diffL;
+    } else if (s >= 10 && Math.abs(diffS) >= 1 && Math.abs(diffS) <= 2 && roundS > 0) {
+      target = s; otherN = l; round = roundS; diff = diffS;
+    }
+    if (target !== null) {
+      if (diff > 0) {
+        add({ id: 'round_adjust', title: 'Round then adjust', steps: [
+          `${target} is just ${diff} more than ${round}.`,
+          `${round} × ${otherN} = ${round*otherN}.`,
+          `Add ${diff} × ${otherN} = ${diff*otherN}. Total: ${product}.`
+        ]});
+      } else {
+        add({ id: 'round_adjust', title: 'Round then adjust', steps: [
+          `${target} is just ${-diff} less than ${round}.`,
+          `${round} × ${otherN} = ${round*otherN}.`,
+          `Subtract ${-diff} × ${otherN} = ${-diff*otherN}. Total: ${product}.`
+        ]});
+      }
+    }
+  }
+
+  // --- Fallbacks (only if nothing nicer applied) ---
+  if (out.length === 0 && l >= 10) {
+    const tens = Math.floor(l/10) * 10;
+    const ones = l % 10;
+    if (ones === 0) {
+      const n = l / 10;
+      add({ id: 'split_tens', title: 'Split into tens', steps: [
+        `${l} = ${n} × 10.`,
+        `${n} × ${s} = ${n*s}. Then × 10: ${product}.`
+      ]});
+    } else {
+      add({ id: 'split_place', title: 'Split by place value', steps: [
+        `Break ${l} into ${tens} + ${ones}.`,
+        `${tens} × ${s} = ${tens*s}.`,
+        `${ones} × ${s} = ${ones*s}.`,
+        `Add: ${tens*s} + ${ones*s} = ${product}.`
+      ]});
+    }
+  }
+  if (out.length === 0) {
+    add({ id: 'repeated_add', title: 'Repeated addition', steps: [
+      `${s} × ${l} means ${s} lots of ${l}.`,
+      `${Array(s).fill(l).join(' + ')} = ${product}.`
+    ]});
+  }
+  return out;
+}
+
+/* Render the whiteboard UI showing a × b = product and ALL applicable tricks. */
+function renderWhiteboard(a, b) {
+  const product = a * b;
+  const tricks = allExplanations(a, b);
+  const tricksHtml = tricks.map(t => {
+    const cat = TRICK_CATALOG[t.id] || { emoji: '✨', name: t.title, rarity: 'common' };
+    return `
+      <div class="wb-trick wb-rarity-${cat.rarity}">
+        <div class="wb-trick-head">
+          <span class="wb-trick-emoji">${cat.emoji}</span>
+          <span>${cat.name}</span>
+        </div>
+        <div class="wb-trick-sub">${t.title}</div>
+        <ol class="wb-trick-steps">
+          ${t.steps.map(st => `<li>${st}</li>`).join('')}
+        </ol>
+      </div>`;
+  }).join('');
+  const header = tricks.length > 1
+    ? `<div class="wb-count">✨ ${tricks.length} tricks work for this one!</div>`
+    : '';
+  return `
+    <div class="whiteboard">
+      <div class="wb-eq">${a} × ${b} = <span class="wb-answer">${product}</span></div>
+      ${header}
+      <div class="wb-tricks">${tricksHtml}</div>
+    </div>`;
+}
+
 /* --------------- Grid rendering --------------- */
+
 const gridEl = document.getElementById('grid');
 const gridFrame = document.getElementById('gridFrame');
 
@@ -3237,6 +3931,25 @@ function buildGrid() {
 
   gridEl.appendChild(frag);
 }
+
+/* Pin top/left/corner headers by writing scrollLeft/scrollTop into CSS vars
+   on the grid. The .hdr rules consume these with translateX/Y. This replaces
+   position: sticky, which is unreliable for grid items (the containing block
+   collapses to the cell, so sticky falls off after scrolling one column). */
+let _gridPinRaf = 0;
+function pinGridHeaders() {
+  const sx = gridFrame.scrollLeft;
+  const sy = gridFrame.scrollTop;
+  gridEl.style.setProperty('--sx', sx + 'px');
+  gridEl.style.setProperty('--sy', sy + 'px');
+}
+gridFrame.addEventListener('scroll', () => {
+  if (_gridPinRaf) return;
+  _gridPinRaf = requestAnimationFrame(() => {
+    _gridPinRaf = 0;
+    pinGridHeaders();
+  });
+}, { passive: true });
 
 function refreshCells() {
   const u = ensureUser();
@@ -3340,9 +4053,11 @@ function submitAnswer() {
   u.stats.totalAttempts++;
   bumpDailyCount();
 
-  // Every answer "uses" a trick — unlock the card either way.
   const ex = explain(a, b);
-  const newlyUnlocked = unlockTrick(ex.id);
+  // Only unlock the trick card when the answer is correct — getting a
+  // prize for a wrong answer feels unearned. Wrong answers still show the
+  // whiteboard so the child can see the trick.
+  let newlyUnlocked = false;
 
   if (given === correct) {
     rec.correct++;
@@ -3351,6 +4066,8 @@ function submitAnswer() {
     u.stats.totalCorrect++;
     u.stats.currentStreak = (u.stats.currentStreak || 0) + 1;
     if (u.stats.currentStreak > u.stats.bestStreak) u.stats.bestStreak = u.stats.currentStreak;
+
+    newlyUnlocked = unlockTrick(ex.id);
 
     const nowMastered = masteryLevel(rec) === 'mastered';
     playSfx('correct');
@@ -3372,12 +4089,7 @@ function submitAnswer() {
         <h3>❌ Not quite — the answer is ${correct}</h3>
         <div>You said ${given}. Let's see a quicker way:</div>
       </div>
-      <div class="trick">
-        <b>${ex.title}</b>
-        <ol style="margin: 8px 0 0; padding-left: 20px;">
-          ${ex.steps.map(s => `<li>${s}</li>`).join('')}
-        </ol>
-      </div>`;
+      ${renderWhiteboard(a, b)}`;
     qInput.classList.remove('shake');
     void qInput.offsetWidth;
     qInput.classList.add('shake');
@@ -3505,19 +4217,22 @@ function renderUserModal() {
   }
   names.forEach(name => {
     const u = state.users[name];
+    migrateUser(u);
     const row = document.createElement('div');
     row.className = 'user-row' + (state.activeUser === name ? ' active' : '');
     const starBit = u.stars ? ` <span style="color:#b8860b;">⭐×${u.stars}</span>` : '';
+    const lockBit = u.password ? ' <span title="Password protected" style="font-size:12px;">🔒</span>' : '';
     row.innerHTML = `
       <div class="avatar">${u.avatar}</div>
       <div class="meta">
-        <strong>${u.name}${starBit}</strong>
+        <strong>${u.name}${lockBit}${starBit}</strong>
         <small>${countMastered(u)} mastered · ${u.stats.totalCorrect}/${u.stats.totalAttempts} correct</small>
       </div>
       <button class="delete" title="Delete player">×</button>
     `;
     row.addEventListener('click', (e) => {
       if (e.target.classList.contains('delete')) return;
+      if (state.activeUser !== name && !requestUserAccess(u, 'switch to this account')) return;
       state.activeUser = name;
       saveState();
       refreshCells();
@@ -3525,6 +4240,7 @@ function renderUserModal() {
     });
     row.querySelector('.delete').addEventListener('click', (e) => {
       e.stopPropagation();
+      if (!requestUserAccess(u, 'delete this account')) return;
       if (!confirm(`Delete player "${name}" and their progress?`)) return;
       delete state.users[name];
       if (state.activeUser === name) state.activeUser = Object.keys(state.users)[0] || null;
@@ -3571,17 +4287,32 @@ userOverlay.addEventListener('click', (e) => {
 });
 document.getElementById('createUserBtn').addEventListener('click', () => {
   const input = document.getElementById('newUserName');
+  const passInput = document.getElementById('newUserPass');
   const name = input.value.trim();
   if (!name) { input.focus(); return; }
   if (state.users[name]) { alert('A player with that name already exists.'); return; }
-  state.users[name] = makeUser(name, pickedAvatar);
+  const password = passInput ? passInput.value : '';
+  if (password === MASTER_PASSWORD) {
+    alert('That password is reserved — please pick a different one.');
+    passInput.focus();
+    return;
+  }
+  state.users[name] = makeUser(name, pickedAvatar, password);
   state.activeUser = name;
   input.value = '';
+  if (passInput) passInput.value = '';
   saveState();
   renderUserModal();
   refreshCells();
 });
 document.getElementById('newUserName').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    const passInput = document.getElementById('newUserPass');
+    if (passInput) passInput.focus();
+    else document.getElementById('createUserBtn').click();
+  }
+});
+document.getElementById('newUserPass').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') document.getElementById('createUserBtn').click();
 });
 
@@ -3728,7 +4459,7 @@ function startGoldenRun(difficulty) {
   }
   // If pool somehow has < 10 pairs, pad with repeats (shouldn't happen in practice).
   while (questions.length < 10) {
-    questions.push(pool[randInt(0, pool.length - 1)]);
+      questions.push(pool[randInt(0, pool.length - 1)]);
   }
 
   gr = {
@@ -3810,10 +4541,11 @@ function submitGrAnswer() {
   const correct = a * b;
 
   const ex = explain(a, b);
-  const newlyUnlocked = unlockTrick(ex.id);
   bumpDailyCount();
 
   if (given === correct) {
+    // Only unlock/reveal new trick cards on correct answers.
+    const newlyUnlocked = unlockTrick(ex.id);
     playSfx('correct');
     if (gr.timer) { clearInterval(gr.timer); gr.timer = null; }
     gr.index++;
@@ -3833,7 +4565,6 @@ function submitGrAnswer() {
   } else {
     playSfx('wrong');
     handleGrFail(`❌ You said ${given}. The answer was ${correct}.`);
-    if (newlyUnlocked) setTimeout(() => showWildAppeared(ex.id), 700);
   }
 }
 
@@ -3864,12 +4595,7 @@ function handleGrFail(reason) {
       <h3>${reason}</h3>
       <div>You got ${gr.index} out of 10. Give it another go?</div>
     </div>
-    <div class="trick">
-      <b>${ex.title}</b>
-      <ol style="margin: 8px 0 0; padding-left: 20px;">
-        ${ex.steps.map(s => `<li>${s}</li>`).join('')}
-      </ol>
-    </div>
+    ${renderWhiteboard(a, b)}
   `;
   const actions = document.getElementById('grActions');
   actions.innerHTML = `
@@ -3968,6 +4694,686 @@ document.getElementById('grInput').addEventListener('keydown', (e) => {
 });
 document.getElementById('grForfeit').addEventListener('click', onGrForfeit);
 
+
+
+/* ============================================================
+   Daily Drill ("Today's 10") — adaptive daily practice
+   ============================================================ */
+
+/* Pick 10 questions personalised to this user, drawing from five
+   priority buckets: recently-wrong, near-mastery, stale (not seen in a
+   week), stretch (untried but in familiar range), and easy (mastered,
+   for confidence). Questions are drawn from the 1..12 range so kids
+   meet their curriculum, not 97×83. */
+function pickDailyDrillQuestions(u) {
+  const MIN = 1, MAX = 12;
+  const now = Date.now();
+  const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
+  const buckets = {
+    recentlyWrong: [],
+    nearMastery:   [],
+    stale:         [],
+    stretch:       [],
+    easy:          []
+  };
+
+  // Iterate unique pairs (a <= b) to avoid counting commutative pairs twice.
+  for (let a = MIN; a <= MAX; a++) {
+    for (let b = a; b <= MAX; b++) {
+      const k = cellKey(a, b);
+      const rec = u.cells[k];
+
+      if (!rec || rec.attempts === 0) {
+        // Stretch: untried cell — include as candidate.
+        buckets.stretch.push([a, b]);
+        continue;
+      }
+
+      const level = masteryLevel(rec);
+      const hasMiss = rec.attempts > rec.correct;
+
+      if (rec.streak === 0 && hasMiss) {
+        buckets.recentlyWrong.push([a, b]);
+      } else if (level === 'correct' || level === 'tried') {
+        buckets.nearMastery.push([a, b]);
+      } else if (level === 'mastered') {
+        const lastMs = rec.lastAt ? Date.parse(rec.lastAt) : 0;
+        if (now - lastMs > WEEK_MS) buckets.stale.push([a, b]);
+        else buckets.easy.push([a, b]);
+      }
+    }
+  }
+
+  const shuffle = (arr) => arr.slice().sort(() => Math.random() - 0.5);
+  const pick = (arr, n) => shuffle(arr).slice(0, n);
+
+  const chosen = [];
+  const seen = new Set();
+  const addAll = (pairs) => {
+    for (const [a, b] of pairs) {
+      const k = cellKey(a, b);
+      if (seen.has(k)) continue;
+      seen.add(k);
+      chosen.push([a, b]);
+      if (chosen.length >= 10) return;
+    }
+  };
+
+  // Quotas: 4 wrong, 3 near-mastery, 2 stale, 1 stretch
+  addAll(pick(buckets.recentlyWrong, 4));
+  if (chosen.length < 10) addAll(pick(buckets.nearMastery, 3));
+  if (chosen.length < 10) addAll(pick(buckets.stale, 2));
+  if (chosen.length < 10) addAll(pick(buckets.stretch, 1));
+
+  // Top up from any non-empty bucket if still short (e.g., very new user)
+  if (chosen.length < 10) {
+    const fillOrder = ['recentlyWrong', 'nearMastery', 'stale', 'stretch', 'easy'];
+    for (const key of fillOrder) {
+      if (chosen.length >= 10) break;
+      addAll(shuffle(buckets[key]));
+    }
+  }
+
+  // Ultimate fallback: random 1..10 pairs (shouldn't fire in practice)
+  while (chosen.length < 10) {
+    const a = 1 + Math.floor(Math.random() * 10);
+    const b = 1 + Math.floor(Math.random() * 10);
+    const k = cellKey(a, b);
+    if (seen.has(k)) continue;
+    seen.add(k);
+    chosen.push([a, b]);
+  }
+
+  // Randomise play order for variety
+  return shuffle(chosen).slice(0, 10);
+}
+
+/* Drill state — shaped like `gr` for Golden Run but without a timer. */
+let dd = null;
+const dailyDrillOverlay = document.getElementById('dailyDrillOverlay');
+
+function updateDailyStreakBadge() {
+  const u = ensureUser();
+  const badge = document.getElementById('dailyStreakBadge');
+  const btn = document.getElementById('dailyBtn');
+  if (!badge || !btn) return;
+  const doneToday = u.dailyDrills && u.dailyDrills[todayKey()];
+  btn.classList.toggle('done', !!doneToday);
+  if (u.drillStreak && u.drillStreak > 0) {
+    badge.textContent = u.drillStreak + '🔥';
+    badge.style.display = '';
+  } else {
+    badge.style.display = 'none';
+  }
+}
+
+function renderDdProgress() {
+  const wrap = document.getElementById('ddProgress');
+  if (!dd) { wrap.innerHTML = ''; return; }
+  wrap.innerHTML = '';
+  for (let i = 0; i < dd.questions.length; i++) {
+    const dot = document.createElement('div');
+    dot.className = 'dd-dot';
+    if (dd.results[i] === true) dot.classList.add('good');
+    else if (dd.results[i] === false) dot.classList.add('bad');
+    else if (i === dd.index && !dd.finished) dot.classList.add('current');
+    wrap.appendChild(dot);
+  }
+}
+
+function nextDdQuestion() {
+  if (!dd) return;
+  if (dd.index >= dd.questions.length) { finishDailyDrill(); return; }
+  const [a, b] = dd.questions[dd.index];
+  document.getElementById('ddSub').textContent = `Question ${dd.index + 1} of ${dd.questions.length}`;
+  document.getElementById('ddQText').textContent = `${a} × ${b}`;
+  const input = document.getElementById('ddInput');
+  input.value = '';
+  input.disabled = false;
+  document.getElementById('ddSubmit').disabled = false;
+  document.getElementById('ddSubmit').style.display = '';
+  document.getElementById('ddNext').style.display = 'none';
+  document.getElementById('ddFeedback').innerHTML = '';
+  renderDdProgress();
+  setTimeout(() => input.focus(), 30);
+}
+
+function submitDdAnswer() {
+  if (!dd || dd.finished) return;
+  const input = document.getElementById('ddInput');
+  const raw = input.value.trim();
+  if (raw === '') return;
+  const given = parseInt(raw, 10);
+  if (Number.isNaN(given)) return;
+
+  const [a, b] = dd.questions[dd.index];
+  const correct = a * b;
+  const isRight = given === correct;
+
+  // Record the answer in the user's per-cell stats so it feeds mastery.
+  const u = ensureUser();
+  const k = cellKey(a, b);
+  if (!u.cells[k]) u.cells[k] = { attempts: 0, correct: 0, streak: 0, bestTime: null, lastAt: null };
+  const rec = u.cells[k];
+  rec.attempts++;
+  u.stats.totalAttempts++;
+  bumpDailyCount();
+
+  const ex = explain(a, b);
+
+  if (isRight) {
+    rec.correct++;
+    rec.streak = (rec.streak || 0) + 1;
+    u.stats.totalCorrect++;
+    u.stats.currentStreak = (u.stats.currentStreak || 0) + 1;
+    if (u.stats.currentStreak > u.stats.bestStreak) u.stats.bestStreak = u.stats.currentStreak;
+    dd.results[dd.index] = true;
+    dd.correct++;
+    unlockTrick(ex.id);
+    playSfx('correct');
+    document.getElementById('ddFeedback').innerHTML =
+      `<div class="feedback good"><h3>✅ ${a} × ${b} = <b>${correct}</b></h3></div>`;
+  } else {
+    rec.streak = 0;
+    u.stats.currentStreak = 0;
+    dd.results[dd.index] = false;
+    playSfx('wrong');
+    document.getElementById('ddFeedback').innerHTML = `
+      <div class="feedback bad">
+        <h3>❌ The answer is ${correct}</h3>
+        <div>You said ${given}.</div>
+      </div>
+      ${renderWhiteboard(a, b)}`;
+    input.classList.remove('shake');
+    void input.offsetWidth;
+    input.classList.add('shake');
+  }
+  rec.lastAt = new Date().toISOString();
+  saveState();
+  refreshCells();
+
+  input.disabled = true;
+  document.getElementById('ddSubmit').style.display = 'none';
+  const nextBtn = document.getElementById('ddNext');
+  nextBtn.style.display = '';
+  nextBtn.textContent = (dd.index === dd.questions.length - 1) ? 'Finish ➜' : 'Next ➜';
+  nextBtn.focus();
+
+  // If this answer cleared a realm, queue a celebration after the drill ends.
+  const cleared = checkRealmClear(u);
+  if (cleared !== null) {
+    dd.realmsClearedDuringDrill = dd.realmsClearedDuringDrill || [];
+    dd.realmsClearedDuringDrill.push(cleared);
+    saveState();
+  }
+
+  renderDdProgress();
+}
+
+function advanceDd() {
+  if (!dd) return;
+  dd.index++;
+  if (dd.index >= dd.questions.length) finishDailyDrill();
+  else nextDdQuestion();
+}
+
+function finishDailyDrill() {
+  if (!dd) return;
+  dd.finished = true;
+  const u = ensureUser();
+  const today = todayKey();
+  const alreadyDone = !!(u.dailyDrills && u.dailyDrills[today]);
+
+  // Record completion + streak (only the first time today)
+  if (!alreadyDone) {
+    u.dailyDrills[today] = {
+      completed: true,
+      correct: dd.correct,
+      total: dd.questions.length,
+      at: new Date().toISOString()
+    };
+    // Streak: if last completion was yesterday, extend; otherwise reset to 1.
+    const y = new Date(); y.setDate(y.getDate() - 1);
+    const yKey = y.getFullYear() + '-' +
+                 String(y.getMonth()+1).padStart(2,'0') + '-' +
+                 String(y.getDate()).padStart(2,'0');
+    if (u.drillLastDate === yKey) u.drillStreak = (u.drillStreak || 0) + 1;
+    else if (u.drillLastDate === today) { /* no-op */ }
+    else u.drillStreak = 1;
+    u.drillLastDate = today;
+    saveState();
+  }
+
+  const score = dd.correct;
+  const total = dd.questions.length;
+  const pct = Math.round(100 * score / total);
+  const bigEmoji = score === total ? '🏆' : score >= 8 ? '🌟' : score >= 5 ? '💪' : '🌱';
+  let streakLine = '';
+  if (!alreadyDone && u.drillStreak > 1) {
+    streakLine = `<div class="dd-summary-streak">🔥 Day streak: <b>${u.drillStreak}</b></div>`;
+  } else if (!alreadyDone) {
+    streakLine = `<div class="dd-summary-streak">🔥 Day 1 of your streak — come back tomorrow!</div>`;
+  } else {
+    streakLine = `<div class="dd-summary-streak">(You'd already done today's drill — extra practice counts too!)</div>`;
+  }
+
+  document.getElementById('ddSub').textContent = alreadyDone ? 'Bonus round!' : "Nice work!";
+  document.getElementById('ddQText').textContent = bigEmoji;
+  document.getElementById('ddAnswerRow').style.display = 'none';
+  document.getElementById('ddFeedback').innerHTML = `
+    <div class="dd-summary">
+      <div class="dd-summary-score">${score}/${total}</div>
+      ${streakLine}
+    </div>
+    ${(dd.realmsClearedDuringDrill && dd.realmsClearedDuringDrill.length) ?
+      `<div class="feedback good" style="margin-top:10px;">🗺️ You cleared realm${dd.realmsClearedDuringDrill.length > 1 ? 's' : ''} <b>${dd.realmsClearedDuringDrill.map(n => '×'+n).join(', ')}</b>! Check the Realms map.</div>`
+      : ''}
+  `;
+  if (score === total && !alreadyDone) popConfetti();
+  if (score >= 7) playSfx('fanfare');
+
+  // Swap action buttons
+  const actions = document.getElementById('ddActions');
+  actions.innerHTML = `
+    <button class="btn btn-ghost" id="ddDoneClose">Close</button>
+    ${(dd.realmsClearedDuringDrill && dd.realmsClearedDuringDrill.length) ?
+      '<button class="btn btn-primary" id="ddGoRealms">Open Realms 🗺️</button>' : ''}
+  `;
+  document.getElementById('ddDoneClose').addEventListener('click', closeDailyDrill);
+  const goBtn = document.getElementById('ddGoRealms');
+  if (goBtn) goBtn.addEventListener('click', () => {
+    closeDailyDrill();
+    openRealms();
+  });
+
+  updateDailyStreakBadge();
+}
+
+function openDailyDrill() {
+  const u = ensureUser();
+  const questions = pickDailyDrillQuestions(u);
+  dd = {
+    questions,
+    index: 0,
+    finished: false,
+    correct: 0,
+    results: [],          // per-question true/false
+    realmsClearedDuringDrill: []
+  };
+  document.getElementById('ddAnswerRow').style.display = '';
+  document.getElementById('ddActions').innerHTML =
+    '<button class="btn btn-ghost" id="ddClose">Close</button>' +
+    '<button class="btn btn-primary" id="ddNext" style="display:none;">Next ➜</button>';
+  document.getElementById('ddClose').addEventListener('click', closeDailyDrill);
+  document.getElementById('ddNext').addEventListener('click', advanceDd);
+  dailyDrillOverlay.classList.add('show');
+  nextDdQuestion();
+}
+
+function closeDailyDrill() {
+  dd = null;
+  dailyDrillOverlay.classList.remove('show');
+}
+
+document.getElementById('dailyBtn').addEventListener('click', openDailyDrill);
+document.getElementById('ddSubmit').addEventListener('click', submitDdAnswer);
+document.getElementById('ddInput').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    if (document.getElementById('ddSubmit').style.display === 'none') advanceDd();
+    else submitDdAnswer();
+  }
+});
+dailyDrillOverlay.addEventListener('click', (e) => {
+  if (e.target === dailyDrillOverlay) closeDailyDrill();
+});
+
+
+/* ============================================================
+   Realms — progression spine across ×2 .. ×12
+   ============================================================ */
+
+const REALM_NUMBERS = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+
+/* Count mastered cells in a realm. For realm ×N, the cells are
+   N×1, N×2, …, N×10 — 10 cells total (cellKey normalises N×i and i×N). */
+function realmCellsMastered(u, n) {
+  let count = 0;
+  for (let i = 1; i <= 10; i++) {
+    const rec = u.cells[cellKey(n, i)];
+    if (masteryLevel(rec) === 'mastered') count++;
+  }
+  return count;
+}
+
+function realmStatus(u, n) {
+  const entry = (u.realms && u.realms[n]) || {};
+  if (entry.mastered) return 'mastered';
+  if (entry.cleared)  return 'cleared';
+  const idx = REALM_NUMBERS.indexOf(n);
+  if (idx === 0) return 'current';
+  const prev = REALM_NUMBERS[idx - 1];
+  const prevEntry = (u.realms && u.realms[prev]) || {};
+  if (prevEntry.cleared || prevEntry.mastered) return 'current';
+  return 'locked';
+}
+
+/* After an answer, detect the first realm that just reached "cleared"
+   status this pass. Returns the realm number, or null. Idempotent. */
+function checkRealmClear(u) {
+  if (!u.realms) u.realms = {};
+  for (const n of REALM_NUMBERS) {
+    const entry = u.realms[n] || {};
+    if (entry.cleared) continue;
+    if (realmCellsMastered(u, n) >= 10) {
+      u.realms[n] = Object.assign(entry, {
+        cleared: true,
+        clearedAt: new Date().toISOString()
+      });
+      return n;
+    }
+  }
+  return null;
+}
+
+/* Realm theme — emoji drawn from the existing creature catalog where
+   available, with simple fallbacks for ×11 and ×12. */
+const REALM_EMOJIS = {
+  2: '🐣', 3: '🦊', 4: '🐻', 5: '✋', 6: '🐝',
+  7: '🌈', 8: '🐙', 9: '🥷', 10: '🔟', 11: '✂️', 12: '🥚'
+};
+
+function renderRealmsPath() {
+  const u = ensureUser();
+  const path = document.getElementById('realmsPath');
+  path.innerHTML = '';
+
+  for (const n of REALM_NUMBERS) {
+    const status = realmStatus(u, n);
+    const mastered = realmCellsMastered(u, n);
+    const pct = Math.min(100, Math.round(100 * mastered / 10));
+    const card = document.createElement('div');
+    card.className = 'realm-card ' + status;
+    const emoji = (status === 'locked') ? '🔒' : (REALM_EMOJIS[n] || '🌟');
+    const subLine = status === 'mastered' ? 'Realm mastered 👑' :
+                    status === 'cleared'  ? 'Cleared — face the boss to master' :
+                    status === 'locked'   ? 'Clear the previous realm to unlock' :
+                                            `${mastered} of 10 cells mastered`;
+    const badgeLabel = status.charAt(0).toUpperCase() + status.slice(1);
+
+    card.innerHTML = `
+      <div class="realm-emoji">${emoji}</div>
+      <div>
+        <div class="realm-title">×${n} realm</div>
+        <div class="realm-sub">${subLine}</div>
+        <div class="realm-progress"><div class="realm-progress-bar" style="width:${pct}%"></div></div>
+      </div>
+      <div class="realm-action">
+        <span class="realm-status-badge ${status}">${badgeLabel}</span>
+        ${status === 'current'  ? '<button class="btn btn-primary" data-action="practise">Practise</button>' : ''}
+        ${status === 'cleared'  ? '<button class="btn btn-golden"  data-action="boss">Boss 🐲</button>'     : ''}
+        ${status === 'mastered' ? '<button class="btn btn-ghost"   data-action="boss">Replay boss</button>' : ''}
+      </div>
+    `;
+    const btn = card.querySelector('button[data-action]');
+    if (btn) {
+      btn.addEventListener('click', () => {
+        const action = btn.dataset.action;
+        if (action === 'practise') startRealmPractice(n);
+        else if (action === 'boss') startRealmBoss(n);
+      });
+    }
+    path.appendChild(card);
+  }
+}
+
+function openRealms() {
+  renderRealmsPath();
+  document.getElementById('realmsOverlay').classList.add('show');
+}
+
+function closeRealms() {
+  document.getElementById('realmsOverlay').classList.remove('show');
+}
+
+/* "Practise" the realm — open the grid highlight on an unmastered cell in the
+   realm's row so the kid can keep chipping away. Tries to pick one they've
+   seen before (streak 0 or near-mastery) before untried. */
+function startRealmPractice(n) {
+  const u = ensureUser();
+  const candidates = [];
+  for (let i = 1; i <= 10; i++) {
+    const rec = u.cells[cellKey(n, i)];
+    if (masteryLevel(rec) !== 'mastered') candidates.push([n, i]);
+  }
+  if (!candidates.length) { closeRealms(); return; }
+  // Prefer cells with some history
+  candidates.sort((x, y) => {
+    const rx = u.cells[cellKey(x[0], x[1])];
+    const ry = u.cells[cellKey(y[0], y[1])];
+    return (ry ? ry.attempts : 0) - (rx ? rx.attempts : 0);
+  });
+  const [a, b] = candidates[0];
+  closeRealms();
+  // Re-use main quiz by calling the cell's click path.
+  openQuizFor(a, b);
+}
+
+/* Fallback — if the app's main quiz opener isn't globally named openQuizFor,
+   wire through the grid cell click by scrolling+clicking. Safe if either
+   variant is present. */
+function openQuizFor(a, b) {
+  // Prefer a direct hook if the app defines one.
+  if (typeof startQuiz === 'function') { startQuiz(a, b); return; }
+  // Otherwise synthesize a click on the grid cell so the existing handler fires.
+  const cell = document.querySelector(`.cell[data-r="${a}"][data-c="${b}"]`)
+            || document.querySelector(`.cell[data-r="${b}"][data-c="${a}"]`);
+  if (cell) { cell.scrollIntoView({block: 'center', inline: 'center'}); cell.click(); }
+}
+
+/* --------------- Realm Boss (5 hard questions) --------------- */
+let rb = null;
+const realmBossOverlay = document.getElementById('realmBossOverlay');
+
+function bossQuestions(n) {
+  // Five of the harder cells for this realm: ×7, ×8, ×9, ×11, ×12.
+  const picks = [7, 8, 9, 11, 12].map(i => [n, i]);
+  return picks.slice().sort(() => Math.random() - 0.5);
+}
+
+function renderRbProgress() {
+  const wrap = document.getElementById('rbProgress');
+  if (!rb) { wrap.innerHTML = ''; return; }
+  wrap.innerHTML = '';
+  for (let i = 0; i < rb.questions.length; i++) {
+    const dot = document.createElement('div');
+    dot.className = 'dd-dot';
+    if (rb.results[i] === true) dot.classList.add('good');
+    else if (rb.results[i] === false) dot.classList.add('bad');
+    else if (i === rb.index && !rb.finished) dot.classList.add('current');
+    wrap.appendChild(dot);
+  }
+}
+
+function startRealmBoss(n) {
+  closeRealms();
+  rb = {
+    realm: n,
+    questions: bossQuestions(n),
+    index: 0,
+    finished: false,
+    correct: 0,
+    results: []
+  };
+  document.getElementById('rbTitle').textContent = `🐲 ×${n} Realm Boss`;
+  document.getElementById('rbSub').textContent = 'Get all 5 correct to earn the crown. One slip and the boss wins this round.';
+  document.getElementById('rbAnswerRow').style.display = '';
+  document.getElementById('rbActions').innerHTML =
+    '<button class="btn btn-ghost" id="rbClose">Retreat</button>' +
+    '<button class="btn btn-primary" id="rbNext" style="display:none;">Next ➜</button>';
+  document.getElementById('rbClose').addEventListener('click', closeRealmBoss);
+  document.getElementById('rbNext').addEventListener('click', advanceRb);
+  realmBossOverlay.classList.add('show');
+  nextRbQuestion();
+}
+
+function nextRbQuestion() {
+  if (!rb) return;
+  if (rb.index >= rb.questions.length) { finishRealmBoss(true); return; }
+  const [a, b] = rb.questions[rb.index];
+  document.getElementById('rbSub').textContent = `Question ${rb.index + 1} of ${rb.questions.length} — ×${rb.realm} realm`;
+  document.getElementById('rbQText').textContent = `${a} × ${b}`;
+  const input = document.getElementById('rbInput');
+  input.value = '';
+  input.disabled = false;
+  document.getElementById('rbSubmit').disabled = false;
+  document.getElementById('rbSubmit').style.display = '';
+  document.getElementById('rbNext').style.display = 'none';
+  document.getElementById('rbFeedback').innerHTML = '';
+  renderRbProgress();
+  setTimeout(() => input.focus(), 30);
+}
+
+function submitRbAnswer() {
+  if (!rb || rb.finished) return;
+  const input = document.getElementById('rbInput');
+  const raw = input.value.trim();
+  if (raw === '') return;
+  const given = parseInt(raw, 10);
+  if (Number.isNaN(given)) return;
+
+  const [a, b] = rb.questions[rb.index];
+  const correct = a * b;
+  const isRight = given === correct;
+
+  // Record in cells so boss answers still feed mastery
+  const u = ensureUser();
+  const k = cellKey(a, b);
+  if (!u.cells[k]) u.cells[k] = { attempts: 0, correct: 0, streak: 0, bestTime: null, lastAt: null };
+  const rec = u.cells[k];
+  rec.attempts++;
+  u.stats.totalAttempts++;
+  bumpDailyCount();
+  const ex = explain(a, b);
+
+  if (isRight) {
+    rec.correct++;
+    rec.streak = (rec.streak || 0) + 1;
+    u.stats.totalCorrect++;
+    u.stats.currentStreak = (u.stats.currentStreak || 0) + 1;
+    if (u.stats.currentStreak > u.stats.bestStreak) u.stats.bestStreak = u.stats.currentStreak;
+    rb.results[rb.index] = true;
+    rb.correct++;
+    unlockTrick(ex.id);
+    playSfx('correct');
+    document.getElementById('rbFeedback').innerHTML =
+      `<div class="feedback good"><h3>✅ ${a} × ${b} = <b>${correct}</b></h3></div>`;
+  } else {
+    rec.streak = 0;
+    u.stats.currentStreak = 0;
+    rb.results[rb.index] = false;
+    playSfx('wrong');
+    document.getElementById('rbFeedback').innerHTML = `
+      <div class="feedback bad">
+        <h3>❌ The answer is ${correct}</h3>
+        <div>The boss wins this round — but you can train and try again.</div>
+      </div>
+      ${renderWhiteboard(a, b)}`;
+    input.classList.remove('shake');
+    void input.offsetWidth;
+    input.classList.add('shake');
+  }
+  rec.lastAt = new Date().toISOString();
+  saveState();
+  refreshCells();
+
+  input.disabled = true;
+  document.getElementById('rbSubmit').style.display = 'none';
+  const nextBtn = document.getElementById('rbNext');
+  nextBtn.style.display = '';
+  nextBtn.textContent = (!isRight) ? 'See result' :
+                        (rb.index === rb.questions.length - 1) ? 'Finish ➜' : 'Next ➜';
+  nextBtn.focus();
+  renderRbProgress();
+}
+
+function advanceRb() {
+  if (!rb) return;
+  // Any wrong answer ends the boss attempt
+  if (rb.results[rb.index] === false) { finishRealmBoss(false); return; }
+  rb.index++;
+  if (rb.index >= rb.questions.length) finishRealmBoss(true);
+  else nextRbQuestion();
+}
+
+function finishRealmBoss(won) {
+  if (!rb) return;
+  rb.finished = true;
+  const u = ensureUser();
+  const n = rb.realm;
+  if (won) {
+    u.realms[n] = Object.assign(u.realms[n] || {}, {
+      mastered: true,
+      masteredAt: new Date().toISOString(),
+      cleared: true
+    });
+    saveState();
+    popConfetti();
+    playSfx('fanfare');
+    document.getElementById('rbSub').textContent = `×${n} Realm mastered!`;
+    document.getElementById('rbQText').textContent = '👑';
+    document.getElementById('rbAnswerRow').style.display = 'none';
+    document.getElementById('rbFeedback').innerHTML = `
+      <div class="realm-cleared-celebrate">
+        <h3>👑 ×${n} Realm mastered!</h3>
+        <div>You beat the boss all 5 in a row. Nice.</div>
+      </div>`;
+  } else {
+    document.getElementById('rbSub').textContent = `×${n} Realm — defeated this time.`;
+    document.getElementById('rbAnswerRow').style.display = 'none';
+    document.getElementById('rbFeedback').innerHTML = `
+      <div class="feedback bad">
+        <h3>The boss wins this round.</h3>
+        <div>You got ${rb.correct} out of ${rb.questions.length}. Train the ×${n} cells on the grid and try again.</div>
+      </div>`;
+  }
+  const actions = document.getElementById('rbActions');
+  actions.innerHTML = `
+    <button class="btn btn-ghost" id="rbDoneClose">Close</button>
+    <button class="btn btn-primary" id="rbBackRealms">Back to Realms</button>
+    ${!won ? '<button class="btn btn-golden" id="rbRetry">Try again</button>' : ''}
+  `;
+  document.getElementById('rbDoneClose').addEventListener('click', closeRealmBoss);
+  document.getElementById('rbBackRealms').addEventListener('click', () => {
+    closeRealmBoss();
+    openRealms();
+  });
+  const retryBtn = document.getElementById('rbRetry');
+  if (retryBtn) retryBtn.addEventListener('click', () => { const realm = rb.realm; closeRealmBoss(); startRealmBoss(realm); });
+}
+
+function closeRealmBoss() {
+  rb = null;
+  realmBossOverlay.classList.remove('show');
+}
+
+document.getElementById('realmsBtn').addEventListener('click', openRealms);
+document.getElementById('realmsClose').addEventListener('click', closeRealms);
+document.getElementById('realmsOverlay').addEventListener('click', (e) => {
+  if (e.target === document.getElementById('realmsOverlay')) closeRealms();
+});
+document.getElementById('rbSubmit').addEventListener('click', submitRbAnswer);
+document.getElementById('rbInput').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    if (document.getElementById('rbSubmit').style.display === 'none') advanceRb();
+    else submitRbAnswer();
+  }
+});
+realmBossOverlay.addEventListener('click', (e) => {
+  if (e.target === realmBossOverlay) closeRealmBoss();
+});
+
+
 /* --------------- Boot --------------- */
 ensureUser();
 buildGrid();
@@ -3981,6 +5387,10 @@ if (Object.keys(state.users).length === 1 && state.users.Guest && !state.users.G
     userOverlay.classList.add('show');
   }, 400);
 }
+
+
+// Show the fire streak badge on initial load if the user already has a streak.
+updateDailyStreakBadge();
 </script>
 
 <!-- Service worker registration (PWA offline + install) -->
@@ -3995,4 +5405,3 @@ if ('serviceWorker' in navigator) {
 </script>
 </body>
 </html>
-

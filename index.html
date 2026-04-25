@@ -4084,17 +4084,36 @@ function submitAnswer() {
     rec.streak = 0;
     u.stats.currentStreak = 0;
     playSfx('wrong');
+    // Don't reveal the correct answer — let them think and try again.
     qFeedback.innerHTML = `
       <div class="feedback bad">
-        <h3>❌ Not quite — the answer is ${correct}</h3>
-        <div>You said ${given}. Let's see a quicker way:</div>
-      </div>
-      ${renderWhiteboard(a, b)}`;
+        <h3>❌ Not quite — try again!</h3>
+        <div>You said <b>${given}</b>. Have another go.</div>
+        <div style="margin-top:8px;">
+          <button class="btn btn-ghost" id="qShowMe" type="button">Show me how 👀</button>
+        </div>
+      </div>`;
     qInput.classList.remove('shake');
     void qInput.offsetWidth;
     qInput.classList.add('shake');
-    qSubmit.style.display = 'none';
-    qNext.style.display = '';
+    // Re-enable input so the child can try again.
+    qInput.value = '';
+    qInput.disabled = false;
+    qSubmit.disabled = false;
+    qSubmit.style.display = '';
+    qNext.style.display = 'none';
+    setTimeout(() => qInput.focus(), 60);
+    document.getElementById('qShowMe').addEventListener('click', () => {
+      qFeedback.innerHTML = `
+        <div class="feedback bad">
+          <h3>The answer is <b>${correct}</b></h3>
+          <div>Here's a quicker way to see it:</div>
+        </div>
+        ${renderWhiteboard(a, b)}`;
+      qInput.disabled = true;
+      qSubmit.style.display = 'none';
+      qNext.style.display = '';
+    });
   }
 
   saveState();
@@ -4564,7 +4583,7 @@ function submitGrAnswer() {
     }
   } else {
     playSfx('wrong');
-    handleGrFail(`❌ You said ${given}. The answer was ${correct}.`);
+    handleGrFail(`❌ Not quite — you said ${given}.`);
   }
 }
 
@@ -4595,7 +4614,6 @@ function handleGrFail(reason) {
       <h3>${reason}</h3>
       <div>You got ${gr.index} out of 10. Give it another go?</div>
     </div>
-    ${renderWhiteboard(a, b)}
   `;
   const actions = document.getElementById('grActions');
   actions.innerHTML = `
@@ -4875,19 +4893,32 @@ function submitDdAnswer() {
     document.getElementById('ddFeedback').innerHTML =
       `<div class="feedback good"><h3>✅ ${a} × ${b} = <b>${correct}</b></h3></div>`;
   } else {
-    rec.streak = 0;
-    u.stats.currentStreak = 0;
+    // Don't reveal the answer — note that it was wrong (already counted)
+    // and let them try the same question again.
     dd.results[dd.index] = false;
     playSfx('wrong');
     document.getElementById('ddFeedback').innerHTML = `
       <div class="feedback bad">
-        <h3>❌ The answer is ${correct}</h3>
-        <div>You said ${given}.</div>
-      </div>
-      ${renderWhiteboard(a, b)}`;
+        <h3>❌ Not quite — try again!</h3>
+        <div>You said <b>${given}</b>. Have another go.</div>
+      </div>`;
     input.classList.remove('shake');
     void input.offsetWidth;
     input.classList.add('shake');
+    rec.streak = 0;
+    u.stats.currentStreak = 0;
+    rec.lastAt = new Date().toISOString();
+    saveState();
+    refreshCells();
+    // Re-enable input for another try.
+    input.value = '';
+    input.disabled = false;
+    document.getElementById('ddSubmit').style.display = '';
+    document.getElementById('ddSubmit').disabled = false;
+    document.getElementById('ddNext').style.display = 'none';
+    setTimeout(() => input.focus(), 60);
+    renderDdProgress();
+    return;  // don't fall through to "Next" button setup
   }
   rec.lastAt = new Date().toISOString();
   saveState();
@@ -5275,10 +5306,9 @@ function submitRbAnswer() {
     playSfx('wrong');
     document.getElementById('rbFeedback').innerHTML = `
       <div class="feedback bad">
-        <h3>❌ The answer is ${correct}</h3>
-        <div>The boss wins this round — but you can train and try again.</div>
-      </div>
-      ${renderWhiteboard(a, b)}`;
+        <h3>❌ Not quite — the boss wins this round.</h3>
+        <div>You said <b>${given}</b>. Train the ×${a === Math.min(a, b) ? Math.max(a, b) : Math.min(a, b)} cells on the grid and try again.</div>
+      </div>`;
     input.classList.remove('shake');
     void input.offsetWidth;
     input.classList.add('shake');

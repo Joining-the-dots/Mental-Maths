@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover" />
-<title>Times Table Quest — V10</title>
+<title>Times Table Quest — V11</title>
 
 <!-- PWA -->
 <link rel="manifest" href="manifest.json">
@@ -210,147 +210,12 @@
 
   .grid {
     display: grid;
-    /* 1 header col + 100 data cols (overridden in ladder mode below) */
+    /* 1 header col + 100 data cols */
     grid-template-columns: var(--cell) repeat(100, var(--cell));
     grid-auto-rows: var(--cell);
     gap: 2px;
     font-size: 12px;
   }
-  /* Ladder mode: only 10 cols for the unlocked rungs */
-  .grid.ladder-mode {
-    grid-template-columns: var(--cell) repeat(10, var(--cell));
-    gap: 4px;
-    font-size: 14px;
-  }
-  .grid.ladder-mode .cell,
-  .grid.ladder-mode .hdr {
-    width: calc(var(--cell) * 1.4);
-    height: calc(var(--cell) * 1.4);
-    border-radius: 10px;
-  }
-  .grid.ladder-mode .hdr.left.current-rung {
-    background: linear-gradient(135deg, #FFD23F, #FF9500);
-    color: #fff;
-    box-shadow: 0 0 0 2px #FFD23F, 0 0 18px rgba(255, 210, 63, 0.6);
-    animation: rung-pulse 1.6s ease-in-out infinite;
-  }
-  @keyframes rung-pulse {
-    0%, 100% { transform: scale(1); }
-    50%      { transform: scale(1.06); }
-  }
-  .grid.ladder-mode .row-just-unlocked {
-    animation: row-slide-in 0.7s cubic-bezier(.2,.9,.3,1.3) both;
-  }
-  @keyframes row-slide-in {
-    0%   { opacity: 0; transform: translateY(-24px) scale(0.96); }
-    60%  { opacity: 1; transform: translateY(4px)   scale(1.02); }
-    100% { opacity: 1; transform: translateY(0)     scale(1); }
-  }
-
-  /* Ladder streak indicator in toolbar */
-  .ladder-pill {
-    display: inline-flex; align-items: center; gap: 8px;
-    padding: 6px 12px; border-radius: 999px;
-    background: linear-gradient(135deg, #6c5ce7, #00b4d8);
-    color: #fff;
-    font-weight: 700; font-size: 13px;
-    box-shadow: 0 2px 8px rgba(108, 92, 231, 0.35);
-  }
-  .ladder-pill .ladder-rung {
-    background: rgba(255, 255, 255, 0.22);
-    padding: 2px 8px; border-radius: 999px;
-    font-size: 12px;
-  }
-  .ladder-pill .ladder-streak-bar {
-    width: 70px; height: 8px; border-radius: 999px;
-    background: rgba(255, 255, 255, 0.25); overflow: hidden;
-    position: relative;
-  }
-  .ladder-pill .ladder-streak-bar > div {
-    height: 100%; width: 0%;
-    background: linear-gradient(90deg, #FFD23F, #fff);
-    border-radius: 999px;
-    transition: width 0.35s cubic-bezier(.2,.9,.3,1.3);
-    box-shadow: 0 0 8px rgba(255, 210, 63, 0.7);
-  }
-  .ladder-pill.complete {
-    background: linear-gradient(135deg, #FFD23F, #FF9500);
-    color: #5d3a00;
-  }
-
-  /* Ladder unlock celebration overlay */
-  .ladder-overlay {
-    position: fixed; inset: 0;
-    background: radial-gradient(circle at center, rgba(108, 92, 231, 0.45), rgba(0, 0, 0, 0.75));
-    display: none; align-items: center; justify-content: center;
-    z-index: 110;
-    animation: ladder-bg 0.3s ease;
-  }
-  .ladder-overlay.show { display: flex; }
-  @keyframes ladder-bg { from { opacity: 0; } to { opacity: 1; } }
-  .ladder-card {
-    background: linear-gradient(160deg, #1c2238, #14182a);
-    color: #e6e9f5;
-    border: 1px solid rgba(255, 215, 64, 0.5);
-    border-radius: 22px;
-    padding: 28px 32px 22px;
-    text-align: center;
-    max-width: 420px; min-width: 320px;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 0 2px rgba(255, 215, 64, 0.4);
-    position: relative; overflow: hidden;
-    animation: ladder-pop 0.55s cubic-bezier(.2,.9,.3,1.3);
-  }
-  @keyframes ladder-pop {
-    0%   { transform: scale(0.5) rotate(-6deg); opacity: 0; }
-    60%  { transform: scale(1.08) rotate(2deg); opacity: 1; }
-    100% { transform: scale(1) rotate(0); opacity: 1; }
-  }
-  .ladder-card::before {
-    content: ''; position: absolute; inset: -50% -50%;
-    background: conic-gradient(from 0deg, transparent, rgba(255, 215, 64, 0.18), transparent 50%);
-    animation: ladder-shine 2s linear infinite;
-    pointer-events: none;
-  }
-  @keyframes ladder-shine {
-    to { transform: rotate(360deg); }
-  }
-  .ladder-heading {
-    font-size: 14px; letter-spacing: 0.18em; text-transform: uppercase;
-    color: #FFD23F; margin-bottom: 6px;
-  }
-  .ladder-digit {
-    font-size: 92px; font-weight: 900; line-height: 1;
-    background: linear-gradient(180deg, #fff 0%, #FFD23F 60%, #FF9500 100%);
-    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-    background-clip: text;
-    margin: 8px 0 6px;
-    text-shadow: 0 0 30px rgba(255, 210, 63, 0.5);
-  }
-  .ladder-msg {
-    font-size: 18px; font-weight: 700; margin-bottom: 4px;
-  }
-  .ladder-sub {
-    font-size: 13px; color: rgba(230, 233, 245, 0.7);
-    margin-bottom: 16px;
-  }
-  .ladder-peg {
-    width: 130px; height: 130px; margin: 0 auto 12px;
-    background: linear-gradient(160deg, #2a2050, #15192a);
-    border-radius: 18px;
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    display: flex; align-items: center; justify-content: center;
-    position: relative; z-index: 1;
-  }
-  .ladder-peg svg { width: 110px; height: 110px; }
-  .ladder-card .btn-dismiss {
-    background: linear-gradient(135deg, #FFD23F, #FF9500);
-    color: #5d3a00; border: none;
-    padding: 10px 22px; border-radius: 12px;
-    font-weight: 800; font-size: 15px; cursor: pointer;
-    box-shadow: 0 4px 14px rgba(255, 152, 0, 0.4);
-    position: relative; z-index: 1;
-  }
-  .ladder-card .btn-dismiss:hover { transform: translateY(-1px); }
 
   .cell, .hdr {
     display: grid;
@@ -1572,18 +1437,9 @@
     <button class="btn btn-golden" id="goldenBtn">✨ Golden Run</button>
     <button class="btn btn-ghost" id="lightningBtn">⚡ Lightning</button>
     <button class="btn btn-ghost" id="trickMasterBtn">🎓 Trick Master</button>
-    <button class="btn btn-ghost" id="cardsBtn">🎴 Trick Cards</button>
     <button class="btn btn-ghost" id="creaturesBtn">✦ My Pegs</button>
-    <span class="ladder-pill" id="ladderPill" style="display:none;"><span class="ladder-rung" id="ladderRung">×1</span><span id="ladderStreakText">0/10</span><span class="ladder-streak-bar"><div id="ladderStreakFill"></div></span></span>
     <button class="btn btn-ghost" id="familyBtn">👨‍👩‍👧 Family</button>
     <button class="btn btn-ghost" id="muteBtn" title="Mute sounds">🔊</button>
-    <div class="group">
-      <label for="jumpRow">Jump to</label>
-      <input type="number" id="jumpRow" min="1" max="100" placeholder="row" />
-      <span style="color: var(--ink-soft); font-size: 13px;">×</span>
-      <input type="number" id="jumpCol" min="1" max="100" placeholder="col" />
-      <button class="btn btn-ghost" id="jumpBtn" style="padding: 6px 12px;">Go</button>
-    </div>
   </div>
 
   <div class="legend">
@@ -1635,6 +1491,7 @@
       <div style="font-size:12px; color: var(--ink-soft); margin-top:4px;">Tip: a password keeps your siblings out of your account. Leave blank for no password.</div>
     </div>
     <div class="modal-actions">
+      <button class="btn btn-ghost" id="bootstrap12Btn" title="Mark all 1× and 2× cells mastered">⏩ Skip ×1 &amp; ×2</button>
       <button class="btn btn-ghost" id="userClose">Done</button>
     </div>
   </div>
@@ -1800,18 +1657,6 @@
 </div>
 
 <!-- Trick Cards gallery -->
-<div class="overlay" id="cardsOverlay">
-  <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="cardsTitle">
-    <h2 id="cardsTitle">🎴 Trick Cards</h2>
-    <p class="sub">Answer problems to discover tricks. Every new trick adds a card to your collection.</p>
-    <div class="gallery-stats" id="cardsStats"></div>
-    <div class="rarity-filter" id="rarityFilter"></div>
-    <div class="gallery-grid" id="cardsGrid"></div>
-    <div class="modal-actions">
-      <button class="btn btn-ghost" id="cardsClose">Close</button>
-    </div>
-  </div>
-</div>
 
 
 <!-- Peg picker wizard (Phase 2) -->
@@ -1830,30 +1675,6 @@
 </div>
 
 
-<!-- Ladder unlock celebration -->
-<div class="ladder-overlay" id="ladderOverlay" role="dialog" aria-modal="true" aria-labelledby="ladderMsg">
-  <div class="ladder-card" id="ladderCard">
-    <div class="ladder-heading">★ Rung cleared ★</div>
-    <div class="ladder-digit" id="ladderDigit">×1</div>
-    <div class="ladder-peg" id="ladderPeg"></div>
-    <div class="ladder-msg" id="ladderMsg">Locked in!</div>
-    <div class="ladder-sub" id="ladderSub">Next up: ×10. Stay sharp.</div>
-    <button class="btn-dismiss" id="ladderDismiss">Let's go ➜</button>
-  </div>
-</div>
-
-<!-- "A wild X appeared!" first-unlock celebration -->
-<div class="wild-overlay" id="wildOverlay" role="dialog" aria-modal="true" aria-labelledby="wildName">
-  <div class="wild-card" id="wildCard">
-    <div class="wild-heading">A wild trick appeared!</div>
-    <div class="wild-emoji" id="wildEmoji">✨</div>
-    <div class="wild-name" id="wildName">Trick</div>
-    <div class="wild-rarity-chip" id="wildRarity">Common</div>
-    <div class="wild-flavor" id="wildFlavor">Flavor</div>
-    <button class="btn-dismiss" id="wildDismiss">Add to collection ✨</button>
-  </div>
-</div>
-
 <script>
 /* ================================================================
    Times Table Quest — V3 (Golden Run + commutative grid + PWA)
@@ -1862,8 +1683,6 @@
 
 const STORAGE_KEY = 'timesTableQuest_v1';
 const GRID_N = 100;
-const LADDER = [1, 10, 2, 5, 3, 4, 9, 6, 8, 7];
-const LADDER_GOAL = 10;  // consecutive correct answers needed to unlock the next rung
 const AVATARS = ['😀','😎','🦄','🐯','🐼','🐵','🦊','🐸','🐙','🦖','🦕','🐳','🐝','🦉','🐨','🦁','🐶','🐱','⭐','🚀','🌈','🍭','🍕','🎈'];
 const COLORS  = ['#ff5aa3','#6c5ce7','#2ecc71','#f6c244','#00b4d8','#ff9f43','#a55eea','#26de81'];
 
@@ -1948,7 +1767,6 @@ function makeUser(name, avatar, password) {
     drillLastDate: null,  // yyyy-mm-dd of last drill completion
     password: password || '',  // optional per-user password. Master password "JC" always unlocks.
     pegs: {},    // digit (1..10) -> chosen peg option index (0..2). Empty until kid picks.
-    ladder: null // { unlocked: [...], current: digit|null, streak: 0 }. Filled in by migrateUser.
   };
 }
 
@@ -1988,9 +1806,6 @@ function migrateUser(u) {
   if (typeof u.drillLastDate === 'undefined') u.drillLastDate = null;
   if (typeof u.password !== 'string') u.password = '';
   if (!u.pegs || typeof u.pegs !== 'object') u.pegs = {};
-  if (!u.ladder || typeof u.ladder !== 'object' || !Array.isArray(u.ladder.unlocked)) {
-    u.ladder = autoGrantLadder(u);
-  }
   return u;
 }
 
@@ -2021,33 +1836,9 @@ function bumpDailyCount() {
   u.daily[k] = (u.daily[k] || 0) + 1;
 }
 
-/* --------------- "A wild X appeared!" overlay --------------- */
-const wildOverlay = document.getElementById('wildOverlay');
-const wildCard    = document.getElementById('wildCard');
-
-function showWildAppeared(trickId) {
-  const cat = TRICK_CATALOG[trickId];
-  if (!cat) return;
-  document.getElementById('wildEmoji').textContent  = cat.emoji;
-  document.getElementById('wildName').textContent   = cat.name;
-  document.getElementById('wildRarity').textContent = cat.rarity;
-  document.getElementById('wildFlavor').textContent = '"' + cat.flavor + '"';
-  // Swap the rarity colour class on the card itself.
-  wildCard.className = 'wild-card card-rarity-' + cat.rarity;
-  wildOverlay.classList.add('show');
-  playSfx(cat.rarity === 'legendary' ? 'fanfare' : 'unlock');
-  // Extra confetti for legendary unlocks
-  if (cat.rarity === 'legendary' || cat.rarity === 'epic') {
-    if (typeof popConfetti === 'function') popConfetti();
-  }
-}
-
-document.getElementById('wildDismiss').addEventListener('click', () => {
-  wildOverlay.classList.remove('show');
-});
-wildOverlay.addEventListener('click', (e) => {
-  if (e.target === wildOverlay) wildOverlay.classList.remove('show');
-});
+/* "Wild trick appeared" overlay was removed in V11 — keep a no-op stub
+   so the callers in submitAnswer / Lightning / Golden Run don't throw. */
+function showWildAppeared(_trickId) { /* no-op */ }
 
 /* --------------- Sound effects ---------------
    Synthesized via Web Audio — no external files, keeps the PWA self-contained.
@@ -2145,92 +1936,6 @@ document.getElementById('muteBtn').addEventListener('click', () => {
   saveState();
   renderMuteBtn();
   if (!u.muted) playSfx('correct');   // feedback chime when turning back on
-});
-
-/* --------------- Trick Cards gallery --------------- */
-const RARITY_ORDER = ['common', 'uncommon', 'rare', 'epic', 'legendary'];
-const cardsOverlay = document.getElementById('cardsOverlay');
-let activeRarityFilter = 'all';
-
-function renderGalleryStats() {
-  const u = ensureUser();
-  migrateUser(u);
-  const wrap = document.getElementById('cardsStats');
-  const byRarity = {};
-  RARITY_ORDER.forEach(r => byRarity[r] = { total: 0, owned: 0 });
-  for (const [id, cat] of Object.entries(TRICK_CATALOG)) {
-    byRarity[cat.rarity].total++;
-    if (u.tricks[id]) byRarity[cat.rarity].owned++;
-  }
-  const totalOwned = Object.values(byRarity).reduce((s,r) => s + r.owned, 0);
-  const total      = Object.values(byRarity).reduce((s,r) => s + r.total, 0);
-  wrap.innerHTML = `
-    <div><b>${totalOwned}/${total}</b> unlocked</div>
-    ${RARITY_ORDER.map(r => {
-      const { owned, total } = byRarity[r];
-      if (total === 0) return '';
-      const label = r[0].toUpperCase() + r.slice(1);
-      return `<div><b>${owned}/${total}</b>${label}</div>`;
-    }).join('')}
-  `;
-}
-
-function renderRarityFilter() {
-  const wrap = document.getElementById('rarityFilter');
-  const options = [['all', 'All']].concat(RARITY_ORDER.map(r => [r, r[0].toUpperCase() + r.slice(1)]));
-  wrap.innerHTML = '';
-  options.forEach(([id, label]) => {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.textContent = label;
-    if (id === activeRarityFilter) b.classList.add('selected');
-    b.addEventListener('click', () => {
-      activeRarityFilter = id;
-      renderGallery();
-    });
-    wrap.appendChild(b);
-  });
-}
-
-function renderGallery() {
-  const u = ensureUser();
-  migrateUser(u);
-  const grid = document.getElementById('cardsGrid');
-  grid.innerHTML = '';
-  // Sort: rarity ascending, then alphabetical
-  const ids = Object.keys(TRICK_CATALOG).sort((x, y) => {
-    const rx = RARITY_ORDER.indexOf(TRICK_CATALOG[x].rarity);
-    const ry = RARITY_ORDER.indexOf(TRICK_CATALOG[y].rarity);
-    if (rx !== ry) return rx - ry;
-    return TRICK_CATALOG[x].name.localeCompare(TRICK_CATALOG[y].name);
-  });
-  for (const id of ids) {
-    const cat = TRICK_CATALOG[id];
-    if (activeRarityFilter !== 'all' && cat.rarity !== activeRarityFilter) continue;
-    const owned = !!u.tricks[id];
-    const el = document.createElement('div');
-    el.className = `tc-card card-rarity-${cat.rarity}${owned ? '' : ' locked'}`;
-    el.innerHTML = `
-      <div class="tc-emoji">${cat.emoji}</div>
-      <div class="tc-name">${cat.name}</div>
-      <div class="tc-rarity">${cat.rarity}</div>
-      <div class="tc-flavor">${owned ? '"' + cat.flavor + '"' : '???'}</div>
-    `;
-    grid.appendChild(el);
-  }
-  renderRarityFilter();
-  renderGalleryStats();
-}
-
-function openCardsGallery() {
-  renderGallery();
-  cardsOverlay.classList.add('show');
-}
-
-document.getElementById('cardsBtn').addEventListener('click', openCardsGallery);
-document.getElementById('cardsClose').addEventListener('click', () => cardsOverlay.classList.remove('show'));
-cardsOverlay.addEventListener('click', (e) => {
-  if (e.target === cardsOverlay) cardsOverlay.classList.remove('show');
 });
 
 
@@ -2651,92 +2356,6 @@ function chosenPeg(u, d) {
   return PEGS[d] && PEGS[d][idx] ? PEGS[d][idx] : null;
 }
 
-
-/* --------------- Trick Ladder (Phase 3) ---------------
-   The kid climbs through the times tables in this order:
-     1 → 10 → 2 → 5 → 3 → 4 → 9 → 6 → 8 → 7
-   Streak of LADDER_GOAL consecutive correct answers on the current rung
-   unlocks the next. While the ladder is active the grid hides everything
-   except the unlocked + current rungs (rows) and cols 1..10. */
-
-function ladderActive(u) {
-  return !!(u && u.ladder && u.ladder.current != null);
-}
-
-/* Returns a Set of digits whose row is currently playable, or null when the
-   ladder is fully cleared (signaling: full 100×100 grid is back). */
-function ladderTables(u) {
-  if (!ladderActive(u)) return null;
-  const ts = new Set(u.ladder.unlocked);
-  if (u.ladder.current != null) ts.add(u.ladder.current);
-  return ts;
-}
-
-/* Is this (a, b) cell currently playable? */
-function ladderEligible(u, a, b) {
-  const tables = ladderTables(u);
-  if (tables === null) return true;             // ladder complete -> full grid
-  if (a < 1 || b < 1 || a > 10 || b > 10) return false;
-  return tables.has(a) || tables.has(b);
-}
-
-/* Auto-grant: existing users with mastered cells in higher-rung rows get all
-   prior rungs unlocked. Threshold: ≥3 mastered cells in the row of digit d
-   bumps the highest-unlocked index up to that rung's position. */
-function autoGrantLadder(u) {
-  let highestIdx = -1;
-  for (let i = 0; i < LADDER.length; i++) {
-    const d = LADDER[i];
-    let mastered = 0;
-    for (let m = 1; m <= 10; m++) {
-      const rec = u.cells ? u.cells[cellKey(d, m)] : null;
-      if (rec && masteryLevel(rec) === 'mastered') mastered++;
-    }
-    if (mastered >= 3) highestIdx = i;
-  }
-  if (highestIdx === LADDER.length - 1) {
-    return { unlocked: LADDER.slice(), current: null, streak: 0 };
-  }
-  if (highestIdx < 0) {
-    // First-time player: nothing unlocked yet, ×1 is the active rung.
-    return { unlocked: [], current: LADDER[0], streak: 0 };
-  }
-  return {
-    unlocked: LADDER.slice(0, highestIdx + 1),
-    current: LADDER[highestIdx + 1],
-    streak: 0
-  };
-}
-
-/* Record a quiz answer's contribution to the ladder streak.
-   Only counts answers that target the current rung digit. Wrong answers on
-   the current rung reset the streak. Returns the digit that just unlocked
-   (i.e. moved from current to unlocked), or null. */
-function recordLadderAnswer(a, b, correct) {
-  const u = ensureUser(); migrateUser(u);
-  if (!ladderActive(u)) return null;
-  const cur = u.ladder.current;
-  if (a !== cur && b !== cur) return null;       // not a current-rung question
-  if (correct) {
-    u.ladder.streak++;
-    if (u.ladder.streak >= LADDER_GOAL) {
-      const cleared = cur;
-      u.ladder.unlocked.push(cleared);
-      const idx = LADDER.indexOf(cleared);
-      u.ladder.current = (idx < LADDER.length - 1) ? LADDER[idx + 1] : null;
-      u.ladder.streak = 0;
-      saveState();
-      return cleared;
-    }
-    saveState();
-  } else {
-    if (u.ladder.streak > 0) {
-      u.ladder.streak = 0;
-      saveState();
-    }
-  }
-  return null;
-}
 
 /* --------------- Creatures collection ---------------
    One creature per times-table (×1..×10). Each has three stages (egg,
@@ -4142,13 +3761,9 @@ const gridFrame = document.getElementById('gridFrame');
 function buildGrid(opts) {
   opts = opts || {};
   const u = ensureUser();
-  const tables = ladderTables(u);
-  const isLadder = tables !== null;
-  const cols = isLadder ? 10 : GRID_N;
+  const cols = GRID_N;
 
   gridEl.innerHTML = '';
-  if (isLadder) gridEl.classList.add('ladder-mode');
-  else gridEl.classList.remove('ladder-mode');
 
   const frag = document.createDocumentFragment();
 
@@ -4166,24 +3781,11 @@ function buildGrid(opts) {
     frag.appendChild(h);
   }
 
-  // Determine which rows to render
-  let rowDigits;
-  if (isLadder) {
-    // Render unlocked rungs in ladder order, then the current rung at the bottom.
-    rowDigits = u.ladder.unlocked.slice();
-    if (u.ladder.current != null) rowDigits.push(u.ladder.current);
-  } else {
-    rowDigits = [];
-    for (let r = 1; r <= GRID_N; r++) rowDigits.push(r);
-  }
-
-  for (const r of rowDigits) {
+  for (let r = 1; r <= GRID_N; r++) {
     const rh = document.createElement('div');
     rh.className = 'hdr left' + (r % 10 === 0 ? ' tenth' : '');
-    if (isLadder && r === u.ladder.current) rh.classList.add('current-rung');
     rh.textContent = r;
     rh.dataset.rowDigit = r;
-    if (opts.justUnlockedDigit && r === opts.justUnlockedDigit) rh.classList.add('row-just-unlocked');
     frag.appendChild(rh);
 
     for (let c = 1; c <= cols; c++) {
@@ -4192,7 +3794,6 @@ function buildGrid(opts) {
       cell.dataset.r = r;
       cell.dataset.c = c;
       cell.textContent = '·';
-      if (opts.justUnlockedDigit && r === opts.justUnlockedDigit) cell.classList.add('row-just-unlocked');
       frag.appendChild(cell);
     }
   }
@@ -4338,8 +3939,6 @@ function submitAnswer() {
     if (u.stats.currentStreak > u.stats.bestStreak) u.stats.bestStreak = u.stats.currentStreak;
 
     // Ladder streak (Phase 3): record correct answer; may unlock next rung.
-    var __ladderUnlocked = recordLadderAnswer(a, b, true);
-    refreshLadderPill();
 
     newlyUnlocked = unlockTrick(ex.id);
 
@@ -4358,8 +3957,6 @@ function submitAnswer() {
     rec.streak = 0;
     u.stats.currentStreak = 0;
     // Ladder streak (Phase 3): wrong answer on the current rung resets the streak.
-    recordLadderAnswer(a, b, false);
-    refreshLadderPill();
     playSfx('wrong');
     // Don't reveal the correct answer — let them think and try again.
     qFeedback.innerHTML = `
@@ -4397,10 +3994,6 @@ function submitAnswer() {
   saveState();
   refreshCells();
 
-  if (typeof __ladderUnlocked !== 'undefined' && __ladderUnlocked != null) {
-    // Wait a beat so the kid sees the correct-answer feedback first.
-    setTimeout(() => showLadderUnlocked(__ladderUnlocked), 700);
-  }
   if (newlyUnlocked) {
     setTimeout(() => showWildAppeared(ex.id), 500);
   }
@@ -4408,21 +4001,12 @@ function submitAnswer() {
 
 function pickNext() {
   // Prefer cells that are not mastered; favour recent wrongs and untried.
-  // Restricted to ladder-eligible cells while the ladder is active so we
-  // never throw a locked-table question at the kid.
   const u = ensureUser(); migrateUser(u);
   const notMastered = [];
   const recentWrong = [];
   const untried = [];
-  const tables = ladderTables(u);
-  const isLadder = tables !== null;
-  // Iterate only over playable rows in ladder mode; full grid otherwise.
-  const rowDigits = isLadder
-    ? [...tables]
-    : (() => { const a = []; for (let r = 1; r <= GRID_N; r++) a.push(r); return a; })();
-  const colMax = isLadder ? 10 : GRID_N;
-  for (const r of rowDigits) {
-    for (let c = 1; c <= colMax; c++) {
+  for (let r = 1; r <= GRID_N; r++) {
+    for (let c = 1; c <= GRID_N; c++) {
       const rec = u.cells[cellKey(r,c)];
       if (!rec) { untried.push([r,c]); continue; }
       const level = masteryLevel(rec);
@@ -4431,23 +4015,9 @@ function pickNext() {
       notMastered.push([r,c]);
     }
   }
-  // While ladder is active, prefer the CURRENT rung so the streak can grow.
-  if (isLadder && u.ladder.current != null) {
-    const cur = u.ladder.current;
-    const onRung = (p) => p[0] === cur || p[1] === cur;
-    const cw = recentWrong.filter(onRung);
-    const cu = untried.filter(onRung);
-    const cn = notMastered.filter(onRung);
-    const pool = cw.length ? cw : (cu.length ? cu : (cn.length ? cn : notMastered));
-    if (pool.length) return pool[Math.floor(Math.random() * pool.length)];
-  }
   const pool = recentWrong.length ? recentWrong
              : (untried.length ? untried : notMastered);
   if (!pool.length) {
-    // Fallback to the active rung × random col.
-    if (isLadder && u.ladder.current != null) {
-      return [u.ladder.current, 1 + Math.floor(Math.random() * 10)];
-    }
     return [Math.ceil(Math.random()*12), Math.ceil(Math.random()*12)];
   }
   return pool[Math.floor(Math.random() * pool.length)];
@@ -4503,8 +4073,7 @@ document.getElementById('weakBtn').addEventListener('click', () => {
     const rec = u.cells[k];
     if (masteryLevel(rec) === 'wrong' || masteryLevel(rec) === 'tried') {
       const [r, c] = k.split('x').map(Number);
-      // Only surface weak cells that are still playable under the ladder.
-      if (ladderEligible(u, r, c)) weak.push([r, c]);
+      weak.push([r, c]);
     }
   }
   if (!weak.length) {
@@ -4516,14 +4085,6 @@ document.getElementById('weakBtn').addEventListener('click', () => {
   scrollToCell(r, c);
 });
 
-document.getElementById('jumpBtn').addEventListener('click', () => {
-  const r = +document.getElementById('jumpRow').value;
-  const c = +document.getElementById('jumpCol').value;
-  if (r >= 1 && r <= 100 && c >= 1 && c <= 100) {
-    scrollToCell(r, c);
-    openQuiz(r, c);
-  }
-});
 
 function scrollToCell(r, c) {
   const cell = gridEl.querySelector(`.cell[data-r="${r}"][data-c="${c}"]`);
@@ -4562,9 +4123,8 @@ function renderUserModal() {
       if (state.activeUser !== name && !requestUserAccess(u, 'switch to this account')) return;
       state.activeUser = name;
       saveState();
-      buildGrid();           // ladder state may differ between users
+      buildGrid();
       refreshCells();
-      refreshLadderPill();
       renderUserModal();
     });
     row.querySelector('.delete').addEventListener('click', (e) => {
@@ -4574,9 +4134,8 @@ function renderUserModal() {
       delete state.users[name];
       if (state.activeUser === name) state.activeUser = Object.keys(state.users)[0] || null;
       saveState();
-      buildGrid();           // active user may have changed -> ladder state differs
+      buildGrid();
       refreshCells();
-      refreshLadderPill();
       renderUserModal();
     });
     userList.appendChild(row);
@@ -4596,6 +4155,25 @@ function renderUserModal() {
   });
 }
 
+function bootstrap12(u) {
+  /* Mark all x1 and x2 cells mastered for this user. */
+  const STAR_THRESHOLD = 5;  // mirror masteryLevel() logic
+  const now = new Date().toISOString();
+  for (let a = 1; a <= 2; a++) {
+    for (let b = 1; b <= 10; b++) {
+      const k = cellKey(a, b);
+      const rec = u.cells[k] || { attempts: 0, correct: 0, streak: 0, lastSeen: null };
+      // Force mastery: streak >= STAR_THRESHOLD and total correct >= STAR_THRESHOLD
+      rec.attempts = Math.max(rec.attempts, STAR_THRESHOLD);
+      rec.correct = Math.max(rec.correct, STAR_THRESHOLD);
+      rec.streak = Math.max(rec.streak, STAR_THRESHOLD);
+      rec.lastSeen = now;
+      u.cells[k] = rec;
+    }
+  }
+  saveState();
+}
+
 function countMastered(u) {
   let n = 0;
   for (const k in u.cells) if (masteryLevel(u.cells[k]) === 'mastered') n++;
@@ -4605,6 +4183,15 @@ function countMastered(u) {
 document.getElementById('userPill').addEventListener('click', () => {
   renderUserModal();
   userOverlay.classList.add('show');
+});
+document.getElementById('bootstrap12Btn').addEventListener('click', () => {
+  const u = ensureUser();
+  if (!u) { alert('Pick a player first.'); return; }
+  if (!confirm(`Mark all ×1 and ×2 cells mastered for ${u.name}?`)) return;
+  bootstrap12(u);
+  renderUserModal();
+  buildGrid();
+  refreshCells();
 });
 document.getElementById('userClose').addEventListener('click', () => {
   userOverlay.classList.remove('show');
@@ -4633,9 +4220,12 @@ document.getElementById('createUserBtn').addEventListener('click', () => {
   input.value = '';
   if (passInput) passInput.value = '';
   saveState();
-  buildGrid();           // fresh user -> ladder starts at ×1
+  // One-time bootstrap prompt: already know your 1s and 2s?
+  if (confirm(`Welcome, ${name}! Already know your ×1 and ×2 times tables?\n\nClick OK to mark them all mastered, or Cancel to start fresh.`)) {
+    bootstrap12(state.users[name]);
+  }
+  buildGrid();
   refreshCells();
-  refreshLadderPill();
   renderUserModal();
 });
 document.getElementById('newUserName').addEventListener('keydown', (e) => {
@@ -5025,7 +4615,6 @@ document.getElementById('grInput').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') submitGrAnswer();
 });
 document.getElementById('grForfeit').addEventListener('click', onGrForfeit);
-
 
 
 /* ============================================================
@@ -5457,75 +5046,6 @@ document.getElementById('pickPegsBtn').addEventListener('click', () => {
   }
   openPegPicker(start);
 });
-
-
-/* --------------- Ladder UI (Phase 3) --------------- */
-function refreshLadderPill() {
-  const u = ensureUser(); migrateUser(u);
-  const pill = document.getElementById('ladderPill');
-  if (!pill) return;
-  if (!ladderActive(u)) {
-    pill.style.display = 'none';
-    pill.classList.add('complete');
-    return;
-  }
-  pill.style.display = '';
-  pill.classList.remove('complete');
-  document.getElementById('ladderRung').textContent = '×' + u.ladder.current;
-  document.getElementById('ladderStreakText').textContent = u.ladder.streak + '/' + LADDER_GOAL;
-  const pct = Math.min(100, Math.round(100 * u.ladder.streak / LADDER_GOAL));
-  document.getElementById('ladderStreakFill').style.width = pct + '%';
-}
-
-const ladderOverlay = document.getElementById('ladderOverlay');
-
-function showLadderUnlocked(digit) {
-  const u = ensureUser(); migrateUser(u);
-  const next = u.ladder.current;  // already advanced to next rung at this point
-  const allDone = next == null;
-  document.getElementById('ladderDigit').textContent = '×' + digit;
-  document.getElementById('ladderMsg').textContent = allDone
-    ? 'You cleared the whole ladder!'
-    : 'Locked in!';
-  document.getElementById('ladderSub').textContent = allDone
-    ? 'Big numbers and the full grid are unlocked. Show off.'
-    : 'Next up: ×' + next + '. Stay sharp.';
-  // Show the kid's chosen peg for this digit if they've picked it.
-  const pegSlot = document.getElementById('ladderPeg');
-  const peg = chosenPeg(u, digit);
-  pegSlot.innerHTML = peg ? peg.svg : '<div style="font-size:64px; opacity:.6;">★</div>';
-  ladderOverlay.classList.add('show');
-  playSfx('fanfare');
-  popConfetti();
-  refreshLadderPill();
-}
-
-function dismissLadderOverlay() {
-  ladderOverlay.classList.remove('show');
-  const u = ensureUser(); migrateUser(u);
-  // Highlight the NEW current rung — that's the row that just appeared in
-  // the grid. The previous current graduated to "unlocked" and was already
-  // visible. When the ladder is fully done u.ladder.current is null and we
-  // just rebuild without a targeted animation.
-  const newRowDigit = u.ladder.current;
-  buildGrid({ justUnlockedDigit: newRowDigit });
-  refreshCells();
-  // Scroll to the bottom-most row (the new one) so the kid can see it.
-  setTimeout(() => {
-    const u = ensureUser();
-    if (ladderActive(u) && u.ladder.current != null) {
-      const tgt = gridEl.querySelector('.cell[data-r="' + u.ladder.current + '"][data-c="1"]');
-      if (tgt) tgt.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
-  }, 80);
-}
-document.getElementById('ladderDismiss').addEventListener('click', dismissLadderOverlay);
-ladderOverlay.addEventListener('click', (e) => {
-  if (e.target === ladderOverlay) dismissLadderOverlay();
-});
-
-// Initial render: pill + grid both reflect ladder state on first load.
-refreshLadderPill();
 
 </script>
 </body>

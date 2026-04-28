@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover" />
-<title>Times Table Quest — V12</title>
+<title>Times Table Quest — V13</title>
 
 <!-- PWA -->
 <link rel="manifest" href="manifest.json">
@@ -1012,7 +1012,25 @@
     0%, 100% { transform: translateY(0) rotate(-6deg); }
     50%      { transform: translateY(-4px) rotate(6deg); }
   }
-  .family-trophy-banner {
+  .family-top3 {
+    margin-top: 10px;
+  }
+  .family-top3 .hof-row {
+    display: grid;
+    grid-template-columns: 30px 1fr 60px 1fr;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--neutral);
+    font-size: 14px;
+  }
+  .family-top3 .hof-row:last-child { border-bottom: 0; }
+  .family-top3 .hof-rank { font-size: 18px; }
+  .family-top3 .hof-name { font-weight: 600; color: var(--ink); }
+  .family-top3 .hof-score { text-align: right; font-size: 16px; }
+  .family-top3 .hof-meta { color: var(--ink-soft); font-size: 11px; }
+
+    .family-trophy-banner {
     background: linear-gradient(135deg, #fff5d0, #ffe58a);
     border-radius: 10px;
     padding: 8px 12px;
@@ -1412,7 +1430,7 @@
   <div class="brand">
     <span class="logo">×</span>
     Times Table Quest
-    <span style="font-family: 'Fredoka', sans-serif; font-size: 13px; font-weight: 600; color: var(--ink-soft); -webkit-text-fill-color: var(--ink-soft); background: var(--neutral); padding: 2px 8px; border-radius: 999px; margin-left: 6px; letter-spacing: 0.5px;">V12</span>
+    <span style="font-family: 'Fredoka', sans-serif; font-size: 13px; font-weight: 600; color: var(--ink-soft); -webkit-text-fill-color: var(--ink-soft); background: var(--neutral); padding: 2px 8px; border-radius: 999px; margin-left: 6px; letter-spacing: 0.5px;">V13</span>
   </div>
 
   <button class="user-pill" id="userPill" title="Switch player">
@@ -1434,7 +1452,6 @@
     <button class="btn btn-daily" id="dailyBtn">🔥 Today's 10 <span class="daily-streak-badge" id="dailyStreakBadge" style="display:none;"></span></button>
     <button class="btn btn-primary" id="challengeBtn">🎲 Random challenge</button>
     <button class="btn btn-ghost" id="weakBtn">🎯 Practise weak spots</button>
-    <button class="btn btn-golden" id="goldenBtn">✨ Golden Run</button>
     <button class="btn btn-ghost" id="lightningBtn">⚡ Lightning</button>
     <button class="btn btn-ghost" id="trickMasterBtn">🎓 Trick Master</button>
     <button class="btn btn-ghost" id="creaturesBtn">✦ My Pegs</button>
@@ -1497,48 +1514,6 @@
   </div>
 </div>
 
-<!-- Golden Run — Setup Modal -->
-<div class="overlay" id="grSetupOverlay">
-  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="grSetupTitle">
-    <h2 id="grSetupTitle">✨ Golden Run</h2>
-    <p class="sub">10 questions · 20 seconds each · one wrong and it's over. Survive all 10 to earn a golden star.</p>
-
-    <div style="margin-top: 10px; font-weight: 600;">Pick your difficulty</div>
-    <div class="difficulty-picker" id="difficultyPicker"></div>
-
-    <div class="modal-actions">
-      <button class="btn btn-ghost" id="grSetupClose">Cancel</button>
-      <button class="btn btn-golden" id="grStart">Start the run ➜</button>
-    </div>
-  </div>
-</div>
-
-<!-- Golden Run — Quiz Modal -->
-<div class="overlay" id="grQuizOverlay">
-  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="grTitle">
-    <h2 id="grTitle">✨ Golden Run</h2>
-    <p class="sub" id="grSub">Question 1 of 10</p>
-
-    <div class="gr-progress" id="grProgress"></div>
-
-    <div class="gr-timer-wrap">
-      <div class="gr-timer-bar" id="grTimerBar"></div>
-    </div>
-
-    <div class="question" id="grQText">— × —</div>
-    <div class="answer-row">
-      <input class="answer-input" id="grInput" type="number" inputmode="numeric" autocomplete="off" placeholder="?" />
-      <button class="btn btn-primary" id="grSubmit">Check</button>
-    </div>
-
-    <div id="grFeedback"></div>
-
-    <div class="modal-actions" id="grActions">
-      <button class="btn btn-ghost" id="grForfeit">Give up</button>
-    </div>
-  </div>
-</div>
-
 <!-- Daily Drill — "Today's 10" -->
 <div class="overlay" id="dailyDrillOverlay">
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="ddTitle">
@@ -1558,14 +1533,12 @@
   </div>
 </div>
 
-<!-- Lightning Round — Setup -->
+<!-- Lightning Round — Setup (V13: no difficulty picker; auto-progression) -->
 <div class="overlay" id="lrSetupOverlay">
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="lrSetupTitle">
     <h2 id="lrSetupTitle">⚡ Lightning Round</h2>
-    <p class="sub">60 seconds. Unlimited questions. Each wrong answer costs 5 seconds. Beat your best.</p>
-    <div style="margin-top: 10px; font-weight: 600;">Pick your difficulty</div>
-    <div class="difficulty-picker" id="lrDifficultyPicker"></div>
-    <div id="lrBestDisplay" style="text-align:center; font-size: 13px; color: var(--ink-soft);"></div>
+    <p class="sub">60 seconds. Each correct answer adds 2 seconds (capped at 90). The longer you survive, the harder it gets.</p>
+    <div id="lrBestDisplay" style="text-align:center; font-size: 13px; color: var(--ink-soft); margin-top: 8px;"></div>
     <div class="modal-actions">
       <button class="btn btn-ghost" id="lrSetupClose">Cancel</button>
       <button class="btn btn-lightning" id="lrStart">Start ⚡</button>
@@ -1578,7 +1551,7 @@
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="lrTitle">
     <h2 id="lrTitle">⚡ Lightning Round</h2>
     <div class="lr-score" id="lrScore">0</div>
-    <div class="lr-best"   id="lrBest">Best: —</div>
+    <div class="lr-best"   id="lrBest">🌱 Easy</div>
     <div class="gr-timer-wrap">
       <div class="gr-timer-bar" id="lrTimerBar"></div>
     </div>
@@ -1759,7 +1732,7 @@ function makeUser(name, avatar, password) {
     goldenRuns: [],  // history: { date, difficulty, won, reached }
     tricks: {},      // trickId -> { firstSeenAt }
     trickMastery: {},// trickId -> { stars: 0..3, runs: [{date, score}] }
-    lightning: { best: 0, lastPlayed: null },  // Lightning Round high score
+    lightning: { best: 0, lastPlayed: null, runs: [] },  // V13: runs[] = [{date, score, bandReached}, ...]
     daily: {},       // yyyy-mm-dd -> questionsAnswered
     muted: false,    // sound mute toggle
     dailyDrills: {}, // yyyy-mm-dd -> { correct, total, at }
@@ -1797,6 +1770,7 @@ function migrateUser(u) {
   if (!u.tricks)     u.tricks = {};
   if (!u.trickMastery) u.trickMastery = {};
   if (!u.lightning)  u.lightning = { best: 0, lastPlayed: null };
+  if (!u.lightning.runs) u.lightning.runs = [];
   if (!u.daily)      u.daily = {};
   if (typeof u.muted !== 'boolean') u.muted = false;
   if (!u.stars)      u.stars = 0;
@@ -2440,45 +2414,73 @@ creaturesOverlay.addEventListener('click', (e) => {
   if (e.target === creaturesOverlay) creaturesOverlay.classList.remove('show');
 });
 
-/* --------------- Lightning Round ---------------
-   60 seconds. Unlimited questions from the picked difficulty pool.
-   Correct = +1 point. Wrong = −5 seconds and show the real answer. */
+/* --------------- Lightning Round (V13) ---------------
+   60-second timed run. Auto-progression by correct count.
+     Bands (correct count threshold):
+       0-1   = Easy        (poolBeginner)
+       2-4   = Know        (poolKnowMyStuff)
+       5-19  = Know + God  (mix)
+       20-39 = Know + God + Savant (mix)
+       40+   = God + Savant (mix)
+   +2s on correct (cap 90s). No penalty on wrong. Score = total correct. */
 const lrSetupOverlay = document.getElementById('lrSetupOverlay');
 const lrQuizOverlay  = document.getElementById('lrQuizOverlay');
-let lrSelectedDiffId = 'beginner';
 let lr = null;
 
-function renderLrDifficultyPicker() {
-  const wrap = document.getElementById('lrDifficultyPicker');
-  wrap.innerHTML = '';
-  DIFFICULTIES.forEach(d => {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.innerHTML = `
-      <span class="diff-emoji">${d.emoji}</span>
-      <span class="diff-title">${d.title}</span>
-      <span class="diff-desc">${d.desc}</span>
-    `;
-    if (d.id === lrSelectedDiffId) b.classList.add('selected');
-    b.addEventListener('click', () => {
-      lrSelectedDiffId = d.id;
-      wrap.querySelectorAll('button').forEach(x => x.classList.remove('selected'));
-      b.classList.add('selected');
-      renderLrBestForDiff();
-    });
-    wrap.appendChild(b);
-  });
-  renderLrBestForDiff();
+const LR_BAND_LABELS = {
+  beginner:    '\ud83c\udf31 Easy',
+  knowmystuff: '\ud83d\udcaa I know my stuff',
+  god:         '\u26a1 Mathematics god',
+  savant:      '\ud83e\udde0 Savant',
+};
+function lrBandTitleFromScore(score) {
+  // Returns a single representative band title for the highest-tier band currently active.
+  if (score < 2)  return 'Easy';
+  if (score < 5)  return 'I know my stuff';
+  if (score < 20) return 'Mathematics god';   // mix of know + god, label highest
+  if (score < 40) return 'Savant';            // mix of know+god+savant
+  return 'Savant';                             // god + savant
 }
-function renderLrBestForDiff() {
-  const u = ensureUser(); migrateUser(u);
-  const best = (u.lightning.bestByDiff && u.lightning.bestByDiff[lrSelectedDiffId]) || 0;
-  document.getElementById('lrBestDisplay').textContent =
-    best ? `Your best at this difficulty: ${best}` : 'No record yet — set one!';
+function lrBandLabel(score) {
+  if (score < 2)  return LR_BAND_LABELS.beginner;
+  if (score < 5)  return LR_BAND_LABELS.knowmystuff;
+  if (score < 20) return LR_BAND_LABELS.god;
+  return LR_BAND_LABELS.savant;
+}
+
+/* Memoise the pool builders so we're not regenerating a 10,000-pair array every pick. */
+let _poolCache = null;
+function lrPools() {
+  if (!_poolCache) {
+    _poolCache = {
+      beginner:    poolBeginner(),
+      knowmystuff: poolKnowMyStuff(),
+      god:         poolGod(),
+      savant:      poolSavant(),
+    };
+  }
+  return _poolCache;
+}
+
+/* Pick the right pool for the current correct-count. Some bands are mixes:
+   pick uniformly-at-random from the listed pools (then a random pair within). */
+function lrPickQuestion(score) {
+  const P = lrPools();
+  let pools;
+  if (score < 2)       pools = [P.beginner];
+  else if (score < 5)  pools = [P.knowmystuff];
+  else if (score < 20) pools = [P.knowmystuff, P.god];
+  else if (score < 40) pools = [P.knowmystuff, P.god, P.savant];
+  else                 pools = [P.god, P.savant];
+  const pool = pools[Math.floor(Math.random() * pools.length)];
+  return pool[Math.floor(Math.random() * pool.length)];
 }
 
 function openLightningSetup() {
-  renderLrDifficultyPicker();
+  const u = ensureUser(); migrateUser(u);
+  const best = (u.lightning && u.lightning.best) || 0;
+  document.getElementById('lrBestDisplay').textContent =
+    best ? `Your all-time best: ${best}` : 'No record yet — set one!';
   lrSetupOverlay.classList.add('show');
 }
 
@@ -2489,29 +2491,31 @@ lrSetupOverlay.addEventListener('click', (e) => {
 });
 
 document.getElementById('lrStart').addEventListener('click', () => {
-  const diff = DIFFICULTIES.find(d => d.id === lrSelectedDiffId) || DIFFICULTIES[0];
   lrSetupOverlay.classList.remove('show');
-  startLightning(diff);
+  startLightning();
 });
 
-function startLightning(difficulty) {
-  const pool = difficulty.pool();
+const LR_START_MS = 60_000;
+const LR_CAP_MS = 90_000;
+const LR_BONUS_MS = 2_000;
+
+function startLightning() {
+  const now = performance.now();
   lr = {
-    pool,
-    difficulty: { id: difficulty.id, title: difficulty.title, emoji: difficulty.emoji },
     score: 0,
-    deadline: performance.now() + 60_000,
-    totalMs: 60_000,
+    deadline: now + LR_START_MS,
+    totalMs: LR_START_MS,            // for the bar's denominator (kept = 60s for visual reference)
     timer: null,
     finished: false,
-    current: null
+    current: null,
+    bandReached: 'Easy',
+    startedAt: now,
   };
   document.getElementById('lrScore').textContent = '0';
-  const u = ensureUser(); migrateUser(u);
-  const best = (u.lightning.bestByDiff && u.lightning.bestByDiff[difficulty.id]) || 0;
-  document.getElementById('lrBest').textContent = best ? `Best: ${best} (${difficulty.title})` : `First run — set the bar! (${difficulty.title})`;
+  document.getElementById('lrBest').textContent = LR_BAND_LABELS.beginner;
   document.getElementById('lrFeedback').innerHTML = '';
-  document.getElementById('lrActions').style.display = '';
+  document.getElementById('lrActions').innerHTML = '<button class="btn btn-ghost" id="lrForfeit">Give up</button>';
+  document.getElementById('lrForfeit').addEventListener('click', onLrForfeit);
   document.querySelector('#lrQuizOverlay .answer-row').style.display = '';
   document.getElementById('lrInput').disabled = false;
   document.getElementById('lrSubmit').disabled = false;
@@ -2522,7 +2526,7 @@ function startLightning(difficulty) {
 
 function nextLrQuestion() {
   if (!lr || lr.finished) return;
-  const pick = lr.pool[Math.floor(Math.random() * lr.pool.length)];
+  const pick = lrPickQuestion(lr.score);
   lr.current = pick;
   const [a, b] = pick;
   document.getElementById('lrQText').textContent = `${a} × ${b}`;
@@ -2540,7 +2544,8 @@ function tickLrTimer() {
   const update = () => {
     if (!lr || lr.finished) return;
     const remaining = lr.deadline - performance.now();
-    const pct = Math.max(0, (remaining / lr.totalMs) * 100);
+    // V13: bar fills relative to LR_CAP_MS so the +2s bonus is visible above 100%? No — cap UI to 100%.
+    const pct = Math.max(0, Math.min(100, (remaining / LR_START_MS) * 100));
     bar.style.width = pct + '%';
     if (pct < 25)      { bar.classList.remove('warn'); bar.classList.add('danger'); }
     else if (pct < 50) { bar.classList.add('warn'); }
@@ -2570,23 +2575,31 @@ function submitLrAnswer() {
   if (given === correct) {
     lr.score++;
     document.getElementById('lrScore').textContent = lr.score;
+    // Update band label — reflect the highest-tier band the player can now see.
+    document.getElementById('lrBest').textContent = lrBandLabel(lr.score);
+    // Track best band reached (for the hall-of-fame line)
+    lr.bandReached = lrBandTitleFromScore(lr.score);
+    // V13: +2s on correct, hard-capped at 90s from now.
+    const now = performance.now();
+    const remaining = lr.deadline - now;
+    const newRemaining = Math.min(LR_CAP_MS, remaining + LR_BONUS_MS);
+    lr.deadline = now + newRemaining;
+    showLrBonus();
     playSfx('correct');
-    document.getElementById('lrFeedback').innerHTML = `<div class="feedback good" style="padding:6px 10px"><b>✅ ${a}×${b}=${correct}</b></div>`;
+    document.getElementById('lrFeedback').innerHTML = `<div class="feedback good" style="padding:6px 10px"><b>✅ ${a}×${b}=${correct}</b> · +2s</div>`;
     if (newlyUnlocked) setTimeout(() => showWildAppeared(ex.id), 100);
     setTimeout(nextLrQuestion, 250);
   } else {
     playSfx('wrong');
-    // −5 second penalty
-    lr.deadline -= 5000;
-    showLrPenalty();
-    document.getElementById('lrFeedback').innerHTML = `<div class="feedback bad" style="padding:6px 10px"><b>❌ ${a}×${b}=${correct}</b> · −5s</div>`;
+    document.getElementById('lrFeedback').innerHTML = `<div class="feedback bad" style="padding:6px 10px"><b>❌ ${a}×${b}=${correct}</b></div>`;
     setTimeout(nextLrQuestion, 700);
   }
 }
-function showLrPenalty() {
+function showLrBonus() {
   const el = document.createElement('div');
-  el.className = 'lr-penalty';
-  el.textContent = '−5s';
+  el.className = 'lr-penalty';   // re-use existing animation
+  el.textContent = '+2s';
+  el.style.color = '#1f8a4f';
   document.body.appendChild(el);
   setTimeout(() => el.remove(), 1000);
 }
@@ -2600,11 +2613,17 @@ function finishLightning() {
   document.querySelector('#lrQuizOverlay .answer-row').style.display = 'none';
 
   const u = ensureUser(); migrateUser(u);
-  if (!u.lightning.bestByDiff) u.lightning.bestByDiff = {};
-  const prevBest = u.lightning.bestByDiff[lr.difficulty.id] || 0;
+  if (!u.lightning.runs) u.lightning.runs = [];
+  u.lightning.runs.push({
+    date: new Date().toISOString(),
+    score: lr.score,
+    bandReached: lr.bandReached,
+  });
+  // Keep last 50 to bound storage.
+  if (u.lightning.runs.length > 50) u.lightning.runs = u.lightning.runs.slice(-50);
+  const prevBest = u.lightning.best || 0;
   const isBest = lr.score > prevBest;
-  if (isBest) u.lightning.bestByDiff[lr.difficulty.id] = lr.score;
-  if (lr.score > (u.lightning.best || 0)) u.lightning.best = lr.score;
+  if (isBest) u.lightning.best = lr.score;
   u.lightning.lastPlayed = new Date().toISOString();
   saveState();
   updateStats();
@@ -2620,7 +2639,9 @@ function finishLightning() {
       <div style="font-size: 60px;">⚡</div>
       <h3 style="margin: 4px 0;">${isBest ? 'NEW BEST!' : 'Time up!'}</h3>
       <div>You scored <b>${lr.score}</b> ${lr.score === 1 ? 'answer' : 'answers'}.</div>
-      ${isBest ? '' : `<div style="color: var(--ink-soft); font-size: 13px; margin-top: 4px;">Your best at ${lr.difficulty.title}: ${prevBest}.</div>`}
+      <div style="color: var(--ink-soft); font-size: 13px; margin-top: 4px;">
+        Highest band reached: <b>${lr.bandReached}</b>${isBest ? '' : ` · your all-time best: ${prevBest}`}
+      </div>
     </div>
   `;
 
@@ -2636,24 +2657,24 @@ function finishLightning() {
   });
 }
 
+function onLrForfeit() {
+  if (!lr || lr.finished) { closeLightning(); return; }
+  if (confirm('Give up this run?')) closeLightning();
+}
+
 function closeLightning() {
   if (lr && lr.timer) { clearInterval(lr.timer); lr.timer = null; }
   lr = null;
   lrQuizOverlay.classList.remove('show');
-  // restore action row for next time
   document.getElementById('lrActions').innerHTML = '<button class="btn btn-ghost" id="lrForfeit">Give up</button>';
-  document.getElementById('lrForfeit').addEventListener('click', () => {
-    if (confirm('Give up this run?')) closeLightning();
-  });
+  document.getElementById('lrForfeit').addEventListener('click', onLrForfeit);
 }
 
 document.getElementById('lrSubmit').addEventListener('click', submitLrAnswer);
 document.getElementById('lrInput').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') submitLrAnswer();
 });
-document.getElementById('lrForfeit').addEventListener('click', () => {
-  if (confirm('Give up this run?')) closeLightning();
-});
+document.getElementById('lrForfeit').addEventListener('click', onLrForfeit);
 
 /* --------------- Trick Master ---------------
    Pick a trick → get 10 problems that all use that trick. 10/10 earns a mastery
@@ -2940,11 +2961,35 @@ document.getElementById('tmForfeit').addEventListener('click', () => {
    Everyone's profiles, side-by-side. Today's top answerer gets the trophy. */
 const familyOverlay = document.getElementById('familyOverlay');
 
-function bestGoldenRunSec(u) {
-  if (!u.goldenRuns || !u.goldenRuns.length) return null;
-  const wins = u.goldenRuns.filter(r => r.won && r.durationSec);
-  if (!wins.length) return null;
-  return Math.min(...wins.map(r => r.durationSec));
+/* V13: best Lightning run in the past 7 days. Returns { score, daysAgo, bandReached } or null. */
+function bestRecent7Lightning(u) {
+  if (!u.lightning || !u.lightning.runs || !u.lightning.runs.length) return null;
+  const NOW = Date.now();
+  const SEVEN = 7 * 24 * 60 * 60 * 1000;
+  const recent = u.lightning.runs.filter(r => {
+    const t = Date.parse(r.date);
+    return Number.isFinite(t) && (NOW - t) <= SEVEN;
+  });
+  if (!recent.length) return null;
+  recent.sort((a, b) => (b.score || 0) - (a.score || 0));
+  const top = recent[0];
+  const daysAgo = Math.floor((NOW - Date.parse(top.date)) / (24 * 60 * 60 * 1000));
+  return { score: top.score, daysAgo, bandReached: top.bandReached || null };
+}
+
+/* V13: gather every Lightning run across all users, sort by score, return top N. */
+function allTimeLightningTop(n) {
+  const out = [];
+  Object.keys(state.users).forEach(name => {
+    const u = state.users[name];
+    if (!u.lightning || !u.lightning.runs) return;
+    u.lightning.runs.forEach(r => {
+      if (typeof r.score !== 'number') return;
+      out.push({ name, score: r.score, date: r.date, bandReached: r.bandReached || null });
+    });
+  });
+  out.sort((a, b) => (b.score - a.score) || (Date.parse(a.date) - Date.parse(b.date)));
+  return out.slice(0, n);
 }
 
 function openFamily() {
@@ -2988,12 +3033,10 @@ function renderFamily() {
     banner.innerHTML = `<div class="family-trophy-banner">Nobody's answered anything today. Go get the trophy 🏆</div>`;
   }
 
-  // Sort by stars desc, then today's count desc
+  // V13: Sort by today's count desc; we no longer use stars.
   names.sort((a, b) => {
-    const ua = state.users[a], ub = state.users[b];
-    if ((ub.stars || 0) !== (ua.stars || 0)) return (ub.stars || 0) - (ua.stars || 0);
-    const da = (ua.daily && ua.daily[today]) || 0;
-    const db = (ub.daily && ub.daily[today]) || 0;
+    const da = (state.users[a].daily && state.users[a].daily[today]) || 0;
+    const db = (state.users[b].daily && state.users[b].daily[today]) || 0;
     return db - da;
   });
 
@@ -3005,8 +3048,11 @@ function renderFamily() {
     const tricksCount = Object.keys(u.tricks || {}).length;
     const totalTricks = Object.keys(TRICK_CATALOG).length;
     const dailyCount = (u.daily && u.daily[today]) || 0;
-    const bestGrSec = bestGoldenRunSec(u);
     const lightningBest = (u.lightning && u.lightning.best) || 0;
+    const recent7 = bestRecent7Lightning(u);
+    const recentLabel = recent7
+      ? `<b>${recent7.score}</b> <span style="color:var(--ink-soft);font-size:11px;">(${recent7.daysAgo === 0 ? 'today' : recent7.daysAgo + 'd ago'})</span>`
+      : '—';
     const drillStreak = u.drillStreak || 0;
 
     const card = document.createElement('div');
@@ -3021,15 +3067,36 @@ function renderFamily() {
         </div>
       </div>
       <div class="fc-stats">
-        <div>✨ Stars</div><div><b>${u.stars || 0}</b></div>
         <div>🎴 Tricks</div><div><b>${tricksCount}</b> / ${totalTricks}</div>
-        <div>⚡ Lightning</div><div><b>${lightningBest}</b></div>
-        <div>🏁 Best run</div><div><b>${bestGrSec ? bestGrSec.toFixed(1) + 's' : '—'}</b></div>
-        <div>🔥 Streak</div><div><b>${drillStreak}</b></div>
+        <div>⚡ All-time best</div><div><b>${lightningBest}</b></div>
+        <div>⚡ 7-day best</div><div>${recentLabel}</div>
+        <div>🔥 Daily streak</div><div><b>${drillStreak}</b></div>
       </div>
     `;
     grid.appendChild(card);
   });
+
+  // V13: All-time Lightning Top 3 panel
+  const top3 = allTimeLightningTop(3);
+  let panel = document.getElementById('familyTop3');
+  if (!panel) {
+    panel = document.createElement('div');
+    panel.id = 'familyTop3';
+    panel.className = 'family-top3';
+    grid.parentNode.insertBefore(panel, grid.nextSibling);
+  }
+  if (top3.length === 0) {
+    panel.innerHTML = `<h3 style="margin:18px 0 6px;font-family:'Baloo 2',sans-serif;">⚡ Hall of Fame</h3>
+      <div style="color:var(--ink-soft);font-size:13px;">No Lightning runs yet — set the first record!</div>`;
+  } else {
+    const medals = ['🥇', '🥈', '🥉'];
+    const rows = top3.map((r, i) => {
+      const date = r.date ? new Date(r.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '';
+      const band = r.bandReached ? ` · reached ${r.bandReached}` : '';
+      return `<div class="hof-row"><span class="hof-rank">${medals[i] || ''}</span><span class="hof-name">${r.name}</span><span class="hof-score"><b>${r.score}</b></span><span class="hof-meta">${date}${band}</span></div>`;
+    }).join('');
+    panel.innerHTML = `<h3 style="margin:18px 0 6px;font-family:'Baloo 2',sans-serif;">⚡ Hall of Fame — all-time Lightning best</h3>${rows}`;
+  }
 }
 
 document.getElementById('familyBtn').addEventListener('click', openFamily);
@@ -4452,304 +4519,6 @@ const DIFFICULTIES = [
   }
 ];
 
-const grSetupOverlay = document.getElementById('grSetupOverlay');
-const grQuizOverlay  = document.getElementById('grQuizOverlay');
-let gr = null;                            // active run state
-let selectedDifficultyId = 'beginner';    // last-picked tier
-
-function renderDifficultyPicker() {
-  const wrap = document.getElementById('difficultyPicker');
-  wrap.innerHTML = '';
-  DIFFICULTIES.forEach(d => {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.dataset.id = d.id;
-    b.innerHTML = `
-      <span class="diff-emoji">${d.emoji}</span>
-      <span class="diff-title">${d.title}</span>
-      <span class="diff-desc">${d.desc}</span>
-    `;
-    if (d.id === selectedDifficultyId) b.classList.add('selected');
-    b.addEventListener('click', () => {
-      selectedDifficultyId = d.id;
-      wrap.querySelectorAll('button').forEach(x => x.classList.remove('selected'));
-      b.classList.add('selected');
-    });
-    wrap.appendChild(b);
-  });
-}
-
-function openGoldenSetup() {
-  renderDifficultyPicker();
-  grSetupOverlay.classList.add('show');
-}
-
-document.getElementById('goldenBtn').addEventListener('click', openGoldenSetup);
-document.getElementById('grSetupClose').addEventListener('click', () => {
-  grSetupOverlay.classList.remove('show');
-});
-grSetupOverlay.addEventListener('click', (e) => {
-  if (e.target === grSetupOverlay) grSetupOverlay.classList.remove('show');
-});
-
-document.getElementById('grStart').addEventListener('click', () => {
-  const diff = DIFFICULTIES.find(d => d.id === selectedDifficultyId) || DIFFICULTIES[0];
-  grSetupOverlay.classList.remove('show');
-  startGoldenRun(diff);
-});
-
-function randInt(min, max) {
-  return Math.floor(Math.random() * (max - min + 1)) + min;
-}
-
-function startGoldenRun(difficulty) {
-  const pool = difficulty.pool();
-  // Fisher-Yates partial shuffle: pick 10 unique pairs from the pool.
-  const picks = pool.slice();
-  const questions = [];
-  const target = Math.min(10, picks.length);
-  for (let i = 0; i < target; i++) {
-    const j = i + Math.floor(Math.random() * (picks.length - i));
-    [picks[i], picks[j]] = [picks[j], picks[i]];
-    questions.push(picks[i]);
-  }
-  // If pool somehow has < 10 pairs, pad with repeats (shouldn't happen in practice).
-  while (questions.length < 10) {
-      questions.push(pool[randInt(0, pool.length - 1)]);
-  }
-
-  gr = {
-    questions, index: 0, finished: false,
-    timer: null, deadline: null,
-    startedAt: performance.now(),
-    difficulty: { id: difficulty.id, title: difficulty.title, emoji: difficulty.emoji }
-  };
-  resetGrModalUI();
-  document.getElementById('grFeedback').innerHTML = '';
-  grQuizOverlay.classList.add('show');
-  renderGrProgress();
-  nextGrQuestion();
-}
-
-function renderGrProgress() {
-  const c = document.getElementById('grProgress');
-  c.innerHTML = '';
-  for (let i = 0; i < 10; i++) {
-    const d = document.createElement('div');
-    d.className = 'gr-dot';
-    if (gr.finished && i === gr.index) d.classList.add('failed');
-    else if (i < gr.index) d.classList.add('done');
-    else if (i === gr.index) d.classList.add('current');
-    d.textContent = i + 1;
-    c.appendChild(d);
-  }
-}
-
-function nextGrQuestion() {
-  if (!gr) return;
-  if (gr.index >= 10) { finishGoldenRun(true); return; }
-  const [a, b] = gr.questions[gr.index];
-  document.getElementById('grQText').textContent = `${a} × ${b}`;
-  const diffLabel = gr.difficulty ? `${gr.difficulty.emoji} ${gr.difficulty.title} · ` : '';
-  document.getElementById('grSub').textContent = `${diffLabel}Question ${gr.index + 1} of 10`;
-  const inp = document.getElementById('grInput');
-  inp.value = '';
-  inp.disabled = false;
-  inp.classList.remove('shake');
-  document.getElementById('grSubmit').disabled = false;
-  document.getElementById('grFeedback').innerHTML = '';
-  setTimeout(() => inp.focus(), 60);
-  renderGrProgress();
-  startGrTimer(20);
-}
-
-function startGrTimer(seconds) {
-  if (gr.timer) clearInterval(gr.timer);
-  const total = seconds * 1000;
-  gr.deadline = performance.now() + total;
-  const bar = document.getElementById('grTimerBar');
-  bar.classList.remove('warn', 'danger');
-  bar.style.width = '100%';
-  gr.timer = setInterval(() => {
-    if (!gr || gr.finished) { clearInterval(gr.timer); return; }
-    const remaining = Math.max(0, gr.deadline - performance.now());
-    const pct = (remaining / total) * 100;
-    bar.style.width = pct + '%';
-    if (pct < 25)      { bar.classList.remove('warn'); bar.classList.add('danger'); }
-    else if (pct < 50) { bar.classList.add('warn'); }
-    if (remaining <= 0) {
-      clearInterval(gr.timer); gr.timer = null;
-      handleGrFail('⏱ Out of time!');
-    }
-  }, 100);
-}
-
-function submitGrAnswer() {
-  if (!gr || gr.finished) return;
-  const inp = document.getElementById('grInput');
-  const val = inp.value.trim();
-  if (val === '') {
-    inp.classList.remove('shake'); void inp.offsetWidth; inp.classList.add('shake');
-    return;
-  }
-  const [a, b] = gr.questions[gr.index];
-  const given = parseInt(val, 10);
-  const correct = a * b;
-
-  const ex = explain(a, b);
-  bumpDailyCount();
-
-  if (given === correct) {
-    // Only unlock/reveal new trick cards on correct answers.
-    const newlyUnlocked = unlockTrick(ex.id);
-    playSfx('correct');
-    if (gr.timer) { clearInterval(gr.timer); gr.timer = null; }
-    gr.index++;
-    if (gr.index >= 10) {
-      finishGoldenRun(true);
-    } else {
-      document.getElementById('grFeedback').innerHTML = `<div class="feedback good"><h3>✅ Correct!</h3></div>`;
-      inp.disabled = true;
-      document.getElementById('grSubmit').disabled = true;
-      renderGrProgress();
-      const delay = newlyUnlocked ? 1500 : 550;
-      if (newlyUnlocked) setTimeout(() => showWildAppeared(ex.id), 250);
-      setTimeout(() => {
-        if (gr && !gr.finished) nextGrQuestion();
-      }, delay);
-    }
-  } else {
-    playSfx('wrong');
-    handleGrFail(`❌ Not quite — you said ${given}.`);
-  }
-}
-
-function handleGrFail(reason) {
-  if (!gr || gr.finished) return;
-  gr.finished = true;
-  if (gr.timer) { clearInterval(gr.timer); gr.timer = null; }
-  document.getElementById('grInput').disabled = true;
-  document.getElementById('grSubmit').disabled = true;
-
-  const [a, b] = gr.questions[gr.index];
-  const ex = explain(a, b);
-
-  // Record history
-  const u = ensureUser();
-  if (!u.goldenRuns) u.goldenRuns = [];
-  u.goldenRuns.push({
-    date: new Date().toISOString(),
-    difficulty: gr.difficulty,
-    reached: gr.index,
-    won: false
-  });
-  saveState();
-
-  renderGrProgress();
-  document.getElementById('grFeedback').innerHTML = `
-    <div class="feedback bad">
-      <h3>${reason}</h3>
-      <div>You got ${gr.index} out of 10. Give it another go?</div>
-    </div>
-  `;
-  const actions = document.getElementById('grActions');
-  actions.innerHTML = `
-    <button class="btn btn-ghost" id="grClose">Close</button>
-    <button class="btn btn-golden" id="grRetry">Try again</button>
-  `;
-  document.getElementById('grClose').addEventListener('click', closeGoldenRun);
-  document.getElementById('grRetry').addEventListener('click', () => {
-    closeGoldenRun();
-    openGoldenSetup();
-  });
-}
-
-function finishGoldenRun(win) {
-  if (!gr) return;
-  gr.finished = true;
-  if (gr.timer) { clearInterval(gr.timer); gr.timer = null; }
-  if (!win) return;
-
-  const u = ensureUser();
-  u.stars = (u.stars || 0) + 1;
-  if (!u.goldenRuns) u.goldenRuns = [];
-  u.goldenRuns.push({
-    date: new Date().toISOString(),
-    difficulty: gr.difficulty,
-    reached: 10,
-    won: true,
-    durationSec: gr.startedAt ? (performance.now() - gr.startedAt) / 1000 : null
-  });
-  saveState();
-  updateStats();
-  popConfetti();
-  // second confetti burst for a bigger moment
-  setTimeout(popConfetti, 400);
-
-  // Fill all dots done
-  document.querySelectorAll('#grProgress .gr-dot').forEach(d => {
-    d.classList.remove('current', 'failed');
-    d.classList.add('done');
-  });
-
-  // Hide the quiz input row, show celebration
-  document.querySelector('#grQuizOverlay .answer-row').style.display = 'none';
-  document.getElementById('grQText').style.display = 'none';
-  document.querySelector('#grQuizOverlay .gr-timer-wrap').style.display = 'none';
-  document.getElementById('grSub').textContent = '';
-
-  document.getElementById('grFeedback').innerHTML = `
-    <div class="golden-celebration">
-      <div class="big-star">⭐</div>
-      <h3 style="margin: 10px 0 0; font-family: 'Baloo 2', sans-serif; font-size: 26px;">
-        Golden Run complete!
-      </h3>
-      <div style="color: var(--ink-soft); margin-top: 6px;">
-        ${u.name} now has <b>${u.stars}</b> ${u.stars === 1 ? 'golden star' : 'golden stars'}. ⭐
-      </div>
-    </div>
-  `;
-  const actions = document.getElementById('grActions');
-  actions.innerHTML = `
-    <button class="btn btn-ghost" id="grAgain">Another run</button>
-    <button class="btn btn-golden" id="grClose">Nice!</button>
-  `;
-  document.getElementById('grAgain').addEventListener('click', () => {
-    closeGoldenRun();
-    openGoldenSetup();
-  });
-  document.getElementById('grClose').addEventListener('click', closeGoldenRun);
-}
-
-function resetGrModalUI() {
-  document.querySelector('#grQuizOverlay .answer-row').style.display = '';
-  document.getElementById('grQText').style.display = '';
-  document.querySelector('#grQuizOverlay .gr-timer-wrap').style.display = '';
-  document.getElementById('grFeedback').innerHTML = '';
-  const actions = document.getElementById('grActions');
-  actions.innerHTML = `<button class="btn btn-ghost" id="grForfeit">Give up</button>`;
-  document.getElementById('grForfeit').addEventListener('click', onGrForfeit);
-}
-
-function onGrForfeit() {
-  if (!gr || gr.finished) { closeGoldenRun(); return; }
-  if (confirm('Give up this run? Your progress will be lost.')) closeGoldenRun();
-}
-
-function closeGoldenRun() {
-  if (gr && gr.timer) clearInterval(gr.timer);
-  gr = null;
-  grQuizOverlay.classList.remove('show');
-  resetGrModalUI();
-}
-
-document.getElementById('grSubmit').addEventListener('click', submitGrAnswer);
-document.getElementById('grInput').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') submitGrAnswer();
-});
-document.getElementById('grForfeit').addEventListener('click', onGrForfeit);
-
-
 /* ============================================================
    Daily Drill ("Today's 10") — adaptive daily practice
    ============================================================ */
@@ -5174,12 +4943,4 @@ document.getElementById('pickPegsBtn').addEventListener('click', () => {
   // Resume on the first unpicked digit; if all picked, start from 1.
   let start = 1;
   for (let d = 1; d <= 10; d++) {
-    if (typeof u.pegs[d] !== 'number') { start = d; break; }
-    if (d === 10) start = 1;
-  }
-  openPegPicker(start);
-});
-
-</script>
-</body>
-</html>
+    if (typ

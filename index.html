@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover" />
-<title>Times Table Quest — V11</title>
+<title>Times Table Quest — V12</title>
 
 <!-- PWA -->
 <link rel="manifest" href="manifest.json">
@@ -1412,7 +1412,7 @@
   <div class="brand">
     <span class="logo">×</span>
     Times Table Quest
-    <span style="font-family: 'Fredoka', sans-serif; font-size: 13px; font-weight: 600; color: var(--ink-soft); -webkit-text-fill-color: var(--ink-soft); background: var(--neutral); padding: 2px 8px; border-radius: 999px; margin-left: 6px; letter-spacing: 0.5px;">V11</span>
+    <span style="font-family: 'Fredoka', sans-serif; font-size: 13px; font-weight: 600; color: var(--ink-soft); -webkit-text-fill-color: var(--ink-soft); background: var(--neutral); padding: 2px 8px; border-radius: 999px; margin-left: 6px; letter-spacing: 0.5px;">V12</span>
   </div>
 
   <button class="user-pill" id="userPill" title="Switch player">
@@ -3059,6 +3059,31 @@ function masteryLevel(rec) {
    Central registry of every trick explain() can emit. Each trick has a stable
    id (never rename — it's a save-state key), a kid-friendly name, a mascot,
    a rarity, and a flavor line used on the collectible card. */
+/* ----- V12: priority hierarchy ---------------------------------------------
+   H = High (specific patterns + clever shortcuts; check first)
+   M = Medium (workhorse mental-math moves)
+   L = Low (so trivial there's nothing to teach — whiteboard is suppressed)
+   Within a tier, code order in allExplanations() decides specificity.
+   Anything missing from the map defaults to 'M'. */
+const TRICK_PRIORITY = {
+  // High
+  nine: 'H', ninetynine: 'H', eleven_carry: 'H', hundred: 'H',
+  teens: 'H', same_tens_ones10: 'H', tens10_same_ones: 'H', same_tens: 'H',
+  both_five: 'H', square_five: 'H', square_close: 'H', square_ten: 'H',
+  nikhilam: 'H', round_adjust: 'H', split_tens: 'H', split_place: 'H',
+  diff_squares: 'H', nikhilam_ten: 'H', halve_double: 'H',
+  factor_regroup: 'H', anchor_step: 'H',
+  // Medium
+  ten: 'M', double: 'M', four: 'M', eight: 'M',
+  five: 'M', fifty: 'M', twentyfive: 'M',
+  three: 'M', six: 'M', nine_finger: 'M', eleven_split: 'M',
+  twelve: 'M', seven_split: 'M', finger_six_ten: 'M',
+  eleven_single: 'M', square_plain: 'M', repeated_add: 'M',
+  // Low
+  zero: 'L', one: 'L',
+};
+const TRICK_TIER_RANK = { H: 0, M: 1, L: 2 };
+
 const TRICK_CATALOG = {
   zero:            { name: 'Zero the Hero',       emoji: '🦸', rarity: 'common',    flavor: 'One touch and everything vanishes.' },
   one:             { name: 'Solo Sam',            emoji: '1️⃣', rarity: 'common',    flavor: 'Whatever walks in, walks right back out.' },
@@ -3091,12 +3116,22 @@ const TRICK_CATALOG = {
   same_tens_ones10:{ name: 'Matching Mika',       emoji: '👯‍♀️', rarity: 'legendary', flavor: 'Same tens, ones add to ten — answer appears like a card trick.' },
   tens10_same_ones:{ name: 'Opposite Ollie',      emoji: '⚔️', rarity: 'legendary', flavor: 'Tens add to ten, ones match. A mirror-image miracle.' },
   nikhilam:        { name: 'Nikhilam Nick',       emoji: '🧙', rarity: 'legendary', flavor: 'Ancient Vedic wizardry for numbers near 100.' },
+  nikhilam_ten:    { name: 'Mini-Nick',           emoji: '🪄', rarity: 'rare',      flavor: 'Same Vedic move as Nick, just over a hundred sizes smaller.' },
+  diff_squares:    { name: 'Mirror Marcy',        emoji: '🪞', rarity: 'epic',      flavor: 'Squares the middle, then nicks off the gap.' },
+  anchor_step:     { name: 'Anchor Andy',         emoji: '⚓',     rarity: 'rare',      flavor: 'Starts from a fact you already know, takes one step over.' },
+  halve_double:    { name: 'Seesaw Sue',          emoji: '⚖️', rarity: 'rare',    flavor: 'Halves one side, doubles the other. The product never tilts.' },
+  factor_regroup:  { name: 'Lego Liam',           emoji: '🧱', rarity: 'rare',      flavor: 'Snaps the factors apart and rebuilds a friendlier pair.' },
+  finger_six_ten:  { name: 'Two-Hand Tony',       emoji: '🤲', rarity: 'uncommon',  flavor: 'Touch the fingers, count below, multiply above. Sixes to tens only.' },
 };
 
 /* --------------- Mental-math explanation engine ---------------
    Given a × b, pick the best trick and produce a short, kid-friendly
    step-by-step explanation. Return { id, title, steps: [string...] }. */
 function explain(a, b) {
+  // V12: delegate to allExplanations so quiz feedback uses the priority hierarchy.
+  const all = allExplanations(a, b);
+  if (all && all.length) return all[0];
+  // Fallback (shouldn't happen) — below this point is the legacy explain() body.
   const [s, l] = a <= b ? [a, b] : [b, a];   // s small, l large
   const product = a * b;
 
@@ -3414,16 +3449,20 @@ function allExplanations(a, b) {
   const other = (n) => (a === n ? b : a);
 
   // --- Single-factor specials ---
-  if (has(0)) add({ id: 'zero', title: 'Multiplying by 0', steps: [
-    'Anything times zero is zero. Always!',
-    `So ${a} × ${b} = 0.`
-  ]});
+  if (has(0)) {
+    add({ id: 'zero', title: 'Multiplying by 0', steps: [
+      'Anything times zero is zero. Always!',
+      `So ${a} × ${b} = 0.`
+    ]});
+    return out;   // V12: nothing else worth showing for ×0
+  }
   if (has(1)) {
     const L = other(1);
     add({ id: 'one', title: 'Multiplying by 1', steps: [
       'Times-one leaves a number unchanged.',
       `${a} × ${b} = ${L}.`
     ]});
+    return out;   // V12: nothing else worth showing for ×1
   }
   if (has(2)) {
     const L = other(2);
@@ -3562,6 +3601,21 @@ function allExplanations(a, b) {
     ]});
   }
 
+  // --- Finger trick for 6–10 × 6–10 (different from the ×9 finger trick) ---
+  if (s !== l && s >= 6 && s <= 10 && l >= 6 && l <= 10 && !(s === 9 || l === 9)) {
+    const downS = s - 5, downL = l - 5;        // touching + below on each hand
+    const upS = 5 - downS, upL = 5 - downL;    // above on each hand
+    const tens = (downS + downL) * 10;
+    const ones = upS * upL;
+    add({ id: 'finger_six_ten', title: 'Two-hand finger trick (6–10)', steps: [
+      `On each hand, count from the thumb: 6, 7, 8, 9, 10.`,
+      `Touch the ${s}-finger and the ${l}-finger together.`,
+      `Below + touching = ${downS} + ${downL} = ${downS+downL} → ${tens} (tens part).`,
+      `Above on each hand: ${upS} × ${upL} = ${ones} → ones part.`,
+      `${tens} + ${ones} = ${product}.`
+    ]});
+  }
+
   // --- Square tricks ---
   if (a === b) {
     if (a % 10 === 5 && a >= 5 && a <= 95) {
@@ -3655,6 +3709,18 @@ function allExplanations(a, b) {
       ]});
     }
   }
+
+  // Nikhilam base 10 — 6–9 × 6–9 corner. Cross-subtract complements from 10.
+  if (s !== l && s >= 6 && s <= 9 && l >= 6 && l <= 9) {
+    const da = 10 - s, db = 10 - l;
+    const tens = (s - db) * 10;            // == (l - da) * 10
+    const ones = da * db;                  // <= 16
+    add({ id: 'nikhilam_ten', title: 'Close to 10 (mini-Nikhilam)', steps: [
+      `${s} is ${da} below 10, ${l} is ${db} below 10.`,
+      `Cross-subtract: ${s} − ${db} = ${s-db} (or ${l} − ${da}, same answer). × 10 = ${tens}.`,
+      `${da} × ${db} = ${ones}. Add: ${tens} + ${ones} = ${product}.`
+    ]});
+  }
   if (s !== l && s >= 12 && l <= 99 && Math.floor(s/10) === Math.floor(l/10)) {
     const t = Math.floor(s/10);
     const u1 = s % 10, u2 = l % 10;
@@ -3665,6 +3731,65 @@ function allExplanations(a, b) {
       `Times the shared tens ${t}: ${s+u2} × ${t} = ${step1}. Stick a 0 on: ${step1*10}.`,
       `${u1} × ${u2} = ${back}. Add: ${step1*10} + ${back} = ${product}.`
     ]});
+  }
+
+  // --- Difference of squares: a × b = avg² − halfdiff² (when a+b is even) ---
+  if (s !== l && (s + l) % 2 === 0) {
+    const avg = (s + l) / 2;
+    const half = (l - s) / 2;
+    if (half >= 1 && half <= 10 && avg <= 100) {
+      add({ id: 'diff_squares', title: 'Mirror trick (avg² minus gap²)', steps: [
+        `${s} and ${l} sit either side of ${avg}.`,
+        `${avg}² = ${avg*avg}.`,
+        `Subtract the gap squared: ${half}² = ${half*half}. ${avg*avg} − ${half*half} = ${product}.`
+      ]});
+    }
+  }
+
+  // --- Anchor + step: when |s−l| = 1, build from the smaller square ---
+  if (s !== l && (l - s) === 1) {
+    add({ id: 'anchor_step', title: 'Anchor on a square + one step', steps: [
+      `${s} × ${l} is one step past ${s} × ${s} = ${s*s}.`,
+      `Add one more lot of ${s}: ${s*s} + ${s} = ${product}.`
+    ]});
+  }
+
+  // --- Halve and double: when one factor is even, halve it / double the other ---
+  if (s !== l && s >= 2 && (s % 2 === 0 || l % 2 === 0)) {
+    let a1 = s, b1 = l;
+    if (a1 % 2 !== 0) { const t = a1; a1 = b1; b1 = t; }   // a1 is the even one
+    // Single halve-double step (keeps the explanation short)
+    const a2 = a1 / 2, b2 = b1 * 2;
+    if (a2 >= 1 && a1 !== 1) {
+      add({ id: 'halve_double', title: 'Halve one, double the other', steps: [
+        `Halve ${a1} → ${a2}. Double ${b1} → ${b2}. The product stays the same.`,
+        `${a2} × ${b2} = ${product}.`
+      ]});
+    }
+  }
+
+  // --- Factor regroup: replace a composite factor with two friendlier factors ---
+  if (s !== l) {
+    const FACTORINGS = {
+      4:  [2,2], 6:  [2,3], 8:  [2,4], 9:  [3,3], 10: [2,5],
+      12: [3,4], 14: [2,7], 15: [3,5], 16: [4,4], 18: [2,9],
+      20: [4,5], 21: [3,7], 24: [4,6], 25: [5,5], 27: [3,9],
+      28: [4,7], 32: [4,8], 35: [5,7], 36: [6,6], 40: [5,8],
+      42: [6,7], 45: [5,9], 48: [6,8], 49: [7,7], 50: [5,10],
+      54: [6,9], 56: [7,8], 63: [7,9], 64: [8,8], 72: [8,9], 81: [9,9],
+    };
+    const pick = FACTORINGS[s] || FACTORINGS[l];
+    const target = FACTORINGS[s] ? s : (FACTORINGS[l] ? l : null);
+    const other = (target === s) ? l : s;
+    if (pick && target !== null && other !== 1 && other !== 10 && other <= 100) {
+      const [p, q] = pick;
+      const step1 = q * other;
+      add({ id: 'factor_regroup', title: 'Regroup the factors', steps: [
+        `${target} = ${p} × ${q}. So ${target} × ${other} = ${p} × ${q} × ${other}.`,
+        `${q} × ${other} = ${step1}.`,
+        `${p} × ${step1} = ${product}.`
+      ]});
+    }
   }
 
   // --- Round-then-adjust (within ±2 of a multiple of 10) ---
@@ -3721,6 +3846,14 @@ function allExplanations(a, b) {
       `${Array(s).fill(l).join(' + ')} = ${product}.`
     ]});
   }
+  // V12: stable-sort by H/M/L tier so primary trick respects the priority hierarchy.
+  out.forEach((t, i) => { t.__i = i; });
+  out.sort((x, y) => {
+    const tx = TRICK_TIER_RANK[TRICK_PRIORITY[x.id] || 'M'];
+    const ty = TRICK_TIER_RANK[TRICK_PRIORITY[y.id] || 'M'];
+    return (tx - ty) || (x.__i - y.__i);
+  });
+  out.forEach(t => { delete t.__i; });
   return out;
 }
 

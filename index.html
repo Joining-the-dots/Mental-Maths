@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover" />
-<title>Times Table Quest — V22</title>
+<title>Conway Family Learning Lab — V23</title>
 
 <!-- PWA -->
 <link rel="manifest" href="manifest.json">
@@ -1811,6 +1811,43 @@
     margin-bottom: 4px;
   }
 
+  .mp-memories {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px dashed #d6cfb3;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .mp-mem {
+    background: linear-gradient(135deg, #fff8e1, #ffe082);
+    border: 1px solid #f4c430;
+    border-radius: 8px;
+    padding: 4px 8px;
+    font-size: 18px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .mp-mem-label { font-size: 11px; color: #5a4a1a; font-weight: 600; }
+  .mp-add-mem {
+    background: white;
+    border: 1px dashed #f4c430;
+    color: #b8860b;
+    border-radius: 8px;
+    padding: 4px 8px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .mp-add-mem:hover { background: #fff8e1; }
+  .mp-mem-pick-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 8px;
+    max-height: 50vh;
+    overflow-y: auto;
+  }
+
   /* ========= V22 Memory Palace ========= */
   #palaceView { padding: 12px 4px; max-width: 1200px; margin: 0 auto; }
   #palaceView.hidden { display: none; }
@@ -1993,9 +2030,9 @@
 
 <header class="topbar">
   <div class="brand">
-    <span class="logo">×</span>
-    Times Table Quest
-    <span style="font-family: 'Fredoka', sans-serif; font-size: 13px; font-weight: 600; color: var(--ink-soft); -webkit-text-fill-color: var(--ink-soft); background: var(--neutral); padding: 2px 8px; border-radius: 999px; margin-left: 6px; letter-spacing: 0.5px;">V22</span>
+    <span class="logo">🧪</span>
+    Conway Family Learning Lab
+    <span style="font-family: 'Fredoka', sans-serif; font-size: 13px; font-weight: 600; color: var(--ink-soft); -webkit-text-fill-color: var(--ink-soft); background: var(--neutral); padding: 2px 8px; border-radius: 999px; margin-left: 6px; letter-spacing: 0.5px;">V23</span>
   </div>
 
   <button class="user-pill" id="userPill" title="Switch player">
@@ -2322,6 +2359,18 @@
   </div>
 </div>
 
+<!-- V23: Memory deposit picker -->
+<div class="overlay" id="mpMemOverlay">
+  <div class="modal" role="dialog" aria-modal="true">
+    <h2 id="mpMemTitle">Deposit a memory</h2>
+    <p class="sub" id="mpMemSub">Pick a flag fact to remember in this room.</p>
+    <div class="mp-mem-pick-grid" id="mpMemGrid"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="mpMemClose">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <!-- Place picker overlay -->
 <div class="overlay" id="mpPlaceOverlay">
   <div class="modal" role="dialog" aria-modal="true">
@@ -2377,7 +2426,7 @@
 
 <script>
 /* ================================================================
-   Times Table Quest — V3 (Golden Run + commutative grid + PWA)
+   Conway Family Learning Lab — V23
    Single-file app. Data persists in localStorage.
    ================================================================ */
 
@@ -5611,8 +5660,12 @@ function ftAnswer(picked) {
   const u = ensureUser(); ensureFlagsState(u);
   if (!u.flags.cardsLearned[q.id]) {
     u.flags.cardsLearned[q.id] = { firstSeenAt: new Date().toISOString() };
-    saveState();
   }
+  if (correct) {
+    if (!u.flags.knownFacts) u.flags.knownFacts = [];
+    if (!u.flags.knownFacts.includes(q.id)) u.flags.knownFacts.push(q.id);
+  }
+  saveState();
   // Feedback
   const fb = document.getElementById('ftFeedback');
   fb.innerHTML = correct
@@ -5983,6 +6036,16 @@ function fcMyAnswer(idx) {
   });
   document.getElementById('fcMePick').textContent = `You: ${correct ? '✅' : '❌'} ${q.optionIds[idx] ? (window.flagById(q.optionIds[idx])||{}).name||'' : ''}`;
   document.getElementById('fcMePick').className = 'me ' + (correct ? 'picked' : 'picked-wrong');
+  // V23: record this flag in the user's knownFacts bank if they got it right.
+  if (correct) {
+    const u23 = ensureUser(); migrateUser(u23);
+    if (!u23.flags) u23.flags = { best: 0, runs: [], cardsLearned: {} };
+    if (!u23.flags.knownFacts) u23.flags.knownFacts = [];
+    if (!u23.flags.knownFacts.includes(q.countryId)) {
+      u23.flags.knownFacts.push(q.countryId);
+      saveState();
+    }
+  }
   // Send to peer
   if (fcConn && fcConn.open) {
     fcConn.send({ type: 'answer', qIdx: g.qIdx, attempt: g.attempt, optionIdx: idx, t: g.myAnswer.t });
@@ -6111,6 +6174,49 @@ function fcShowFinal() {
   if (typeof popConfetti === 'function' && my > their) { popConfetti(); setTimeout(popConfetti, 400); }
 }
 
+
+
+/* ============================================================
+   V23 — Cross-app connections
+   ============================================================ */
+const MP_STARTER_UNLOCKS = 5;
+
+function masteredCellCount(u) {
+  let n = 0;
+  if (!u || !u.cells) return 0;
+  for (const k in u.cells) {
+    if (masteryLevel(u.cells[k]) === 'mastered') n++;
+  }
+  return n;
+}
+function palaceUnlocksEarned(u) {
+  return masteredCellCount(u) + MP_STARTER_UNLOCKS;
+}
+function palaceUnlocksUsed(u) {
+  if (!u || !u.palace) return 0;
+  let count = (u.palace.places || []).length;
+  (u.palace.places || []).forEach(p => count += (p.furniture || []).length);
+  return count;
+}
+function palaceUnlocksAvailable(u) {
+  return Math.max(0, palaceUnlocksEarned(u) - palaceUnlocksUsed(u));
+}
+
+/* Memory bank — flags answered correctly in tests/challenges that haven't
+   yet been deposited in any room. */
+function knownFlagFacts(u) {
+  return (u && u.flags && u.flags.knownFacts) || [];
+}
+function depositedFlagSet(u) {
+  const set = new Set();
+  if (!u || !u.palace) return set;
+  (u.palace.places || []).forEach(p => (p.memories || []).forEach(id => set.add(id)));
+  return set;
+}
+function availableFlagFacts(u) {
+  const dep = depositedFlagSet(u);
+  return knownFlagFacts(u).filter(id => !dep.has(id));
+}
 
 /* ============================================================
    V22 — Memory Palace
@@ -6251,7 +6357,15 @@ function mpUpdateHeader() {
   } else {
     const label = u.palace.context === 'custom' && u.palace.customName ? u.palace.customName : ctx.possessive(nm);
     titleEl.textContent = label;
-    statsEl.textContent = `${u.palace.places.length} place${u.palace.places.length === 1 ? '' : 's'} · ${mpTotalFurn(u)} item${mpTotalFurn(u) === 1 ? '' : 's'}`;
+    const unlocks = palaceUnlocksAvailable(u);
+    const memBank = availableFlagFacts(u).length;
+    let parts = [
+      `${u.palace.places.length} place${u.palace.places.length === 1 ? '' : 's'}`,
+      `${mpTotalFurn(u)} item${mpTotalFurn(u) === 1 ? '' : 's'}`,
+      `🔓 ${unlocks} unlock${unlocks === 1 ? '' : 's'}`,
+    ];
+    if (memBank > 0) parts.push(`💭 ${memBank} memory ready to place`);
+    statsEl.textContent = parts.join(' · ');
   }
 }
 function mpTotalFurn(u) {
@@ -6286,16 +6400,29 @@ function mpRender() {
       const dot = f.color ? `<span class="mp-color-dot" style="background:${(MP_COLORS.find(c=>c.id===f.color)||{}).hex||'#999'}"></span>` : '';
       return `<div class="mp-furn" title="${fdef.label}${f.color ? ' ('+f.color+')' : ''}">${fdef.icon}${dot}</div>`;
     }).join('');
+    const memHtml = (place.memories || []).map(id => {
+      const f = (window.flagById && window.flagById(id)) || null;
+      return f ? `<div class="mp-mem" title="${f.name} — ${f.capital}">${f.flag}<span class="mp-mem-label">${f.name}</span></div>` : '';
+    }).join('');
+    const memSection = (place.memories && place.memories.length) || availableFlagFacts(u).length > 0
+      ? `<div class="mp-memories">${memHtml}<button type="button" class="mp-add-mem" data-add-mem>💭 Deposit memory</button></div>`
+      : '';
     card.innerHTML = `
       <div class="mp-room-head">
         <span class="mp-room-icon">${def.icon}</span>
         <span class="mp-room-name">${def.label}</span>
       </div>
       <div class="mp-furniture">${furnHtml}<button type="button" class="mp-add-furn" data-add-furn>+</button></div>
+      ${memSection}
     `;
     card.querySelector('[data-add-furn]').addEventListener('click', (ev) => {
       ev.stopPropagation();
       mpOpenFurnPicker(idx);
+    });
+    const memBtn = card.querySelector('[data-add-mem]');
+    if (memBtn) memBtn.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      mpOpenMemoryPicker(idx);
     });
     roomsEl.appendChild(card);
   });
@@ -6364,7 +6491,11 @@ function mpOpenPlacePicker() {
 
 function mpAddPlace(typeId) {
   const u = ensureUser(); migrateUser(u); ensurePalace(u);
-  u.palace.places.push({ type: typeId, furniture: [] });
+  if (palaceUnlocksAvailable(u) <= 0) {
+    alert('You need an unlock token to add a new place. Master a multiplication to earn one!');
+    return;
+  }
+  u.palace.places.push({ type: typeId, furniture: [], memories: [] });
   saveState();
   mpRender();
 }
@@ -6427,6 +6558,10 @@ function mpShowColorPicker() {
 
 function mpAddFurniture(roomIdx, typeId, color) {
   const u = ensureUser(); migrateUser(u); ensurePalace(u);
+  if (palaceUnlocksAvailable(u) <= 0) {
+    alert('You need an unlock token to add furniture. Master a multiplication to earn one!');
+    return;
+  }
   const place = u.palace.places[roomIdx];
   if (!place) return;
   if (!place.furniture) place.furniture = [];
@@ -6434,6 +6569,43 @@ function mpAddFurniture(roomIdx, typeId, color) {
   saveState();
   mpFurnOverlay.classList.remove('show');
   mpRender();
+}
+
+
+const mpMemOverlay = document.getElementById('mpMemOverlay');
+document.getElementById('mpMemClose').addEventListener('click', () => mpMemOverlay.classList.remove('show'));
+mpMemOverlay.addEventListener('click', (e) => { if (e.target === mpMemOverlay) mpMemOverlay.classList.remove('show'); });
+
+function mpOpenMemoryPicker(roomIdx) {
+  const u = ensureUser(); migrateUser(u); ensurePalace(u);
+  const place = u.palace.places[roomIdx];
+  const placeDef = MP_PLACES[place.type];
+  document.getElementById('mpMemTitle').textContent = `Deposit a memory in ${placeDef.label}`;
+  const avail = availableFlagFacts(u);
+  const grid = document.getElementById('mpMemGrid');
+  grid.innerHTML = '';
+  if (avail.length === 0) {
+    document.getElementById('mpMemSub').textContent = 'No flag facts yet — answer flags correctly in a test or challenge to earn memories.';
+  } else {
+    document.getElementById('mpMemSub').textContent = 'Pick a flag fact to remember in this room.';
+    avail.forEach(id => {
+      const f = (window.flagById && window.flagById(id)) || null;
+      if (!f) return;
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'mp-place-opt';
+      b.innerHTML = `<span class="mp-icon">${f.flag}</span>${f.name}<br><small style="color:var(--ink-soft); font-size:11px;">${f.capital}</small>`;
+      b.addEventListener('click', () => {
+        if (!place.memories) place.memories = [];
+        place.memories.push(id);
+        saveState();
+        mpMemOverlay.classList.remove('show');
+        mpRender();
+      });
+      grid.appendChild(b);
+    });
+  }
+  mpMemOverlay.classList.add('show');
 }
 
 /* Re-render when the palace tab is opened. */

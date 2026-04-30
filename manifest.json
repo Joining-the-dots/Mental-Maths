@@ -1,7 +1,7 @@
 {
-  "name": "Times Table Quest",
-  "short_name": "Times Tables",
-  "description": "A fun mental-maths times tables game for kids.",
+  "name": "Conway Family Learning Lab",
+  "short_name": "Learning Lab",
+  "description": "Conway Family Learning Lab — times tables, flags, and memory palace.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

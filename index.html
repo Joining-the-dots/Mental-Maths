@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover" />
-<title>Times Table Quest — V17</title>
+<title>Times Table Quest — V22</title>
 
 <!-- PWA -->
 <link rel="manifest" href="manifest.json">
@@ -1559,6 +1559,83 @@
   }
   .wild-card .btn-dismiss:hover { transform: translateY(-1px); }
 
+  /* ========= V19 Flag challenge ========= */
+  .fc-code {
+    font-family: 'Baloo 2', monospace;
+    font-size: 48px;
+    font-weight: 700;
+    letter-spacing: 8px;
+    text-align: center;
+    color: var(--accent-2);
+    background: var(--neutral);
+    border-radius: 16px;
+    padding: 16px 12px;
+    margin: 12px 0;
+  }
+  .fc-status {
+    text-align: center;
+    color: var(--ink-soft);
+    font-size: 14px;
+    margin: 8px 0;
+    min-height: 20px;
+  }
+  .fc-input {
+    width: 100%;
+    text-align: center;
+    font-family: 'Baloo 2', monospace;
+    font-size: 36px;
+    letter-spacing: 6px;
+    text-transform: uppercase;
+    padding: 12px;
+    border: 2px solid #e8e2f6;
+    border-radius: 14px;
+    outline: none;
+  }
+  .fc-input:focus { border-color: var(--accent-2); }
+  .fc-scoreboard {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    gap: 12px;
+    align-items: center;
+    margin: 6px 0 12px;
+    text-align: center;
+  }
+  .fc-side {
+    background: white;
+    border: 2px solid #e8e2f6;
+    border-radius: 12px;
+    padding: 8px 10px;
+  }
+  .fc-side.me { border-color: var(--accent-2); background: linear-gradient(135deg,#f4efff,#fef4fb); }
+  .fc-side.them { border-color: #ff9f43; background: linear-gradient(135deg,#fff4e6,#ffeedd); }
+  .fc-side-name { font-weight: 700; font-size: 13px; color: var(--ink); }
+  .fc-side-score { font-size: 32px; font-weight: 700; color: var(--ink); line-height: 1.1; }
+  .fc-vs { font-size: 14px; color: var(--ink-soft); font-weight: 700; }
+  .fc-attempt {
+    text-align: center;
+    font-size: 12px;
+    color: var(--ink-soft);
+    margin: 4px 0;
+  }
+  .fc-pick-status {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin: 6px 0;
+    font-size: 12px;
+    text-align: center;
+  }
+  .fc-pick-status .me, .fc-pick-status .them {
+    padding: 4px 8px;
+    border-radius: 8px;
+    background: var(--neutral);
+    color: var(--ink-soft);
+  }
+  .fc-pick-status .picked { background: #c9f2d6; color: #1a5a3a; font-weight: 600; }
+  .fc-pick-status .picked-wrong { background: #ffd0d0; color: #7a2020; font-weight: 600; }
+  .ft-option.disabled { opacity: 0.4; pointer-events: none; }
+  .ft-option.locked { pointer-events: none; }
+
   /* ========= V16 Flags game ========= */
   .app-tabs {
     display: flex;
@@ -1617,22 +1694,22 @@
   .flags-group-head:hover { background: var(--neutral); }
   .flags-group-count { color: var(--ink-soft); font-size: 13px; font-weight: 400; }
   .flags-group-body {
-    padding: 12px;
+    padding: 16px;
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-    gap: 10px;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 14px;
   }
   .flags-group.collapsed .flags-group-body { display: none; }
   .flag-card {
     background: white;
     border: 1px solid #e8e2f6;
-    border-radius: 12px;
-    padding: 12px;
+    border-radius: 14px;
+    padding: 18px 14px;
     text-align: center;
     transition: transform .15s, box-shadow .15s;
   }
   .flag-card:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(0,0,0,0.08); }
-  .flag-emoji { font-size: 48px; line-height: 1.2; }
+  .flag-emoji { font-size: 110px; line-height: 1.05; display: block; margin: 4px 0 8px; }
   .flag-country { font-weight: 700; color: var(--ink); margin-top: 4px; font-size: 14px; }
   .flag-capital { color: var(--ink-soft); font-size: 12px; margin-top: 2px; }
   .flag-mnem-toggle {
@@ -1703,7 +1780,7 @@
     text-align: center;
     margin: 12px 0;
   }
-  .ft-prompt-flag { font-size: 80px; }
+  .ft-prompt-flag { font-size: 140px; line-height: 1; }
   .ft-prompt-text { font-size: 22px; font-weight: 700; color: var(--ink); margin-top: 4px; }
   .ft-prompt-sub { font-size: 13px; color: var(--ink-soft); }
   .ft-options {
@@ -1733,16 +1810,192 @@
     font-size: 13px;
     margin-bottom: 4px;
   }
+
+  /* ========= V22 Memory Palace ========= */
+  #palaceView { padding: 12px 4px; max-width: 1200px; margin: 0 auto; }
+  #palaceView.hidden { display: none; }
+  .mp-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  .mp-title { font-family: 'Baloo 2', sans-serif; font-size: 22px; font-weight: 700; color: var(--ink); }
+  .mp-stats { color: var(--ink-soft); font-size: 13px; }
+  .mp-empty {
+    background: white;
+    border: 2px dashed #e8e2f6;
+    border-radius: 16px;
+    padding: 40px 20px;
+    text-align: center;
+  }
+  .mp-empty h3 { margin: 0 0 6px; font-family: 'Baloo 2', sans-serif; font-size: 22px; }
+  .mp-empty p { color: var(--ink-soft); margin: 0 0 16px; }
+  .mp-context-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+    margin-top: 16px;
+  }
+  .mp-context-btn {
+    background: white;
+    border: 2px solid #e8e2f6;
+    border-radius: 14px;
+    padding: 18px 12px;
+    font-family: inherit;
+    font-size: 15px;
+    cursor: pointer;
+    transition: all .15s;
+  }
+  .mp-context-btn:hover { border-color: var(--accent-2); background: #f4efff; transform: translateY(-2px); }
+  .mp-context-btn .mp-icon { display: block; font-size: 36px; margin-bottom: 6px; }
+
+  .mp-floor {
+    background: linear-gradient(135deg, #f8f6ff, #fef6f0);
+    border-radius: 16px;
+    padding: 14px;
+    min-height: 240px;
+    /* fake-iso tilt: subtle skew so the grid feels spatial without true 3D */
+  }
+  .mp-rooms {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+  }
+  .mp-room {
+    background: white;
+    border: 1px solid #e1dcc9;
+    border-radius: 12px;
+    padding: 12px;
+    cursor: pointer;
+    transition: transform .15s, box-shadow .15s;
+    box-shadow: 0 4px 0 rgba(0,0,0,0.06), 0 6px 14px rgba(0,0,0,0.05);
+  }
+  .mp-room:hover { transform: translateY(-2px); box-shadow: 0 6px 0 rgba(0,0,0,0.06), 0 10px 20px rgba(0,0,0,0.08); }
+  .mp-room-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-bottom: 1px dashed #d6cfb3;
+    padding-bottom: 6px;
+    margin-bottom: 8px;
+  }
+  .mp-room-icon { font-size: 22px; }
+  .mp-room-name { font-weight: 700; color: var(--ink); }
+  .mp-furniture {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(48px, 1fr));
+    gap: 6px;
+    min-height: 30px;
+  }
+  .mp-furn {
+    aspect-ratio: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--neutral);
+    border-radius: 8px;
+    font-size: 22px;
+    position: relative;
+    cursor: pointer;
+  }
+  .mp-furn .mp-color-dot {
+    position: absolute;
+    bottom: 3px;
+    right: 3px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    border: 1.5px solid white;
+  }
+  .mp-add-furn {
+    background: transparent;
+    border: 1.5px dashed #c8c8c8;
+    color: var(--ink-soft);
+    border-radius: 8px;
+    aspect-ratio: 1;
+    cursor: pointer;
+    font-size: 22px;
+  }
+  .mp-add-furn:hover { border-color: var(--accent-2); color: var(--accent-2); }
+  .mp-add-place {
+    background: linear-gradient(135deg, #6c5ce7, #ff5aa3);
+    color: white;
+    font-family: 'Fredoka', sans-serif;
+    font-weight: 600;
+    border: none;
+    border-radius: 12px;
+    padding: 16px 20px;
+    cursor: pointer;
+    font-size: 15px;
+    margin-top: 12px;
+  }
+  .mp-place-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 8px;
+    margin: 8px 0 12px;
+    max-height: 50vh;
+    overflow-y: auto;
+  }
+  .mp-place-grid h4 {
+    grid-column: 1 / -1;
+    margin: 8px 0 0;
+    font-size: 13px;
+    color: var(--ink-soft);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .mp-place-opt {
+    background: white;
+    border: 2px solid #e8e2f6;
+    border-radius: 12px;
+    padding: 12px 8px;
+    cursor: pointer;
+    text-align: center;
+    transition: all .15s;
+    font-family: inherit;
+    font-size: 13px;
+  }
+  .mp-place-opt:hover { border-color: var(--accent-2); background: #f4efff; }
+  .mp-place-opt .mp-icon { display: block; font-size: 28px; margin-bottom: 4px; }
+  .mp-furn-pick-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
+    gap: 8px;
+    max-height: 50vh;
+    overflow-y: auto;
+  }
+  .mp-color-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: center;
+    margin-top: 8px;
+  }
+  .mp-color-swatch {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    border: 2px solid white;
+    box-shadow: 0 0 0 1px #d8d3c9;
+    cursor: pointer;
+  }
+  .mp-color-swatch:hover { transform: scale(1.1); }
+
 </style>
 </head>
 <body>
 <script src="./flags-data.js"></script>
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 
 <header class="topbar">
   <div class="brand">
     <span class="logo">×</span>
     Times Table Quest
-    <span style="font-family: 'Fredoka', sans-serif; font-size: 13px; font-weight: 600; color: var(--ink-soft); -webkit-text-fill-color: var(--ink-soft); background: var(--neutral); padding: 2px 8px; border-radius: 999px; margin-left: 6px; letter-spacing: 0.5px;">V17</span>
+    <span style="font-family: 'Fredoka', sans-serif; font-size: 13px; font-weight: 600; color: var(--ink-soft); -webkit-text-fill-color: var(--ink-soft); background: var(--neutral); padding: 2px 8px; border-radius: 999px; margin-left: 6px; letter-spacing: 0.5px;">V22</span>
   </div>
 
   <button class="user-pill" id="userPill" title="Switch player">
@@ -1762,6 +2015,7 @@
 <div class="app-tabs" id="appTabs">
   <button class="app-tab active" data-app="tt">Times Tables</button>
   <button class="app-tab" data-app="flags">🏳️ Flags</button>
+  <button class="app-tab" data-app="palace">🏰 Memory Palace</button>
 </div>
 
 <main id="ttView">
@@ -1769,7 +2023,6 @@
     <button class="btn btn-daily" id="dailyBtn">🔥 Today's 10 <span class="daily-streak-badge" id="dailyStreakBadge" style="display:none;"></span></button>
     <button class="btn btn-ghost" id="lightningBtn">⚡ Lightning</button>
     <button class="btn btn-ghost" id="trickMasterBtn">🎓 Trick Master</button>
-    <button class="btn btn-ghost" id="creaturesBtn">✦ My Pegs</button>
     <button class="btn btn-ghost" id="familyBtn">👨‍👩‍👧 Family</button>
     <button class="btn btn-ghost" id="muteBtn" title="Mute sounds">🔊</button>
   </div>
@@ -1920,6 +2173,7 @@
 <div id="flagsView" class="hidden" style="max-width: 1200px; margin: 0 auto;">
   <div class="flags-toolbar">
     <button class="btn btn-primary" id="flagsTestBtn">⚡ Test me</button>
+    <button class="btn btn-primary" id="flagsChallengeBtn" style="background:linear-gradient(135deg,#ff9f43,#ee5a24);color:white;">🤝 Challenge a friend</button>
     <button class="btn btn-ghost" id="flagsExpandAll">Expand all</button>
     <button class="btn btn-ghost" id="flagsCollapseAll">Collapse all</button>
     <div class="flags-stats">
@@ -1968,6 +2222,134 @@
   </div>
 </div>
 
+<!-- V19: Flag challenge — setup -->
+<div class="overlay" id="fcSetupOverlay">
+  <div class="modal" role="dialog" aria-modal="true">
+    <h2>🤝 Challenge a friend</h2>
+    <p class="sub">Race a friend on a different device. 10 flags, first to tap the correct answer wins the point.</p>
+    <div style="display:flex; gap:8px; margin-top:12px;">
+      <button class="btn btn-primary" id="fcStartHost" style="flex:1; padding:14px;">📡 Start a challenge</button>
+      <button class="btn btn-primary" id="fcStartJoin" style="flex:1; padding:14px; background:linear-gradient(135deg,#ff9f43,#ee5a24);">🔑 Join a challenge</button>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="fcSetupClose">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- V19: Flag challenge — host lobby -->
+<div class="overlay" id="fcHostOverlay">
+  <div class="modal" role="dialog" aria-modal="true">
+    <h2>📡 Your code</h2>
+    <p class="sub">Tell your friend this code so they can join:</p>
+    <div class="fc-code" id="fcHostCode">— — — —</div>
+    <div class="fc-status" id="fcHostStatus">Connecting…</div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="fcHostCancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- V19: Flag challenge — join input -->
+<div class="overlay" id="fcJoinOverlay">
+  <div class="modal" role="dialog" aria-modal="true">
+    <h2>🔑 Enter the code</h2>
+    <p class="sub">Ask your friend for the 4-letter code.</p>
+    <input class="fc-input" id="fcJoinInput" maxlength="4" autocomplete="off" placeholder="FROG" />
+    <div class="fc-status" id="fcJoinStatus"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="fcJoinCancel">Cancel</button>
+      <button class="btn btn-primary" id="fcJoinConnect">Join ➜</button>
+    </div>
+  </div>
+</div>
+
+<!-- V19: Flag challenge — game -->
+<div class="overlay" id="fcGameOverlay">
+  <div class="modal" role="dialog" aria-modal="true">
+    <h2 style="margin-bottom:4px;">🤝 Challenge</h2>
+    <div class="ft-progress" id="fcProgress">Question 1 of 10</div>
+    <div class="fc-scoreboard">
+      <div class="fc-side me">
+        <div class="fc-side-name" id="fcMeName">You</div>
+        <div class="fc-side-score" id="fcMeScore">0</div>
+      </div>
+      <div class="fc-vs">VS</div>
+      <div class="fc-side them">
+        <div class="fc-side-name" id="fcThemName">Friend</div>
+        <div class="fc-side-score" id="fcThemScore">0</div>
+      </div>
+    </div>
+    <div class="fc-attempt" id="fcAttempt"></div>
+    <div class="ft-prompt" id="fcPrompt"></div>
+    <div class="ft-options" id="fcOptions"></div>
+    <div class="fc-pick-status" id="fcPickStatus">
+      <div class="me" id="fcMePick">You: —</div>
+      <div class="them" id="fcThemPick">Friend: —</div>
+    </div>
+    <div id="fcFeedback" style="min-height:24px; text-align:center; font-size:14px; margin-top:6px;"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="fcGameQuit">Quit</button>
+    </div>
+  </div>
+</div>
+
+<div id="palaceView" class="hidden">
+  <div class="mp-header">
+    <div>
+      <div class="mp-title" id="mpTitle">Memory Palace</div>
+      <div class="mp-stats" id="mpStats"></div>
+    </div>
+    <div>
+      <button class="btn btn-ghost" id="mpResetBtn" style="display:none;">Reset palace</button>
+    </div>
+  </div>
+  <div id="mpEmpty" class="mp-empty">
+    <h3>What are you building?</h3>
+    <p>Pick a place you know well. You'll add rooms and furniture as you walk through it.</p>
+    <div class="mp-context-grid">
+      <button type="button" class="mp-context-btn" data-ctx="home"><span class="mp-icon">🏠</span>My home</button>
+      <button type="button" class="mp-context-btn" data-ctx="school"><span class="mp-icon">🏫</span>My school</button>
+      <button type="button" class="mp-context-btn" data-ctx="grandparents"><span class="mp-icon">👵</span>My grandparents'</button>
+      <button type="button" class="mp-context-btn" data-ctx="custom"><span class="mp-icon">✏️</span>Custom — name it</button>
+    </div>
+  </div>
+  <div id="mpBuilder" class="hidden">
+    <div class="mp-floor">
+      <div class="mp-rooms" id="mpRooms"></div>
+    </div>
+    <button type="button" class="mp-add-place" id="mpAddPlaceBtn">➕ Add next place</button>
+  </div>
+</div>
+
+<!-- Place picker overlay -->
+<div class="overlay" id="mpPlaceOverlay">
+  <div class="modal" role="dialog" aria-modal="true">
+    <h2 id="mpPlaceTitle">Where to next?</h2>
+    <p class="sub" id="mpPlaceSub">Pick the next place along your walk.</p>
+    <div class="mp-place-grid" id="mpPlaceGrid"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="mpPlaceClose">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Furniture picker overlay -->
+<div class="overlay" id="mpFurnOverlay">
+  <div class="modal" role="dialog" aria-modal="true">
+    <h2 id="mpFurnTitle">Add to room</h2>
+    <p class="sub" id="mpFurnSub"></p>
+    <div class="mp-furn-pick-grid" id="mpFurnGrid"></div>
+    <div id="mpColorPick" style="display:none; margin-top:12px;">
+      <div style="font-weight:600; text-align:center;">Pick a colour</div>
+      <div class="mp-color-row" id="mpColorRow"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="mpFurnClose">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <!-- V14: Interactive teaching modal -->
 <div class="overlay" id="interactiveTrickOverlay">
   <div class="modal it-modal" role="dialog" aria-modal="true" aria-labelledby="itTitle">
@@ -1992,40 +2374,6 @@
     </div>
   </div>
 </div>
-
-<!-- Creatures gallery -->
-<div class="overlay" id="creaturesOverlay">
-  <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="creaturesTitle">
-    <h2 id="creaturesTitle">✦ My Pegs</h2>
-    <p class="sub">Your memory-palace pegs — one per digit, 1 to 10. Pick a peg the first time you open this; master cells in that table to bring it from a faint sketch to full color and finally to glowing &quot;mastered&quot;.</p>
-    <div style="margin: 8px 0 12px;">
-      <button class="btn btn-primary" id="pickPegsBtn" style="font-size:13px;">✦ Pick / change my pegs</button>
-    </div>
-    <div class="creatures-grid" id="creaturesGrid"></div>
-    <div class="modal-actions">
-      <button class="btn btn-ghost" id="creaturesClose">Close</button>
-    </div>
-  </div>
-</div>
-
-<!-- Trick Cards gallery -->
-
-
-<!-- Peg picker wizard (Phase 2) -->
-<div class="overlay" id="pegPickerOverlay">
-  <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="pegPickerTitle">
-    <h2 id="pegPickerTitle">✦ Pick your peg for digit <span id="pegPickerDigit">1</span></h2>
-    <p class="sub">Pick the picture you want to remember for this digit. You'll picture it in your head when this digit shows up — so go with the one that feels coolest. Tap one to lock it in.</p>
-    <div class="peg-picker-dots" id="pegPickerDots"></div>
-    <div class="peg-pick-grid" id="pegPickerGrid"></div>
-    <div class="peg-picker-progress" id="pegPickerProgress">Digit 1 of 10</div>
-    <div class="modal-actions">
-      <button class="btn btn-ghost" id="pegPickerBack">← Back</button>
-      <button class="btn btn-ghost" id="pegPickerSkip">Skip for now</button>
-    </div>
-  </div>
-</div>
-
 
 <script>
 /* ================================================================
@@ -2297,502 +2645,6 @@ document.getElementById('muteBtn').addEventListener('click', () => {
    picks one option per digit on first run (or via the picker button). The
    chosen peg shows in the gallery alongside their mastery progress for
    that times-table. Same mastery model as the old creatures. */
-const PEGS = {
-  1: [
-    { name: 'Pencil', svg: `<svg viewBox="0 0 110 110">
-      <defs>
-        <linearGradient id="p1a" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#FF2E63"/><stop offset="1" stop-color="#9B0F3D"/></linearGradient>
-      </defs>
-      <rect x="42" y="22" width="26" height="60" fill="#1a1f30" stroke="#fff" stroke-width="2.5" rx="3"/>
-      <rect x="46" y="26" width="4" height="52" fill="#fff" opacity="0.25"/>
-      <rect x="42" y="22" width="26" height="8" fill="#FFD23F" stroke="#fff" stroke-width="2.5"/>
-      <polygon points="42,82 68,82 55,104" fill="#FFE4B5" stroke="#fff" stroke-width="2.5"/>
-      <polygon points="48,93 62,93 55,104" fill="url(#p1a)"/>
-      <line x1="32" y1="50" x2="38" y2="50" stroke="#00E5FF" stroke-width="2"/>
-      <line x1="72" y1="50" x2="78" y2="50" stroke="#00E5FF" stroke-width="2"/>
-      <line x1="32" y1="60" x2="36" y2="60" stroke="#00E5FF" stroke-width="2" opacity="0.5"/>
-      <line x1="74" y1="60" x2="78" y2="60" stroke="#00E5FF" stroke-width="2" opacity="0.5"/>
-    </svg>` },
-    { name: 'Candle', svg: `<svg viewBox="0 0 110 110">
-      <defs>
-        <linearGradient id="p1b" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#00E5FF"/><stop offset="0.5" stop-color="#B084FF"/><stop offset="1" stop-color="#FF2E63"/></linearGradient>
-        <radialGradient id="p1bf" cx="0.5" cy="0.5"><stop offset="0" stop-color="#fff"/><stop offset="0.4" stop-color="#00E5FF"/><stop offset="1" stop-color="#9B5DE5"/></radialGradient>
-      </defs>
-      <rect x="40" y="40" width="30" height="50" fill="#0f1320" stroke="#fff" stroke-width="2.5" rx="2"/>
-      <rect x="40" y="40" width="30" height="50" fill="url(#p1b)" opacity="0.6" rx="2"/>
-      <rect x="36" y="86" width="38" height="6" fill="#1a1f30" stroke="#fff" stroke-width="2.5"/>
-      <line x1="55" y1="40" x2="55" y2="32" stroke="#fff" stroke-width="2"/>
-      <ellipse cx="55" cy="22" rx="9" ry="13" fill="url(#p1bf)" opacity="0.95"/>
-      <ellipse cx="55" cy="20" rx="4" ry="6" fill="#fff" opacity="0.7"/>
-      <circle cx="30" cy="30" r="1.5" fill="#00E5FF"/>
-      <circle cx="80" cy="50" r="1.5" fill="#FF2E63"/>
-      <circle cx="84" cy="78" r="1" fill="#FFD23F"/>
-    </svg>` },
-    { name: 'Magic wand', svg: `<svg viewBox="0 0 110 110">
-      <defs>
-        <linearGradient id="p1c" x1="0" x2="1"><stop offset="0" stop-color="#FFD23F"/><stop offset="1" stop-color="#FF9500"/></linearGradient>
-      </defs>
-      <rect x="44" y="46" width="6" height="54" fill="#1a1f30" stroke="#fff" stroke-width="2" transform="rotate(-15 47 73)"/>
-      <polygon points="55,10 60,28 78,28 64,40 70,58 55,48 40,58 46,40 32,28 50,28" fill="url(#p1c)" stroke="#fff" stroke-width="2.5"/>
-      <circle cx="55" cy="32" r="4" fill="#fff" opacity="0.8"/>
-      <circle cx="20" cy="20" r="1" fill="#FFD23F"/>
-      <circle cx="88" cy="18" r="1.5" fill="#FFD23F"/>
-      <circle cx="92" cy="50" r="1" fill="#FFD23F"/>
-      <circle cx="14" cy="70" r="1" fill="#FFD23F"/>
-    </svg>` },
-  ],
-  2: [
-    { name: 'Swan', svg: `<svg viewBox="0 0 110 110">
-      <defs>
-        <linearGradient id="p2a" x1="0" x2="1"><stop offset="0" stop-color="#1a1f30"/><stop offset="1" stop-color="#3a2050"/></linearGradient>
-      </defs>
-      <ellipse cx="55" cy="78" rx="32" ry="10" fill="#0a0e1a"/>
-      <path d="M 28 78 Q 35 50 60 50 Q 78 50 80 38 Q 82 30 76 24 Q 70 22 70 28 Q 70 34 76 36" fill="url(#p2a)" stroke="#fff" stroke-width="2.5"/>
-      <path d="M 35 70 Q 50 60 65 64" fill="none" stroke="#B084FF" stroke-width="1.5" opacity="0.7"/>
-      <path d="M 38 75 Q 52 67 66 70" fill="none" stroke="#00E5FF" stroke-width="1.2" opacity="0.5"/>
-      <polygon points="76,28 84,28 80,33" fill="#FFD23F" stroke="#fff" stroke-width="1.5"/>
-      <circle cx="73" cy="27" r="1.5" fill="#fff"/>
-    </svg>` },
-    { name: 'Snake', svg: `<svg viewBox="0 0 110 110">
-      <defs>
-        <linearGradient id="p2b" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#1f3a1f"/><stop offset="1" stop-color="#0a1a0a"/></linearGradient>
-      </defs>
-      <path d="M 25 90 Q 25 70 45 70 Q 65 70 65 50 Q 65 30 85 30 Q 92 30 92 22" fill="none" stroke="url(#p2b)" stroke-width="14" stroke-linecap="round"/>
-      <path d="M 25 90 Q 25 70 45 70 Q 65 70 65 50 Q 65 30 85 30 Q 92 30 92 22" fill="none" stroke="#39FF6A" stroke-width="2" stroke-linecap="round" stroke-dasharray="3 4" opacity="0.8"/>
-      <ellipse cx="92" cy="20" rx="9" ry="6" fill="url(#p2b)" stroke="#39FF6A" stroke-width="1.5"/>
-      <circle cx="95" cy="18" r="1.8" fill="#FF2E63"/>
-      <line x1="86" y1="22" x2="80" y2="28" stroke="#FF2E63" stroke-width="1.5"/>
-      <line x1="86" y1="20" x2="78" y2="22" stroke="#FF2E63" stroke-width="1.5"/>
-    </svg>` },
-    { name: 'Big "2"', svg: `<svg viewBox="0 0 110 110">
-      <defs>
-        <linearGradient id="p2c" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stop-color="#00E5FF"/><stop offset="0.5" stop-color="#B084FF"/><stop offset="1" stop-color="#FF2E63"/></linearGradient>
-      </defs>
-      <text x="22" y="92" font-size="92" font-weight="900" font-family="Inter, sans-serif" fill="url(#p2c)" stroke="#fff" stroke-width="1.5">2</text>
-      <circle cx="20" cy="22" r="1.5" fill="#fff"/>
-      <circle cx="92" cy="40" r="1" fill="#fff"/>
-    </svg>` },
-  ],
-  3: [
-    { name: 'Heart', svg: `<svg viewBox="0 0 110 110">
-      <defs>
-        <linearGradient id="p3a" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stop-color="#FF2E63"/><stop offset="0.5" stop-color="#B084FF"/><stop offset="1" stop-color="#00E5FF"/></linearGradient>
-      </defs>
-      <path d="M 55 92 C 25 70 18 45 32 32 C 42 22 52 28 55 38 C 58 28 68 22 78 32 C 92 45 85 70 55 92 Z" fill="url(#p3a)" stroke="#fff" stroke-width="2.5"/>
-      <path d="M 55 92 C 25 70 18 45 32 32 C 42 22 52 28 55 38" fill="none" stroke="#fff" stroke-width="2" opacity="0.4"/>
-      <ellipse cx="40" cy="42" rx="5" ry="3" fill="#fff" opacity="0.5" transform="rotate(-30 40 42)"/>
-    </svg>` },
-    { name: 'Butterfly', svg: `<svg viewBox="0 0 110 110">
-      <defs>
-        <linearGradient id="p3b1" x1="0" x2="1"><stop offset="0" stop-color="#00E5FF"/><stop offset="1" stop-color="#9B5DE5"/></linearGradient>
-        <linearGradient id="p3b2" x1="0" x2="1"><stop offset="0" stop-color="#FF2E63"/><stop offset="1" stop-color="#FFD23F"/></linearGradient>
-      </defs>
-      <line x1="55" y1="30" x2="55" y2="80" stroke="#fff" stroke-width="2.5"/>
-      <path d="M 55 38 Q 30 22 22 40 Q 18 58 36 58 Q 50 58 55 50" fill="url(#p3b1)" stroke="#fff" stroke-width="2.5"/>
-      <path d="M 55 38 Q 80 22 88 40 Q 92 58 74 58 Q 60 58 55 50" fill="url(#p3b2)" stroke="#fff" stroke-width="2.5"/>
-      <path d="M 55 60 Q 32 60 26 78 Q 22 88 38 86 Q 50 84 55 76" fill="url(#p3b2)" stroke="#fff" stroke-width="2.5"/>
-      <path d="M 55 60 Q 78 60 84 78 Q 88 88 72 86 Q 60 84 55 76" fill="url(#p3b1)" stroke="#fff" stroke-width="2.5"/>
-      <circle cx="55" cy="32" r="3" fill="#1a1f30" stroke="#fff" stroke-width="2"/>
-    </svg>` },
-    { name: 'Mountains', svg: `<svg viewBox="0 0 110 110">
-      <defs>
-        <linearGradient id="p3c" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#FF2E63"/><stop offset="0.5" stop-color="#9B5DE5"/><stop offset="1" stop-color="#1a1f30"/></linearGradient>
-      </defs>
-      <rect x="0" y="0" width="110" height="110" fill="url(#p3c)" opacity="0.15" rx="6"/>
-      <circle cx="78" cy="28" r="9" fill="#FFD23F" opacity="0.9"/>
-      <polygon points="10,90 35,40 55,68 70,50 100,90" fill="#1a1f30" stroke="#fff" stroke-width="2.5"/>
-      <polygon points="35,40 42,52 30,52" fill="#fff" opacity="0.9"/>
-      <polygon points="70,50 75,58 65,58" fill="#fff" opacity="0.7"/>
-      <line x1="0" y1="92" x2="110" y2="92" stroke="#FF2E63" stroke-width="1.5" opacity="0.5"/>
-    </svg>` },
-  ],
-  4: [
-    { name: 'Sailboat', svg: `<svg viewBox="0 0 110 110">
-      <defs>
-        <linearGradient id="p4a" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#FF2E63"/><stop offset="1" stop-color="#9B5DE5"/></linearGradient>
-      </defs>
-      <path d="M 18 72 Q 55 78 92 72 L 86 88 L 24 88 Z" fill="#1a1f30" stroke="#fff" stroke-width="2.5"/>
-      <line x1="55" y1="20" x2="55" y2="72" stroke="#fff" stroke-width="2.5"/>
-      <polygon points="55,20 55,68 22,68" fill="url(#p4a)" stroke="#fff" stroke-width="2.5"/>
-      <polygon points="55,28 80,68 55,68" fill="#00E5FF" stroke="#fff" stroke-width="2.5" opacity="0.85"/>
-      <line x1="0" y1="94" x2="110" y2="94" stroke="#00E5FF" stroke-width="1" opacity="0.4"/>
-    </svg>` },
-    { name: 'Kite', svg: `<svg viewBox="0 0 110 110">
-      <defs>
-        <linearGradient id="p4b" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stop-color="#00E5FF"/><stop offset="0.5" stop-color="#B084FF"/><stop offset="1" stop-color="#FF2E63"/></linearGradient>
-      </defs>
-      <polygon points="55,12 90,46 55,80 20,46" fill="url(#p4b)" stroke="#fff" stroke-width="2.5"/>
-      <line x1="55" y1="12" x2="55" y2="80" stroke="#fff" stroke-width="1.5" opacity="0.5"/>
-      <line x1="20" y1="46" x2="90" y2="46" stroke="#fff" stroke-width="1.5" opacity="0.5"/>
-      <path d="M 55 80 Q 50 90 55 96 Q 60 102 55 104" fill="none" stroke="#fff" stroke-width="2"/>
-      <line x1="50" y1="86" x2="46" y2="86" stroke="#FFD23F" stroke-width="2"/>
-      <line x1="58" y1="92" x2="62" y2="92" stroke="#FFD23F" stroke-width="2"/>
-      <line x1="52" y1="100" x2="48" y2="100" stroke="#FFD23F" stroke-width="2"/>
-    </svg>` },
-    { name: 'Throne', svg: `<svg viewBox="0 0 110 110">
-      <defs>
-        <linearGradient id="p4c" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#3a2a50"/><stop offset="1" stop-color="#1a1f30"/></linearGradient>
-      </defs>
-      <rect x="28" y="14" width="54" height="50" fill="url(#p4c)" stroke="#fff" stroke-width="2.5" rx="3"/>
-      <polygon points="28,14 38,4 72,4 82,14" fill="#FFD23F" stroke="#fff" stroke-width="2.5"/>
-      <circle cx="45" cy="9" r="2" fill="#FF2E63"/>
-      <circle cx="55" cy="9" r="2" fill="#00E5FF"/>
-      <circle cx="65" cy="9" r="2" fill="#FFD23F"/>
-      <rect x="32" y="60" width="46" height="38" fill="#1a1f30" stroke="#fff" stroke-width="2.5"/>
-      <rect x="38" y="68" width="34" height="6" fill="#FF2E63" opacity="0.7"/>
-      <rect x="32" y="98" width="46" height="6" fill="#1a1f30" stroke="#fff" stroke-width="2.5"/>
-      <rect x="36" y="104" width="6" height="4" fill="#1a1f30" stroke="#fff" stroke-width="2"/>
-      <rect x="68" y="104" width="6" height="4" fill="#1a1f30" stroke="#fff" stroke-width="2"/>
-    </svg>` },
-  ],
-  5: [
-    { name: 'Gauntlet', svg: `<svg viewBox="0 0 110 110">
-      <defs>
-        <linearGradient id="p5a" x1="0" x2="1"><stop offset="0" stop-color="#9aa6c0"/><stop offset="0.5" stop-color="#fff"/><stop offset="1" stop-color="#5a6680"/></linearGradient>
-      </defs>
-      <path d="M 38 90 L 38 50 Q 38 38 50 38 L 50 30 Q 50 22 58 22 Q 66 22 66 30 L 66 38 Q 78 38 78 50 L 78 90 Z" fill="url(#p5a)" stroke="#1a1f30" stroke-width="2.5"/>
-      <rect x="42" y="60" width="32" height="3" fill="#1a1f30"/>
-      <rect x="42" y="68" width="32" height="3" fill="#1a1f30"/>
-      <rect x="42" y="76" width="32" height="3" fill="#1a1f30"/>
-      <circle cx="48" cy="56" r="2" fill="#FF2E63"/>
-      <circle cx="58" cy="56" r="2" fill="#FF2E63"/>
-      <circle cx="68" cy="56" r="2" fill="#FF2E63"/>
-      <line x1="58" y1="22" x2="58" y2="14" stroke="#00E5FF" stroke-width="2"/>
-      <line x1="50" y1="20" x2="46" y2="14" stroke="#00E5FF" stroke-width="2"/>
-      <line x1="66" y1="20" x2="70" y2="14" stroke="#00E5FF" stroke-width="2"/>
-    </svg>` },
-    { name: 'Seahorse', svg: `<svg viewBox="0 0 110 110">
-      <defs>
-        <linearGradient id="p5b" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#00E5FF"/><stop offset="1" stop-color="#9B5DE5"/></linearGradient>
-      </defs>
-      <path d="M 60 18 Q 75 18 75 32 Q 75 42 65 48 Q 55 54 55 68 Q 55 80 45 84 Q 38 86 38 92 Q 38 98 44 98" fill="none" stroke="url(#p5b)" stroke-width="11" stroke-linecap="round"/>
-      <circle cx="68" cy="28" r="3" fill="#FF2E63"/>
-      <line x1="58" y1="32" x2="55" y2="36" stroke="#fff" stroke-width="2"/>
-      <line x1="62" y1="42" x2="58" y2="44" stroke="#fff" stroke-width="2"/>
-      <line x1="58" y1="56" x2="54" y2="58" stroke="#fff" stroke-width="2"/>
-      <line x1="46" y1="74" x2="42" y2="76" stroke="#fff" stroke-width="2"/>
-      <path d="M 75 22 L 82 18 L 80 24 L 86 22" fill="none" stroke="#FFD23F" stroke-width="2" stroke-linecap="round"/>
-    </svg>` },
-    { name: 'Star', svg: `<svg viewBox="0 0 110 110">
-      <defs>
-        <linearGradient id="p5c" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stop-color="#FFD23F"/><stop offset="1" stop-color="#FF9500"/></linearGradient>
-        <radialGradient id="p5cg" cx="0.5" cy="0.5"><stop offset="0" stop-color="#FFD23F" stop-opacity="0.5"/><stop offset="1" stop-color="#FFD23F" stop-opacity="0"/></radialGradient>
-      </defs>
-      <circle cx="55" cy="55" r="50" fill="url(#p5cg)"/>
-      <polygon points="55,8 67,42 102,42 73,62 84,96 55,76 26,96 37,62 8,42 43,42" fill="url(#p5c)" stroke="#fff" stroke-width="2.5"/>
-      <polygon points="55,20 62,42 84,42 67,55 73,76 55,64" fill="#fff" opacity="0.35"/>
-    </svg>` },
-  ],
-  6: [
-    { name: 'Cherries', svg: `<svg viewBox="0 0 110 110">
-      <defs>
-        <radialGradient id="p6a" cx="0.35" cy="0.3"><stop offset="0" stop-color="#fff"/><stop offset="0.3" stop-color="#FF2E63"/><stop offset="1" stop-color="#7a0a2a"/></radialGradient>
-        <radialGradient id="p6a2" cx="0.35" cy="0.3"><stop offset="0" stop-color="#fff"/><stop offset="0.3" stop-color="#9B5DE5"/><stop offset="1" stop-color="#3a1a5a"/></radialGradient>
-      </defs>
-      <path d="M 35 78 Q 30 50 50 25" fill="none" stroke="#39FF6A" stroke-width="2.5"/>
-      <path d="M 75 78 Q 80 50 60 25" fill="none" stroke="#39FF6A" stroke-width="2.5"/>
-      <path d="M 50 25 Q 55 20 60 25" fill="none" stroke="#39FF6A" stroke-width="2.5"/>
-      <ellipse cx="35" cy="78" rx="18" ry="20" fill="url(#p6a)" stroke="#fff" stroke-width="2.5"/>
-      <ellipse cx="75" cy="78" rx="18" ry="20" fill="url(#p6a2)" stroke="#fff" stroke-width="2.5"/>
-      <ellipse cx="28" cy="70" rx="5" ry="3" fill="#fff" opacity="0.6"/>
-      <ellipse cx="68" cy="70" rx="5" ry="3" fill="#fff" opacity="0.6"/>
-    </svg>` },
-    { name: 'Elephant', svg: `<svg viewBox="0 0 110 110">
-      <defs>
-        <linearGradient id="p6b" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#3a3550"/><stop offset="1" stop-color="#1a1530"/></linearGradient>
-      </defs>
-      <path d="M 22 76 Q 22 50 42 46 Q 50 30 65 32 Q 85 34 88 56 Q 90 80 75 86 L 75 96 L 65 96 L 65 88 L 50 88 L 50 96 L 40 96 L 40 86 Q 28 84 22 76 Z" fill="url(#p6b)" stroke="#fff" stroke-width="2.5"/>
-      <path d="M 32 60 L 28 50 L 24 56 M 38 50 L 36 38 L 30 44" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
-      <circle cx="78" cy="50" r="2.5" fill="#FF2E63"/>
-      <circle cx="84" cy="56" r="1.5" fill="#FFD23F"/>
-      <line x1="80" y1="64" x2="86" y2="62" stroke="#00E5FF" stroke-width="1.5"/>
-      <line x1="82" y1="70" x2="88" y2="70" stroke="#00E5FF" stroke-width="1.5"/>
-    </svg>` },
-    { name: 'Golf club', svg: `<svg viewBox="0 0 110 110">
-      <defs>
-        <linearGradient id="p6c" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#9aa6c0"/></linearGradient>
-      </defs>
-      <line x1="22" y1="14" x2="60" y2="100" stroke="#1a1f30" stroke-width="6" stroke-linecap="round"/>
-      <line x1="22" y1="14" x2="60" y2="100" stroke="#fff" stroke-width="2" stroke-linecap="round" opacity="0.4"/>
-      <path d="M 14 8 Q 14 26 30 22 Q 32 14 26 6 Z" fill="url(#p6c)" stroke="#1a1f30" stroke-width="2.5"/>
-      <line x1="18" y1="14" x2="26" y2="14" stroke="#1a1f30" stroke-width="1.2"/>
-      <line x1="20" y1="18" x2="24" y2="18" stroke="#1a1f30" stroke-width="1.2"/>
-      <circle cx="60" cy="100" r="4" fill="#FFD23F" stroke="#1a1f30" stroke-width="1.5"/>
-      <circle cx="78" cy="20" r="2" fill="#00E5FF"/>
-      <circle cx="84" cy="40" r="1.5" fill="#FF2E63"/>
-    </svg>` },
-  ],
-  7: [
-    { name: 'Boomerang', svg: `<svg viewBox="0 0 110 110">
-      <defs>
-        <linearGradient id="p7a" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stop-color="#FF2E63"/><stop offset="1" stop-color="#9B5DE5"/></linearGradient>
-      </defs>
-      <path d="M 18 50 Q 18 22 50 22 L 92 22 Q 70 30 60 50 Q 52 38 36 38 Q 22 38 22 50 Z" fill="url(#p7a)" stroke="#fff" stroke-width="2.5"/>
-      <path d="M 30 36 L 86 26" stroke="#fff" stroke-width="1.5" opacity="0.4"/>
-      <path d="M 14 60 Q 30 70 50 65" fill="none" stroke="#00E5FF" stroke-width="2" stroke-dasharray="4 3" opacity="0.7"/>
-      <path d="M 12 72 Q 28 82 48 78" fill="none" stroke="#00E5FF" stroke-width="1.5" stroke-dasharray="3 3" opacity="0.5"/>
-      <path d="M 10 84 Q 26 92 46 90" fill="none" stroke="#00E5FF" stroke-width="1" stroke-dasharray="2 3" opacity="0.4"/>
-    </svg>` },
-    { name: 'Lightsaber', svg: `<svg viewBox="0 0 110 110">
-      <defs>
-        <linearGradient id="p7b" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#fff"/><stop offset="0.4" stop-color="#39FF6A"/><stop offset="1" stop-color="#0a3a18"/></linearGradient>
-      </defs>
-      <rect x="50" y="60" width="10" height="34" fill="#1a1f30" stroke="#fff" stroke-width="2.5" rx="2"/>
-      <rect x="48" y="86" width="14" height="6" fill="#9aa6c0" stroke="#fff" stroke-width="2"/>
-      <rect x="52" y="68" width="6" height="2" fill="#FFD23F"/>
-      <rect x="52" y="74" width="6" height="2" fill="#FFD23F"/>
-      <rect x="46" y="58" width="18" height="4" fill="#5a6680" stroke="#fff" stroke-width="2"/>
-      <rect x="51" y="6" width="8" height="54" fill="url(#p7b)" stroke="#fff" stroke-width="2" rx="3"/>
-      <rect x="53" y="10" width="2" height="44" fill="#fff" opacity="0.7"/>
-      <ellipse cx="55" cy="6" rx="6" ry="3" fill="#fff" opacity="0.9"/>
-    </svg>` },
-    { name: 'Cliff', svg: `<svg viewBox="0 0 110 110">
-      <defs>
-        <linearGradient id="p7c" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#FFD23F"/><stop offset="0.5" stop-color="#FF9500"/><stop offset="1" stop-color="#5a1a0a"/></linearGradient>
-      </defs>
-      <rect x="0" y="0" width="110" height="110" fill="url(#p7c)" opacity="0.18" rx="6"/>
-      <circle cx="20" cy="20" r="8" fill="#FFD23F" opacity="0.85"/>
-      <polygon points="0,98 20,70 30,80 45,55 60,75 75,60 95,82 110,72 110,110 0,110" fill="#1a1f30" stroke="#fff" stroke-width="2.5"/>
-      <path d="M 30 80 L 32 75 L 28 78 Z" fill="#fff" opacity="0.3"/>
-      <path d="M 60 75 L 62 70 L 58 73 Z" fill="#fff" opacity="0.3"/>
-      <line x1="0" y1="100" x2="110" y2="100" stroke="#FF2E63" stroke-width="1.5" opacity="0.4"/>
-    </svg>` },
-  ],
-  8: [
-    { name: 'Snowman', svg: `<svg viewBox="0 0 110 110">
-      <defs>
-        <radialGradient id="p8a" cx="0.5" cy="0.4"><stop offset="0" stop-color="#fff"/><stop offset="0.7" stop-color="#d8e0f5"/><stop offset="1" stop-color="#8090b0"/></radialGradient>
-      </defs>
-      <ellipse cx="55" cy="86" rx="26" ry="14" fill="url(#p8a)" stroke="#1a1f30" stroke-width="2.5"/>
-      <ellipse cx="55" cy="58" rx="20" ry="14" fill="url(#p8a)" stroke="#1a1f30" stroke-width="2.5"/>
-      <ellipse cx="55" cy="32" rx="14" ry="13" fill="url(#p8a)" stroke="#1a1f30" stroke-width="2.5"/>
-      <rect x="40" y="20" width="30" height="6" fill="#1a1f30"/>
-      <rect x="36" y="14" width="38" height="6" fill="#FF2E63" stroke="#1a1f30" stroke-width="2"/>
-      <rect x="38" y="29" width="34" height="6" fill="#1a1f30" rx="2"/>
-      <rect x="40" y="30" width="12" height="4" fill="#00E5FF" rx="1"/>
-      <rect x="58" y="30" width="12" height="4" fill="#00E5FF" rx="1"/>
-      <line x1="52" y1="32" x2="58" y2="32" stroke="#1a1f30" stroke-width="2"/>
-      <polygon points="55,40 53,44 57,44" fill="#FF9500"/>
-      <circle cx="48" cy="56" r="2" fill="#1a1f30"/>
-      <circle cx="62" cy="56" r="2" fill="#1a1f30"/>
-      <circle cx="50" cy="84" r="1.5" fill="#1a1f30"/>
-      <circle cx="60" cy="84" r="1.5" fill="#1a1f30"/>
-    </svg>` },
-    { name: 'Hourglass', svg: `<svg viewBox="0 0 110 110">
-      <defs>
-        <linearGradient id="p8b" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#FFD23F"/><stop offset="1" stop-color="#FF2E63"/></linearGradient>
-      </defs>
-      <rect x="22" y="14" width="66" height="6" fill="#9aa6c0" stroke="#fff" stroke-width="2"/>
-      <rect x="22" y="90" width="66" height="6" fill="#9aa6c0" stroke="#fff" stroke-width="2"/>
-      <path d="M 28 20 L 82 20 Q 60 50 55 55 Q 50 50 28 20 Z" fill="#1a1f30" stroke="#fff" stroke-width="2.5"/>
-      <path d="M 28 90 L 82 90 Q 60 60 55 55 Q 50 60 28 90 Z" fill="#1a1f30" stroke="#fff" stroke-width="2.5"/>
-      <path d="M 32 24 L 78 24 Q 60 48 55 53 Q 50 48 32 24 Z" fill="url(#p8b)" opacity="0.85"/>
-      <circle cx="55" cy="60" r="3" fill="#FFD23F"/>
-      <circle cx="55" cy="68" r="2.5" fill="#FFD23F"/>
-      <circle cx="55" cy="76" r="2" fill="#FFD23F"/>
-      <circle cx="55" cy="82" r="1.5" fill="#FFD23F"/>
-    </svg>` },
-    { name: 'Octopus', svg: `<svg viewBox="0 0 110 110">
-      <defs>
-        <radialGradient id="p8c" cx="0.5" cy="0.3"><stop offset="0" stop-color="#FF2E63"/><stop offset="1" stop-color="#5a0a2a"/></radialGradient>
-      </defs>
-      <path d="M 30 80 Q 28 50 55 40 Q 82 50 80 80" fill="url(#p8c)" stroke="#fff" stroke-width="2.5"/>
-      <path d="M 30 80 Q 22 90 16 96 Q 22 88 26 84" fill="url(#p8c)" stroke="#fff" stroke-width="2"/>
-      <path d="M 40 88 Q 32 100 26 104" fill="url(#p8c)" stroke="#fff" stroke-width="2"/>
-      <path d="M 50 92 Q 46 104 42 108" fill="url(#p8c)" stroke="#fff" stroke-width="2"/>
-      <path d="M 60 92 Q 64 104 68 108" fill="url(#p8c)" stroke="#fff" stroke-width="2"/>
-      <path d="M 70 88 Q 78 100 84 104" fill="url(#p8c)" stroke="#fff" stroke-width="2"/>
-      <path d="M 80 80 Q 88 90 94 96 Q 88 88 84 84" fill="url(#p8c)" stroke="#fff" stroke-width="2"/>
-      <ellipse cx="44" cy="58" rx="3.5" ry="4" fill="#fff"/><ellipse cx="44" cy="59" rx="2" ry="2.5" fill="#1a1f30"/>
-      <ellipse cx="64" cy="58" rx="3.5" ry="4" fill="#fff"/><ellipse cx="64" cy="59" rx="2" ry="2.5" fill="#1a1f30"/>
-      <path d="M 48 70 Q 54 73 60 70" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
-      <ellipse cx="48" cy="48" rx="6" ry="2" fill="#fff" opacity="0.4"/>
-    </svg>` },
-  ],
-  9: [
-    { name: 'Balloon', svg: `<svg viewBox="0 0 110 110">
-      <defs>
-        <radialGradient id="p9a" cx="0.4" cy="0.3"><stop offset="0" stop-color="#fff"/><stop offset="0.3" stop-color="#FF2E63"/><stop offset="1" stop-color="#5a0a2a"/></radialGradient>
-      </defs>
-      <ellipse cx="55" cy="40" rx="26" ry="32" fill="url(#p9a)" stroke="#fff" stroke-width="2.5"/>
-      <polygon points="50,70 60,70 55,80" fill="#1a1f30" stroke="#fff" stroke-width="2"/>
-      <path d="M 55 80 Q 60 90 50 96 Q 60 98 55 108" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
-      <ellipse cx="44" cy="28" rx="6" ry="9" fill="#fff" opacity="0.55"/>
-      <circle cx="20" cy="22" r="1.5" fill="#fff"/>
-      <circle cx="92" cy="50" r="1" fill="#fff"/>
-    </svg>` },
-    { name: 'Tadpole', svg: `<svg viewBox="0 0 110 110">
-      <defs>
-        <linearGradient id="p9b" x1="0" x2="1"><stop offset="0" stop-color="#1a1f30"/><stop offset="1" stop-color="#3a3550"/></linearGradient>
-      </defs>
-      <ellipse cx="40" cy="60" rx="22" ry="18" fill="url(#p9b)" stroke="#fff" stroke-width="2.5"/>
-      <path d="M 60 60 Q 78 50 88 60 Q 84 64 88 70 Q 80 64 60 64" fill="url(#p9b)" stroke="#fff" stroke-width="2.5"/>
-      <ellipse cx="32" cy="54" rx="3" ry="4" fill="#fff"/>
-      <circle cx="32" cy="55" r="1.8" fill="#1a1f30"/>
-      <ellipse cx="30" cy="52" rx="0.8" ry="1" fill="#fff"/>
-      <path d="M 25 68 Q 32 71 38 68" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/>
-      <line x1="22" y1="46" x2="28" y2="42" stroke="#00E5FF" stroke-width="1.5"/>
-      <line x1="56" y1="50" x2="60" y2="46" stroke="#00E5FF" stroke-width="1.2"/>
-      <line x1="56" y1="74" x2="60" y2="78" stroke="#00E5FF" stroke-width="1.2"/>
-    </svg>` },
-    { name: 'Lollipop', svg: `<svg viewBox="0 0 110 110">
-      <defs>
-        <linearGradient id="p9c" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#FF2E63"/><stop offset="0.5" stop-color="#FFD23F"/><stop offset="1" stop-color="#00E5FF"/></linearGradient>
-      </defs>
-      <line x1="55" y1="60" x2="55" y2="100" stroke="#9aa6c0" stroke-width="4"/>
-      <line x1="55" y1="60" x2="55" y2="100" stroke="#fff" stroke-width="1.5" opacity="0.6"/>
-      <circle cx="55" cy="40" r="32" fill="#1a1f30" stroke="#fff" stroke-width="2.5"/>
-      <path d="M 55 40 m -22 0 a 22 22 0 1 1 44 0 a 14 14 0 1 1 -28 0 a 8 8 0 1 1 16 0" fill="none" stroke="url(#p9c)" stroke-width="5" stroke-linecap="round"/>
-      <ellipse cx="44" cy="28" rx="5" ry="3" fill="#fff" opacity="0.4"/>
-    </svg>` },
-  ],
-  10: [
-    { name: 'Bat & ball', svg: `<svg viewBox="0 0 110 110">
-      <defs>
-        <linearGradient id="p10a" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#9aa6c0"/><stop offset="1" stop-color="#3a3550"/></linearGradient>
-        <radialGradient id="p10ab" cx="0.4" cy="0.3"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#aab5c8"/></radialGradient>
-      </defs>
-      <rect x="30" y="80" width="60" height="10" fill="url(#p10a)" stroke="#fff" stroke-width="2.5" rx="3" transform="rotate(-30 60 85)"/>
-      <rect x="20" y="92" width="14" height="14" fill="#1a1f30" stroke="#fff" stroke-width="2" rx="2" transform="rotate(-30 27 99)"/>
-      <circle cx="32" cy="32" r="18" fill="url(#p10ab)" stroke="#1a1f30" stroke-width="2.5"/>
-      <path d="M 22 28 Q 32 36 42 28" fill="none" stroke="#FF2E63" stroke-width="2" stroke-linecap="round"/>
-      <path d="M 22 36 Q 32 42 42 36" fill="none" stroke="#FF2E63" stroke-width="2" stroke-linecap="round"/>
-      <line x1="20" y1="22" x2="44" y2="42" stroke="#FF2E63" stroke-width="1.5" opacity="0.5"/>
-    </svg>` },
-    { name: 'Knight (chess)', svg: `<svg viewBox="0 0 110 110">
-      <defs>
-        <linearGradient id="p10b" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#1a1f30"/><stop offset="1" stop-color="#0a0e1a"/></linearGradient>
-      </defs>
-      <rect x="20" y="92" width="70" height="12" fill="#1a1f30" stroke="#fff" stroke-width="2.5" rx="3"/>
-      <rect x="22" y="95" width="66" height="2" fill="#FFD23F"/>
-      <path d="M 30 92 L 30 60 Q 30 40 48 30 Q 52 26 50 22 Q 48 18 52 18 L 80 18 Q 86 18 86 28 Q 86 38 80 42 Q 74 46 78 56 Q 80 64 80 92" fill="url(#p10b)" stroke="#fff" stroke-width="2.5"/>
-      <circle cx="74" cy="32" r="1.8" fill="#fff"/>
-      <ellipse cx="68" cy="38" rx="4" ry="2" fill="#FF2E63" transform="rotate(-15 68 38)"/>
-      <line x1="60" y1="50" x2="74" y2="50" stroke="#fff" stroke-width="1.5" opacity="0.6"/>
-      <line x1="55" y1="60" x2="76" y2="60" stroke="#fff" stroke-width="1.5" opacity="0.4"/>
-    </svg>` },
-    { name: 'Robot', svg: `<svg viewBox="0 0 110 110">
-      <defs>
-        <linearGradient id="p10c" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#9aa6c0"/><stop offset="1" stop-color="#3a3550"/></linearGradient>
-      </defs>
-      <rect x="32" y="22" width="46" height="38" fill="url(#p10c)" stroke="#fff" stroke-width="2.5" rx="6"/>
-      <rect x="42" y="60" width="26" height="6" fill="#1a1f30" stroke="#fff" stroke-width="2"/>
-      <rect x="36" y="66" width="38" height="32" fill="url(#p10c)" stroke="#fff" stroke-width="2.5" rx="4"/>
-      <rect x="38" y="32" width="34" height="14" fill="#1a1f30" rx="3"/>
-      <rect x="48" y="36" width="14" height="6" fill="#00E5FF" rx="2"/>
-      <line x1="44" y1="38" x2="50" y2="38" stroke="#fff" stroke-width="0.8" opacity="0.6"/>
-      <circle cx="50" cy="78" r="3" fill="#FF2E63"/>
-      <circle cx="60" cy="78" r="3" fill="#FFD23F"/>
-      <line x1="42" y1="88" x2="68" y2="88" stroke="#fff" stroke-width="1.5" opacity="0.5"/>
-      <rect x="40" y="14" width="3" height="10" fill="#fff"/>
-      <circle cx="41.5" cy="13" r="2.5" fill="#FF2E63"/>
-      <rect x="68" y="14" width="3" height="10" fill="#fff"/>
-      <circle cx="69.5" cy="13" r="2.5" fill="#00E5FF"/>
-    </svg>` },
-  ],
-};
-
-/* Returns true if the user has picked all 10 pegs. */
-function pegsAllPicked(u) {
-  if (!u || !u.pegs) return false;
-  for (let d = 1; d <= 10; d++) {
-    if (typeof u.pegs[d] !== 'number') return false;
-  }
-  return true;
-}
-
-/* Get the chosen peg for digit d, or null if not picked. */
-function chosenPeg(u, d) {
-  if (!u || !u.pegs) return null;
-  const idx = u.pegs[d];
-  if (typeof idx !== 'number') return null;
-  return PEGS[d] && PEGS[d][idx] ? PEGS[d][idx] : null;
-}
-
-
-/* --------------- Creatures collection ---------------
-   One creature per times-table (×1..×10). Each has three stages (egg,
-   juvenile, adult) driven by how many of its 100 cells are mastered. */
-const CREATURES = [
-  { table: 1,  name: 'Uno',        stages: ['🥚', '🐤', '🐥'], tag: 'The starter' },
-  { table: 2,  name: 'Twinwing',   stages: ['🐛', '🐞', '🦋'], tag: 'Doubles into beauty' },
-  { table: 3,  name: 'Tripp',      stages: ['🦎', '🐊', '🐲'], tag: 'Three steps to dragon' },
-  { table: 4,  name: 'Quatro',     stages: ['🐱', '🐯', '🦁'], tag: 'From purr to roar' },
-  { table: 5,  name: 'Fionna',     stages: ['🌱', '🌿', '🌳'], tag: 'Grows a forest' },
-  { table: 6,  name: 'Hexxy',      stages: ['🐚', '🐌', '🐙'], tag: 'Six arms, six skills' },
-  { table: 7,  name: 'Lucky',      stages: ['🐣', '🦆', '🦢'], tag: 'Lucky number swan' },
-  { table: 8,  name: 'Octie',      stages: ['🥚', '🦂', '🐍'], tag: 'Eight-legged marvel' },
-  { table: 9,  name: 'Niner',      stages: ['🕯️', '🦉', '🧙'], tag: 'Wisest of them all' },
-  { table: 10, name: 'Decka',      stages: ['🥚', '🦖', '🐉'], tag: 'The mighty Decka' }
-];
-const STAGE_NAMES = ['Egg', 'Juvenile', 'Adult'];
-
-/* Count mastered cells in the ×N table. Commutative (1×N counts once). */
-function masteredForTable(u, n) {
-  let count = 0;
-  for (let m = 1; m <= 100; m++) {
-    const rec = u.cells[cellKey(n, m)];
-    if (rec && masteryLevel(rec) === 'mastered') count++;
-  }
-  return count;
-}
-function creatureStage(mastered) {
-  if (mastered >= 67) return 2;
-  if (mastered >= 34) return 1;
-  return 0;
-}
-
-const creaturesOverlay = document.getElementById('creaturesOverlay');
-
-function renderCreatures() {
-  const u = ensureUser();
-  migrateUser(u);
-  const grid = document.getElementById('creaturesGrid');
-  grid.innerHTML = '';
-  for (const c of CREATURES) {
-    const mastered = masteredForTable(u, c.table);
-    const stage = creatureStage(mastered);
-    const full = mastered >= 100;
-    const pct = mastered;
-    const peg = chosenPeg(u, c.table);
-    const el = document.createElement('div');
-    el.className = `creature-card peg-card stage-${stage}${full ? ' full' : ''}` + (peg ? '' : ' peg-unpicked');
-    if (peg) {
-      // Locked-silhouette tint when stage is 0; full color from stage 1+; glowing when full.
-      const tintClass = full ? 'peg-svg peg-full' : (stage === 0 ? 'peg-svg peg-faint' : 'peg-svg peg-on');
-      el.innerHTML = `
-        <div class="${tintClass}">${peg.svg}</div>
-        <div class="creature-name">${peg.name}</div>
-        <div class="creature-table">×${c.table} peg · ${c.tag}</div>
-        <div class="creature-stage">${full ? '★ Mastered ★' : STAGE_NAMES[stage]}</div>
-        <div class="creature-bar"><div style="width:${pct}%"></div></div>
-        <div class="creature-progress">${mastered} / 100 mastered</div>
-      `;
-    } else {
-      el.innerHTML = `
-        <div class="peg-svg peg-empty">?</div>
-        <div class="creature-name">×${c.table} peg</div>
-        <div class="creature-table">Not picked yet · ${c.tag}</div>
-        <div class="creature-stage">Tap &quot;Pick my pegs&quot; above</div>
-        <div class="creature-bar"><div style="width:${pct}%"></div></div>
-        <div class="creature-progress">${mastered} / 100 mastered</div>
-      `;
-    }
-    grid.appendChild(el);
-  }
-}
-
-function openCreaturesGallery() {
-  renderCreatures();
-  creaturesOverlay.classList.add('show');
-}
-
-document.getElementById('creaturesBtn').addEventListener('click', openCreaturesGallery);
-document.getElementById('creaturesClose').addEventListener('click', () => creaturesOverlay.classList.remove('show'));
-creaturesOverlay.addEventListener('click', (e) => {
-  if (e.target === creaturesOverlay) creaturesOverlay.classList.remove('show');
-});
-
 /* --------------- Lightning Round (V13) ---------------
    60-second timed run. Auto-progression by correct count.
      Bands (correct count threshold):
@@ -3531,43 +3383,44 @@ const TRICK_PRIORITY = {
 const TRICK_TIER_RANK = { H: 0, M: 1, L: 2 };
 
 const TRICK_CATALOG = {
-  zero:            { name: 'Zero the Hero',       emoji: '🦸', rarity: 'common',    flavor: 'One touch and everything vanishes.' },
-  one:             { name: 'Solo Sam',            emoji: '1️⃣', rarity: 'common',    flavor: 'Whatever walks in, walks right back out.' },
-  double:          { name: 'Double Dora',         emoji: '👯', rarity: 'common',    flavor: 'Sees everything twice. Literally.' },
-  three:           { name: 'Triple Trevor',       emoji: '🎲', rarity: 'uncommon',  flavor: 'Double it, then sneak one more on top.' },
-  four:            { name: 'Double-Double Dash',  emoji: '🐕', rarity: 'uncommon',  flavor: 'Twice the double. Four the win.' },
-  five:            { name: 'High-Five Hugo',      emoji: '✋', rarity: 'uncommon',  flavor: 'Bumps it up to ten, then splits the difference.' },
-  six:             { name: 'Sixy Sally',          emoji: '6️⃣', rarity: 'uncommon',  flavor: 'Five lots plus one more, easy as pie.' },
-  seven_split:     { name: 'Seven-Split Sven',    emoji: '7️⃣', rarity: 'uncommon',  flavor: 'Chops the tricky seven into five plus two.' },
-  eight:           { name: 'Triple-Double Tess',  emoji: '🎱', rarity: 'uncommon',  flavor: 'Double, double, double. Done.' },
-  nine_finger:     { name: 'Finger Fred',         emoji: '🖐️', rarity: 'uncommon',  flavor: 'Bends one finger and the answer appears.' },
-  nine:            { name: 'Nifty Nine Ninja',    emoji: '🥷', rarity: 'rare',      flavor: 'Ten lots. Then one stealthy subtract.' },
-  ten:             { name: 'Ten-der Ted',         emoji: '🔟', rarity: 'common',    flavor: 'Just drops a zero on the end. Job done.' },
-  eleven_split:    { name: 'Splitter Sid',        emoji: '✂️', rarity: 'rare',      flavor: 'Pulls the digits apart and slides the sum between.' },
-  eleven_carry:    { name: 'Carry Carol',         emoji: '📤', rarity: 'rare',      flavor: 'When the sum spills over, she carries it up.' },
-  twelve:          { name: 'Dozen Dot',           emoji: '🥚', rarity: 'rare',      flavor: 'One big ten-lot and one little two-lot.' },
-  twentyfive:      { name: 'Quarter Quinn',       emoji: '🍀', rarity: 'rare',      flavor: 'A quarter of a hundred. Divide by 4 and dust off.' },
-  fifty:           { name: 'Half-Ton Hal',        emoji: '⚖️', rarity: 'rare',      flavor: 'Hundred lots, then chop in half.' },
-  ninetynine:      { name: 'Nearly-Hundred Nell', emoji: '🎯', rarity: 'rare',      flavor: 'Does a hundred lots, then hands one back.' },
-  hundred:         { name: 'Century Ciaran',      emoji: '💯', rarity: 'common',    flavor: 'Two zeros and call it a day.' },
-  round_adjust:    { name: 'Round-Up Ruby',       emoji: '🔄', rarity: 'rare',      flavor: 'Rounds to the nearest ten, tidies the leftovers.' },
-  split_tens:      { name: 'Ten-Slide Theo',      emoji: '⬇️', rarity: 'uncommon',  flavor: 'Rolls out a ten and slides the zero on at the end.' },
-  split_place:     { name: 'Place-Value Pippa',   emoji: '📦', rarity: 'uncommon',  flavor: 'Breaks the big number into tidy tens and ones.' },
-  square_five:     { name: 'Five-Square Finn',    emoji: '🐟', rarity: 'rare',      flavor: 'Anything ending in 5, squared, ends in 25. Magic.' },
-  square_ten:      { name: 'Rounded Ron',         emoji: '🟡', rarity: 'rare',      flavor: 'Square the tens digit, stick 00 on. Clean.' },
-  square_close:    { name: 'Twin-Square Tara',    emoji: '🪞', rarity: 'epic',      flavor: 'Shifts to the nearest ten and patches the gap.' },
-  both_five:       { name: 'Fivesies Fiona',      emoji: '🎣', rarity: 'epic',      flavor: 'When both end in 5, she hooks the front and drops a 25 on back.' },
-  teens:           { name: 'Teen Titan',          emoji: '🦸', rarity: 'epic',      flavor: 'Owns the 13–19 corner. Both hands. No contest.' },
-  same_tens:       { name: 'Same-Tens Sam',       emoji: '🪩', rarity: 'epic',      flavor: 'When the tens match, Sam steps in with a sly one-line shortcut.' },
-  same_tens_ones10:{ name: 'Matching Mika',       emoji: '👯‍♀️', rarity: 'legendary', flavor: 'Same tens, ones add to ten — answer appears like a card trick.' },
-  tens10_same_ones:{ name: 'Opposite Ollie',      emoji: '⚔️', rarity: 'legendary', flavor: 'Tens add to ten, ones match. A mirror-image miracle.' },
-  nikhilam:        { name: 'Nikhilam Nick',       emoji: '🧙', rarity: 'legendary', flavor: 'Ancient Vedic wizardry for numbers near 100.' },
-  nikhilam_ten:    { name: 'Mini-Nick',           emoji: '🪄', rarity: 'rare',      flavor: 'Same Vedic move as Nick, just over a hundred sizes smaller.' },
-  diff_squares:    { name: 'Mirror Marcy',        emoji: '🪞', rarity: 'epic',      flavor: 'Squares the middle, then nicks off the gap.' },
-  anchor_step:     { name: 'Anchor Andy',         emoji: '⚓',     rarity: 'rare',      flavor: 'Starts from a fact you already know, takes one step over.' },
-  halve_double:    { name: 'Seesaw Sue',          emoji: '⚖️', rarity: 'rare',    flavor: 'Halves one side, doubles the other. The product never tilts.' },
-  factor_regroup:  { name: 'Lego Liam',           emoji: '🧱', rarity: 'rare',      flavor: 'Snaps the factors apart and rebuilds a friendlier pair.' },
-  finger_six_ten:  { name: 'Two-Hand Tony',       emoji: '🤲', rarity: 'uncommon',  flavor: 'Touch the fingers, count below, multiply above. Sixes to tens only.' },
+  // V21: Names describe what the trick does, not character names.
+  zero:            { name: 'Times zero',                            emoji: '0️⃣', rarity: 'common',    flavor: 'Anything × 0 = 0.' },
+  one:             { name: 'Times one',                             emoji: '1️⃣', rarity: 'common',    flavor: 'Anything × 1 stays the same.' },
+  double:          { name: 'Doubling',                              emoji: '✌️', rarity: 'common',    flavor: '× 2 — add it to itself.' },
+  three:           { name: 'Double, then add one more lot',         emoji: '🎲', rarity: 'uncommon',  flavor: '× 3 = double + one more.' },
+  four:            { name: 'Double, double',                        emoji: '✖️', rarity: 'uncommon',  flavor: '× 4 = double twice.' },
+  five:            { name: 'Times ten, then halve',                 emoji: '✋', rarity: 'uncommon',  flavor: '× 5 = × 10 ÷ 2.' },
+  six:             { name: 'Times five, plus one more lot',         emoji: '6️⃣', rarity: 'uncommon',  flavor: '× 6 = × 5 + one more.' },
+  seven_split:     { name: 'Times five, plus times two',            emoji: '7️⃣', rarity: 'uncommon',  flavor: '× 7 = × 5 + × 2.' },
+  eight:           { name: 'Double three times',                    emoji: '🎱', rarity: 'uncommon',  flavor: '× 8 = double, double, double.' },
+  nine_finger:     { name: 'Nine fingers',                          emoji: '🖐️', rarity: 'uncommon',  flavor: 'Bend one finger, read the answer.' },
+  nine:            { name: 'Times ten, minus one lot',              emoji: '9️⃣', rarity: 'rare',      flavor: '× 9 = × 10 − 1×.' },
+  ten:             { name: 'Times ten',                             emoji: '🔟', rarity: 'common',    flavor: '× 10 — add a zero on the end.' },
+  eleven_split:    { name: 'Times eleven (single digit)',           emoji: '✂️', rarity: 'rare',      flavor: 'Just write the digit twice.' },
+  eleven_carry:    { name: 'Times eleven (two digits, with carry)', emoji: '📤', rarity: 'rare',      flavor: 'Sum the digits, slot it between.' },
+  twelve:          { name: 'Times ten plus times two',              emoji: '🥚', rarity: 'rare',      flavor: '× 12 = × 10 + × 2.' },
+  twentyfive:      { name: 'Times hundred, divided by four',        emoji: '🍀', rarity: 'rare',      flavor: '× 25 = quarter of × 100.' },
+  fifty:           { name: 'Times hundred, halved',                 emoji: '⚖️', rarity: 'rare',      flavor: '× 50 = half of × 100.' },
+  ninetynine:      { name: 'Times hundred, minus one lot',          emoji: '🎯', rarity: 'rare',      flavor: '× 99 = × 100 − 1×.' },
+  hundred:         { name: 'Times hundred',                         emoji: '💯', rarity: 'common',    flavor: '× 100 — add two zeros.' },
+  round_adjust:    { name: 'Round to a tidy number, then adjust',   emoji: '🔄', rarity: 'rare',      flavor: 'Use a nearby round number, then correct.' },
+  split_tens:      { name: 'Split into tens',                       emoji: '⬇️', rarity: 'uncommon',  flavor: 'Multiply by the tens, then add a zero.' },
+  split_place:     { name: 'Split by place value',                  emoji: '📦', rarity: 'uncommon',  flavor: 'Break into tens + ones, multiply each, add.' },
+  square_five:     { name: 'Squaring a number ending in 5',         emoji: '🟦', rarity: 'rare',      flavor: 'n × (n+1), then stick 25 on the end.' },
+  square_ten:      { name: 'Squaring a round ten',                  emoji: '🟡', rarity: 'rare',      flavor: 'Square the tens digit, stick 00 on.' },
+  square_close:    { name: 'Square via the next round number',      emoji: '🪞', rarity: 'epic',      flavor: 'n² = (n−1)(n+1) + 1.' },
+  both_five:       { name: 'Both numbers end in 5',                 emoji: '🎣', rarity: 'epic',      flavor: 'Front digits + average × 100, plus 25.' },
+  teens:           { name: 'Teens × Teens (11 – 19)',               emoji: '🦸', rarity: 'epic',      flavor: 'Add the ones, ×10, then add the ones-product.' },
+  same_tens:       { name: 'Same tens digit',                       emoji: '🪩', rarity: 'epic',      flavor: 'Use the shared tens digit as a base.' },
+  same_tens_ones10:{ name: 'Same tens, ones add to 10',             emoji: '👯', rarity: 'legendary', flavor: 't(t+1) | u₁·u₂.' },
+  tens10_same_ones:{ name: 'Tens add to 10, same ones',             emoji: '⚔️', rarity: 'legendary', flavor: 't₁·t₂ + u | u².' },
+  nikhilam:        { name: 'Close to 100',                          emoji: '🧙', rarity: 'legendary', flavor: 'Cross-subtract from 100, multiply deficits.' },
+  nikhilam_ten:    { name: 'Close to 10',                           emoji: '🪄', rarity: 'rare',      flavor: 'Cross-subtract from 10, multiply deficits.' },
+  diff_squares:    { name: 'Square the middle, minus the gap²',     emoji: '🪞', rarity: 'epic',      flavor: 'a × b = avg² − halfdiff² (when a+b is even).' },
+  anchor_step:     { name: 'One step from a square',                emoji: '⚓', rarity: 'rare',      flavor: 'n × (n+1) = n² + n.' },
+  halve_double:    { name: 'Halve and double',                      emoji: '⚖️', rarity: 'rare',      flavor: 'Halve one factor, double the other (repeat).' },
+  factor_regroup:  { name: 'Regroup the factors',                   emoji: '🧱', rarity: 'rare',      flavor: 'Replace a composite factor with two friendlier ones.' },
+  finger_six_ten:  { name: 'Two-hand finger trick (6 – 10)',        emoji: '🤲', rarity: 'uncommon',  flavor: 'Touching + below = tens; above × above = ones.' },
 };
 
 /* --------------- Mental-math explanation engine ---------------
@@ -4200,17 +4053,28 @@ function allExplanations(a, b) {
     ]});
   }
 
-  // --- Halve and double: when one factor is even, halve it / double the other ---
+  // --- Halve and double: V21 — iterate halving the even factor until it
+  //     reaches 1 (or becomes odd), doubling the other factor each time. ---
   if (s !== l && s >= 2 && (s % 2 === 0 || l % 2 === 0)) {
-    let a1 = s, b1 = l;
-    if (a1 % 2 !== 0) { const t = a1; a1 = b1; b1 = t; }   // a1 is the even one
-    // Single halve-double step (keeps the explanation short)
-    const a2 = a1 / 2, b2 = b1 * 2;
-    if (a2 >= 1 && a1 !== 1) {
-      add({ id: 'halve_double', title: 'Halve one, double the other', steps: [
-        `Halve ${a1} → ${a2}. Double ${b1} → ${b2}. The product stays the same.`,
-        `${a2} × ${b2} = ${product}.`
-      ]});
+    let curA = s, curB = l;
+    if (curA % 2 !== 0) { const t = curA; curA = curB; curB = t; }   // curA is even
+    if (curA >= 2) {
+      const steps = [];
+      while (curA % 2 === 0 && curA > 1) {
+        const newA = curA / 2;
+        const newB = curB * 2;
+        steps.push(`Halve ${curA} → ${newA}. Double ${curB} → ${newB}.`);
+        curA = newA; curB = newB;
+      }
+      // Close out: either we hit ×1 (answer = curB), or the multiplier is now odd.
+      if (curA === 1) {
+        steps.push(`So ${a} × ${b} = ${curB}.`);
+      } else {
+        steps.push(`${curA} × ${curB} = ${product}.`);
+      }
+      if (steps.length >= 2) {
+        add({ id: 'halve_double', title: 'Halve and double', steps });
+      }
     }
   }
 
@@ -4354,8 +4218,24 @@ function itRenderActive() {
   const cat = TRICK_CATALOG[trick.id] || { emoji: '✨', name: trick.title, rarity: 'common' };
   itSubEl.innerHTML = `Working out <b>${a} × ${b}</b>`;
 
-  // Build per-step DOM
-  const stepNodes = trick.steps.map((stepText, i) => {
+  // V18: split each explanation step into individual SENTENCES so every
+  // sub-step gets its own line + input. Each sentence with "= NUMBER." gets
+  // a typed input; sentences without become tap-to-advance narration.
+  const sentences = [];
+  trick.steps.forEach(stepText => {
+    const parts = stepText.split(/\.\s+/);
+    parts.forEach((p, i) => {
+      let s = p.trim();
+      if (!s) return;
+      if (i < parts.length - 1) s += '.';   // restore the period we split on
+      sentences.push(s);
+    });
+  });
+  // V18: ALWAYS append a final "🎯 So a × b = ?" question that asks the kid
+  // to type the product themselves — closes the loop with one more input.
+  sentences.push(`🎯 So ${a} × ${b} = ${a*b}.`);
+
+  const stepNodes = sentences.map((stepText, i) => {
     const parsed = itParseStep(stepText);
     const node = document.createElement('div');
     node.className = 'it-step';
@@ -5466,81 +5346,6 @@ if ('serviceWorker' in navigator) {
   });
 }
 
-/* --------------- Peg picker (Phase 2) ---------------
-   Walks digits 1..10. Three SVG options per digit. Tapping an option saves it
-   and advances to the next digit. Skip leaves remaining picks for next time. */
-const pegPickerOverlay = document.getElementById('pegPickerOverlay');
-const pegPickerGrid    = document.getElementById('pegPickerGrid');
-let pegPickerDigit = 1;
-
-function openPegPicker(startDigit) {
-  pegPickerDigit = startDigit || 1;
-  renderPegPicker();
-  pegPickerOverlay.classList.add('show');
-}
-function closePegPicker() {
-  pegPickerOverlay.classList.remove('show');
-  // Re-render gallery in case it's open behind.
-  if (creaturesOverlay && creaturesOverlay.classList.contains('show')) renderCreatures();
-}
-function renderPegPicker() {
-  const u = ensureUser(); migrateUser(u);
-  const d = pegPickerDigit;
-  document.getElementById('pegPickerDigit').textContent = d;
-  document.getElementById('pegPickerProgress').textContent = `Digit ${d} of 10`;
-  // Dots row
-  const dots = document.getElementById('pegPickerDots');
-  dots.innerHTML = '';
-  for (let i = 1; i <= 10; i++) {
-    const s = document.createElement('span');
-    if (typeof u.pegs[i] === 'number') s.classList.add('done');
-    if (i === d) s.classList.add('active');
-    dots.appendChild(s);
-  }
-  // Three options
-  pegPickerGrid.innerHTML = '';
-  const options = PEGS[d] || [];
-  options.forEach((opt, idx) => {
-    const card = document.createElement('div');
-    card.className = 'peg-pick-opt' + (u.pegs[d] === idx ? ' selected' : '');
-    card.innerHTML = `${opt.svg}<div class="peg-pick-name">${opt.name}</div>`;
-    card.addEventListener('click', () => {
-      const cu = ensureUser(); migrateUser(cu);
-      cu.pegs[d] = idx;
-      saveState();
-      // Advance to next unpicked digit, or close on the 10th.
-      if (d < 10) {
-        pegPickerDigit = d + 1;
-        renderPegPicker();
-      } else {
-        closePegPicker();
-      }
-    });
-    pegPickerGrid.appendChild(card);
-  });
-  // Back button visibility
-  document.getElementById('pegPickerBack').style.visibility = (d > 1) ? 'visible' : 'hidden';
-}
-document.getElementById('pegPickerBack').addEventListener('click', () => {
-  if (pegPickerDigit > 1) { pegPickerDigit--; renderPegPicker(); }
-});
-document.getElementById('pegPickerSkip').addEventListener('click', closePegPicker);
-pegPickerOverlay.addEventListener('click', (e) => {
-  if (e.target === pegPickerOverlay) closePegPicker();
-});
-
-/* "Pick / change my pegs" button inside the My Pegs gallery */
-document.getElementById('pickPegsBtn').addEventListener('click', () => {
-  const u = ensureUser(); migrateUser(u);
-  // Resume on the first unpicked digit; if all picked, start from 1.
-  let start = 1;
-  for (let d = 1; d <= 10; d++) {
-    if (typeof u.pegs[d] !== 'number') { start = d; break; }
-  }
-  openPegPicker(start);
-});
-
-
 /* ============================================================
    V16 — Flags game
    ============================================================ */
@@ -5863,6 +5668,788 @@ function ftCloseQuiz() {
   ftQuizOverlay.classList.remove('show');
 }
 ftQuizOverlay.addEventListener('click', (e) => { if (e.target === ftQuizOverlay) ftCloseQuiz(); });
+
+
+/* ============================================================
+   V19 — Flag challenge over PeerJS
+   ============================================================ */
+const FC_CODE_WORDS = ['FROG','BEAR','MOON','TREE','FIRE','LION','FISH','GOLD',
+  'KITE','RAIN','SNOW','STAR','DUCK','CAKE','KING','ROCK','WAVE','DEER','HERO',
+  'PINK','MILK','BIRD','CORN','HARP','JADE','BOOK','LAMP','PLUM','WOLF','SWAN',
+  'MINT','PEAR','OWL2','HOPS','RICE','DUNE','ROSE','LIME','SAND','GEMS','LAKE',
+  'PEAK','MOSS','BUZZ','BOLT','GAZE','SAGE','TIDE','OPAL','VINE'];
+const FC_PEER_PREFIX = 'ttq-';   // namespace our app's peers
+const FC_QUESTIONS = 10;
+
+let fcPeer = null;          // local Peer instance
+let fcConn = null;          // active DataConnection
+let fcRole = null;          // 'host' | 'guest'
+let fcGame = null;          // active game state
+
+function fcRandomCode() {
+  return FC_CODE_WORDS[Math.floor(Math.random() * FC_CODE_WORDS.length)];
+}
+
+/* PeerJS readiness check */
+function fcCheckPeerJS() {
+  if (typeof Peer === 'undefined') {
+    alert('Multiplayer library failed to load. Check your internet connection and reload.');
+    return false;
+  }
+  return true;
+}
+
+/* ----- UI wiring ----- */
+const fcSetupOverlay = document.getElementById('fcSetupOverlay');
+const fcHostOverlay  = document.getElementById('fcHostOverlay');
+const fcJoinOverlay  = document.getElementById('fcJoinOverlay');
+const fcGameOverlay  = document.getElementById('fcGameOverlay');
+
+document.getElementById('flagsChallengeBtn').addEventListener('click', () => {
+  if (!fcCheckPeerJS()) return;
+  fcSetupOverlay.classList.add('show');
+});
+document.getElementById('fcSetupClose').addEventListener('click', () => fcSetupOverlay.classList.remove('show'));
+
+document.getElementById('fcStartHost').addEventListener('click', () => {
+  fcSetupOverlay.classList.remove('show');
+  fcHostStart();
+});
+document.getElementById('fcStartJoin').addEventListener('click', () => {
+  fcSetupOverlay.classList.remove('show');
+  fcJoinStart();
+});
+
+document.getElementById('fcHostCancel').addEventListener('click', () => fcCleanupAndClose());
+document.getElementById('fcJoinCancel').addEventListener('click', () => fcCleanupAndClose());
+document.getElementById('fcGameQuit').addEventListener('click', () => {
+  if (confirm('Quit this challenge?')) fcCleanupAndClose();
+});
+document.getElementById('fcJoinConnect').addEventListener('click', () => fcGuestConnect());
+document.getElementById('fcJoinInput').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') fcGuestConnect();
+});
+
+function fcCleanupAndClose() {
+  try { if (fcConn) fcConn.close(); } catch (e) {}
+  try { if (fcPeer) fcPeer.destroy(); } catch (e) {}
+  fcConn = null; fcPeer = null; fcGame = null; fcRole = null;
+  [fcSetupOverlay, fcHostOverlay, fcJoinOverlay, fcGameOverlay].forEach(o => o.classList.remove('show'));
+}
+
+/* ----- Host flow ----- */
+function fcHostStart() {
+  fcRole = 'host';
+  const code = fcRandomCode();
+  document.getElementById('fcHostCode').textContent = code;
+  document.getElementById('fcHostStatus').textContent = 'Connecting…';
+  fcHostOverlay.classList.add('show');
+
+  // Try this peer ID; if taken, regenerate code and try again (rare).
+  fcOpenHostPeer(code, 0);
+}
+
+function fcOpenHostPeer(code, attempt) {
+  if (attempt >= 5) {
+    document.getElementById('fcHostStatus').textContent = 'Network busy. Please try again.';
+    return;
+  }
+  fcPeer = new Peer(FC_PEER_PREFIX + code);
+  fcPeer.on('open', () => {
+    document.getElementById('fcHostStatus').textContent = 'Waiting for your friend to join…';
+  });
+  fcPeer.on('error', (err) => {
+    if (err && (err.type === 'unavailable-id' || /taken/i.test(err.message || ''))) {
+      // try a new code
+      try { fcPeer.destroy(); } catch (e) {}
+      const newCode = fcRandomCode();
+      document.getElementById('fcHostCode').textContent = newCode;
+      fcOpenHostPeer(newCode, attempt + 1);
+    } else {
+      document.getElementById('fcHostStatus').textContent = 'Connection error: ' + (err.message || err.type || 'unknown');
+    }
+  });
+  fcPeer.on('connection', (conn) => {
+    fcConn = conn;
+    conn.on('open', () => {
+      document.getElementById('fcHostStatus').textContent = 'Friend connected! Starting…';
+      fcHostInitGame();
+    });
+    conn.on('data', (msg) => fcHandleMessage(msg));
+    conn.on('close', () => fcHandleDisconnect());
+  });
+}
+
+function fcHostInitGame() {
+  // Host picks 10 flags from anywhere + builds 4-option lists.
+  const all = window.COUNTRIES || [];
+  if (all.length < 4) { alert('Not enough countries.'); return; }
+  const picks = shuffle(all.slice()).slice(0, FC_QUESTIONS);
+  const questions = picks.map(c => {
+    const sameGroup = all.filter(x => x.group === c.group && x.id !== c.id);
+    const pool = sameGroup.length >= 3 ? sameGroup : all.filter(x => x.id !== c.id);
+    const distractors = shuffle(pool.slice()).slice(0, 3);
+    const opts = shuffle([c, ...distractors]);
+    const correctIdx = opts.findIndex(o => o.id === c.id);
+    return {
+      countryId: c.id,
+      flag: c.flag,
+      correctIdx,
+      optionIds: opts.map(o => o.id),
+    };
+  });
+  const u = ensureUser(); migrateUser(u);
+  const myName = (u && u.name) || 'You';
+  fcGame = {
+    role: 'host',
+    questions,
+    qIdx: 0,
+    attempt: 1,
+    hostScore: 0,
+    guestScore: 0,
+    myName,
+    theirName: '?',
+    myAnswer: null, theirAnswer: null,
+    locked: false,
+  };
+  fcConn.send({ type: 'init', questions, hostName: myName });
+}
+
+/* ----- Guest flow ----- */
+function fcJoinStart() {
+  fcRole = 'guest';
+  document.getElementById('fcJoinInput').value = '';
+  document.getElementById('fcJoinStatus').textContent = '';
+  fcJoinOverlay.classList.add('show');
+  setTimeout(() => document.getElementById('fcJoinInput').focus(), 80);
+}
+
+function fcGuestConnect() {
+  const code = document.getElementById('fcJoinInput').value.trim().toUpperCase();
+  if (code.length !== 4) {
+    document.getElementById('fcJoinStatus').textContent = 'Please enter a 4-letter code.';
+    return;
+  }
+  document.getElementById('fcJoinStatus').textContent = 'Connecting…';
+  fcPeer = new Peer();   // anonymous peer for guest
+  fcPeer.on('open', () => {
+    fcConn = fcPeer.connect(FC_PEER_PREFIX + code);
+    fcConn.on('open', () => {
+      const u = ensureUser(); migrateUser(u);
+      const myName = (u && u.name) || 'Guest';
+      fcConn.send({ type: 'hello', guestName: myName });
+      document.getElementById('fcJoinStatus').textContent = 'Connected!';
+      // Wait for host's init message
+    });
+    fcConn.on('data', (msg) => fcHandleMessage(msg));
+    fcConn.on('close', () => fcHandleDisconnect());
+    fcConn.on('error', (err) => {
+      document.getElementById('fcJoinStatus').textContent = 'Could not connect to ' + code + '.';
+    });
+    // If the connection never opens, surface a friendly timeout
+    setTimeout(() => {
+      if (fcConn && !fcConn.open) {
+        document.getElementById('fcJoinStatus').textContent = 'No response from ' + code + '. Wrong code?';
+      }
+    }, 8000);
+  });
+  fcPeer.on('error', (err) => {
+    document.getElementById('fcJoinStatus').textContent = 'Network error: ' + (err.message || err.type || 'unknown');
+  });
+}
+
+/* ----- Shared message handler ----- */
+function fcHandleMessage(msg) {
+  if (!msg || typeof msg !== 'object') return;
+  if (msg.type === 'hello' && fcRole === 'host') {
+    if (fcGame) fcGame.theirName = msg.guestName || 'Friend';
+    return;
+  }
+  if (msg.type === 'init' && fcRole === 'guest') {
+    const u = ensureUser(); migrateUser(u);
+    fcGame = {
+      role: 'guest',
+      questions: msg.questions,
+      qIdx: 0,
+      attempt: 1,
+      hostScore: 0,   // mirrored from host
+      guestScore: 0,
+      myName: (u && u.name) || 'Guest',
+      theirName: msg.hostName || 'Friend',
+      myAnswer: null, theirAnswer: null,
+      locked: false,
+    };
+    fcConn.send({ type: 'ready' });
+    fcOpenGameOverlay();
+    fcRenderQuestion();
+    return;
+  }
+  if (msg.type === 'ready' && fcRole === 'host') {
+    fcOpenGameOverlay();
+    fcRenderQuestion();
+    return;
+  }
+  if (msg.type === 'answer') {
+    fcRecordPeerAnswer(msg.qIdx, msg.attempt, msg.optionIdx, msg.t);
+    return;
+  }
+  if (msg.type === 'result' && fcRole === 'guest') {
+    fcGame.hostScore = msg.hostScore;
+    fcGame.guestScore = msg.guestScore;
+    fcShowResult(msg.winner, msg.correctIdx);
+    return;
+  }
+  if (msg.type === 'next' && fcRole === 'guest') {
+    fcGame.qIdx = msg.qIdx;
+    fcGame.attempt = msg.attempt;
+    fcGame.myAnswer = null; fcGame.theirAnswer = null; fcGame.locked = false;
+    fcRenderQuestion();
+    return;
+  }
+  if (msg.type === 'retry' && fcRole === 'guest') {
+    fcGame.attempt = msg.attempt;
+    fcGame.myAnswer = null; fcGame.theirAnswer = null; fcGame.locked = false;
+    fcRenderQuestion(/*retry*/true);
+    return;
+  }
+  if (msg.type === 'end' && fcRole === 'guest') {
+    fcGame.hostScore = msg.hostScore;
+    fcGame.guestScore = msg.guestScore;
+    fcShowFinal();
+    return;
+  }
+}
+
+function fcHandleDisconnect() {
+  if (!fcGame) return;
+  document.getElementById('fcFeedback').innerHTML =
+    '<span style="color:#c0392b;">⚠️ Friend disconnected.</span>';
+  setTimeout(fcCleanupAndClose, 2000);
+}
+
+/* ----- Game UI ----- */
+function fcOpenGameOverlay() {
+  fcHostOverlay.classList.remove('show');
+  fcJoinOverlay.classList.remove('show');
+  fcGameOverlay.classList.add('show');
+  document.getElementById('fcMeName').textContent = fcGame.myName;
+  document.getElementById('fcThemName').textContent = fcGame.theirName;
+}
+
+function fcRenderQuestion(isRetry) {
+  const g = fcGame;
+  const q = g.questions[g.qIdx];
+  document.getElementById('fcProgress').textContent = `Flag ${g.qIdx + 1} of ${g.questions.length}`;
+  document.getElementById('fcMeScore').textContent = (g.role === 'host' ? g.hostScore : g.guestScore);
+  document.getElementById('fcThemScore').textContent = (g.role === 'host' ? g.guestScore : g.hostScore);
+  document.getElementById('fcAttempt').textContent = isRetry ? 'Both got it wrong — second try!' : (g.attempt === 2 ? 'Second attempt' : '');
+  document.getElementById('fcPrompt').innerHTML = `<div class="ft-prompt-flag">${q.flag}</div><div class="ft-prompt-sub">Which country?</div>`;
+  document.getElementById('fcMePick').textContent = `You: —`;
+  document.getElementById('fcMePick').className = 'me';
+  document.getElementById('fcThemPick').textContent = `${g.theirName}: —`;
+  document.getElementById('fcThemPick').className = 'them';
+  document.getElementById('fcFeedback').innerHTML = '';
+
+  // Build options
+  const opts = q.optionIds.map(id => window.flagById(id)).filter(Boolean);
+  const optsEl = document.getElementById('fcOptions');
+  optsEl.innerHTML = '';
+  opts.forEach((opt, i) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'ft-option';
+    b.textContent = opt.name;
+    b.dataset.idx = i;
+    b.addEventListener('click', () => fcMyAnswer(i));
+    optsEl.appendChild(b);
+  });
+  g.myAnswer = null; g.theirAnswer = null;
+}
+
+function fcMyAnswer(idx) {
+  const g = fcGame;
+  if (!g || g.locked) return;
+  if (g.myAnswer != null) return;
+  g.myAnswer = { idx, t: Date.now() };
+  const q = g.questions[g.qIdx];
+  const correct = (idx === q.correctIdx);
+  // Visual feedback for me
+  const buttons = document.querySelectorAll('#fcOptions .ft-option');
+  buttons.forEach((b, i) => {
+    if (i === idx) {
+      b.classList.add(correct ? 'correct' : 'wrong');
+    }
+    b.classList.add('locked');
+  });
+  document.getElementById('fcMePick').textContent = `You: ${correct ? '✅' : '❌'} ${q.optionIds[idx] ? (window.flagById(q.optionIds[idx])||{}).name||'' : ''}`;
+  document.getElementById('fcMePick').className = 'me ' + (correct ? 'picked' : 'picked-wrong');
+  // Send to peer
+  if (fcConn && fcConn.open) {
+    fcConn.send({ type: 'answer', qIdx: g.qIdx, attempt: g.attempt, optionIdx: idx, t: g.myAnswer.t });
+  }
+  fcAfterAnswer();
+}
+
+function fcRecordPeerAnswer(qIdx, attempt, optionIdx, t) {
+  const g = fcGame;
+  if (!g) return;
+  if (qIdx !== g.qIdx || attempt !== g.attempt) return;
+  if (g.theirAnswer != null) return;
+  g.theirAnswer = { idx: optionIdx, t: t || Date.now() };
+  const q = g.questions[qIdx];
+  const correct = (optionIdx === q.correctIdx);
+  document.getElementById('fcThemPick').textContent = `${g.theirName}: ${correct ? '✅' : '❌'}`;
+  document.getElementById('fcThemPick').className = 'them ' + (correct ? 'picked' : 'picked-wrong');
+  fcAfterAnswer();
+}
+
+function fcAfterAnswer() {
+  const g = fcGame;
+  if (g.myAnswer == null || g.theirAnswer == null) return;
+  // Host arbitrates result
+  if (g.role !== 'host') return;
+  fcHostResolveRound();
+}
+
+function fcHostResolveRound() {
+  const g = fcGame;
+  const q = g.questions[g.qIdx];
+  const hostAns = g.myAnswer;        // host's local answer
+  const guestAns = g.theirAnswer;    // remote
+  const hostCorrect = (hostAns.idx === q.correctIdx);
+  const guestCorrect = (guestAns.idx === q.correctIdx);
+  let winner = null;
+  if (hostCorrect && guestCorrect) winner = (hostAns.t <= guestAns.t) ? 'host' : 'guest';
+  else if (hostCorrect) winner = 'host';
+  else if (guestCorrect) winner = 'guest';
+  // None correct — retry or give up
+  if (winner == null && g.attempt < 2) {
+    // Send retry instruction
+    g.attempt++;
+    if (fcConn && fcConn.open) fcConn.send({ type: 'retry', attempt: g.attempt });
+    setTimeout(() => {
+      g.myAnswer = null; g.theirAnswer = null;
+      fcRenderQuestion(/*retry*/true);
+    }, 900);
+    return;
+  }
+  // Award point
+  if (winner === 'host') g.hostScore++;
+  else if (winner === 'guest') g.guestScore++;
+  // Send result
+  if (fcConn && fcConn.open) {
+    fcConn.send({ type: 'result', qIdx: g.qIdx, winner, correctIdx: q.correctIdx, hostScore: g.hostScore, guestScore: g.guestScore });
+  }
+  fcShowResult(winner, q.correctIdx);
+  // After a beat, advance
+  setTimeout(() => {
+    if (g.qIdx + 1 >= g.questions.length) {
+      // End
+      if (fcConn && fcConn.open) fcConn.send({ type: 'end', hostScore: g.hostScore, guestScore: g.guestScore });
+      fcShowFinal();
+    } else {
+      g.qIdx++;
+      g.attempt = 1;
+      g.myAnswer = null; g.theirAnswer = null;
+      if (fcConn && fcConn.open) fcConn.send({ type: 'next', qIdx: g.qIdx, attempt: 1 });
+      fcRenderQuestion();
+    }
+  }, 1700);
+}
+
+function fcShowResult(winner, correctIdx) {
+  const g = fcGame;
+  // Reveal correct option for both
+  const buttons = document.querySelectorAll('#fcOptions .ft-option');
+  buttons.forEach((b, i) => {
+    b.classList.add('locked');
+    if (i === correctIdx) b.classList.add('correct');
+  });
+  // Update scores
+  document.getElementById('fcMeScore').textContent = (g.role === 'host' ? g.hostScore : g.guestScore);
+  document.getElementById('fcThemScore').textContent = (g.role === 'host' ? g.guestScore : g.hostScore);
+  const fb = document.getElementById('fcFeedback');
+  if (winner == null) {
+    fb.innerHTML = `<span style="color:#c0392b;">No point — both got it wrong twice.</span>`;
+  } else {
+    const wonByMe = (winner === 'host' && g.role === 'host') || (winner === 'guest' && g.role === 'guest');
+    fb.innerHTML = wonByMe
+      ? `<span style="color:#1a8a4f;">🎉 Point to you!</span>`
+      : `<span style="color:#7a6a2e;">Point to ${g.theirName}.</span>`;
+  }
+}
+
+function fcShowFinal() {
+  const g = fcGame;
+  if (!g) return;
+  g.locked = true;
+  const my = (g.role === 'host' ? g.hostScore : g.guestScore);
+  const their = (g.role === 'host' ? g.guestScore : g.hostScore);
+  const verdict = my > their ? '🏆 You won!' : (my < their ? `${g.theirName} won — rematch?` : `Tied at ${my}!`);
+  document.getElementById('fcPrompt').innerHTML = `<div class="ft-prompt-flag">🤝</div>
+    <div class="ft-prompt-text">${my} vs ${their}</div>
+    <div class="ft-prompt-sub">${verdict}</div>`;
+  document.getElementById('fcOptions').innerHTML = '';
+  document.getElementById('fcAttempt').textContent = '';
+  document.getElementById('fcFeedback').innerHTML = '';
+  document.getElementById('fcMePick').textContent = '';
+  document.getElementById('fcThemPick').textContent = '';
+  document.getElementById('fcProgress').textContent = 'Challenge complete';
+  // Save run to local profile
+  const u = ensureUser(); migrateUser(u);
+  if (!u.flags) u.flags = { best: 0, runs: [], cardsLearned: {} };
+  if (!u.flags.challenges) u.flags.challenges = [];
+  u.flags.challenges.push({
+    date: new Date().toISOString(),
+    role: g.role,
+    opponent: g.theirName,
+    myScore: my,
+    theirScore: their,
+  });
+  if (u.flags.challenges.length > 50) u.flags.challenges = u.flags.challenges.slice(-50);
+  saveState();
+  if (typeof popConfetti === 'function' && my > their) { popConfetti(); setTimeout(popConfetti, 400); }
+}
+
+
+/* ============================================================
+   V22 — Memory Palace
+   ============================================================ */
+const MP_CONTEXTS = {
+  home:         { label: 'Home',         possessive: function (n) { return n + "'s Home"; } },
+  school:       { label: 'School',       possessive: function (n) { return n + "'s School"; } },
+  grandparents: { label: "Grandparents'", possessive: function (n) { return n + "'s Grandparents'"; } },
+  custom:       { label: 'My Place',     possessive: function (n) { return n + "'s Place"; } },
+};
+
+/* Place catalogue — grouped for the picker. Icon + label + which kinds of
+   furniture it can hold. */
+const MP_PLACES = {
+  // Outside
+  front_door:    { label: 'Front door',    icon: '🚪', group: 'Outside / entry', furn: ['mat', 'plant', 'lamp'] },
+  porch:         { label: 'Porch',         icon: '🏡', group: 'Outside / entry', furn: ['chair', 'plant', 'lamp', 'mat'] },
+  driveway:      { label: 'Driveway',      icon: '🛣️', group: 'Outside / entry', furn: ['car', 'bike', 'bin'] },
+  garage:        { label: 'Garage',        icon: '🚗', group: 'Outside / entry', furn: ['car', 'bike', 'workbench', 'shelf', 'tool'] },
+  garden_gate:   { label: 'Garden gate',   icon: '🚧', group: 'Outside / entry', furn: ['post', 'plant'] },
+  front_garden:  { label: 'Front garden',  icon: '🌳', group: 'Outside / garden', furn: ['tree', 'flower', 'bench', 'gnome'] },
+  back_garden:   { label: 'Back garden',   icon: '🌿', group: 'Outside / garden', furn: ['tree', 'flower', 'trampoline', 'swing', 'slide', 'bbq', 'shed', 'pond'] },
+  patio:         { label: 'Patio',         icon: '🪑', group: 'Outside / garden', furn: ['table', 'chair', 'umbrella', 'bbq', 'plant'] },
+  shed:          { label: 'Shed',          icon: '🛖', group: 'Outside / garden', furn: ['workbench', 'tool', 'bike', 'shelf'] },
+  // Ground floor
+  hallway:       { label: 'Hallway',       icon: '🪞', group: 'Ground floor', furn: ['mirror', 'coat_rack', 'shoe_rack', 'lamp', 'plant', 'rug', 'picture'] },
+  living_room:   { label: 'Living room',   icon: '🛋️', group: 'Ground floor', furn: ['sofa', 'armchair', 'tv', 'coffee_table', 'bookshelf', 'rug', 'lamp', 'fireplace', 'piano', 'plant', 'picture'] },
+  dining_room:   { label: 'Dining room',   icon: '🍽️', group: 'Ground floor', furn: ['table', 'chair', 'sideboard', 'lamp', 'rug', 'picture'] },
+  kitchen:       { label: 'Kitchen',       icon: '🍳', group: 'Ground floor', furn: ['fridge', 'oven', 'sink', 'kitchen_table', 'kettle', 'microwave', 'dishwasher', 'kettle', 'chair'] },
+  utility:       { label: 'Utility room',  icon: '🧺', group: 'Ground floor', furn: ['washer', 'dryer', 'sink', 'shelf'] },
+  pantry:        { label: 'Pantry',        icon: '🥫', group: 'Ground floor', furn: ['shelf'] },
+  conservatory:  { label: 'Conservatory',  icon: '🪴', group: 'Ground floor', furn: ['sofa', 'armchair', 'plant', 'table', 'chair'] },
+  cloakroom:     { label: 'Cloakroom',     icon: '🧥', group: 'Ground floor', furn: ['toilet', 'sink', 'mirror', 'coat_rack'] },
+  study:         { label: 'Study',         icon: '📚', group: 'Ground floor', furn: ['desk', 'chair', 'computer', 'bookshelf', 'lamp', 'rug', 'picture'] },
+  // Stairs / upstairs
+  stairs:        { label: 'Stairs',        icon: '🪜', group: 'Stairs / upstairs', furn: ['picture', 'lamp'] },
+  landing:       { label: 'Landing',       icon: '🚪', group: 'Stairs / upstairs', furn: ['picture', 'lamp', 'plant'] },
+  bedroom:       { label: 'Bedroom',       icon: '🛏️', group: 'Stairs / upstairs', furn: ['bed', 'wardrobe', 'chest_of_drawers', 'bedside_table', 'mirror', 'lamp', 'rug', 'picture', 'desk'] },
+  spare_room:    { label: 'Spare room',    icon: '🛌', group: 'Stairs / upstairs', furn: ['bed', 'wardrobe', 'chair', 'lamp', 'picture'] },
+  bathroom:      { label: 'Bathroom',      icon: '🛁', group: 'Stairs / upstairs', furn: ['bath', 'shower', 'toilet', 'sink', 'mirror', 'towel_rail'] },
+  office:        { label: 'Office',        icon: '💻', group: 'Stairs / upstairs', furn: ['desk', 'chair', 'computer', 'bookshelf', 'lamp', 'picture'] },
+  // Loft / basement
+  loft:          { label: 'Loft',          icon: '📦', group: 'Loft / basement', furn: ['box', 'shelf'] },
+  basement:      { label: 'Basement',      icon: '🪨', group: 'Loft / basement', furn: ['shelf', 'box', 'workbench'] },
+};
+
+/* Furniture catalogue — icon + label + colourable flag. */
+const MP_FURN = {
+  sofa:             { icon: '🛋️', label: 'Sofa', color: true },
+  armchair:         { icon: '🪑', label: 'Armchair', color: true },
+  bed:              { icon: '🛏️', label: 'Bed', color: true },
+  wardrobe:         { icon: '🚪', label: 'Wardrobe', color: true },
+  chest_of_drawers: { icon: '🗄️', label: 'Chest of drawers', color: true },
+  bedside_table:    { icon: '🪵', label: 'Bedside table', color: true },
+  table:            { icon: '🪑', label: 'Table', color: true },
+  kitchen_table:    { icon: '🍽️', label: 'Kitchen table', color: true },
+  coffee_table:     { icon: '🪵', label: 'Coffee table', color: true },
+  chair:            { icon: '🪑', label: 'Chair', color: true },
+  desk:             { icon: '🖥️', label: 'Desk', color: true },
+  bookshelf:        { icon: '📚', label: 'Bookshelf', color: true },
+  shelf:            { icon: '📚', label: 'Shelf', color: true },
+  sideboard:        { icon: '🗄️', label: 'Sideboard', color: true },
+  rug:              { icon: '🟫', label: 'Rug', color: true },
+  picture:          { icon: '🖼️', label: 'Picture' },
+  mirror:           { icon: '🪞', label: 'Mirror' },
+  lamp:             { icon: '💡', label: 'Lamp', color: true },
+  plant:            { icon: '🪴', label: 'Plant' },
+  fireplace:        { icon: '🔥', label: 'Fireplace' },
+  tv:               { icon: '📺', label: 'TV' },
+  computer:         { icon: '💻', label: 'Computer' },
+  piano:            { icon: '🎹', label: 'Piano' },
+  fridge:           { icon: '🧊', label: 'Fridge' },
+  oven:             { icon: '🍳', label: 'Oven' },
+  sink:             { icon: '🚰', label: 'Sink' },
+  kettle:           { icon: '☕', label: 'Kettle' },
+  microwave:        { icon: '📦', label: 'Microwave' },
+  dishwasher:       { icon: '🧼', label: 'Dishwasher' },
+  washer:           { icon: '🧺', label: 'Washing machine' },
+  dryer:            { icon: '🧺', label: 'Dryer' },
+  bath:             { icon: '🛁', label: 'Bath' },
+  shower:           { icon: '🚿', label: 'Shower' },
+  toilet:           { icon: '🚽', label: 'Toilet' },
+  towel_rail:       { icon: '🧖', label: 'Towel rail' },
+  coat_rack:        { icon: '🧥', label: 'Coat rack' },
+  shoe_rack:        { icon: '👟', label: 'Shoe rack' },
+  mat:              { icon: '🟫', label: 'Mat', color: true },
+  workbench:        { icon: '🔨', label: 'Workbench' },
+  tool:             { icon: '🔧', label: 'Tools' },
+  bike:             { icon: '🚲', label: 'Bike', color: true },
+  car:              { icon: '🚗', label: 'Car', color: true },
+  bin:              { icon: '🗑️', label: 'Bin' },
+  post:             { icon: '🪧', label: 'Post' },
+  tree:             { icon: '🌳', label: 'Tree' },
+  flower:           { icon: '🌸', label: 'Flower bed' },
+  bench:            { icon: '🪑', label: 'Bench', color: true },
+  gnome:            { icon: '🧙', label: 'Gnome' },
+  trampoline:       { icon: '🤸', label: 'Trampoline' },
+  swing:            { icon: '🛝', label: 'Swing' },
+  slide:            { icon: '🛝', label: 'Slide', color: true },
+  bbq:              { icon: '🍖', label: 'BBQ' },
+  pond:             { icon: '🐟', label: 'Pond' },
+  umbrella:         { icon: '⛱️', label: 'Umbrella', color: true },
+  box:              { icon: '📦', label: 'Box' },
+};
+
+const MP_COLORS = [
+  { id: 'red',    hex: '#e74c3c' },
+  { id: 'blue',   hex: '#3498db' },
+  { id: 'green',  hex: '#2ecc71' },
+  { id: 'yellow', hex: '#f6c244' },
+  { id: 'orange', hex: '#ff9f43' },
+  { id: 'purple', hex: '#9b59b6' },
+  { id: 'pink',   hex: '#ff5aa3' },
+  { id: 'brown',  hex: '#8b4513' },
+  { id: 'black',  hex: '#2c2c2a' },
+  { id: 'grey',   hex: '#888780' },
+  { id: 'white',  hex: '#fafafa' },
+];
+
+/* Initialize palace state on user. */
+function ensurePalace(u) {
+  if (!u.palace) u.palace = { context: null, customName: null, places: [] };
+  if (!u.palace.places) u.palace.places = [];
+  return u.palace;
+}
+
+/* Update tab title and stats when active user changes. */
+function mpUpdateHeader() {
+  const u = ensureUser(); migrateUser(u); ensurePalace(u);
+  const ctx = MP_CONTEXTS[u.palace.context] || null;
+  const nm = (u && u.name) || 'Your';
+  const titleEl = document.getElementById('mpTitle');
+  const statsEl = document.getElementById('mpStats');
+  if (!titleEl) return;
+  if (!ctx) {
+    titleEl.textContent = `${nm}'s Memory Palace`;
+    statsEl.textContent = '';
+  } else {
+    const label = u.palace.context === 'custom' && u.palace.customName ? u.palace.customName : ctx.possessive(nm);
+    titleEl.textContent = label;
+    statsEl.textContent = `${u.palace.places.length} place${u.palace.places.length === 1 ? '' : 's'} · ${mpTotalFurn(u)} item${mpTotalFurn(u) === 1 ? '' : 's'}`;
+  }
+}
+function mpTotalFurn(u) {
+  return (u.palace.places || []).reduce((acc, p) => acc + (p.furniture || []).length, 0);
+}
+
+function mpRender() {
+  const u = ensureUser(); migrateUser(u); ensurePalace(u);
+  mpUpdateHeader();
+  const empty = document.getElementById('mpEmpty');
+  const builder = document.getElementById('mpBuilder');
+  const resetBtn = document.getElementById('mpResetBtn');
+  if (!u.palace.context) {
+    empty.classList.remove('hidden');
+    builder.classList.add('hidden');
+    resetBtn.style.display = 'none';
+    return;
+  }
+  empty.classList.add('hidden');
+  builder.classList.remove('hidden');
+  resetBtn.style.display = '';
+
+  const roomsEl = document.getElementById('mpRooms');
+  roomsEl.innerHTML = '';
+  u.palace.places.forEach((place, idx) => {
+    const def = MP_PLACES[place.type] || { icon: '📍', label: place.type };
+    const card = document.createElement('div');
+    card.className = 'mp-room';
+    card.dataset.idx = idx;
+    const furnHtml = (place.furniture || []).map(f => {
+      const fdef = MP_FURN[f.type] || { icon: '❓', label: f.type };
+      const dot = f.color ? `<span class="mp-color-dot" style="background:${(MP_COLORS.find(c=>c.id===f.color)||{}).hex||'#999'}"></span>` : '';
+      return `<div class="mp-furn" title="${fdef.label}${f.color ? ' ('+f.color+')' : ''}">${fdef.icon}${dot}</div>`;
+    }).join('');
+    card.innerHTML = `
+      <div class="mp-room-head">
+        <span class="mp-room-icon">${def.icon}</span>
+        <span class="mp-room-name">${def.label}</span>
+      </div>
+      <div class="mp-furniture">${furnHtml}<button type="button" class="mp-add-furn" data-add-furn>+</button></div>
+    `;
+    card.querySelector('[data-add-furn]').addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      mpOpenFurnPicker(idx);
+    });
+    roomsEl.appendChild(card);
+  });
+}
+
+/* Context picker (empty state) */
+document.querySelectorAll('.mp-context-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const ctx = btn.dataset.ctx;
+    const u = ensureUser(); migrateUser(u); ensurePalace(u);
+    if (ctx === 'custom') {
+      const name = prompt('What do you want to call your palace?', '');
+      if (!name) return;
+      u.palace.customName = name.trim().slice(0, 40);
+    }
+    u.palace.context = ctx;
+    u.palace.places = [];
+    saveState();
+    mpRender();
+  });
+});
+
+/* Reset palace */
+document.getElementById('mpResetBtn').addEventListener('click', () => {
+  if (!confirm('Reset your palace? You will start over with a blank canvas.')) return;
+  const u = ensureUser(); migrateUser(u); ensurePalace(u);
+  u.palace = { context: null, customName: null, places: [] };
+  saveState();
+  mpRender();
+});
+
+/* Place picker overlay */
+const mpPlaceOverlay = document.getElementById('mpPlaceOverlay');
+document.getElementById('mpPlaceClose').addEventListener('click', () => mpPlaceOverlay.classList.remove('show'));
+mpPlaceOverlay.addEventListener('click', (e) => { if (e.target === mpPlaceOverlay) mpPlaceOverlay.classList.remove('show'); });
+
+document.getElementById('mpAddPlaceBtn').addEventListener('click', () => mpOpenPlacePicker());
+
+function mpOpenPlacePicker() {
+  const grid = document.getElementById('mpPlaceGrid');
+  grid.innerHTML = '';
+  // Group by 'group' field
+  const groups = {};
+  Object.entries(MP_PLACES).forEach(([id, def]) => {
+    if (!groups[def.group]) groups[def.group] = [];
+    groups[def.group].push({ id, ...def });
+  });
+  Object.keys(groups).forEach(gname => {
+    const h = document.createElement('h4');
+    h.textContent = gname;
+    grid.appendChild(h);
+    groups[gname].forEach(def => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'mp-place-opt';
+      b.innerHTML = `<span class="mp-icon">${def.icon}</span>${def.label}`;
+      b.addEventListener('click', () => {
+        mpAddPlace(def.id);
+        mpPlaceOverlay.classList.remove('show');
+      });
+      grid.appendChild(b);
+    });
+  });
+  mpPlaceOverlay.classList.add('show');
+}
+
+function mpAddPlace(typeId) {
+  const u = ensureUser(); migrateUser(u); ensurePalace(u);
+  u.palace.places.push({ type: typeId, furniture: [] });
+  saveState();
+  mpRender();
+}
+
+/* Furniture picker overlay */
+const mpFurnOverlay = document.getElementById('mpFurnOverlay');
+document.getElementById('mpFurnClose').addEventListener('click', () => mpFurnOverlay.classList.remove('show'));
+mpFurnOverlay.addEventListener('click', (e) => { if (e.target === mpFurnOverlay) mpFurnOverlay.classList.remove('show'); });
+
+let mpPendingFurn = null;   // { roomIdx, type } awaiting colour pick
+
+function mpOpenFurnPicker(roomIdx) {
+  const u = ensureUser(); migrateUser(u); ensurePalace(u);
+  const place = u.palace.places[roomIdx];
+  const placeDef = MP_PLACES[place.type];
+  document.getElementById('mpFurnTitle').textContent = `Add to ${placeDef.label}`;
+  document.getElementById('mpFurnSub').textContent = 'Pick something to put in this room.';
+  const grid = document.getElementById('mpFurnGrid');
+  grid.innerHTML = '';
+  document.getElementById('mpColorPick').style.display = 'none';
+  (placeDef.furn || []).forEach(typeId => {
+    const def = MP_FURN[typeId];
+    if (!def) return;
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'mp-place-opt';
+    b.innerHTML = `<span class="mp-icon">${def.icon}</span>${def.label}`;
+    b.addEventListener('click', () => {
+      if (def.color) {
+        mpPendingFurn = { roomIdx, type: typeId };
+        mpShowColorPicker();
+      } else {
+        mpAddFurniture(roomIdx, typeId, null);
+      }
+    });
+    grid.appendChild(b);
+  });
+  mpFurnOverlay.classList.add('show');
+}
+
+function mpShowColorPicker() {
+  const cp = document.getElementById('mpColorPick');
+  const row = document.getElementById('mpColorRow');
+  row.innerHTML = '';
+  MP_COLORS.forEach(c => {
+    const sw = document.createElement('div');
+    sw.className = 'mp-color-swatch';
+    sw.style.background = c.hex;
+    sw.title = c.id;
+    sw.addEventListener('click', () => {
+      if (!mpPendingFurn) return;
+      mpAddFurniture(mpPendingFurn.roomIdx, mpPendingFurn.type, c.id);
+      mpPendingFurn = null;
+    });
+    row.appendChild(sw);
+  });
+  cp.style.display = '';
+  cp.scrollIntoView({ block: 'nearest' });
+}
+
+function mpAddFurniture(roomIdx, typeId, color) {
+  const u = ensureUser(); migrateUser(u); ensurePalace(u);
+  const place = u.palace.places[roomIdx];
+  if (!place) return;
+  if (!place.furniture) place.furniture = [];
+  place.furniture.push({ type: typeId, color: color || null });
+  saveState();
+  mpFurnOverlay.classList.remove('show');
+  mpRender();
+}
+
+/* Re-render when the palace tab is opened. */
+const __origSetActiveApp = setActiveApp;
+setActiveApp = function (name) {
+  __origSetActiveApp(name);
+  if (name === 'palace') mpRender();
+};
+// Also wire the new tab button click
+document.querySelectorAll('.app-tab').forEach(t => {
+  if (t.dataset.app === 'palace') {
+    t.addEventListener('click', () => setActiveApp('palace'));
+  }
+});
+// Initial render so the palace view is correct on first open
+mpRender();
 
 </script>
 </body>

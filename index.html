@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover" />
-<title>Times Table Quest — V13</title>
+<title>Times Table Quest — V14</title>
 
 <!-- PWA -->
 <link rel="manifest" href="manifest.json">
@@ -404,6 +404,128 @@
     line-height: 1.55;
   }
   .trick b { color: var(--accent-2); }
+
+  /* V14: Interactive teaching whiteboard */
+  .it-modal {
+    max-width: 520px;
+  }
+  .it-board {
+    background: #fdfcf5;
+    background-image:
+      linear-gradient(rgba(74, 143, 237, 0.05) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(74, 143, 237, 0.05) 1px, transparent 1px);
+    background-size: 28px 28px;
+    border: 2px solid #e1dcc9;
+    border-radius: 14px;
+    padding: 18px 18px 22px;
+    margin-top: 8px;
+    box-shadow: 0 4px 12px rgba(60, 50, 30, 0.08), inset 0 0 0 3px #fffef8;
+    position: relative;
+  }
+  .it-board::after {
+    content: '';
+    position: absolute;
+    left: -6px; right: -6px; bottom: -10px; height: 10px;
+    background: linear-gradient(#d0c8ae, #9a9277);
+    border-radius: 0 0 8px 8px;
+    box-shadow: 0 3px 6px rgba(0,0,0,0.15);
+  }
+  .it-eq {
+    font-family: 'Patrick Hand', 'Baloo 2', cursive;
+    font-size: 36px;
+    color: #2a4778;
+    text-align: center;
+    margin: 0 0 10px;
+  }
+  .it-trickname {
+    text-align: center;
+    font-size: 14px;
+    color: #6f5c1c;
+    margin: 0 0 12px;
+    font-weight: 600;
+  }
+  .it-trickname .it-emoji { font-size: 18px; margin-right: 6px; }
+  .it-step {
+    font-family: 'Patrick Hand', 'Baloo 2', cursive;
+    font-size: 22px;
+    color: #2a3a55;
+    line-height: 1.5;
+    padding: 10px 4px;
+    border-bottom: 1px dashed #d6cfb3;
+    opacity: 0.35;
+    transition: opacity .25s;
+  }
+  .it-step.active   { opacity: 1; }
+  .it-step.done     { opacity: 0.85; }
+  .it-step:last-of-type { border-bottom: 0; }
+  .it-blank {
+    display: inline-block;
+    min-width: 60px;
+    text-align: center;
+    border: 2px solid #4a8fed;
+    border-radius: 8px;
+    padding: 2px 10px;
+    background: white;
+    font-family: 'Patrick Hand', cursive;
+    font-size: 22px;
+    color: #2a4778;
+    outline: none;
+  }
+  .it-blank:focus { border-color: var(--accent-2); box-shadow: 0 0 0 3px rgba(108,92,231,0.15); }
+  .it-blank.filled { background: #e6f6ff; color: #1a8a4f; border-color: #1a8a4f; cursor: default; }
+  .it-hint {
+    font-family: 'Patrick Hand', cursive;
+    font-size: 14px;
+    color: #b14e1e;
+    margin-top: 4px;
+    min-height: 18px;
+  }
+  .it-tap-hint {
+    font-size: 12px;
+    color: var(--ink-soft);
+    text-align: center;
+    margin-top: 6px;
+    font-style: italic;
+  }
+  .it-final {
+    font-family: 'Patrick Hand', cursive;
+    font-size: 28px;
+    text-align: center;
+    color: #1a8a4f;
+    margin-top: 10px;
+  }
+  .it-final b { font-size: 36px; }
+  .it-tabs {
+    margin-top: 14px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    justify-content: center;
+  }
+  .it-tabs-label {
+    width: 100%;
+    text-align: center;
+    font-size: 12px;
+    color: var(--ink-soft);
+    margin-bottom: 4px;
+  }
+  .it-tab {
+    background: white;
+    border: 1px solid var(--neutral-2, #e1dcc9);
+    border-radius: 999px;
+    padding: 4px 12px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: background .15s, border-color .15s;
+  }
+  .it-tab:hover { background: var(--neutral); }
+  .it-tab.active { background: var(--accent-2); color: white; border-color: var(--accent-2); }
+  .it-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 12px;
+  }
 
   /* Whiteboard — shown after a wrong answer to teach ALL applicable tricks */
   .whiteboard {
@@ -1430,7 +1552,7 @@
   <div class="brand">
     <span class="logo">×</span>
     Times Table Quest
-    <span style="font-family: 'Fredoka', sans-serif; font-size: 13px; font-weight: 600; color: var(--ink-soft); -webkit-text-fill-color: var(--ink-soft); background: var(--neutral); padding: 2px 8px; border-radius: 999px; margin-left: 6px; letter-spacing: 0.5px;">V13</span>
+    <span style="font-family: 'Fredoka', sans-serif; font-size: 13px; font-weight: 600; color: var(--ink-soft); -webkit-text-fill-color: var(--ink-soft); background: var(--neutral); padding: 2px 8px; border-radius: 999px; margin-left: 6px; letter-spacing: 0.5px;">V14</span>
   </div>
 
   <button class="user-pill" id="userPill" title="Switch player">
@@ -1602,6 +1724,19 @@
 </div>
 
 <!-- Family leaderboard -->
+<!-- V14: Interactive teaching modal -->
+<div class="overlay" id="interactiveTrickOverlay">
+  <div class="modal it-modal" role="dialog" aria-modal="true" aria-labelledby="itTitle">
+    <h2 id="itTitle" style="margin:0 0 4px;">✏️ Quick lesson</h2>
+    <p class="sub" id="itSub" style="margin: 0 0 8px;"></p>
+    <div class="it-board" id="itBoard"></div>
+    <div class="it-actions" id="itActions">
+      <button class="btn btn-ghost" id="itClose">Close</button>
+      <button class="btn btn-primary" id="itDone" style="display:none;">Got it! ➜</button>
+    </div>
+  </div>
+</div>
+
 <div class="overlay" id="familyOverlay">
   <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="familyTitle">
     <h2 id="familyTitle">👨‍👩‍👧 Family</h2>
@@ -3924,6 +4059,218 @@ function allExplanations(a, b) {
   return out;
 }
 
+/* ============================================================
+   V14 — Interactive teaching whiteboard
+   ============================================================
+   Two triggers:
+     1. Cell click for a cell whose primary trick is not yet learned.
+     2. "Show me how" button after a wrong answer in the main quiz.
+   Each numeric step (one ending in "= NUMBER.") becomes a typed input;
+   pure-narration steps reveal on tap. After completion, a tab strip lets
+   the kid see the same problem worked with another applicable trick. */
+
+const itOverlay = document.getElementById('interactiveTrickOverlay');
+const itBoardEl = document.getElementById('itBoard');
+const itSubEl   = document.getElementById('itSub');
+const itDoneBtn = document.getElementById('itDone');
+const itCloseBtn = document.getElementById('itClose');
+let it = null;        // active interactive session state
+
+/* Parse a step string. If it ends with "= NUMBER." treat the trailing number
+   as the answer the kid must type; otherwise it's pure narration. */
+function itParseStep(text) {
+  const m = text.match(/^([\s\S]*?=\s*)(-?\d+)\s*(\.\s*)$/);
+  if (!m) return { prefix: text, answer: null, suffix: '' };
+  return { prefix: m[1], answer: parseInt(m[2], 10), suffix: m[3] };
+}
+
+/* Lay out an existing-trick teaching session for problem (a, b) using trickId.
+   onClose: called when the user dismisses (after they've finished or skipped). */
+function showInteractiveTrick(a, b, trickId, onClose) {
+  const all = allExplanations(a, b);
+  if (!all || !all.length) { if (onClose) onClose(); return; }
+  // Find the trick the caller asked for, or fall back to the primary.
+  let tIdx = all.findIndex(t => t.id === trickId);
+  if (tIdx < 0) tIdx = 0;
+  it = {
+    a, b,
+    all,
+    activeIdx: tIdx,
+    onClose: onClose || null,
+    completedTricks: new Set(),
+  };
+  itRenderActive();
+  itOverlay.classList.add('show');
+}
+
+/* Render the currently-selected trick in the modal. */
+function itRenderActive() {
+  const { a, b, all, activeIdx } = it;
+  const trick = all[activeIdx];
+  const cat = TRICK_CATALOG[trick.id] || { emoji: '✨', name: trick.title, rarity: 'common' };
+  itSubEl.innerHTML = `Working out <b>${a} × ${b}</b>`;
+
+  // Build per-step DOM
+  const stepNodes = trick.steps.map((stepText, i) => {
+    const parsed = itParseStep(stepText);
+    const node = document.createElement('div');
+    node.className = 'it-step';
+    if (parsed.answer == null) {
+      node.innerHTML = `<span class="it-narr">${stepText}</span>`;
+      node.dataset.kind = 'narration';
+    } else {
+      node.innerHTML = `${parsed.prefix}<input class="it-blank" type="number" inputmode="numeric" autocomplete="off" />${parsed.suffix}<div class="it-hint"></div>`;
+      node.dataset.kind = 'numeric';
+      node.dataset.expected = String(parsed.answer);
+    }
+    return node;
+  });
+
+  itBoardEl.innerHTML = `<div class="it-eq">${a} × ${b} = <span style="color:#c0392b">?</span></div>
+    <div class="it-trickname"><span class="it-emoji">${cat.emoji}</span>${cat.name} <span style="color:#aaa;font-weight:400;">— ${trick.title}</span></div>`;
+
+  const stepsWrap = document.createElement('div');
+  stepsWrap.id = 'itSteps';
+  stepNodes.forEach(n => stepsWrap.appendChild(n));
+  itBoardEl.appendChild(stepsWrap);
+
+  // Tap-to-advance hint for the first step (set before activating)
+  const tapHint = document.createElement('div');
+  tapHint.className = 'it-tap-hint';
+  tapHint.id = 'itTapHint';
+  tapHint.style.display = 'none';
+  itBoardEl.appendChild(tapHint);
+
+  // Activate the first step
+  it.stepIdx = 0;
+  itActivateStep(0);
+
+  // Done button hidden until user finishes
+  itDoneBtn.style.display = 'none';
+
+  // Render bottom tab strip (other tricks for this same problem)
+  itRenderTabs();
+}
+
+function itActivateStep(idx) {
+  if (!it) return;
+  const stepsWrap = document.getElementById('itSteps');
+  const nodes = stepsWrap.querySelectorAll('.it-step');
+  if (idx >= nodes.length) {
+    itFinish();
+    return;
+  }
+  // Mark earlier nodes as 'done', later ones still hidden
+  nodes.forEach((n, i) => {
+    n.classList.remove('active');
+    if (i < idx) n.classList.add('done');
+  });
+  const node = nodes[idx];
+  node.classList.add('active');
+  it.stepIdx = idx;
+
+  if (node.dataset.kind === 'narration') {
+    document.getElementById('itTapHint').textContent = 'Tap to continue ↓';
+    document.getElementById('itTapHint').style.display = '';
+    node.style.cursor = 'pointer';
+    node.addEventListener('click', function onceTap() {
+      node.removeEventListener('click', onceTap);
+      itActivateStep(idx + 1);
+    });
+  } else {
+    document.getElementById('itTapHint').style.display = 'none';
+    const input = node.querySelector('.it-blank');
+    input.focus();
+    input.addEventListener('keydown', function onKey(ev) {
+      if (ev.key === 'Enter') { ev.preventDefault(); itCheckNumeric(idx, input, node); }
+    });
+    input.addEventListener('blur', function onBlur() {
+      if (input.value.trim() !== '' && !input.classList.contains('filled')) {
+        itCheckNumeric(idx, input, node);
+      }
+    });
+  }
+}
+
+function itCheckNumeric(idx, input, node) {
+  const expected = parseInt(node.dataset.expected, 10);
+  const given = parseInt((input.value || '').trim(), 10);
+  const hint = node.querySelector('.it-hint');
+  if (Number.isFinite(given) && given === expected) {
+    input.classList.add('filled');
+    input.disabled = true;
+    if (hint) hint.textContent = '';
+    setTimeout(() => itActivateStep(idx + 1), 280);
+  } else {
+    input.classList.remove('shake'); void input.offsetWidth; input.classList.add('shake');
+    playSfx && playSfx('wrong');
+    if (hint) hint.textContent = `Not quite — try again. (Hint: the answer is ${expected})`;
+  }
+}
+
+function itFinish() {
+  if (!it) return;
+  const { a, b, all, activeIdx } = it;
+  it.completedTricks.add(all[activeIdx].id);
+  // Reveal the answer
+  const eq = itBoardEl.querySelector('.it-eq');
+  if (eq) eq.innerHTML = `${a} × ${b} = <b style="color:#1a8a4f">${a*b}</b>`;
+  // Mark all steps done
+  const stepsWrap = document.getElementById('itSteps');
+  if (stepsWrap) stepsWrap.querySelectorAll('.it-step').forEach(n => { n.classList.remove('active'); n.classList.add('done'); });
+  // Append final celebration line
+  if (!itBoardEl.querySelector('.it-final')) {
+    const fin = document.createElement('div');
+    fin.className = 'it-final';
+    fin.innerHTML = `🎉 So <b>${a} × ${b} = ${a*b}</b>.`;
+    itBoardEl.appendChild(fin);
+  }
+  document.getElementById('itTapHint').style.display = 'none';
+  itRenderTabs();
+  itDoneBtn.style.display = '';
+  if (playSfx) playSfx('correct');
+  // Mark the trick as learned in the user's catalog
+  unlockTrick(all[activeIdx].id);
+}
+
+function itRenderTabs() {
+  // Remove any existing tab strip
+  const old = document.getElementById('itTabs');
+  if (old) old.remove();
+  if (!it) return;
+  const others = it.all.filter((_, i) => i !== it.activeIdx);
+  if (!others.length) return;
+  const wrap = document.createElement('div');
+  wrap.id = 'itTabs';
+  wrap.className = 'it-tabs';
+  wrap.innerHTML = '<div class="it-tabs-label">Show me another way</div>';
+  it.all.forEach((t, i) => {
+    if (i === it.activeIdx) return;
+    const cat = TRICK_CATALOG[t.id] || { emoji: '✨', name: t.title };
+    const tab = document.createElement('button');
+    tab.type = 'button';
+    tab.className = 'it-tab';
+    tab.innerHTML = `${cat.emoji} ${cat.name}`;
+    tab.addEventListener('click', () => {
+      it.activeIdx = i;
+      itRenderActive();
+    });
+    wrap.appendChild(tab);
+  });
+  itBoardEl.appendChild(wrap);
+}
+
+function itClose() {
+  itOverlay.classList.remove('show');
+  const cb = it && it.onClose;
+  it = null;
+  if (cb) cb();
+}
+
+itDoneBtn.addEventListener('click', itClose);
+itCloseBtn.addEventListener('click', itClose);
+itOverlay.addEventListener('click', (e) => { if (e.target === itOverlay) itClose(); });
+
 /* Render the whiteboard UI showing a × b = product and ALL applicable tricks. */
 function renderWhiteboard(a, b) {
   const product = a * b;
@@ -4182,12 +4529,19 @@ function submitAnswer() {
       qFeedback.innerHTML = `
         <div class="feedback bad">
           <h3>The answer is <b>${correct}</b></h3>
-          <div>Here's a quicker way to see it:</div>
-        </div>
-        ${renderWhiteboard(a, b)}`;
+          <div>Let's walk through it together.</div>
+        </div>`;
       qInput.disabled = true;
       qSubmit.style.display = 'none';
       qNext.style.display = '';
+      // V14: launch interactive teaching for this problem's primary trick.
+      const exNow = explain(a, b);
+      if (exNow && exNow.id && exNow.id !== 'repeated_add' && exNow.id !== 'square_plain') {
+        showInteractiveTrick(a, b, exNow.id, null);
+      } else {
+        // Fallback: show the static whiteboard for cases with no real trick.
+        qFeedback.insertAdjacentHTML('beforeend', renderWhiteboard(a, b));
+      }
     });
   }
 
@@ -4243,7 +4597,15 @@ function popConfetti() {
 gridEl.addEventListener('click', (e) => {
   const cell = e.target.closest('.cell');
   if (!cell) return;
-  openQuiz(+cell.dataset.r, +cell.dataset.c);
+  const r = +cell.dataset.r, c = +cell.dataset.c;
+  // V14: if the primary trick is not yet learned, teach it interactively first.
+  const u = ensureUser(); migrateUser(u);
+  const ex = (typeof explain === 'function') ? explain(r, c) : null;
+  if (ex && ex.id && !u.tricks[ex.id] && ex.id !== 'repeated_add' && ex.id !== 'square_plain') {
+    showInteractiveTrick(r, c, ex.id, () => openQuiz(r, c));
+  } else {
+    openQuiz(r, c);
+  }
 });
 
 qSubmit.addEventListener('click', submitAnswer);

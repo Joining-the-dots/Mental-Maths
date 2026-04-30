@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover" />
-<title>Times Table Quest — V14</title>
+<title>Times Table Quest — V16</title>
 
 <!-- PWA -->
 <link rel="manifest" href="manifest.json">
@@ -316,6 +316,10 @@
     padding: 24px;
     box-shadow: 0 25px 60px rgba(0,0,0,0.35);
     animation: pop .2s ease;
+    /* V15: prevent clipping on small screens — scroll inside the modal. */
+    max-height: calc(100vh - 40px);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
   }
   @keyframes pop {
     from { transform: scale(.94); opacity: 0; }
@@ -1544,15 +1548,191 @@
     z-index: 2;
   }
   .wild-card .btn-dismiss:hover { transform: translateY(-1px); }
+
+  /* ========= V16 Flags game ========= */
+  .app-tabs {
+    display: flex;
+    gap: 8px;
+    margin: 8px 0 0;
+    padding: 0 4px;
+  }
+  .app-tab {
+    background: white;
+    border: 1px solid #e1dcc9;
+    color: var(--ink-soft);
+    border-radius: 999px;
+    padding: 6px 16px;
+    font-family: 'Fredoka', sans-serif;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all .15s;
+  }
+  .app-tab:hover { background: var(--neutral); }
+  .app-tab.active { background: var(--accent-2); color: white; border-color: var(--accent-2); }
+  #flagsView { padding: 12px 4px; }
+  #flagsView.hidden, #ttView.hidden { display: none; }
+
+  .flags-toolbar {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+  }
+  .flags-stats {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    color: var(--ink-soft);
+    font-size: 13px;
+  }
+  .flags-group {
+    background: white;
+    border: 1px solid #e1dcc9;
+    border-radius: 14px;
+    margin-bottom: 12px;
+    overflow: hidden;
+  }
+  .flags-group-head {
+    padding: 12px 16px;
+    background: #fafafa;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-family: 'Baloo 2', sans-serif;
+    font-weight: 600;
+    color: var(--ink);
+  }
+  .flags-group-head:hover { background: var(--neutral); }
+  .flags-group-count { color: var(--ink-soft); font-size: 13px; font-weight: 400; }
+  .flags-group-body {
+    padding: 12px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 10px;
+  }
+  .flags-group.collapsed .flags-group-body { display: none; }
+  .flag-card {
+    background: white;
+    border: 1px solid #e8e2f6;
+    border-radius: 12px;
+    padding: 12px;
+    text-align: center;
+    transition: transform .15s, box-shadow .15s;
+  }
+  .flag-card:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(0,0,0,0.08); }
+  .flag-emoji { font-size: 48px; line-height: 1.2; }
+  .flag-country { font-weight: 700; color: var(--ink); margin-top: 4px; font-size: 14px; }
+  .flag-capital { color: var(--ink-soft); font-size: 12px; margin-top: 2px; }
+  .flag-mnem-toggle {
+    background: none;
+    border: none;
+    color: var(--accent-2);
+    font-size: 11px;
+    cursor: pointer;
+    margin-top: 6px;
+    padding: 2px 6px;
+  }
+  .flag-mnem {
+    text-align: left;
+    background: #fdfcf5;
+    border: 1px dashed #d6cfb3;
+    border-radius: 8px;
+    padding: 8px 10px;
+    margin-top: 6px;
+    font-size: 12px;
+    color: #5a4a1a;
+    display: none;
+  }
+  .flag-card.show-mnem .flag-mnem { display: block; }
+  .flag-mnem b { color: #2a4778; }
+
+  /* Test setup */
+  .ft-groups {
+    max-height: 240px;
+    overflow-y: auto;
+    border: 1px solid #e8e2f6;
+    border-radius: 10px;
+    padding: 8px 12px;
+    margin: 8px 0 12px;
+  }
+  .ft-groups label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 0;
+    font-size: 14px;
+  }
+  .ft-direction {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin: 8px 0 12px;
+  }
+  .ft-direction button {
+    background: white;
+    border: 2px solid #e8e2f6;
+    border-radius: 12px;
+    padding: 10px 8px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 13px;
+    text-align: center;
+    transition: all .15s;
+  }
+  .ft-direction button.selected {
+    border-color: var(--accent-2);
+    background: linear-gradient(135deg, #f4efff, #fef4fb);
+    color: var(--accent-2);
+    font-weight: 600;
+  }
+
+  /* Test quiz */
+  .ft-prompt {
+    text-align: center;
+    margin: 12px 0;
+  }
+  .ft-prompt-flag { font-size: 80px; }
+  .ft-prompt-text { font-size: 22px; font-weight: 700; color: var(--ink); margin-top: 4px; }
+  .ft-prompt-sub { font-size: 13px; color: var(--ink-soft); }
+  .ft-options {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin: 8px 0;
+  }
+  .ft-option {
+    background: white;
+    border: 2px solid #e8e2f6;
+    border-radius: 12px;
+    padding: 12px 10px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 14px;
+    text-align: center;
+    transition: all .15s;
+  }
+  .ft-option:hover { border-color: var(--accent-1); transform: translateY(-1px); }
+  .ft-option.correct { background: #d4f4dd; border-color: #2ecc71; }
+  .ft-option.wrong { background: #ffe0e0; border-color: #e74c3c; }
+  .ft-option:disabled { cursor: default; }
+  .ft-progress {
+    text-align: center;
+    color: var(--ink-soft);
+    font-size: 13px;
+    margin-bottom: 4px;
+  }
 </style>
 </head>
 <body>
+<script src="./flags-data.js"></script>
 
 <header class="topbar">
   <div class="brand">
     <span class="logo">×</span>
     Times Table Quest
-    <span style="font-family: 'Fredoka', sans-serif; font-size: 13px; font-weight: 600; color: var(--ink-soft); -webkit-text-fill-color: var(--ink-soft); background: var(--neutral); padding: 2px 8px; border-radius: 999px; margin-left: 6px; letter-spacing: 0.5px;">V14</span>
+    <span style="font-family: 'Fredoka', sans-serif; font-size: 13px; font-weight: 600; color: var(--ink-soft); -webkit-text-fill-color: var(--ink-soft); background: var(--neutral); padding: 2px 8px; border-radius: 999px; margin-left: 6px; letter-spacing: 0.5px;">V16</span>
   </div>
 
   <button class="user-pill" id="userPill" title="Switch player">
@@ -1569,11 +1749,14 @@
   </div>
 </header>
 
-<main>
+<div class="app-tabs" id="appTabs">
+  <button class="app-tab active" data-app="tt">Times Tables</button>
+  <button class="app-tab" data-app="flags">🏳️ Flags</button>
+</div>
+
+<main id="ttView">
   <div class="toolbar">
     <button class="btn btn-daily" id="dailyBtn">🔥 Today's 10 <span class="daily-streak-badge" id="dailyStreakBadge" style="display:none;"></span></button>
-    <button class="btn btn-primary" id="challengeBtn">🎲 Random challenge</button>
-    <button class="btn btn-ghost" id="weakBtn">🎯 Practise weak spots</button>
     <button class="btn btn-ghost" id="lightningBtn">⚡ Lightning</button>
     <button class="btn btn-ghost" id="trickMasterBtn">🎓 Trick Master</button>
     <button class="btn btn-ghost" id="creaturesBtn">✦ My Pegs</button>
@@ -1724,6 +1907,57 @@
 </div>
 
 <!-- Family leaderboard -->
+<div id="flagsView" class="hidden" style="max-width: 1200px; margin: 0 auto;">
+  <div class="flags-toolbar">
+    <button class="btn btn-primary" id="flagsTestBtn">⚡ Test me</button>
+    <button class="btn btn-ghost" id="flagsExpandAll">Expand all</button>
+    <button class="btn btn-ghost" id="flagsCollapseAll">Collapse all</button>
+    <div class="flags-stats">
+      <span id="flagsLearnedStat">0 / 197 learned</span>
+      <span id="flagsBestStat"></span>
+    </div>
+  </div>
+  <div id="flagsBrowse"></div>
+</div>
+
+<!-- Flags test setup -->
+<div class="overlay" id="ftSetupOverlay">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="ftSetupTitle">
+    <h2 id="ftSetupTitle">⚡ Flags test</h2>
+    <p class="sub">Pick which regions to include and what direction to test.</p>
+    <div style="display:flex; gap:8px; margin: 6px 0 4px;">
+      <button type="button" class="btn btn-ghost" id="ftAllGroups" style="padding:4px 10px; font-size:12px;">All</button>
+      <button type="button" class="btn btn-ghost" id="ftNoGroups" style="padding:4px 10px; font-size:12px;">None</button>
+    </div>
+    <div class="ft-groups" id="ftGroups"></div>
+    <div style="font-weight:600; margin-top:8px;">Direction</div>
+    <div class="ft-direction" id="ftDirection">
+      <button type="button" data-dir="f2c">🏳️ → Country</button>
+      <button type="button" data-dir="c2cap">Country → 🏛️ Capital</button>
+      <button type="button" data-dir="f2cap">🏳️ → 🏛️ Capital</button>
+      <button type="button" data-dir="mixed" class="selected">🎲 All mixed</button>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="ftSetupClose">Cancel</button>
+      <button class="btn btn-primary" id="ftStart">Start ➜</button>
+    </div>
+  </div>
+</div>
+
+<!-- Flags test quiz -->
+<div class="overlay" id="ftQuizOverlay">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="ftQuizTitle">
+    <h2 id="ftQuizTitle">⚡ Flags test</h2>
+    <div class="ft-progress" id="ftProgress">Question 1 of 10</div>
+    <div class="ft-prompt" id="ftPrompt"></div>
+    <div class="ft-options" id="ftOptions"></div>
+    <div id="ftFeedback" style="min-height:24px; text-align:center; font-size:14px; margin-top:6px;"></div>
+    <div class="modal-actions" id="ftActions">
+      <button class="btn btn-ghost" id="ftForfeit">Give up</button>
+    </div>
+  </div>
+</div>
+
 <!-- V14: Interactive teaching modal -->
 <div class="overlay" id="interactiveTrickOverlay">
   <div class="modal it-modal" role="dialog" aria-modal="true" aria-labelledby="itTitle">
@@ -4534,12 +4768,23 @@ function submitAnswer() {
       qInput.disabled = true;
       qSubmit.style.display = 'none';
       qNext.style.display = '';
-      // V14: launch interactive teaching for this problem's primary trick.
+      // V14/15: launch interactive teaching for this problem's primary trick,
+      // then re-pose the same problem so the kid applies the trick ("Now you try").
       const exNow = explain(a, b);
+      const nowYouTry = () => {
+        current.answered = false;
+        qInput.value = '';
+        qInput.disabled = false;
+        qSubmit.disabled = false;
+        qSubmit.style.display = '';
+        qNext.style.display = 'none';
+        qFeedback.innerHTML = `<div class="feedback good" style="padding:8px 12px;">✏️ Now you try — type <b>${a} × ${b}</b> =</div>`;
+        setTimeout(() => qInput.focus(), 60);
+      };
       if (exNow && exNow.id && exNow.id !== 'repeated_add' && exNow.id !== 'square_plain') {
-        showInteractiveTrick(a, b, exNow.id, null);
+        showInteractiveTrick(a, b, exNow.id, nowYouTry);
       } else {
-        // Fallback: show the static whiteboard for cases with no real trick.
+        // Fallback for trivial cells: show the static whiteboard, no retry loop.
         qFeedback.insertAdjacentHTML('beforeend', renderWhiteboard(a, b));
       }
     });
@@ -4618,31 +4863,6 @@ quizOverlay.addEventListener('click', (e) => {
 });
 qNext.addEventListener('click', () => {
   const [r, c] = pickNext();
-  openQuiz(r, c);
-  scrollToCell(r, c);
-});
-
-document.getElementById('challengeBtn').addEventListener('click', () => {
-  const [r, c] = pickNext();
-  openQuiz(r, c);
-  scrollToCell(r, c);
-});
-
-document.getElementById('weakBtn').addEventListener('click', () => {
-  const u = ensureUser(); migrateUser(u);
-  const weak = [];
-  for (const k in u.cells) {
-    const rec = u.cells[k];
-    if (masteryLevel(rec) === 'wrong' || masteryLevel(rec) === 'tried') {
-      const [r, c] = k.split('x').map(Number);
-      weak.push([r, c]);
-    }
-  }
-  if (!weak.length) {
-    alert("No weak spots yet — do a few questions first (or try Random challenge).");
-    return;
-  }
-  const [r, c] = weak[Math.floor(Math.random()*weak.length)];
   openQuiz(r, c);
   scrollToCell(r, c);
 });
@@ -5305,4 +5525,335 @@ document.getElementById('pickPegsBtn').addEventListener('click', () => {
   // Resume on the first unpicked digit; if all picked, start from 1.
   let start = 1;
   for (let d = 1; d <= 10; d++) {
-    if (typ
+    if (typeof u.pegs[d] !== 'number') { start = d; break; }
+  }
+  openPegPicker(start);
+});
+
+
+/* ============================================================
+   V16 — Flags game
+   ============================================================ */
+const FLAGS_TEST_LEN = 10;
+let ftState = null;       // active test state
+let ftSelGroups = null;   // remembered selection (Set)
+let ftSelDir = 'mixed';
+
+function flagsTotal() { return (window.COUNTRIES || []).length; }
+
+/* Active app — 'tt' (times tables) or 'flags'. Persisted across reloads. */
+function getActiveApp() {
+  try { return localStorage.getItem('ttq_activeApp') || 'tt'; } catch (e) { return 'tt'; }
+}
+function setActiveApp(name) {
+  try { localStorage.setItem('ttq_activeApp', name); } catch (e) {}
+  document.querySelectorAll('.app-tab').forEach(t => {
+    t.classList.toggle('active', t.dataset.app === name);
+  });
+  document.getElementById('ttView').classList.toggle('hidden', name !== 'tt');
+  document.getElementById('flagsView').classList.toggle('hidden', name !== 'flags');
+  if (name === 'flags') flagsRender();
+}
+document.querySelectorAll('.app-tab').forEach(t => {
+  t.addEventListener('click', () => setActiveApp(t.dataset.app));
+});
+setActiveApp(getActiveApp());
+
+/* Migration: ensure u.flags exists */
+function ensureFlagsState(u) {
+  if (!u.flags) u.flags = { best: 0, runs: [], cardsLearned: {} };
+  if (!u.flags.cardsLearned) u.flags.cardsLearned = {};
+  if (!u.flags.runs) u.flags.runs = [];
+  return u.flags;
+}
+
+/* Browse view */
+function flagsRender() {
+  const u = ensureUser(); migrateUser(u); ensureFlagsState(u);
+  const root = document.getElementById('flagsBrowse');
+  if (!root || !window.FLAG_GROUPS || !window.COUNTRIES) return;
+  root.innerHTML = '';
+  window.FLAG_GROUPS.forEach(g => {
+    const list = window.flagsByGroup(g.id);
+    const sec = document.createElement('div');
+    sec.className = 'flags-group';
+    sec.dataset.group = g.id;
+    const learned = list.filter(c => u.flags.cardsLearned[c.id]).length;
+    sec.innerHTML = `
+      <div class="flags-group-head" data-toggle>
+        <span>${g.name}</span>
+        <span class="flags-group-count">${learned} / ${list.length}</span>
+      </div>
+      <div class="flags-group-body"></div>
+    `;
+    const body = sec.querySelector('.flags-group-body');
+    list.forEach(c => {
+      const card = document.createElement('div');
+      card.className = 'flag-card';
+      card.innerHTML = `
+        <div class="flag-emoji">${c.flag}</div>
+        <div class="flag-country">${c.name}</div>
+        <div class="flag-capital">${c.capital}</div>
+        <button type="button" class="flag-mnem-toggle">📚 How to remember</button>
+        <div class="flag-mnem"><b>Flag:</b> ${c.flagDesc}<br><b>Capital:</b> ${c.capitalLink}</div>
+      `;
+      card.querySelector('.flag-mnem-toggle').addEventListener('click', () => {
+        card.classList.toggle('show-mnem');
+        if (card.classList.contains('show-mnem')) {
+          u.flags.cardsLearned[c.id] = { firstSeenAt: new Date().toISOString() };
+          saveState();
+          flagsUpdateStats();
+        }
+      });
+      body.appendChild(card);
+    });
+    sec.querySelector('[data-toggle]').addEventListener('click', () => {
+      sec.classList.toggle('collapsed');
+    });
+    // Default collapsed
+    sec.classList.add('collapsed');
+    root.appendChild(sec);
+  });
+  flagsUpdateStats();
+}
+
+function flagsUpdateStats() {
+  const u = ensureUser(); ensureFlagsState(u);
+  const learned = Object.keys(u.flags.cardsLearned || {}).length;
+  const stat = document.getElementById('flagsLearnedStat');
+  if (stat) stat.textContent = `${learned} / ${flagsTotal()} learned`;
+  const best = u.flags.best || 0;
+  const bestEl = document.getElementById('flagsBestStat');
+  if (bestEl) bestEl.textContent = best ? `· Best test: ${best}/${FLAGS_TEST_LEN}` : '';
+  // Update group counts in headings
+  document.querySelectorAll('.flags-group').forEach(g => {
+    const list = window.flagsByGroup(g.dataset.group) || [];
+    const cnt = list.filter(c => u.flags.cardsLearned[c.id]).length;
+    const h = g.querySelector('.flags-group-count');
+    if (h) h.textContent = `${cnt} / ${list.length}`;
+  });
+}
+
+document.getElementById('flagsExpandAll').addEventListener('click', () => {
+  document.querySelectorAll('.flags-group').forEach(g => g.classList.remove('collapsed'));
+});
+document.getElementById('flagsCollapseAll').addEventListener('click', () => {
+  document.querySelectorAll('.flags-group').forEach(g => g.classList.add('collapsed'));
+});
+
+/* Test setup */
+const ftSetupOverlay = document.getElementById('ftSetupOverlay');
+const ftQuizOverlay  = document.getElementById('ftQuizOverlay');
+
+function openFtSetup() {
+  if (!window.FLAG_GROUPS) return;
+  if (!ftSelGroups) ftSelGroups = new Set(window.FLAG_GROUPS.map(g => g.id));
+  const list = document.getElementById('ftGroups');
+  list.innerHTML = '';
+  window.FLAG_GROUPS.forEach(g => {
+    const cnt = window.flagsByGroup(g.id).length;
+    const lab = document.createElement('label');
+    lab.innerHTML = `<input type="checkbox" data-gid="${g.id}" ${ftSelGroups.has(g.id) ? 'checked' : ''}> ${g.name} <span style="color:var(--ink-soft);font-size:12px;margin-left:auto;">${cnt}</span>`;
+    list.appendChild(lab);
+  });
+  list.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+    cb.addEventListener('change', () => {
+      if (cb.checked) ftSelGroups.add(cb.dataset.gid);
+      else ftSelGroups.delete(cb.dataset.gid);
+    });
+  });
+  document.querySelectorAll('#ftDirection button').forEach(b => {
+    b.classList.toggle('selected', b.dataset.dir === ftSelDir);
+    b.onclick = () => {
+      ftSelDir = b.dataset.dir;
+      document.querySelectorAll('#ftDirection button').forEach(x => x.classList.remove('selected'));
+      b.classList.add('selected');
+    };
+  });
+  ftSetupOverlay.classList.add('show');
+}
+document.getElementById('flagsTestBtn').addEventListener('click', openFtSetup);
+document.getElementById('ftSetupClose').addEventListener('click', () => ftSetupOverlay.classList.remove('show'));
+ftSetupOverlay.addEventListener('click', (e) => { if (e.target === ftSetupOverlay) ftSetupOverlay.classList.remove('show'); });
+
+document.getElementById('ftAllGroups').addEventListener('click', () => {
+  document.querySelectorAll('#ftGroups input[type="checkbox"]').forEach(cb => { cb.checked = true; ftSelGroups.add(cb.dataset.gid); });
+});
+document.getElementById('ftNoGroups').addEventListener('click', () => {
+  document.querySelectorAll('#ftGroups input[type="checkbox"]').forEach(cb => { cb.checked = false; });
+  ftSelGroups.clear();
+});
+
+document.getElementById('ftStart').addEventListener('click', () => {
+  if (!ftSelGroups || ftSelGroups.size === 0) {
+    alert('Pick at least one region.');
+    return;
+  }
+  ftSetupOverlay.classList.remove('show');
+  startFlagsTest(Array.from(ftSelGroups), ftSelDir);
+});
+
+/* Test runner */
+function shuffle(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+function startFlagsTest(groupIds, dir) {
+  const allowed = window.COUNTRIES.filter(c => groupIds.includes(c.group));
+  if (allowed.length < 4) { alert('Need at least 4 countries — pick more regions.'); return; }
+  const pool = shuffle(allowed.slice()).slice(0, FLAGS_TEST_LEN);
+  ftState = {
+    pool, idx: 0, dir, score: 0, finished: false,
+    answers: [],   // [{country, picked, correct}]
+  };
+  ftQuizOverlay.classList.add('show');
+  document.getElementById('ftActions').innerHTML = '<button class="btn btn-ghost" id="ftForfeit">Give up</button>';
+  document.getElementById('ftForfeit').addEventListener('click', () => {
+    if (confirm('Give up this test?')) ftCloseQuiz();
+  });
+  ftRenderQuestion();
+}
+
+function ftPickActualDir() {
+  // For 'mixed' draw a random concrete direction per question.
+  if (ftState.dir !== 'mixed') return ftState.dir;
+  const dirs = ['f2c', 'c2cap', 'f2cap'];
+  return dirs[Math.floor(Math.random() * dirs.length)];
+}
+
+function ftRenderQuestion() {
+  if (!ftState || ftState.finished) return;
+  const q = ftState.pool[ftState.idx];
+  const actDir = ftPickActualDir();
+  ftState.activeDir = actDir;
+
+  document.getElementById('ftProgress').textContent = `Question ${ftState.idx + 1} of ${ftState.pool.length} · score ${ftState.score}`;
+
+  // Build prompt + options based on direction
+  const promptEl = document.getElementById('ftPrompt');
+  const optsEl = document.getElementById('ftOptions');
+  const fb = document.getElementById('ftFeedback');
+  fb.innerHTML = '';
+
+  // Pick 3 distractors from same group first, then top up from any country
+  const sameGroup = (window.flagsByGroup(q.group) || []).filter(c => c.id !== q.id);
+  const others = window.COUNTRIES.filter(c => c.id !== q.id && c.group !== q.group);
+  const distractors = shuffle(sameGroup.slice()).slice(0, 3);
+  while (distractors.length < 3) {
+    const x = others[Math.floor(Math.random() * others.length)];
+    if (!distractors.includes(x)) distractors.push(x);
+  }
+  const options = shuffle([q, ...distractors]);
+
+  let promptHtml = '';
+  let optionLabel = (c) => c.name;
+  if (actDir === 'f2c') {
+    promptHtml = `<div class="ft-prompt-flag">${q.flag}</div><div class="ft-prompt-sub">Which country?</div>`;
+    optionLabel = (c) => c.name;
+  } else if (actDir === 'c2cap') {
+    promptHtml = `<div class="ft-prompt-text">${q.name}</div><div class="ft-prompt-sub">What's the capital?</div>`;
+    optionLabel = (c) => c.capital;
+  } else if (actDir === 'f2cap') {
+    promptHtml = `<div class="ft-prompt-flag">${q.flag}</div><div class="ft-prompt-sub">What's the capital?</div>`;
+    optionLabel = (c) => c.capital;
+  }
+  promptEl.innerHTML = promptHtml;
+
+  optsEl.innerHTML = '';
+  options.forEach(opt => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'ft-option';
+    b.textContent = optionLabel(opt);
+    b.dataset.id = opt.id;
+    b.addEventListener('click', () => ftAnswer(opt));
+    optsEl.appendChild(b);
+  });
+}
+
+function ftAnswer(picked) {
+  if (!ftState || ftState.finished) return;
+  const q = ftState.pool[ftState.idx];
+  const correct = picked.id === q.id;
+  ftState.answers.push({ country: q.id, picked: picked.id, correct });
+  if (correct) {
+    ftState.score++;
+    if (typeof playSfx === 'function') playSfx('correct');
+  } else {
+    if (typeof playSfx === 'function') playSfx('wrong');
+  }
+  // Disable + colour the options
+  document.querySelectorAll('#ftOptions .ft-option').forEach(b => {
+    b.disabled = true;
+    if (b.dataset.id === q.id) b.classList.add('correct');
+    else if (b.dataset.id === picked.id) b.classList.add('wrong');
+  });
+  // Mark country as learned (kid encountered it)
+  const u = ensureUser(); ensureFlagsState(u);
+  if (!u.flags.cardsLearned[q.id]) {
+    u.flags.cardsLearned[q.id] = { firstSeenAt: new Date().toISOString() };
+    saveState();
+  }
+  // Feedback
+  const fb = document.getElementById('ftFeedback');
+  fb.innerHTML = correct
+    ? `<span style="color:#1f8a4f;">✅ ${q.flag} ${q.name} — capital ${q.capital}</span>`
+    : `<span style="color:#c0392b;">❌ It was ${q.flag} ${q.name} — capital ${q.capital}</span>`;
+
+  setTimeout(() => {
+    ftState.idx++;
+    if (ftState.idx >= ftState.pool.length) ftFinish();
+    else ftRenderQuestion();
+  }, correct ? 700 : 1500);
+}
+
+function ftFinish() {
+  if (!ftState) return;
+  ftState.finished = true;
+  const u = ensureUser(); migrateUser(u); ensureFlagsState(u);
+  const prevBest = u.flags.best || 0;
+  const isBest = ftState.score > prevBest;
+  if (isBest) u.flags.best = ftState.score;
+  u.flags.runs.push({
+    date: new Date().toISOString(),
+    score: ftState.score,
+    total: ftState.pool.length,
+    direction: ftState.dir,
+    groups: Array.from(ftSelGroups),
+  });
+  if (u.flags.runs.length > 50) u.flags.runs = u.flags.runs.slice(-50);
+  saveState();
+
+  const promptEl = document.getElementById('ftPrompt');
+  const optsEl = document.getElementById('ftOptions');
+  const fb = document.getElementById('ftFeedback');
+  optsEl.innerHTML = '';
+  fb.innerHTML = '';
+  promptEl.innerHTML = `<div class="ft-prompt-flag">🎯</div>
+    <div class="ft-prompt-text">${ftState.score} / ${ftState.pool.length}</div>
+    <div class="ft-prompt-sub">${isBest ? 'New best!' : (`Your best: ${prevBest}`)}</div>`;
+  document.getElementById('ftProgress').textContent = 'Test complete';
+  if (isBest && typeof popConfetti === 'function') { popConfetti(); setTimeout(popConfetti, 400); }
+
+  document.getElementById('ftActions').innerHTML = `
+    <button class="btn btn-ghost" id="ftClose">Close</button>
+    <button class="btn btn-primary" id="ftAgain">Test again</button>
+  `;
+  document.getElementById('ftClose').addEventListener('click', ftCloseQuiz);
+  document.getElementById('ftAgain').addEventListener('click', () => { ftCloseQuiz(); openFtSetup(); });
+  flagsUpdateStats();
+}
+
+function ftCloseQuiz() {
+  ftState = null;
+  ftQuizOverlay.classList.remove('show');
+}
+ftQuizOverlay.addEventListener('click', (e) => { if (e.target === ftQuizOverlay) ftCloseQuiz(); });
+
+</script>
+</body>
+</html>

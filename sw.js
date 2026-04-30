@@ -1,7 +1,7 @@
 /* Times Table Quest — service worker
    Bump CACHE_VERSION whenever you deploy a change to index.html or assets,
    so returning users get the new version instead of a stale cache. */
-const CACHE_VERSION = 'tt-quest-v3-20';
+const CACHE_VERSION = 'tt-quest-v3-21';
 const APP_SHELL = [
   './',
   './index.html',
@@ -44,7 +44,7 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(req.url);
   const isNavigation = req.mode === 'navigate' || (req.headers.get('accept') || '').includes('text/html');
-  const isFont = url.hostname === 'fonts.googleapis.com' || url.hostname === 'fonts.gstatic.com';
+  const isFont = url.hostname === 'fonts.googleapis.com' || url.hostname === 'fonts.gstatic.com' || url.hostname === 'cdn.jsdelivr.net';
   const sameOrigin = url.origin === self.location.origin;
 
   if (isNavigation) {

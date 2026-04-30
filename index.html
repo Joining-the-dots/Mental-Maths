@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover" />
-<title>Times Table Quest — V16</title>
+<title>Times Table Quest — V17</title>
 
 <!-- PWA -->
 <link rel="manifest" href="manifest.json">
@@ -46,10 +46,20 @@
     --cell: 36px;
   }
 
+  /* V17: Twemoji flag font for Windows. Scoped to regional-indicator
+     codepoints so it only affects flag emoji, not other text. */
+  @font-face {
+    font-family: "Twemoji Country Flags";
+    unicode-range: U+1F1E6-1F1FF, U+1F3F4, U+E0062-E0063, U+E0065, U+E0067,
+                   U+E006C, U+E006E, U+E0073-E0074, U+E0077, U+E007F;
+    src: url("https://cdn.jsdelivr.net/npm/country-flag-emoji-polyfill@0.1/dist/TwemojiCountryFlags.woff2") format("woff2");
+    font-display: swap;
+  }
+
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; }
   body {
-    font-family: 'Fredoka', system-ui, -apple-system, sans-serif;
+    font-family: "Twemoji Country Flags", 'Fredoka', system-ui, -apple-system, sans-serif;
     color: var(--ink);
     background:
       radial-gradient(1200px 800px at 10% -10%, var(--bg-2), transparent 60%),
@@ -1732,7 +1742,7 @@
   <div class="brand">
     <span class="logo">×</span>
     Times Table Quest
-    <span style="font-family: 'Fredoka', sans-serif; font-size: 13px; font-weight: 600; color: var(--ink-soft); -webkit-text-fill-color: var(--ink-soft); background: var(--neutral); padding: 2px 8px; border-radius: 999px; margin-left: 6px; letter-spacing: 0.5px;">V16</span>
+    <span style="font-family: 'Fredoka', sans-serif; font-size: 13px; font-weight: 600; color: var(--ink-soft); -webkit-text-fill-color: var(--ink-soft); background: var(--neutral); padding: 2px 8px; border-radius: 999px; margin-left: 6px; letter-spacing: 0.5px;">V17</span>
   </div>
 
   <button class="user-pill" id="userPill" title="Switch player">

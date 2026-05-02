@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover" />
-<title>Conway Family Learning Lab — V23</title>
+<title>Conway Family Learning Lab — V25</title>
 
 <!-- PWA -->
 <link rel="manifest" href="manifest.json">
@@ -2022,6 +2022,85 @@
   }
   .mp-color-swatch:hover { transform: scale(1.1); }
 
+
+  /* ========= V25 Array decomposition + audio ========= */
+  .it-array-wrap {
+    background: #fff;
+    border: 1px solid #e1dcc9;
+    border-radius: 12px;
+    padding: 14px 12px 10px;
+    margin: 0 0 12px;
+    text-align: center;
+  }
+  .it-array-label {
+    font-size: 12px;
+    color: var(--ink-soft);
+    margin-bottom: 6px;
+    font-family: 'Patrick Hand', cursive;
+  }
+  .it-array {
+    max-width: 100%;
+    height: auto;
+    display: block;
+    margin: 0 auto;
+  }
+  .it-array circle {
+    transition: opacity .35s ease, fill .35s ease;
+  }
+  .it-array .it-grp-divider {
+    stroke-dasharray: 4 3;
+    opacity: .85;
+  }
+  .it-array .it-grp-label {
+    font-family: 'Patrick Hand', cursive;
+    font-size: 12px;
+    fill: var(--ink-soft);
+  }
+  .it-array .it-bracket {
+    fill: none;
+    stroke: var(--ink-soft);
+    stroke-width: 1.5;
+    opacity: 0.7;
+  }
+  .it-area-rect {
+    background: linear-gradient(135deg, #6c5ce7, #ff5aa3);
+    color: white;
+    border-radius: 10px;
+    padding: 18px 12px;
+    margin: 0 auto;
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    min-width: 180px;
+  }
+  .it-area-rect .it-area-eq { font-family: 'Patrick Hand', cursive; font-size: 22px; }
+  .it-area-rect .it-area-sub { font-size: 12px; opacity: 0.85; }
+
+  /* Audio toggle */
+  .it-audio-btn {
+    background: none;
+    border: 1px solid var(--neutral-2, #e1dcc9);
+    border-radius: 999px;
+    padding: 4px 10px;
+    cursor: pointer;
+    font-size: 14px;
+    color: var(--ink-soft);
+    transition: all .15s;
+  }
+  .it-audio-btn:hover { background: var(--neutral); }
+  .it-audio-btn.on { background: linear-gradient(135deg, #6c5ce7, #ff5aa3); color: white; border-color: transparent; }
+  .it-modal h2 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .it-modal h2 .it-audio-btn {
+    margin-left: auto;
+    font-weight: 400;
+    font-size: 13px;
+  }
+
 </style>
 </head>
 <body>
@@ -2032,7 +2111,7 @@
   <div class="brand">
     <span class="logo">🧪</span>
     Conway Family Learning Lab
-    <span style="font-family: 'Fredoka', sans-serif; font-size: 13px; font-weight: 600; color: var(--ink-soft); -webkit-text-fill-color: var(--ink-soft); background: var(--neutral); padding: 2px 8px; border-radius: 999px; margin-left: 6px; letter-spacing: 0.5px;">V23</span>
+    <span style="font-family: 'Fredoka', sans-serif; font-size: 13px; font-weight: 600; color: var(--ink-soft); -webkit-text-fill-color: var(--ink-soft); background: var(--neutral); padding: 2px 8px; border-radius: 999px; margin-left: 6px; letter-spacing: 0.5px;">V25</span>
   </div>
 
   <button class="user-pill" id="userPill" title="Switch player">
@@ -2402,7 +2481,7 @@
 <!-- V14: Interactive teaching modal -->
 <div class="overlay" id="interactiveTrickOverlay">
   <div class="modal it-modal" role="dialog" aria-modal="true" aria-labelledby="itTitle">
-    <h2 id="itTitle" style="margin:0 0 4px;">✏️ Quick lesson</h2>
+    <h2 id="itTitle" style="margin:0 0 4px;">✏️ Quick lesson<button type="button" class="it-audio-btn" id="itAudioBtn" title="Read aloud">🔇 Audio</button></h2>
     <p class="sub" id="itSub" style="margin: 0 0 8px;"></p>
     <div class="it-board" id="itBoard"></div>
     <div class="it-actions" id="itActions">
@@ -4267,39 +4346,42 @@ function itRenderActive() {
   const cat = TRICK_CATALOG[trick.id] || { emoji: '✨', name: trick.title, rarity: 'common' };
   itSubEl.innerHTML = `Working out <b>${a} × ${b}</b>`;
 
-  // V18: split each explanation step into individual SENTENCES so every
-  // sub-step gets its own line + input. Each sentence with "= NUMBER." gets
-  // a typed input; sentences without become tap-to-advance narration.
   const sentences = [];
   trick.steps.forEach(stepText => {
     const parts = stepText.split(/\.\s+/);
     parts.forEach((p, i) => {
       let s = p.trim();
       if (!s) return;
-      if (i < parts.length - 1) s += '.';   // restore the period we split on
+      if (i < parts.length - 1) s += '.';
       sentences.push(s);
     });
   });
-  // V18: ALWAYS append a final "🎯 So a × b = ?" question that asks the kid
-  // to type the product themselves — closes the loop with one more input.
   sentences.push(`🎯 So ${a} × ${b} = ${a*b}.`);
 
   const stepNodes = sentences.map((stepText, i) => {
     const parsed = itParseStep(stepText);
     const node = document.createElement('div');
     node.className = 'it-step';
+    // V25: store text for speech synthesis (with blanks replaced by "equals what")
     if (parsed.answer == null) {
       node.innerHTML = `<span class="it-narr">${stepText}</span>`;
       node.dataset.kind = 'narration';
+      node.dataset.spoken = stepText.replace(/[🎯]/g, '').trim();
     } else {
       node.innerHTML = `${parsed.prefix}<input class="it-blank" type="number" inputmode="numeric" autocomplete="off" />${parsed.suffix}<div class="it-hint"></div>`;
       node.dataset.kind = 'numeric';
       node.dataset.expected = String(parsed.answer);
+      // Spoken version: prefix without trailing "= " plus "equals what"
+      const cleanPrefix = parsed.prefix.replace(/=\s*$/, '').trim();
+      node.dataset.spoken = `${cleanPrefix} equals what?`.replace(/[🎯]/g, '').trim();
     }
     return node;
   });
 
-  itBoardEl.innerHTML = `<div class="it-eq">${a} × ${b} = <span style="color:#c0392b">?</span></div>
+  // V25: visual array decomposition above the equation
+  const arrayHTML = itArrayRender(a, b, trick.id);
+
+  itBoardEl.innerHTML = `${arrayHTML}<div class="it-eq">${a} × ${b} = <span style="color:#c0392b">?</span></div>
     <div class="it-trickname"><span class="it-emoji">${cat.emoji}</span>${cat.name} <span style="color:#aaa;font-weight:400;">— ${trick.title}</span></div>`;
 
   const stepsWrap = document.createElement('div');
@@ -4307,23 +4389,262 @@ function itRenderActive() {
   stepNodes.forEach(n => stepsWrap.appendChild(n));
   itBoardEl.appendChild(stepsWrap);
 
-  // Tap-to-advance hint for the first step (set before activating)
   const tapHint = document.createElement('div');
   tapHint.className = 'it-tap-hint';
   tapHint.id = 'itTapHint';
   tapHint.style.display = 'none';
   itBoardEl.appendChild(tapHint);
 
-  // Activate the first step
   it.stepIdx = 0;
   itActivateStep(0);
-
-  // Done button hidden until user finishes
   itDoneBtn.style.display = 'none';
-
-  // Render bottom tab strip (other tricks for this same problem)
   itRenderTabs();
 }
+
+/* V25: Visual array decomposition.
+   Renders a × b multiplication as a rectangle of dots (or, for very large
+   problems, a labeled area rectangle). Uses trick-specific layouts where
+   they make the trick visible (×9 → 10 cols with last subtracted, splits
+   show a divider, anchor_step shows the extra column, etc.). */
+function itArrayRender(a, b, trickId) {
+  const s = Math.min(a, b), l = Math.max(a, b);
+  // V25 fix: trick-specific labels for problems involving big round factors.
+  // These return BEFORE the generic "too big" early-return, so the kid sees
+  // the trick's framing rather than a generic rectangle.
+  if ((trickId === 'ninetynine') && (a === 99 || b === 99)) {
+    const k = (a === 99) ? b : a;
+    return `<div class="it-array-wrap">
+      <div class="it-array-label">${a} × ${b}: ${k} lots of 100, minus ${k}</div>
+      <div class="it-area-rect">
+        <span class="it-area-eq">${k} × 100 = ${k * 100}</span>
+        <span class="it-area-sub">then − ${k} = ${a*b}</span>
+      </div>
+    </div>`;
+  }
+  if ((trickId === 'hundred') && (a === 100 || b === 100)) {
+    const k = (a === 100) ? b : a;
+    return `<div class="it-array-wrap">
+      <div class="it-array-label">${a} × ${b}: ${k} lots of 100</div>
+      <div class="it-area-rect">
+        <span class="it-area-eq">${k} × 100 = ${a*b}</span>
+        <span class="it-area-sub">stick two zeros on the end</span>
+      </div>
+    </div>`;
+  }
+  if ((trickId === 'fifty') && (a === 50 || b === 50)) {
+    const k = (a === 50) ? b : a;
+    return `<div class="it-array-wrap">
+      <div class="it-array-label">${a} × ${b}: half of (${k} × 100)</div>
+      <div class="it-area-rect">
+        <span class="it-area-eq">${k} × 100 = ${k * 100}</span>
+        <span class="it-area-sub">halve it = ${a*b}</span>
+      </div>
+    </div>`;
+  }
+  if ((trickId === 'twentyfive') && (a === 25 || b === 25)) {
+    const k = (a === 25) ? b : a;
+    return `<div class="it-array-wrap">
+      <div class="it-array-label">${a} × ${b}: a quarter of (${k} × 100)</div>
+      <div class="it-area-rect">
+        <span class="it-area-eq">${k} × 100 = ${k * 100}</span>
+        <span class="it-area-sub">divide by 4 = ${a*b}</span>
+      </div>
+    </div>`;
+  }
+  // Very large products: skip dots, show a labeled area rectangle.
+  if (l > 20 || s > 20) {
+    return `<div class="it-array-wrap">
+      <div class="it-array-label">${a} × ${b} as a rectangle</div>
+      <div class="it-area-rect">
+        <span class="it-area-eq">${a} rows of ${b}</span>
+        <span class="it-area-sub">= ${a*b} altogether</span>
+      </div>
+    </div>`;
+  }
+  // Decide rendering plan based on trick id.
+  // rows = factor that becomes the row count; cols = column count to render
+  // (which may exceed b for "trick" framings like ×9 → render 10 cols)
+  let rows = s, cols = l;
+  let plan = { dimCol: null, splitAtCol: null, extraCol: null, splitAtRow: null,
+               leftLabel: null, rightLabel: null, topLabel: null, bottomLabel: null,
+               note: '' };
+
+  if ((trickId === 'nine') && (a === 9 || b === 9)) {
+    // s × 10 with last col dimmed. The non-9 factor becomes rows.
+    const other = (a === 9) ? b : a;
+    rows = other; cols = 10;
+    plan.dimCol = 9;  // 0-indexed
+    plan.note = `${other} rows of 10, then take away ${other}.`;
+  } else if (trickId === 'ten' || trickId === 'twelve') {
+    // No special highlight; just render plainly with rows = non-10/12 factor.
+    const other = (b === 10 || b === 12) ? a : b;
+    const target = (b === 10 || b === 12) ? b : a;
+    rows = other; cols = target;
+    if (trickId === 'twelve') {
+      plan.splitAtCol = 10;     // show 10 + 2 split
+      plan.note = `${other} lots of 10, plus ${other} lots of 2.`;
+    }
+  } else if (trickId === 'five') {
+    // s × 10 split horizontally to show "halve it"
+    const other = (b === 5) ? a : b;
+    rows = other; cols = 10;
+    plan.splitAtRow = Math.floor(other / 2);
+    plan.note = `${other} lots of 10, then halve.`;
+  } else if (trickId === 'seven_split' && (a === 7 || b === 7)) {
+    const other = (a === 7) ? b : a;
+    rows = other; cols = 7;
+    plan.splitAtCol = 5;
+    plan.note = `${other} lots of 5, plus ${other} lots of 2.`;
+  } else if (trickId === 'six' && (a === 6 || b === 6)) {
+    const other = (a === 6) ? b : a;
+    rows = other; cols = 6;
+    plan.splitAtCol = 5;
+    plan.note = `${other} lots of 5, plus one more lot of ${other}.`;
+  } else if (trickId === 'three' && (a === 3 || b === 3)) {
+    const other = (a === 3) ? b : a;
+    rows = other; cols = 3;
+    plan.splitAtCol = 2;
+    plan.note = `Double, then add one more lot.`;
+  } else if (trickId === 'four' && (a === 4 || b === 4)) {
+    const other = (a === 4) ? b : a;
+    rows = other; cols = 4;
+    plan.splitAtCol = 2;
+    plan.note = `Double, then double again.`;
+  } else if (trickId === 'eight' && (a === 8 || b === 8)) {
+    const other = (a === 8) ? b : a;
+    rows = other; cols = 8;
+    plan.splitAtCol = 4;   // visualize ×4 then double
+  } else if (trickId === 'split_tens' || trickId === 'split_place') {
+    // Split the larger factor into tens + ones.
+    rows = s; cols = l;
+    const tens = Math.floor(l / 10) * 10;
+    if (tens > 0 && tens < l) plan.splitAtCol = tens;
+    plan.note = `Split ${l} into ${tens} and ${l - tens}.`;
+  } else if (trickId === 'anchor_step' && Math.abs(a - b) === 1) {
+    // n × (n+1): show n × n square + 1 extra column highlighted
+    rows = s; cols = l;     // s = smaller, l = s+1
+    plan.extraCol = s;      // 0-indexed: the (s+1)th col is at index s
+    plan.note = `A ${s} × ${s} square, plus one extra ${s}.`;
+  } else if (trickId === 'eleven_split' && (a === 11 || b === 11)) {
+    const other = (a === 11) ? b : a;
+    rows = other; cols = 11;
+    plan.splitAtCol = 10;
+    plan.note = `${other} lots of 10, plus one more lot of ${other}.`;
+  } else if (trickId === 'teens' && s >= 11 && l <= 19) {
+    // Both teens — show as 10 + ones layout.
+    // Render as l × s grid with split.
+    rows = s; cols = l;
+    plan.splitAtCol = 10;
+  } else if (trickId === 'diff_squares' && (a + b) % 2 === 0 && a !== b) {
+    // Show as avg × avg square, with the "gap" notion in caption.
+    const avg = (a + b) / 2;
+    const half = Math.abs(b - a) / 2;
+    rows = avg; cols = avg;
+    plan.dimCol = avg - 1;  // Show one column dimmed (representing the "gap²" subtracted)
+    plan.note = `Square of ${avg} (${avg*avg}) minus ${half}² = ${avg*avg - half*half}.`;
+  } else if (trickId === 'halve_double' && s % 2 === 0) {
+    // Show as halved-and-doubled — leave plain for now.
+    rows = s; cols = l;
+    plan.note = `Halve ${s} → ${s/2}; double ${l} → ${l*2}. Same area.`;
+  } else if (trickId === 'factor_regroup') {
+    rows = s; cols = l;
+    plan.note = `Same rectangle, regrouped factors.`;
+  }
+
+  // Cap final size for safety
+  if (rows > 20 || cols > 20) {
+    return `<div class="it-array-wrap">
+      <div class="it-array-label">${a} × ${b}</div>
+      <div class="it-area-rect">
+        <span class="it-area-eq">${a} × ${b}</span>
+        <span class="it-area-sub">= ${a*b}</span>
+      </div>
+    </div>`;
+  }
+
+  // Build the SVG dot grid
+  const r = 5;          // dot radius
+  const sp = 16;        // spacing between dot centers
+  const pad = 14;       // outer padding
+  const w = pad * 2 + cols * sp;
+  const h = pad * 2 + rows * sp;
+  let svg = `<svg viewBox="0 0 ${w} ${h}" class="it-array" role="img" aria-label="${a} by ${b} array">`;
+  // Optional grouping background for the "extra" column (anchor_step) — drawn first under dots
+  if (plan.extraCol != null) {
+    const x = pad + plan.extraCol * sp;
+    svg += `<rect x="${x}" y="${pad - 4}" width="${sp}" height="${rows * sp + 8}" fill="#fff8e1" stroke="#f4c430" stroke-width="1.5" rx="6"/>`;
+  }
+  for (let rr = 0; rr < rows; rr++) {
+    for (let cc = 0; cc < cols; cc++) {
+      const cx = pad + cc * sp + sp / 2;
+      const cy = pad + rr * sp + sp / 2;
+      let fill = '#6c5ce7';
+      let opacity = 1;
+      if (plan.dimCol != null && cc === plan.dimCol) { fill = '#e74c3c'; opacity = 0.35; }
+      else if (plan.extraCol != null && cc === plan.extraCol) { fill = '#f4c430'; }
+      else if (plan.splitAtCol != null && cc >= plan.splitAtCol) { fill = '#ff5aa3'; }
+      else if (plan.splitAtRow != null && rr >= plan.splitAtRow) { opacity = 0.45; }
+      svg += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${fill}" opacity="${opacity}"/>`;
+    }
+  }
+  // Vertical divider for splits
+  if (plan.splitAtCol != null && plan.splitAtCol > 0 && plan.splitAtCol < cols) {
+    const x = pad + plan.splitAtCol * sp;
+    svg += `<line x1="${x}" y1="${pad - 4}" x2="${x}" y2="${pad + rows * sp + 4}" stroke="#2c2c2a" stroke-width="2" class="it-grp-divider"/>`;
+  }
+  if (plan.splitAtRow != null && plan.splitAtRow > 0 && plan.splitAtRow < rows) {
+    const y = pad + plan.splitAtRow * sp;
+    svg += `<line x1="${pad - 4}" y1="${y}" x2="${pad + cols * sp + 4}" y2="${y}" stroke="#2c2c2a" stroke-width="2" class="it-grp-divider"/>`;
+  }
+  // Mark dimmed column with an X for clarity
+  if (plan.dimCol != null) {
+    const x1 = pad + plan.dimCol * sp + 2;
+    const x2 = pad + (plan.dimCol + 1) * sp - 2;
+    const y1 = pad + 2;
+    const y2 = pad + rows * sp - 2;
+    svg += `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#c0392b" stroke-width="2" opacity="0.6"/>`;
+    svg += `<line x1="${x1}" y1="${y2}" x2="${x2}" y2="${y1}" stroke="#c0392b" stroke-width="2" opacity="0.6"/>`;
+  }
+  svg += '</svg>';
+  return `<div class="it-array-wrap"><div class="it-array-label">${plan.note || `${a} × ${b} = ${a*b}`}</div>${svg}</div>`;
+}
+
+/* V25: Audio narration via the Web Speech API. Toggle persists in
+   localStorage. Each step is spoken as it activates. */
+let itAudioEnabled = false;
+try { itAudioEnabled = localStorage.getItem('ttq_lesson_audio') === '1'; } catch (e) {}
+
+function itUpdateAudioBtn() {
+  const btn = document.getElementById('itAudioBtn');
+  if (!btn) return;
+  if (itAudioEnabled) {
+    btn.textContent = '🔊 Audio on';
+    btn.classList.add('on');
+  } else {
+    btn.textContent = '🔇 Audio off';
+    btn.classList.remove('on');
+  }
+}
+function itToggleAudio() {
+  itAudioEnabled = !itAudioEnabled;
+  try { localStorage.setItem('ttq_lesson_audio', itAudioEnabled ? '1' : '0'); } catch (e) {}
+  itUpdateAudioBtn();
+  if (!itAudioEnabled && window.speechSynthesis) speechSynthesis.cancel();
+}
+function itSpeak(text) {
+  if (!itAudioEnabled || !window.speechSynthesis || !text) return;
+  try {
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.rate = 0.95;
+    u.pitch = 1.0;
+    u.lang = 'en-GB';
+    speechSynthesis.speak(u);
+  } catch (e) {}
+}
+document.getElementById('itAudioBtn').addEventListener('click', itToggleAudio);
+itUpdateAudioBtn();
+
 
 function itActivateStep(idx) {
   if (!it) return;
@@ -4333,7 +4654,6 @@ function itActivateStep(idx) {
     itFinish();
     return;
   }
-  // Mark earlier nodes as 'done', later ones still hidden
   nodes.forEach((n, i) => {
     n.classList.remove('active');
     if (i < idx) n.classList.add('done');
@@ -4341,6 +4661,8 @@ function itActivateStep(idx) {
   const node = nodes[idx];
   node.classList.add('active');
   it.stepIdx = idx;
+  // V25: speak the step if audio is on
+  if (node.dataset.spoken) itSpeak(node.dataset.spoken);
 
   if (node.dataset.kind === 'narration') {
     document.getElementById('itTapHint').textContent = 'Tap to continue ↓';
@@ -4397,6 +4719,7 @@ function itFinish() {
     fin.className = 'it-final';
     fin.innerHTML = `🎉 So <b>${a} × ${b} = ${a*b}</b>.`;
     itBoardEl.appendChild(fin);
+    itSpeak(`So ${a} times ${b} equals ${a*b}.`);
   }
   document.getElementById('itTapHint').style.display = 'none';
   itRenderTabs();
@@ -4435,6 +4758,7 @@ function itRenderTabs() {
 
 function itClose() {
   itOverlay.classList.remove('show');
+  if (window.speechSynthesis) speechSynthesis.cancel();
   const cb = it && it.onClose;
   it = null;
   if (cb) cb();
@@ -6491,10 +6815,8 @@ function mpOpenPlacePicker() {
 
 function mpAddPlace(typeId) {
   const u = ensureUser(); migrateUser(u); ensurePalace(u);
-  if (palaceUnlocksAvailable(u) <= 0) {
-    alert('You need an unlock token to add a new place. Master a multiplication to earn one!');
-    return;
-  }
+  // V24: unlock gate temporarily disabled — re-enable when ready by uncommenting:
+  // if (palaceUnlocksAvailable(u) <= 0) { alert('You need an unlock token...'); return; }
   u.palace.places.push({ type: typeId, furniture: [], memories: [] });
   saveState();
   mpRender();
@@ -6558,10 +6880,8 @@ function mpShowColorPicker() {
 
 function mpAddFurniture(roomIdx, typeId, color) {
   const u = ensureUser(); migrateUser(u); ensurePalace(u);
-  if (palaceUnlocksAvailable(u) <= 0) {
-    alert('You need an unlock token to add furniture. Master a multiplication to earn one!');
-    return;
-  }
+  // V24: unlock gate temporarily disabled — re-enable later by uncommenting.
+  // if (palaceUnlocksAvailable(u) <= 0) { alert('Master a multiplication...'); return; }
   const place = u.palace.places[roomIdx];
   if (!place) return;
   if (!place.furniture) place.furniture = [];
@@ -6614,13 +6934,11 @@ setActiveApp = function (name) {
   __origSetActiveApp(name);
   if (name === 'palace') mpRender();
 };
-// Also wire the new tab button click
 document.querySelectorAll('.app-tab').forEach(t => {
   if (t.dataset.app === 'palace') {
     t.addEventListener('click', () => setActiveApp('palace'));
   }
 });
-// Initial render so the palace view is correct on first open
 mpRender();
 
 </script>

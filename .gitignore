@@ -1,0 +1,18 @@
+# Manual version backups — git history replaces this
+backups/
+
+# Transcript source material (large, generated)
+transcripts/
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# Claude Code local files
+.claude/local/

@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Peg picker — cool / graphic edition</title>
+<style>
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+    background: radial-gradient(ellipse at top, #1a1230 0%, #0a0e1a 60%, #050810 100%);
+    margin: 0; padding: 28px; color: #e6e9f5;
+    min-height: 100vh;
+  }
+  h1 {
+    margin: 0 0 4px; font-size: 30px; font-weight: 800; letter-spacing: -0.01em;
+    background: linear-gradient(90deg, #00E5FF, #B084FF, #FF2E63);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .sub { color: #8b91a8; margin-bottom: 18px; font-size: 14px; }
+  .legend {
+    background: linear-gradient(135deg, rgba(176, 132, 255, 0.08), rgba(0, 229, 255, 0.06));
+    border: 1px solid rgba(176, 132, 255, 0.25);
+    padding: 14px 18px; border-radius: 12px; margin-bottom: 22px;
+    font-size: 13px; color: #c5c9dc; line-height: 1.5;
+  }
+  .row {
+    display: grid; grid-template-columns: 60px repeat(3, 1fr);
+    gap: 12px; align-items: stretch;
+    background: linear-gradient(135deg, #141828, #0f1320);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 18px; padding: 14px;
+    margin-bottom: 14px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  }
+  .digit {
+    font-family: 'Inter', sans-serif;
+    font-size: 48px; font-weight: 900; letter-spacing: -0.04em;
+    text-align: center; align-self: center;
+    background: linear-gradient(180deg, #fff, #B084FF);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .opt {
+    background: linear-gradient(160deg, #1c2238, #14182a);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 14px; padding: 10px;
+    text-align: center; transition: all 0.18s ease;
+    position: relative; overflow: hidden;
+  }
+  .opt::before {
+    content: ''; position: absolute; inset: 0;
+    background: radial-gradient(circle at 30% 0%, rgba(176, 132, 255, 0.12), transparent 60%);
+    pointer-events: none;
+  }
+  .opt:hover {
+    transform: translateY(-3px);
+    border-color: rgba(0, 229, 255, 0.4);
+    box-shadow: 0 8px 20px rgba(0, 229, 255, 0.15);
+  }
+  .opt svg {
+    width: 100px; height: 100px; display: block; margin: 0 auto;
+    position: relative; z-index: 1;
+  }
+  .opt-name {
+    font-size: 12px; margin-top: 6px; color: #c5c9dc;
+    font-weight: 600; letter-spacing: 0.02em;
+    text-transform: uppercase;
+    position: relative; z-index: 1;
+  }
+</style>
+</head>
+<body>
+  <h1>PEG PICKER — cool edition</h1>
+  <p class="sub">Less kiddy. Sleek silhouettes, neon palette, holo gradients. Three concept variants per digit — pick one per kid.</p>
+
+  <div class="legend">
+    Style brief: dark cards, bold outlined silhouettes, holographic + neon accents (cyan #00E5FF, magenta #FF2E63, purple #B084FF, gold #FFD23F). No ribbons, no blush dots, no anime eyes. Think album-cover / sneaker-drop / streetwear aesthetic — confident graphic icons a 7-year-old will think look cool.
+  </div>
+
+<!-- ============ 1 ============ -->
+<div class="row">
+  <div class="digit">1</div>
+  <div class="opt">
+    <svg viewBox="0 0 110 110">
+      <defs>
+        <linearGradient id="p1a" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#FF2E63"/><stop offset="1" stop-color="#9B0F3D"/></linearGradient>
+      </defs>
+      <rect x="42" y="22" width="26" height="60" fill="#1a1f30" stroke="#fff" stroke-width="2.5" rx="3"/>
+      <rect x="46" y="26" width="4" height="52" fill="#fff" opacity="0.25"/>
+      <rect x="42" y="22" width="26" height="8" fill="#FFD23F" stroke="#fff" stroke-width="2.5"/>
+      <polygon points="42,82 68,82 55,104" fill="#FFE4B5" stroke="#fff" stroke-width="2.5"/>
+      <polygon points="48,93 62,93 55,104" fill="url(#p1a)"/>
+      <line x1="32" y1="50" x2="38" y2="50" stroke="#00E5FF" stroke-width="2"/>
+      <line x1="72" y1="50" x2="78" y2="50" stroke="#00E5FF" stroke-width="2"/>
+      <line x1="32" y1="60" x2="36" y2="60" stroke="#00E5FF" stroke-width="2" opacity="0.5"/>
+      <line x1="74" y1="60" x2="78" y2="60" stroke="#00E5FF" stroke-width="2" opacity="0.5"/>
+    </svg>
+    <div class="opt-name">Pencil</div>
+  </div>
+  <div class="opt">
+    <svg viewBox="0 0 110 110">
+      <defs>
+        <linearGradient id="p1b" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#00E5FF"/><stop offset="0.5" stop-color="#B084FF"/><stop offset="1" stop-color="#FF2E63"/></linearGradient>
+        <radialGradient id="p1bf" cx="0.5" cy="0.5"><stop offset="0" stop-color="#fff"/><stop offset="0.4" stop-color="#00E5FF"/><stop offset="1" stop-color="#9B5DE5"/></radialGradient>
+      </defs>
+      <rect x="40" y="40" width="30" height="50" fill="#0f1320" stroke="#fff" stroke-width="2.5" rx="2"/>
+      <rect x="40" y="40" width="30" height="50" fill="url(#p1b)" opacity="0.6" rx="2"/>
+      <rect x="36" y="86" width="38" height="6" fill="#1a1f30" stroke="#fff" stroke-width="2.5"/>
+      <line x1="55" y1="40" x2="55" y2="32" stroke="#fff" stroke-width="2"/>
+      <ellipse cx="55" cy="22" rx="9" ry="13" fill="url(#p1bf)" opacity="0.95"/>
+      <ellipse cx="55" cy="20" rx="4" ry="6" fill="#fff" opacity="0.7"/>
+      <circle cx="30" cy="30" r="1.5" fill="#00E5FF"/>
+      <circle cx="80" cy="50" r="1.5" fill="#FF2E63"/>
+      <circle cx="84" cy="78" r="1" fill="#FFD23F"/>
+    </svg>
+    <div class="opt-name">Candle</div>
+  </div>
+  <div class="opt">
+    <svg viewBox="0 0 110 110">
+      <defs>
+        <linearGradient id="p1c" x1="0" x2="1"><stop offset="0" stop-color="#FFD23F"/><stop offset="1" stop-color="#FF9500"/></linearGradient>
+      </defs>
+      <rect x="44" y="46" width="6" height="54" fill="#1a1f30" stroke="#fff" stroke-width="2" transform="rotate(-15 47 73)"/>
+      <polygon points="55,10 60,28 78,28 64,40 70,58 55,48 40,58 46,40 32,28 50,28" fill="url(#p1c)" stroke="#fff" stroke-width="2.5"/>
+      <circle cx="55" cy="32" r="4" fill="#fff" opacity="0.8"/>
+      <circle cx="20" cy="20" r="1" fill="#FFD23F"/>
+      <circle cx="88" cy="18" r="1.5" fill="#FFD23F"/>
+      <circle cx="92" cy="50" r="1" fill="#FFD23F"/>
+      <circle cx="14" cy="70" r="1" fill="#FFD23F"/>
+    </svg>
+    <div class="opt-name">Magic wand</div>
+  </div>
+</div>
+
+<!-- ============ 2 ============ -->
+<div class="row">
+  <div class="digit">2</div>
+  <div class="opt">
+    <svg viewBox="0 0 110 110">
+      <defs>
+        <linearGradient id="p2a" x1="0" x2="1"><stop offset="0" stop-color="#1a1f30"/><stop offset="1" stop-color="#3a2050"/></linearGradient>
+      </defs>
+      <ellipse cx="55" cy="78" rx="32" ry="10" fill="#0a0e1a"/>
+      <path d="M 28 78 Q 35 50 60 50 Q 78 50 80 38 Q 82 30 76 24 Q 70 22 70 28 Q 70 34 76 36" fill="url(#p2a)" stroke="#fff" stroke-width="2.5"/>
+      <path d="M 35 70 Q 50 60 65 64" fill="none" stroke="#B084FF" stroke-width="1.5" opacity="0.7"/>
+      <path d="M 38 75 Q 52 67 66 70" fill="none" stroke="#00E5FF" stroke-width="1.2" opacity="0.5"/>
+      <polygon points="76,28 84,28 80,33" fill="#FFD23F" stroke="#fff" stroke-width="1.5"/>
+      <circle cx="73" cy="27" r="1.5" fill="#fff"/>
+    </svg>
+    <div class="opt-name">Swan</div>
+  </div>
+  <div class="opt">
+    <svg viewBox="0 0 110 110">
+      <defs>
+        <linearGradient id="p2b" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#1f3a1f"/><stop offset="1" stop-color="#0a1a0a"/></linearGradient>
+      </defs>
+      <path d="M 25 90 Q 25 70 45 70 Q 65 70 65 50 Q 65 30 85 30 Q 92 30 92 22" fill="none" stroke="url(#p2b)" stroke-width="14" stroke-linecap="round"/>
+      <path d="M 25 90 Q 25 70 45 70 Q 65 70 65 50 Q 65 30 85 30 Q 92 30 92 22" fill="none" stroke="#39FF6A" stroke-width="2" stroke-linecap="round" stroke-dasharray="3 4" opacity="0.8"/>
+      <ellipse cx="92" cy="20" rx="9" ry="6" fill="url(#p2b)" stroke="#39FF6A" stroke-width="1.5"/>
+      <circle cx="95" cy="18" r="1.8" fill="#FF2E63"/>
+      <line x1="86" y1="22" x2="80" y2="28" stroke="#FF2E63" stroke-width="1.5"/>
+      <line x1="86" y1="20" x2="78" y2="22" stroke="#FF2E63" stroke-width="1.5"/>
+    </svg>
+    <div class="opt-name">Snake</div>
+  </div>
+  <div class="opt">
+    <svg viewBox="0 0 110 110">
+      <defs>
+        <linearGradient id="p2c" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stop-color="#00E5FF"/><stop offset="0.5" stop-color="#B084FF"/><stop offset="1" stop-color="#FF2E63"/></linearGradient>
+      </defs>
+      <text x="22" y="92" font-size="92" font-weight="900" font-family="Inter, sans-serif" fill="url(#p2c)" stroke="#fff" stroke-width="1.5">2</text>
+      <circle cx="20" cy="22" r="1.5" fill="#fff"/>
+      <circle cx="92" cy="40" r="1" fill="#fff"/>
+    </svg>
+    <div class="opt-name">Big &quot;2&quot;</div>
+  </div>
+</div>
+
+<!-- ============ 3 ============ -->
+<div class="row">
+  <div class="digit">3</div>
+  <div class="opt">
+    <svg viewBox="0 0 110 110">
+      <defs>
+        <linearGradient id="p3a" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stop-color="#FF2E63"/><stop offset="0.5" stop-color="#B084FF"/><stop offset="1" stop-color="#00E5FF"/></linearGradient>
+      </defs>
+      <path d="M 55 92 C 25 70 18 45 32 32 C 42 22 52 28 55 38 C 58 28 68 22 78 32 C 92 45 85 70 55 92 Z" fill="url(#p3a)" stroke="#fff" stroke-width="2.5"/>
+      <path d="M 55 92 C 25 70 18 45 32 32 C 42 22 52 28 55 38" fill="none" stroke="#fff" stroke-width="2" opacity="0.4"/>
+      <ellipse cx="40" cy="42" rx="5" ry="3" fill="#fff" opacity="0.5" transform="rotate(-30 40 42)"/>
+    </svg>
+    <div class="opt-name">Heart</div>
+  </div>
+  <div class="opt">
+    <svg viewBox="0 0 110 110">
+      <defs>
+        <linearGradient id="p3b1" x1="0" x2="1"><stop offset="0" stop-color="#00E5FF"/><stop offset="1" stop-color="#9B5DE5"/></linearGradient>
+        <linearGradient id="p3b2" x1="0" x2="1"><stop offset="0" stop-color="#FF2E63"/><stop offset="1" stop-color="#FFD23F"/></linearGradient>
+      </defs>
+      <line x1="55" y1="30" x2="55" y2="80" stroke="#fff" stroke-width="2.5"/>
+      <path d="M 55 38 Q 30 22 22 40 Q 18 58 36 58 Q 50 58 55 50" fill="url(#p3b1)" stroke="#fff" stroke-width="2.5"/>
+      <path d="M 55 38 Q 80 22 88 40 Q 92 58 74 58 Q 60 58 55 50" fill="url(#p3b2)" stroke="#fff" stroke-width="2.5"/>
+      <path d="M 55 60 Q 32 60 26 78 Q 22 88 38 86 Q 50 84 55 76" fill="url(#p3b2)" stroke="#fff" stroke-width="2.5"/>
+      <path d="M 55 60 Q 78 60 84 78 Q 88 88 72 86 Q 60 84 55 76" fill="url(#p3b1)" stroke="#fff" stroke-width="2.5"/>
+      <circle cx="55" cy="32" r="3" fill="#1a1f30" stroke="#fff" stroke-width="2"/>
+    </svg>
+    <div class="opt-name">Butterfly</div>
+  </div>
+  <div class="opt">
+    <svg viewBox="0 0 110 110">
+      <defs>
+        <linearGradient id="p3c" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#FF2E63"/><stop offset="0.5" stop-color="#9B5DE5"/><stop offset="1" stop-color="#1a1f30"/></linearGradient>
+      </defs>
+      <rect x="0" y="0" width="110" height="110" fill="url(#p3c)" opacity="0.15" rx="6"/>
+      <circle cx="78" cy="28" r="9" fill="#FFD23F" opacity="0.9"/>
+      <polygon points="10,90 35,40 55,68 70,50 100,90" fill="#1a1f30" stroke="#fff" stroke-width="2.5"/>
+      <polygon points="35,40 42,52 30,52" fill="#fff" opacity="0.9"/>
+      <polygon points="70,50 75,58 65,58" fill="#fff" opacity="0.7"/>
+      <line x1="0" y1="92" x2="110" y2="92" stroke="#FF2E63" stroke-width="1.5" opacity="0.5"/>
+    </svg>
+    <div class="opt-name">Mountains</div>
+  </div>
+</div>
+
+<!-- ============ 4 ============ -->
+<div class="row">
+  <div class="digit">4</div>
+  <div class="opt">
+    <svg viewBox="0 0 110 110">
+      <defs>
+        <linearGradient id="p4a" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#FF2E63"/><stop offset="1" stop-color="#9B5DE5"/></linearGradient>
+      </defs>
+      <path d="M 18 72 Q 55 78 92 72 L 86 88 L 24 88 Z" fill="#1a1f30" stroke="#fff" stroke-width="2.5"/>
+      <line x1="55" y1="20" x2="55" y2="72" stroke="#fff" stroke-width="2.5"/>
+      <polygon points="55,20 55,68 22,68" fill="url(#p4a)" stroke="#fff" stroke-width="2.5"/>
+      <polygon points="55,28 80,68 55,68" fill="#00E5FF" stroke="#fff" stroke-width="2.5" opacity="0.85"/>
+      <line x1="0" y1="94" x2="110" y2="94" stroke="#00E5FF" stroke-width="1" opacity="0.4"/>
+    </svg>
+    <div class="opt-name">Sailboat</div>
+  </div>
+  <div class="opt">
+    <svg viewBox="0 0 110 110">
+      <defs>
+        <linearGradient id="p4b" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stop-color="#00E5FF"/><stop offset="0.5" stop-color="#B084FF"/><stop offset="1" stop-color="#FF2E63"/></linearGradient>
+      </defs>
+      <polygon points="55,12 90,46 55,80 20,46" fill="url(#p4b)" stroke="#fff" stroke-width="2.5"/>
+      <line x1="55" y1="12" x2="55" y2="80" stroke="#fff" stroke-width="1.5" opacity="0.5"/>
+      <line x1="20" y1="46" x2="90" y2="46" stroke="#fff" stroke-width="1.5" opacity="0.5"/>
+      <path d="M 55 80 Q 50 90 55 96 Q 60 102 55 104" fill="none" stroke="#fff" stroke-width="2"/>
+      <line x1="50" y1="86" x2="46" y2="86" stroke="#FFD23F" stroke-width="2"/>
+      <line x1="58" y1="92" x2="62" y2="92" stroke="#FFD23F" stroke-width="2"/>
+      <line x1="52" y1="100" x2="48" y2="100" stroke="#FFD23F" stroke-width="2"/>
+    </svg>
+    <div class="opt-name">Kite</div>
+  </div>
+  <div class="opt">
+    <svg viewBox="0 0 110 110">
+      <defs>
+        <linearGradient id="p4c" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#3a2a50"/><stop offset="1" stop-color="#1a1f30"/></linearGradient>
+      </defs>
+      <rect x="28" y="14" width="54" height="50" fill="url(#p4c)" stroke="#fff" stroke-width="2.5" rx="3"/>
+      <polygon points="28,14 38,4 72,4 82,14" fill="#FFD23F" stroke="#fff" stroke-width="2.5"/>
+      <circle cx="45" cy="9" r="2" fill="#FF2E63"/>
+      <circle cx="55" cy="9" r="2" fill="#00E5FF"/>
+      <circle cx="65" cy="9" r="2" fill="#FFD23F"/>
+      <rect x="32" y="60" width="46" height="38" fill="#1a1f30" stroke="#fff" stroke-width="2.5"/>
+      <rect x="38" y="68" width="34" height="6" fill="#FF2E63" opacity="0.7"/>
+      <rect x="32" y="98" width="46" height="6" fill="#1a1f30" stroke="#fff" stroke-width="2.5"/>
+      <rect x="36" y="104" width="6" height="4" fill="#1a1f30" stroke="#fff" stroke-width="2"/>
+      <rect x="68" y="104" width="6" height="4" fill="#1a1f30" stroke="#fff" stroke-width="2"/>
+    </svg>
+    <div class="opt-name">Throne</div>
+  </div>
+</div>
+
+<!-- ============ 5 ============ -->
+<div class="row">
+  <div class="digit">5</div>
+  <div class="opt">
+    <svg viewBox="0 0 110 110">
+      <defs>
+        <linearGradient id="p5a" x1="0" x2="1"><stop offset="0" stop-color="#9aa6c0"/><stop offset="0.5" stop-color="#fff"/><stop offset="1" stop-color="#5a6680"/></linearGradient>
+      </defs>
+      <path d="M 38 90 L 38 50 Q 38 38 50 38 L 50 30 Q 50 22 58 22 Q 66 22 66 30 L 66 38 Q 78 38 78 50 L 78 90 Z" fill="url(#p5a)" stroke="#1a1f30" stroke-width="2.5"/>
+      <rect x="42" y="60" width="32" height="3" fill="#1a1f30"/>
+      <rect x="42" y="68" width="32" height="3" fill="#1a1f30"/>
+      <rect x="42" y="76" width="32" height="3" fill="#1a1f30"/>
+      <circle cx="48" cy="56" r="2" fill="#FF2E63"/>
+      <circle cx="58" cy="56" r="2" fill="#FF2E63"/>
+      <circle cx="68" cy="56" r="2" fill="#FF2E63"/>
+      <line x1="58" y1="22" x2="58" y2="14" stroke="#00E5FF" stroke-width="2"/>
+      <line x1="50" y1="20" x2="46" y2="14" stroke="#00E5FF" stroke-width="2"/>
+      <line x1="66" y1="20" x2="70" y2="14" stroke="#00E5FF" stroke-width="2"/>
+    </svg>
+    <div class="opt-name">Gauntlet</div>
+  </div>
+  <div class="opt">
+    <svg viewBox="0 0 110 110">
+      <defs>
+        <linearGradient id="p5b" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#00E5FF"/><stop offset="1" stop-color="#9B5DE5"/></linearGradient>
+      </defs>
+      <path d="M 60 18 Q 75 18 75 32 Q 75 42 65 48 Q 55 54 55 68 Q 55 80 45 84 Q 38 86 38 92 Q 38 98 44 98" fill="none" stroke="url(#p5b)" stroke-width="11" stroke-linecap="round"/>
+      <circle cx="68" cy="28" r="3" fill="#FF2E63"/>
+      <line x1="58" y1="32" x2="55" y2="36" stroke="#fff" stroke-width="2"/>
+      <line x1="62" y1="42" x2="58" y2="44" stroke="#fff" stroke-width="2"/>
+      <line x1="58" y1="56" x2="54" y2="58" stroke="#fff" stroke-width="2"/>
+      <line x1="46" y1="74" x2="42" y2="76" stroke="#fff" stroke-width="2"/>
+      <path d="M 75 22 L 82 18 L 80 24 L 86 22" fill="none" stroke="#FFD23F" stroke-width="2" stroke-linecap="round"/>
+    </svg>
+    <div class="opt-name">Seahorse</div>
+  </div>
+  <div class="opt">
+    <svg viewBox="0 0 110 110">
+      <defs>
+        <linearGradient id="p5c" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stop-color="#FFD23F"/><stop offset="1" stop-color="#FF9500"/></linearGradient>
+        <radialGradient id="p5cg" cx="0.5" cy="0.5"><stop offset="0" stop-color="#FFD23F" stop-opacity="0.5"/><stop offset="1" stop-color="#FFD23F" stop-opacity="0"/></radialGradient>
+      </defs>
+      <circle cx="55" cy="55" r="50" fill="url(#p5cg)"/>
+      <polygon points="55,8 67,42 102,42 73,62 84,96 55,76 26,96 37,62 8,42 43,42" fill="url(#p5c)" stroke="#fff" stroke-width="2.5"/>
+      <polygon points="55,20 62,42 84,42 67,55 73,76 55,64" fill="#fff" opacity="0.35"/>
+    </svg>
+    <div class="opt-name">Star</div>
+  </div>
+</div>
+
+<!-- ============ 6 ============ -->
+<div class="row">
+  <div class="digit">6</div>
+  <div class="opt">
+    <svg viewBox="0 0 110 110">
+      <defs>
+        <radialGradient id="p6a" cx="0.35" cy="0.3"><stop offset="0" stop-color="#fff"/><stop offset="0.3" stop-color="#FF2E63"/><stop offset="1" stop-color="#7a0a2a"/></radialGradient>
+        <radialGradient id="p6a2" cx="0.35" cy="0.3"><stop offset="0" stop-color="#fff"/><stop offset="0.3" stop-color="#9B5DE5"/><stop offset="1" stop-color="#3a1a5a"/></radialGradient>
+      </defs>
+      <path d="M 35 78 Q 30 50 50 25" fill="none" stroke="#39FF6A" stroke-width="2.5"/>
+      <path d="M 75 78 Q 80 50 60 25" fill="none" stroke="#39FF6A" stroke-width="2.5"/>
+      <path d="M 50 25 Q 55 20 60 25" fill="none" stroke="#39FF6A" stroke-width="2.5"/>
+      <ellipse cx="35" cy="78" rx="18" ry="20" fill="url(#p6a)" stroke="#fff" stroke-width="2.5"/>
+      <ellipse cx="75" cy="78" rx="18" ry="20" fill="url(#p6a2)" stroke="#fff" stroke-width="2.5"/>
+      <ellipse cx="28" cy="70" rx="5" ry="3" fill="#fff" opacity="0.6"/>
+      <ellipse cx="68" cy="70" rx="5" ry="3" fill="#fff" opacity="0.6"/>
+    </svg>
+    <div class="opt-name">Cherries</div>
+  </div>
+  <div class="opt">
+    <svg viewBox="0 0 110 110">
+      <defs>
+        <linearGradient id="p6b" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#3a3550"/><stop offset="1" stop-color="#1a1530"/></linearGradient>
+      </defs>
+      <path d="M 22 76 Q 22 50 42 46 Q 50 30 65 32 Q 85 34 88 56 Q 90 80 75 86 L 75 96 L 65 96 L 65 88 L 50 88 L 50 96 L 40 96 L 40 86 Q 28 84 22 76 Z" fill="url(#p6b)" stroke="#fff" stroke-width="2.5"/>
+      <path d="M 32 60 L 28 50 L 24 56 M 38 50 L 36 38 L 30 44" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
+      <circle cx="78" cy="50" r="2.5" fill="#FF2E63"/>
+      <circle cx="84" cy="56" r="1.5" fill="#FFD23F"/>
+      <line x1="80" y1="64" x2="86" y2="62" stroke="#00E5FF" stroke-width="1.5"/>
+      <line x1="82" y1="70" x2="88" y2="70" stroke="#00E5FF" stroke-width="1.5"/>
+    </svg>
+    <div class="opt-name">Elephant</div>
+  </div>
+  <div class="opt">
+    <svg viewBox="0 0 110 110">
+      <defs>
+        <linearGradient id="p6c" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#9aa6c0"/></linearGradient>
+      </defs>
+      <line x1="22" y1="14" x2="60" y2="100" stroke="#1a1f30" stroke-width="6" stroke-linecap="round"/>
+      <line x1="22" y1="14" x2="60" y2="100" stroke="#fff" stroke-width="2" stroke-linecap="round" opacity="0.4"/>
+      <path d="M 14 8 Q 14 26 30 22 Q 32 14 26 6 Z" fill="url(#p6c)" stroke="#1a1f30" stroke-width="2.5"/>
+      <line x1="18" y1="14" x2="26" y2="14" stroke="#1a1f30" stroke-width="1.2"/>
+      <line x1="20" y1="18" x2="24" y2="18" stroke="#1a1f30" stroke-width="1.2"/>
+      <circle cx="60" cy="100" r="4" fill="#FFD23F" stroke="#1a1f30" stroke-width="1.5"/>
+      <circle cx="78" cy="20" r="2" fill="#00E5FF"/>
+      <circle cx="84" cy="40" r="1.5" fill="#FF2E63"/>
+    </svg>
+    <div class="opt-name">Golf club</div>
+  </div>
+</div>
+
+<!-- ============ 7 ============ -->
+<div class="row">
+  <div class="digit">7</div>
+  <div class="opt">
+    <svg viewBox="0 0 110 110">
+      <defs>
+        <linearGradient id="p7a" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stop-color="#FF2E63"/><stop offset="1" stop-color="#9B5DE5"/></linearGradient>
+      </defs>
+      <path d="M 18 50 Q 18 22 50 22 L 92 22 Q 70 30 60 50 Q 52 38 36 38 Q 22 38 22 50 Z" fill="url(#p7a)" stroke="#fff" stroke-width="2.5"/>
+      <path d="M 30 36 L 86 26" stroke="#fff" stroke-width="1.5" opacity="0.4"/>
+      <path d="M 14 60 Q 30 70 50 65" fill="none" stroke="#00E5FF" stroke-width="2" stroke-dasharray="4 3" opacity="0.7"/>
+      <path d="M 12 72 Q 28 82 48 78" fill="none" stroke="#00E5FF" stroke-width="1.5" stroke-dasharray="3 3" opacity="0.5"/>
+      <path d="M 10 84 Q 26 92 46 90" fill="none" stroke="#00E5FF" stroke-width="1" stroke-dasharray="2 3" opacity="0.4"/>
+    </svg>
+    <div class="opt-name">Boomerang</div>
+  </div>
+  <div class="opt">
+    <svg viewBox="0 0 110 110">
+      <defs>
+        <linearGradient id="p7b" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#fff"/><stop offset="0.4" stop-color="#39FF6A"/><stop offset="1" stop-color="#0a3a18"/></linearGradient>
+      </defs>
+      <rect x="50" y="60" width="10" height="34" fill="#1a1f30" stroke="#fff" stroke-width="2.5" rx="2"/>
+      <rect x="48" y="86" width="14" height="6" fill="#9aa6c0" stroke="#fff" stroke-width="2"/>
+      <rect x="52" y="68" width="6" height="2" fill="#FFD23F"/>
+      <rect x="52" y="74" width="6" height="2" fill="#FFD23F"/>
+      <rect x="46" y="58" width="18" height="4" fill="#5a6680" stroke="#fff" stroke-width="2"/>
+      <rect x="51" y="6" width="8" height="54" fill="url(#p7b)" stroke="#fff" stroke-width="2" rx="3"/>
+      <rect x="53" y="10" width="2" height="44" fill="#fff" opacity="0.7"/>
+      <ellipse cx="55" cy="6" rx="6" ry="3" fill="#fff" opacity="0.9"/>
+    </svg>
+    <div class="opt-name">Lightsaber</div>
+  </div>
+  <div class="opt">
+    <svg viewBox="0 0 110 110">
+      <defs>
+        <linearGradient id="p7c" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#FFD23F"/><stop offset="0.5" stop-color="#FF9500"/><stop offset="1" stop-color="#5a1a0a"/></linearGradient>
+      </defs>
+      <rect x="0" y="0" width="110" height="110" fill="url(#p7c)" opacity="0.18" rx="6"/>
+      <circle cx="20" cy="20" r="8" fill="#FFD23F" opacity="0.85"/>
+      <polygon points="0,98 20,70 30,80 45,55 60,75 75,60 95,82 110,72 110,110 0,110" fill="#1a1f30" stroke="#fff" stroke-width="2.5"/>
+      <path d="M 30 80 L 32 75 L 28 78 Z" fill="#fff" opacity="0.3"/>
+      <path d="M 60 75 L 62 70 L 58 73 Z" fill="#fff" opacity="0.3"/>
+      <line x1="0" y1="100" x2="110" y2="100" stroke="#FF2E63" stroke-width="1.5" opacity="0.4"/>
+    </svg>
+    <div class="opt-name">Cliff</div>
+  </div>
+</div>
+
+<!-- ============ 8 ============ -->
+<div class="row">
+  <div class="digit">8</div>
+  <div class="opt">
+    <svg viewBox="0 0 110 110">
+      <defs>
+        <radialGradient id="p8a" cx="0.5" cy="0.4"><stop offset="0" stop-color="#fff"/><stop offset="0.7" stop-color="#d8e0f5"/><stop offset="1" stop-color="#8090b0"/></radialGradient>
+      </defs>
+      <ellipse cx="55" cy="86" rx="26" ry="14" fill="url(#p8a)" stroke="#1a1f30" stroke-width="2.5"/>
+      <ellipse cx="55" cy="58" rx="20" ry="14" fill="url(#p8a)" stroke="#1a1f30" stroke-width="2.5"/>
+      <ellipse cx="55" cy="32" rx="14" ry="13" fill="url(#p8a)" stroke="#1a1f30" stroke-width="2.5"/>
+      <rect x="40" y="20" width="30" height="6" fill="#1a1f30"/>
+      <rect x="36" y="14" width="38" height="6" fill="#FF2E63" stroke="#1a1f30" stroke-width="2"/>
+      <rect x="38" y="29" width="34" height="6" fill="#1a1f30" rx="2"/>
+      <rect x="40" y="30" width="12" height="4" fill="#00E5FF" rx="1"/>
+      <rect x="58" y="30" width="12" height="4" fill="#00E5FF" rx="1"/>
+      <line x1="52" y1="32" x2="58" y2="32" stroke="#1a1f30" stroke-width="2"/>
+      <polygon points="55,40 53,44 57,44" fill="#FF9500"/>
+      <circle cx="48" cy="56" r="2" fill="#1a1f30"/>
+      <circle cx="62" cy="56" r="2" fill="#1a1f30"/>
+      <circle cx="50" cy="84" r="1.5" fill="#1a1f30"/>
+      <circle cx="60" cy="84" r="1.5" fill="#1a1f30"/>
+    </svg>
+    <div class="opt-name">Snowman</div>
+  </div>
+  <div class="opt">
+    <svg viewBox="0 0 110 110">
+      <defs>
+        <linearGradient id="p8b" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#FFD23F"/><stop offset="1" stop-color="#FF2E63"/></linearGradient>
+      </defs>
+      <rect x="22" y="14" width="66" height="6" fill="#9aa6c0" stroke="#fff" stroke-width="2"/>
+      <rect x="22" y="90" width="66" height="6" fill="#9aa6c0" stroke="#fff" stroke-width="2"/>
+      <path d="M 28 20 L 82 20 Q 60 50 55 55 Q 50 50 28 20 Z" fill="#1a1f30" stroke="#fff" stroke-width="2.5"/>
+      <path d="M 28 90 L 82 90 Q 60 60 55 55 Q 50 60 28 90 Z" fill="#1a1f30" stroke="#fff" stroke-width="2.5"/>
+      <path d="M 32 24 L 78 24 Q 60 48 55 53 Q 50 48 32 24 Z" fill="url(#p8b)" opacity="0.85"/>
+      <circle cx="55" cy="60" r="3" fill="#FFD23F"/>
+      <circle cx="55" cy="68" r="2.5" fill="#FFD23F"/>
+      <circle cx="55" cy="76" r="2" fill="#FFD23F"/>
+      <circle cx="55" cy="82" r="1.5" fill="#FFD23F"/>
+    </svg>
+    <div class="opt-name">Hourglass</div>
+  </div>
+  <div class="opt">
+    <svg viewBox="0 0 110 110">
+      <defs>
+        <radialGradient id="p8c" cx="0.5" cy="0.3"><stop offset="0" stop-color="#FF2E63"/><stop offset="1" stop-color="#5a0a2a"/></radialGradient>
+      </defs>
+      <path d="M 30 80 Q 28 50 55 40 Q 82 50 80 80" fill="url(#p8c)" stroke="#fff" stroke-width="2.5"/>
+      <path d="M 30 80 Q 22 90 16 96 Q 22 88 26 84" fill="url(#p8c)" stroke="#fff" stroke-width="2"/>
+      <path d="M 40 88 Q 32 100 26 104" fill="url(#p8c)" stroke="#fff" stroke-width="2"/>
+      <path d="M 50 92 Q 46 104 42 108" fill="url(#p8c)" stroke="#fff" stroke-width="2"/>
+      <path d="M 60 92 Q 64 104 68 108" fill="url(#p8c)" stroke="#fff" stroke-width="2"/>
+      <path d="M 70 88 Q 78 100 84 104" fill="url(#p8c)" stroke="#fff" stroke-width="2"/>
+      <path d="M 80 80 Q 88 90 94 96 Q 88 88 84 84" fill="url(#p8c)" stroke="#fff" stroke-width="2"/>
+      <ellipse cx="44" cy="58" rx="3.5" ry="4" fill="#fff"/><ellipse cx="44" cy="59" rx="2" ry="2.5" fill="#1a1f30"/>
+      <ellipse cx="64" cy="58" rx="3.5" ry="4" fill="#fff"/><ellipse cx="64" cy="59" rx="2" ry="2.5" fill="#1a1f30"/>
+      <path d="M 48 70 Q 54 73 60 70" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
+      <ellipse cx="48" cy="48" rx="6" ry="2" fill="#fff" opacity="0.4"/>
+    </svg>
+    <div class="opt-name">Octopus</div>
+  </div>
+</div>
+
+<!-- ============ 9 ============ -->
+<div class="row">
+  <div class="digit">9</div>
+  <div class="opt">
+    <svg viewBox="0 0 110 110">
+      <defs>
+        <radialGradient id="p9a" cx="0.4" cy="0.3"><stop offset="0" stop-color="#fff"/><stop offset="0.3" stop-color="#FF2E63"/><stop offset="1" stop-color="#5a0a2a"/></radialGradient>
+      </defs>
+      <ellipse cx="55" cy="40" rx="26" ry="32" fill="url(#p9a)" stroke="#fff" stroke-width="2.5"/>
+      <polygon points="50,70 60,70 55,80" fill="#1a1f30" stroke="#fff" stroke-width="2"/>
+      <path d="M 55 80 Q 60 90 50 96 Q 60 98 55 108" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
+      <ellipse cx="44" cy="28" rx="6" ry="9" fill="#fff" opacity="0.55"/>
+      <circle cx="20" cy="22" r="1.5" fill="#fff"/>
+      <circle cx="92" cy="50" r="1" fill="#fff"/>
+    </svg>
+    <div class="opt-name">Balloon</div>
+  </div>
+  <div class="opt">
+    <svg viewBox="0 0 110 110">
+      <defs>
+        <linearGradient id="p9b" x1="0" x2="1"><stop offset="0" stop-color="#1a1f30"/><stop offset="1" stop-color="#3a3550"/></linearGradient>
+      </defs>
+      <ellipse cx="40" cy="60" rx="22" ry="18" fill="url(#p9b)" stroke="#fff" stroke-width="2.5"/>
+      <path d="M 60 60 Q 78 50 88 60 Q 84 64 88 70 Q 80 64 60 64" fill="url(#p9b)" stroke="#fff" stroke-width="2.5"/>
+      <ellipse cx="32" cy="54" rx="3" ry="4" fill="#fff"/>
+      <circle cx="32" cy="55" r="1.8" fill="#1a1f30"/>
+      <ellipse cx="30" cy="52" rx="0.8" ry="1" fill="#fff"/>
+      <path d="M 25 68 Q 32 71 38 68" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/>
+      <line x1="22" y1="46" x2="28" y2="42" stroke="#00E5FF" stroke-width="1.5"/>
+      <line x1="56" y1="50" x2="60" y2="46" stroke="#00E5FF" stroke-width="1.2"/>
+      <line x1="56" y1="74" x2="60" y2="78" stroke="#00E5FF" stroke-width="1.2"/>
+    </svg>
+    <div class="opt-name">Tadpole</div>
+  </div>
+  <div class="opt">
+    <svg viewBox="0 0 110 110">
+      <defs>
+        <linearGradient id="p9c" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#FF2E63"/><stop offset="0.5" stop-color="#FFD23F"/><stop offset="1" stop-color="#00E5FF"/></linearGradient>
+      </defs>
+      <line x1="55" y1="60" x2="55" y2="100" stroke="#9aa6c0" stroke-width="4"/>
+      <line x1="55" y1="60" x2="55" y2="100" stroke="#fff" stroke-width="1.5" opacity="0.6"/>
+      <circle cx="55" cy="40" r="32" fill="#1a1f30" stroke="#fff" stroke-width="2.5"/>
+      <path d="M 55 40 m -22 0 a 22 22 0 1 1 44 0 a 14 14 0 1 1 -28 0 a 8 8 0 1 1 16 0" fill="none" stroke="url(#p9c)" stroke-width="5" stroke-linecap="round"/>
+      <ellipse cx="44" cy="28" rx="5" ry="3" fill="#fff" opacity="0.4"/>
+    </svg>
+    <div class="opt-name">Lollipop</div>
+  </div>
+</div>
+
+<!-- ============ 10 ============ -->
+<div class="row">
+  <div class="digit">10</div>
+  <div class="opt">
+    <svg viewBox="0 0 110 110">
+      <defs>
+        <linearGradient id="p10a" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#9aa6c0"/><stop offset="1" stop-color="#3a3550"/></linearGradient>
+        <radialGradient id="p10ab" cx="0.4" cy="0.3"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#aab5c8"/></radialGradient>
+      </defs>
+      <rect x="30" y="80" width="60" height="10" fill="url(#p10a)" stroke="#fff" stroke-width="2.5" rx="3" transform="rotate(-30 60 85)"/>
+      <rect x="20" y="92" width="14" height="14" fill="#1a1f30" stroke="#fff" stroke-width="2" rx="2" transform="rotate(-30 27 99)"/>
+      <circle cx="32" cy="32" r="18" fill="url(#p10ab)" stroke="#1a1f30" stroke-width="2.5"/>
+      <path d="M 22 28 Q 32 36 42 28" fill="none" stroke="#FF2E63" stroke-width="2" stroke-linecap="round"/>
+      <path d="M 22 36 Q 32 42 42 36" fill="none" stroke="#FF2E63" stroke-width="2" stroke-linecap="round"/>
+      <line x1="20" y1="22" x2="44" y2="42" stroke="#FF2E63" stroke-width="1.5" opacity="0.5"/>
+    </svg>
+    <div class="opt-name">Bat &amp; ball</div>
+  </div>
+  <div class="opt">
+    <svg viewBox="0 0 110 110">
+      <defs>
+        <linearGradient id="p10b" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#1a1f30"/><stop offset="1" stop-color="#0a0e1a"/></linearGradient>
+      </defs>
+      <rect x="20" y="92" width="70" height="12" fill="#1a1f30" stroke="#fff" stroke-width="2.5" rx="3"/>
+      <rect x="22" y="95" width="66" height="2" fill="#FFD23F"/>
+      <path d="M 30 92 L 30 60 Q 30 40 48 30 Q 52 26 50 22 Q 48 18 52 18 L 80 18 Q 86 18 86 28 Q 86 38 80 42 Q 74 46 78 56 Q 80 64 80 92" fill="url(#p10b)" stroke="#fff" stroke-width="2.5"/>
+      <circle cx="74" cy="32" r="1.8" fill="#fff"/>
+      <ellipse cx="68" cy="38" rx="4" ry="2" fill="#FF2E63" transform="rotate(-15 68 38)"/>
+      <line x1="60" y1="50" x2="74" y2="50" stroke="#fff" stroke-width="1.5" opacity="0.6"/>
+      <line x1="55" y1="60" x2="76" y2="60" stroke="#fff" stroke-width="1.5" opacity="0.4"/>
+    </svg>
+    <div class="opt-name">Knight (chess)</div>
+  </div>
+  <div class="opt">
+    <svg viewBox="0 0 110 110">
+      <defs>
+        <linearGradient id="p10c" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#9aa6c0"/><stop offset="1" stop-color="#3a3550"/></linearGradient>
+      </defs>
+      <rect x="32" y="22" width="46" height="38" fill="url(#p10c)" stroke="#fff" stroke-width="2.5" rx="6"/>
+      <rect x="42" y="60" width="26" height="6" fill="#1a1f30" stroke="#fff" stroke-width="2"/>
+      <rect x="36" y="66" width="38" height="32" fill="url(#p10c)" stroke="#fff" stroke-width="2.5" rx="4"/>
+      <rect x="38" y="32" width="34" height="14" fill="#1a1f30" rx="3"/>
+      <rect x="48" y="36" width="14" height="6" fill="#00E5FF" rx="2"/>
+      <line x1="44" y1="38" x2="50" y2="38" stroke="#fff" stroke-width="0.8" opacity="0.6"/>
+      <circle cx="50" cy="78" r="3" fill="#FF2E63"/>
+      <circle cx="60" cy="78" r="3" fill="#FFD23F"/>
+      <line x1="42" y1="88" x2="68" y2="88" stroke="#fff" stroke-width="1.5" opacity="0.5"/>
+      <rect x="40" y="14" width="3" height="10" fill="#fff"/>
+      <circle cx="41.5" cy="13" r="2.5" fill="#FF2E63"/>
+      <rect x="68" y="14" width="3" height="10" fill="#fff"/>
+      <circle cx="69.5" cy="13" r="2.5" fill="#00E5FF"/>
+    </svg>
+    <div class="opt-name">Robot</div>
+  </div>
+</div>
+
+</body>
+</html>

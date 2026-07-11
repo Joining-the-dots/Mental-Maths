@@ -7533,11 +7533,12 @@ function renderUserModal() {
 }
 
 function bootstrap12(u) {
-  /* Mark all x1 and x2 cells mastered for this user. */
+  /* Mark ALL ×1 and ×2 cells mastered for this user — the whole grid
+     (1-100), not just up to 10. */
   const STAR_THRESHOLD = 5;  // mirror masteryLevel() logic
   const now = new Date().toISOString();
   for (let a = 1; a <= 2; a++) {
-    for (let b = 1; b <= 10; b++) {
+    for (let b = 1; b <= GRID_N; b++) {
       const k = cellKey(a, b);
       const rec = u.cells[k] || { attempts: 0, correct: 0, streak: 0, lastSeen: null };
       // Force mastery: streak >= STAR_THRESHOLD and total correct >= STAR_THRESHOLD
@@ -22946,7 +22947,7 @@ tcGameOverlay.addEventListener('click', (e) => { if (e.target === tcGameOverlay)
 <div class="overlay" id="op2SetupOverlay">
   <div class="modal" role="dialog" aria-modal="true">
     <h2>🤝 1% Challenge — head to head</h2>
-    <p class="sub">Same 15 questions each, easy to fiendish. One wrong answer and you're OUT — unless you play your PASS. Outlast your friend, or out-score them!</p>
+    <p class="sub">Same 15 questions each, easy to fiendish. One wrong answer and you're OUT — unless you play your PASS. Outlast your friend, or out-score them! If you BOTH get one wrong, you share ❤️❤️❤️ three team lives to retry the round.</p>
     <div style="display:flex; gap:8px; margin-top:12px;">
       <button class="btn btn-primary" id="op2StartHost" style="flex:1; padding:14px;">📡 Start a challenge</button>
       <button class="btn btn-primary" id="op2StartJoin" style="flex:1; padding:14px; background:linear-gradient(135deg,#ff9f43,#ee5a24);">🔑 Join a challenge</button>
@@ -22998,6 +22999,7 @@ tcGameOverlay.addEventListener('click', (e) => { if (e.target === tcGameOverlay)
       </div>
     </div>
     <div class="op-spectate" id="op2Spectate"></div>
+    <div style="text-align:center;font-size:15px;letter-spacing:2px;" id="op2Lives"></div>
     <div class="op-stagechip" id="op2StageChip"></div>
     <div class="op-q" id="op2Q"></div>
     <div class="op-timerbar" id="op2TimerBar"><div style="width:100%"></div></div>
@@ -25038,6 +25040,7 @@ var OP_BANK = [
   var g2O = document.getElementById('op2GameOverlay');
 
   function p2Cleanup() {
+    p2DropLobby();
     try { if (p2Conn) p2Conn.close(); } catch (e) {}
     try { if (p2Peer) p2Peer.destroy(); } catch (e) {}
     p2Conn = null; p2Peer = null; p2G = null; p2Role = null;
@@ -25065,6 +25068,31 @@ var OP_BANK = [
     if (e.key === 'Enter') p2GuestConnect();
   });
 
+  /* V48.3: the host also holds a well-known "lobby" peer; a joining
+     player's device asks it for the waiting game's code so the code box
+     fills itself in. If two games run at once, only the first host owns
+     the lobby — the second game falls back to typing the code. */
+  var p2Lobby = null;
+  function p2RegisterLobby() {
+    try {
+      p2Lobby = new Peer(OP2_PREFIX + 'lobby');
+      p2Lobby.on('connection', function (conn) {
+        conn.on('open', function () {
+          try {
+            var code = (document.getElementById('op2HostCode').textContent || '').trim();
+            if (/^[A-Z]{4}$/.test(code)) conn.send({ type: 'code', code: code });
+          } catch (e) {}
+          setTimeout(function () { try { conn.close(); } catch (e) {} }, 900);
+        });
+      });
+      p2Lobby.on('error', function () { /* lobby already owned by another host — fine */ });
+    } catch (e) {}
+  }
+  function p2DropLobby() {
+    try { if (p2Lobby) p2Lobby.destroy(); } catch (e) {}
+    p2Lobby = null;
+  }
+
   function p2HostStart() {
     p2Role = 'host';
     var code = p2Code();
@@ -25072,6 +25100,7 @@ var OP_BANK = [
     document.getElementById('op2HostStatus').textContent = 'Connecting…';
     h2O.classList.add('show');
     p2OpenHostPeer(code, 0);
+    p2RegisterLobby();
   }
   function p2OpenHostPeer(code, attempt) {
     if (attempt >= 5) {
@@ -25110,7 +25139,8 @@ var OP_BANK = [
       hostOutAt: -1, guestOutAt: -1,
       myName: myName, theirName: theirName,
       myAnswer: null, theirAnswer: null, locked: false, deadline: 0, qSecs: Q_SECS,
-      passUsed: false, timeUsed: false, timeUsedThisQ: false
+      passUsed: false, timeUsed: false, timeUsedThisQ: false,
+      roundLives: 3
     };
   }
   function p2HostInit() {
@@ -25121,14 +25151,42 @@ var OP_BANK = [
       return q;
     }).filter(Boolean);
     p2G = newP2State('host', questions, p2Name(), '?');
+    p2DropLobby();
     p2Conn.send({ type: 'init', questions: questions, hostName: p2G.myName });
   }
   function p2JoinStart() {
     p2Role = 'guest';
     document.getElementById('op2JoinInput').value = '';
-    document.getElementById('op2JoinStatus').textContent = '';
+    document.getElementById('op2JoinStatus').textContent = 'Looking for a waiting game…';
     j2O.classList.add('show');
     setTimeout(function () { document.getElementById('op2JoinInput').focus(); }, 80);
+    /* V48.3: ask the host's lobby for the code so it fills itself in */
+    try {
+      var disc = new Peer();
+      var done = false;
+      function finish(code) {
+        if (done) return;
+        done = true;
+        try { disc.destroy(); } catch (e) {}
+        var inp = document.getElementById('op2JoinInput');
+        var st = document.getElementById('op2JoinStatus');
+        if (code && inp && !inp.value.trim()) {
+          inp.value = code;
+          if (st) st.textContent = '✨ Found a waiting game: ' + code + ' — press Join!';
+        } else if (st && st.textContent.indexOf('Looking') === 0) {
+          st.textContent = 'Type the 4-letter code from your friend’s screen.';
+        }
+      }
+      disc.on('open', function () {
+        var c = disc.connect(OP2_PREFIX + 'lobby');
+        c.on('data', function (msg) {
+          if (msg && msg.type === 'code' && /^[A-Z]{4}$/.test(String(msg.code || ''))) finish(msg.code);
+        });
+        c.on('error', function () { finish(null); });
+      });
+      disc.on('error', function () { finish(null); });
+      setTimeout(function () { finish(null); }, 3500);
+    } catch (e) {}
   }
   function p2GuestConnect() {
     var code = document.getElementById('op2JoinInput').value.trim().toUpperCase();
@@ -25194,7 +25252,16 @@ var OP_BANK = [
       p2G.hostScore = msg.hostScore; p2G.guestScore = msg.guestScore;
       p2G.hostAlive = msg.hostAlive; p2G.guestAlive = msg.guestAlive;
       p2G.hostOutAt = msg.hostOutAt; p2G.guestOutAt = msg.guestOutAt;
-      p2ShowResult(msg.correctIdx, msg.hostPick, msg.guestPick);
+      if (typeof msg.roundLives === 'number') p2G.roundLives = msg.roundLives;
+      p2ShowResult(msg.correctIdx, msg.hostPick, msg.guestPick, msg.lifeSaved);
+      return;
+    }
+    if (msg.type === 'retryq' && p2Role === 'guest') {
+      p2G.questions[msg.qIdx] = msg.question;
+      p2G.qIdx = msg.qIdx;
+      p2G.roundLives = msg.roundLives;
+      p2G.myAnswer = null; p2G.theirAnswer = null; p2G.locked = false;
+      p2Render();
       return;
     }
     if (msg.type === 'next' && p2Role === 'guest') {
@@ -25235,6 +25302,8 @@ var OP_BANK = [
     document.getElementById('op2MeScore').textContent = (g.role === 'host' ? g.hostScore : g.guestScore);
     document.getElementById('op2ThemScore').textContent = (g.role === 'host' ? g.guestScore : g.hostScore);
     document.getElementById('op2StageChip').innerHTML = '<span>The ' + q.stage + '% question · ⭐' + STAGE_PTS[q.stage] + '</span>';
+    document.getElementById('op2Lives').textContent =
+      '❤️'.repeat(Math.max(0, g.roundLives)) + '🖤'.repeat(3 - Math.max(0, g.roundLives)) + ' team lives';
     document.getElementById('op2Q').textContent = q.q;
     document.getElementById('op2MePick').textContent = 'You: —';
     document.getElementById('op2ThemPick').textContent = g.theirName + ': —';
@@ -25329,21 +25398,52 @@ var OP_BANK = [
     var q = g.questions[g.qIdx];
     var pts = STAGE_PTS[q.stage];
     var hostPick = g.myAnswer.idx, guestPick = g.theirAnswer.idx;
-    if (g.hostAlive) {
-      if (hostPick === q.answerIdx) g.hostScore += pts;
-      else if (hostPick !== -2) { g.hostAlive = false; g.hostOutAt = g.qIdx; }
-    }
-    if (g.guestAlive) {
-      if (guestPick === q.answerIdx) g.guestScore += pts;
-      else if (guestPick !== -2) { g.guestAlive = false; g.guestOutAt = g.qIdx; }
+    /* V48.3: if BOTH players (still in the game) get it wrong, burn one of
+       the three shared team lives and retry the round with a new question
+       instead of a double knockout. Passes don't count as wrong. */
+    var hostWrong = g.hostAlive && hostPick !== q.answerIdx && hostPick !== -2 && hostPick !== -3;
+    var guestWrong = g.guestAlive && guestPick !== q.answerIdx && guestPick !== -2 && guestPick !== -3;
+    var lifeSaved = hostWrong && guestWrong && g.roundLives > 0;
+    if (lifeSaved) {
+      g.roundLives -= 1;
+    } else {
+      if (g.hostAlive) {
+        if (hostPick === q.answerIdx) g.hostScore += pts;
+        else if (hostPick !== -2) { g.hostAlive = false; g.hostOutAt = g.qIdx; }
+      }
+      if (g.guestAlive) {
+        if (guestPick === q.answerIdx) g.guestScore += pts;
+        else if (guestPick !== -2) { g.guestAlive = false; g.guestOutAt = g.qIdx; }
+      }
     }
     p2Conn.send({ type: 'result', correctIdx: q.answerIdx, hostPick: hostPick, guestPick: guestPick,
       hostScore: g.hostScore, guestScore: g.guestScore,
       hostAlive: g.hostAlive, guestAlive: g.guestAlive,
-      hostOutAt: g.hostOutAt, guestOutAt: g.guestOutAt });
-    p2ShowResult(q.answerIdx, hostPick, guestPick);
+      hostOutAt: g.hostOutAt, guestOutAt: g.guestOutAt,
+      lifeSaved: lifeSaved, roundLives: g.roundLives });
+    p2ShowResult(q.answerIdx, hostPick, guestPick, lifeSaved);
     setTimeout(function () {
       if (!p2G) return;
+      if (lifeSaved) {
+        /* same round, fresh question at the same stage */
+        var used = {};
+        g.questions.forEach(function (q2) { used[qKey(q2)] = true; });
+        var nq = pickQuestion(q.stage, used, g.questions) || pickQuestion(q.stage, used, null) || pickQuestion(q.stage, null, null);
+        if (nq) {
+          markAsked(nq);
+          g.questions[g.qIdx] = nq;
+          g.myAnswer = null; g.theirAnswer = null; g.locked = false;
+          p2Conn.send({ type: 'retryq', qIdx: g.qIdx, question: nq, roundLives: g.roundLives });
+          p2Render();
+        } else {
+          /* no fresh question available — just move on, nobody eliminated */
+          g.qIdx += 1;
+          g.myAnswer = null; g.theirAnswer = null; g.locked = false;
+          p2Conn.send({ type: 'next', qIdx: g.qIdx });
+          p2Render();
+        }
+        return;
+      }
       var over = (g.qIdx + 1 >= g.questions.length) || (!g.hostAlive && !g.guestAlive);
       if (over) {
         p2Conn.send({ type: 'end', hostScore: g.hostScore, guestScore: g.guestScore,
@@ -25356,9 +25456,9 @@ var OP_BANK = [
         p2Conn.send({ type: 'next', qIdx: g.qIdx });
         p2Render();
       }
-    }, 3400);
+    }, 3800);
   }
-  function p2ShowResult(correctIdx, hostPick, guestPick) {
+  function p2ShowResult(correctIdx, hostPick, guestPick, lifeSaved) {
     var g = p2G;
     g.locked = true;
     var q = g.questions[g.qIdx];
@@ -25371,11 +25471,16 @@ var OP_BANK = [
     });
     document.getElementById('op2MeScore').textContent = (g.role === 'host' ? g.hostScore : g.guestScore);
     document.getElementById('op2ThemScore').textContent = (g.role === 'host' ? g.guestScore : g.hostScore);
+    document.getElementById('op2Lives').textContent =
+      '❤️'.repeat(Math.max(0, g.roundLives)) + '🖤'.repeat(3 - Math.max(0, g.roundLives)) + ' team lives';
     var iWasAliveBefore = myPick !== -3;
     var right = myPick === correctIdx;
     var nowAlive = g.role === 'host' ? g.hostAlive : g.guestAlive;
     var html;
-    if (!iWasAliveBefore) html = '<span style="color:#8a86a3;font-weight:800;">Watching…</span>';
+    if (lifeSaved) {
+      sfx('wrong');
+      html = '<span style="color:#e6324b;font-weight:800;">💥 You BOTH got it wrong! ❤️ One team life used — same round, new question…</span>';
+    } else if (!iWasAliveBefore) html = '<span style="color:#8a86a3;font-weight:800;">Watching…</span>';
     else if (right) {
       sfx('correct');
       try { if (typeof awardPoints === 'function') awardPoints(STAGE_PTS[q.stage]); } catch (e) {}
@@ -25386,8 +25491,10 @@ var OP_BANK = [
       sfx('wrong');
       html = '<span style="color:#c0392b;font-weight:800;">' + (myPick < 0 ? '⏰ Out of time' : '❌ Wrong') + ' — YOU’RE OUT!</span>';
     }
+    /* V48.3: always show HOW it's done — the right answer plus the aha */
     document.getElementById('op2Feedback').innerHTML = html +
-      '<div class="op-explain">' + esc(q.explain || '') + '</div>';
+      '<div class="op-explain">' + (right ? '' : 'The answer was: <b>' + esc(q.options[correctIdx]) + '</b>. ') +
+      esc(q.explain || '') + '</div>';
     if (!nowAlive && iWasAliveBefore && !right && myPick !== -2) {
       document.getElementById('op2Spectate').textContent = '💀 You’re out — watching ' + g.theirName + ' play on.';
     }
@@ -25403,7 +25510,11 @@ var OP_BANK = [
     var iWin = meLife > themLife || (meLife === themLife && meScore > themScore);
     var draw = meLife === themLife && meScore === themScore;
     sfx(iWin || draw ? 'win' : 'lose');
-    if (iWin) { try { if (typeof popConfetti === 'function') popConfetti(); } catch (e) {} }
+    if (iWin) {
+      try {
+        if (typeof popConfetti === 'function') { popConfetti(); setTimeout(popConfetti, 400); setTimeout(popConfetti, 900); }
+      } catch (e) {}
+    }
     document.getElementById('op2Progress').textContent = 'Challenge complete';
     document.getElementById('op2Q').textContent = '';
     document.getElementById('op2Options').innerHTML = '';
@@ -25414,9 +25525,10 @@ var OP_BANK = [
       themOutAt < 0 ? g.theirName + ' survived — you went out on the ' + STAGES[Math.min(meOutAt, STAGES.length - 1)] + '% question.' :
       'You went out at ' + STAGES[Math.min(meOutAt, STAGES.length - 1)] + '%, ' + g.theirName + ' at ' + STAGES[Math.min(themOutAt, STAGES.length - 1)] + '%.';
     document.getElementById('op2Feedback').innerHTML =
+      (iWin ? '<div style="font-family:\'Baloo 2\',sans-serif;font-size:34px;font-weight:800;color:#1e9e54;line-height:1.15;animation:dbPulse 1.1s infinite;">🏆 WINNER<br>WINNER<br>WINNER! 🏆</div>' : '') +
       '<div style="font-family:\'Baloo 2\',sans-serif;font-size:24px;font-weight:800;color:' +
       (iWin ? '#1e9e54' : (draw ? '#6c5ce7' : '#c0392b')) + ';">' +
-      (iWin ? '🏆 You win! ' : (draw ? '🤝 It’s a draw! ' : '😮 ' + esc(g.theirName) + ' wins ')) +
+      (iWin ? '' : (draw ? '🤝 It’s a draw! ' : '😮 ' + esc(g.theirName) + ' wins ')) +
       meScore + ' – ' + themScore + '</div>' +
       '<div style="margin-top:6px;font-size:14px;">' + esc(story) + '</div>';
   }

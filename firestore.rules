@@ -32,5 +32,20 @@ service cloud.firestore {
       allow read: if signedIn() && request.auth.uid == uid;
       allow write: if false;
     }
+
+    // Live-users heartbeat: everyone signed in can see who's online;
+    // you can only write your own heartbeat.
+    match /presence/{uid} {
+      allow read: if signedIn();
+      allow write: if signedIn() && request.auth.uid == uid;
+    }
+
+    // Open-challenge announcements ("James started a 1% Challenge — join?").
+    // Anyone signed in sees them; only the host can create/remove their own.
+    match /challenges/{id} {
+      allow read: if signedIn();
+      allow create: if signedIn() && request.resource.data.hostUid == request.auth.uid;
+      allow update, delete: if signedIn() && resource.data.hostUid == request.auth.uid;
+    }
   }
 }

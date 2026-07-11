@@ -8728,6 +8728,7 @@ document.getElementById('fcJoinInput').addEventListener('keydown', (e) => {
 });
 
 function fcCleanupAndClose() {
+  try { if (window.cloudRetractChallenge) cloudRetractChallenge(); } catch (e) {}
   try { if (fcConn) fcConn.close(); } catch (e) {}
   try { if (fcPeer) fcPeer.destroy(); } catch (e) {}
   fcConn = null; fcPeer = null; fcGame = null; fcRole = null;
@@ -8754,6 +8755,7 @@ function fcOpenHostPeer(code, attempt) {
   fcPeer = new Peer(FC_PEER_PREFIX + code);
   fcPeer.on('open', () => {
     document.getElementById('fcHostStatus').textContent = 'Waiting for your friend to join…';
+    try { if (window.cloudAnnounceChallenge) cloudAnnounceChallenge('flags', code); } catch (e) {}
   });
   fcPeer.on('error', (err) => {
     if (err && (err.type === 'unavailable-id' || /taken/i.test(err.message || ''))) {
@@ -8770,6 +8772,7 @@ function fcOpenHostPeer(code, attempt) {
     fcConn = conn;
     conn.on('open', () => {
       document.getElementById('fcHostStatus').textContent = 'Friend connected! Starting…';
+      try { if (window.cloudRetractChallenge) cloudRetractChallenge(); } catch (e) {}
       fcHostInitGame();
     });
     conn.on('data', (msg) => fcHandleMessage(msg));
@@ -16001,6 +16004,7 @@ document.getElementById('tcJoinConnect').addEventListener('click', () => tcGuest
 document.getElementById('tcJoinInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') tcGuestConnect(); });
 
 function tcCleanupAndClose() {
+  try { if (window.cloudRetractChallenge) cloudRetractChallenge(); } catch (e) {}
   try { if (tcConn) tcConn.close(); } catch (e) {}
   try { if (tcPeer) tcPeer.destroy(); } catch (e) {}
   tcConn = null; tcPeer = null; tcGame = null; tcRole = null;
@@ -16018,7 +16022,7 @@ function tcHostStart() {
 function tcOpenHostPeer(code, attempt) {
   if (attempt >= 5) { document.getElementById('tcHostStatus').textContent = 'Network busy. Please try again.'; return; }
   tcPeer = new Peer(TC_PEER_PREFIX + code);
-  tcPeer.on('open', () => { document.getElementById('tcHostStatus').textContent = 'Waiting for your friend to join…'; });
+  tcPeer.on('open', () => { document.getElementById('tcHostStatus').textContent = 'Waiting for your friend to join…'; try { if (window.cloudAnnounceChallenge) cloudAnnounceChallenge('tt', code); } catch (e) {} });
   tcPeer.on('error', (err) => {
     if (err && (err.type === 'unavailable-id' || /taken/i.test(err.message || ''))) {
       try { tcPeer.destroy(); } catch (e) {}
@@ -16031,7 +16035,7 @@ function tcOpenHostPeer(code, attempt) {
   });
   tcPeer.on('connection', (conn) => {
     tcConn = conn;
-    conn.on('open', () => { document.getElementById('tcHostStatus').textContent = 'Friend connected! Starting…'; tcHostInitGame(); });
+    conn.on('open', () => { document.getElementById('tcHostStatus').textContent = 'Friend connected! Starting…'; try { if (window.cloudRetractChallenge) cloudRetractChallenge(); } catch (e) {} tcHostInitGame(); });
     conn.on('data', (msg) => tcHandleMessage(msg));
     conn.on('close', () => tcHandleDisconnect());
   });
@@ -22591,6 +22595,7 @@ tcGameOverlay.addEventListener('click', (e) => { if (e.target === tcGameOverlay)
   };
 
   function cleanup() {
+    try { if (window.cloudRetractChallenge) cloudRetractChallenge(); } catch (e) {}
     try { if (dbConn) dbConn.close(); } catch (e) {}
     try { if (dbPeer) dbPeer.destroy(); } catch (e) {}
     dbConn = null; dbPeer = null; dbG = null; dbRole = null;
@@ -22607,6 +22612,13 @@ tcGameOverlay.addEventListener('click', (e) => { if (e.target === tcGameOverlay)
     if (confirm('Quit this debate?')) cleanup();
   });
   document.getElementById('dbJoinConnect').addEventListener('click', guestConnect);
+  /* Live V3: challenge toasts jump straight into this join flow */
+  window.dbJoinWithCode = function (code) {
+    setupO.classList.remove('show');
+    joinStart();
+    document.getElementById('dbJoinInput').value = code;
+    guestConnect();
+  };
   document.getElementById('dbJoinInput').addEventListener('keydown', function (e) {
     if (e.key === 'Enter') guestConnect();
   });
@@ -22628,6 +22640,7 @@ tcGameOverlay.addEventListener('click', (e) => { if (e.target === tcGameOverlay)
     dbPeer = new Peer(DB_PEER_PREFIX + code);
     dbPeer.on('open', function () {
       document.getElementById('dbHostStatus').textContent = 'Waiting for your opponent to join…';
+      try { if (window.cloudAnnounceChallenge) cloudAnnounceChallenge('debate', code); } catch (e) {}
     });
     dbPeer.on('error', function (err) {
       if (err && (err.type === 'unavailable-id' || /taken/i.test(err.message || ''))) {
@@ -22643,6 +22656,7 @@ tcGameOverlay.addEventListener('click', (e) => { if (e.target === tcGameOverlay)
       dbConn = conn;
       conn.on('open', function () {
         document.getElementById('dbHostStatus').textContent = 'Opponent connected! Starting…';
+        try { if (window.cloudRetractChallenge) cloudRetractChallenge(); } catch (e) {}
       });
       conn.on('data', handleMsg);
       conn.on('close', handleDisconnect);
@@ -25092,6 +25106,7 @@ var OP_BANK = [
   var g2O = document.getElementById('op2GameOverlay');
 
   function p2Cleanup() {
+    try { if (window.cloudRetractChallenge) cloudRetractChallenge(); } catch (e) {}
     p2DropLobby();
     try { if (p2Conn) p2Conn.close(); } catch (e) {}
     try { if (p2Peer) p2Peer.destroy(); } catch (e) {}
@@ -25116,6 +25131,13 @@ var OP_BANK = [
     if (confirm('Quit this challenge?')) p2Cleanup();
   });
   document.getElementById('op2JoinConnect').addEventListener('click', p2GuestConnect);
+  /* Live V3: challenge toasts jump straight into this join flow */
+  window.op2JoinWithCode = function (code) {
+    s2O.classList.remove('show');
+    p2JoinStart();
+    document.getElementById('op2JoinInput').value = code;
+    p2GuestConnect();
+  };
   document.getElementById('op2JoinInput').addEventListener('keydown', function (e) {
     if (e.key === 'Enter') p2GuestConnect();
   });
@@ -25162,6 +25184,7 @@ var OP_BANK = [
     p2Peer = new Peer(OP2_PREFIX + code);
     p2Peer.on('open', function () {
       document.getElementById('op2HostStatus').textContent = 'Waiting for your friend to join…';
+      try { if (window.cloudAnnounceChallenge) cloudAnnounceChallenge('onepct', code); } catch (e) {}
     });
     p2Peer.on('error', function (err) {
       if (err && (err.type === 'unavailable-id' || /taken/i.test(err.message || ''))) {
@@ -25177,6 +25200,7 @@ var OP_BANK = [
       p2Conn = conn;
       conn.on('open', function () {
         document.getElementById('op2HostStatus').textContent = 'Friend connected! Starting…';
+        try { if (window.cloudRetractChallenge) cloudRetractChallenge(); } catch (e) {}
         p2HostInit();
       });
       conn.on('data', p2HandleMsg);
@@ -27621,6 +27645,237 @@ var SPELL_BANKS = {
   } catch (e) {}
 
   renderBadge();
+})();
+</script>
+
+<!-- ============================================================
+     Live V3: presence + challenge broadcasts.
+     Signed-in players heartbeat into presence/{uid}; the header
+     shows how many players are live right now. Hosting any
+     challenge (flags, times tables, 1%, debate) publishes an open
+     challenge doc — every online player gets a "Join?" toast that
+     drops them straight into the right join flow. Cancelling or
+     starting the game retracts the toast everywhere.
+     ============================================================ -->
+<style>
+  .lu-pill { display: inline-flex; align-items: center; gap: 5px; background: #eafaf0;
+    border: 2px solid #2ecc71; color: #1e9e54; font-weight: 800; font-size: 12.5px;
+    border-radius: 999px; padding: 3px 10px; cursor: pointer; font-family: inherit; }
+  .lu-dot { width: 8px; height: 8px; border-radius: 50%; background: #2ecc71;
+    animation: luPulse 2s infinite; }
+  @keyframes luPulse { 50% { opacity: 0.35; } }
+  #slToasts { position: fixed; right: 14px; bottom: 14px; z-index: 10000; display: flex;
+    flex-direction: column; gap: 8px; max-width: 320px; }
+  .sl-toast { background: #fff; border-radius: 14px; box-shadow: 0 8px 28px rgba(40,30,90,0.28);
+    border-left: 5px solid #6c5ce7; padding: 12px 14px; animation: slIn 0.25s ease-out; }
+  @keyframes slIn { from { transform: translateY(14px); opacity: 0; } }
+  .sl-toast-title { font-family: 'Baloo 2', sans-serif; font-weight: 800; font-size: 15px;
+    color: var(--ink); margin-bottom: 2px; }
+  .sl-toast-sub { font-size: 12.5px; color: var(--ink-soft); margin-bottom: 8px; }
+  .sl-toast-row { display: flex; gap: 6px; }
+  .sl-toast-btn { font-family: inherit; font-weight: 800; font-size: 13px; border: none;
+    cursor: pointer; border-radius: 999px; padding: 7px 14px; }
+  .sl-join { background: #6c5ce7; color: #fff; }
+  .sl-dismiss { background: #eceaf6; color: #6c5ce7; }
+</style>
+<div id="slToasts"></div>
+<script>
+(function () {
+  'use strict';
+  if (typeof firebase === 'undefined') return;
+  var auth, db;
+  try { auth = firebase.auth(); db = firebase.firestore(); } catch (e) { return; }
+
+  var HEARTBEAT_MS = 90000;
+  var LIVE_WINDOW_MS = 3 * 60 * 1000;
+  var CH_MAX_AGE_MS = 3 * 60 * 1000;
+
+  var GAME_META = {
+    flags:  { emoji: '🏳️', name: 'Flags challenge' },
+    tt:     { emoji: '✖️', name: 'Times Tables challenge' },
+    onepct: { emoji: '🏆', name: '1% Challenge' },
+    debate: { emoji: '🎤', name: 'Debate' }
+  };
+
+  function me() { return auth.currentUser; }
+  function myName() {
+    try { return (window.cloudState && window.cloudState.doc && window.cloudState.doc.username) || 'Someone'; }
+    catch (e) { return 'Someone'; }
+  }
+  function myFamily() {
+    try { return (window.cloudState && window.cloudState.doc && window.cloudState.doc.familyCode) || ''; }
+    catch (e) { return ''; }
+  }
+
+  /* ---------------- presence heartbeat ---------------- */
+  var lastPoke = Date.now();
+  ['pointerdown', 'keydown', 'touchstart'].forEach(function (ev) {
+    window.addEventListener(ev, function () { lastPoke = Date.now(); }, { passive: true });
+  });
+  function beat() {
+    if (!me() || document.hidden) return;
+    if (Date.now() - lastPoke > LIVE_WINDOW_MS) return;   /* idle — don't count as live */
+    db.collection('presence').doc(me().uid).set({
+      username: myName(), familyCode: myFamily(), lastSeen: Date.now()
+    }).catch(function () {});
+  }
+  setInterval(beat, HEARTBEAT_MS);
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) { beat(); refreshCount(); } });
+
+  /* ---------------- live counter ---------------- */
+  function ensurePill() {
+    var pill = document.getElementById('liveUsersPill');
+    if (pill) return pill;
+    var stats = document.querySelector('.stats');
+    if (!stats) return null;
+    pill = document.createElement('button');
+    pill.id = 'liveUsersPill';
+    pill.type = 'button';
+    pill.className = 'lu-pill';
+    pill.style.display = 'none';
+    pill.title = 'Players online right now — tap to see who';
+    pill.innerHTML = '<span class="lu-dot"></span><span id="liveUsersCount">–</span> live';
+    pill.addEventListener('click', showWho);
+    stats.insertBefore(pill, stats.firstChild);
+    return pill;
+  }
+  function refreshCount() {
+    var pill = ensurePill();
+    if (!pill) return;
+    if (!me()) { pill.style.display = 'none'; return; }
+    var q = db.collection('presence').where('lastSeen', '>', Date.now() - LIVE_WINDOW_MS);
+    var done = function (n) {
+      document.getElementById('liveUsersCount').textContent = n;
+      pill.style.display = '';
+    };
+    try {
+      q.count().get().then(function (snap) { done(snap.data().count); })
+        .catch(function () { q.get().then(function (s) { done(s.size); }).catch(function () {}); });
+    } catch (e) {
+      q.get().then(function (s) { done(s.size); }).catch(function () {});
+    }
+  }
+  setInterval(refreshCount, 60000);
+  function showWho() {
+    if (!me()) return;
+    db.collection('presence').where('lastSeen', '>', Date.now() - LIVE_WINDOW_MS).get()
+      .then(function (s) {
+        var names = s.docs.map(function (d) {
+          var x = d.data();
+          return x.username + (x.familyCode ? ' (' + x.familyCode + ')' : '');
+        });
+        toast('🟢 Online now', names.join(' · ') || 'Just you!', null, null, 8000);
+      }).catch(function () {});
+  }
+
+  /* ---------------- toasts ---------------- */
+  var toastByDoc = {};
+  function toast(title, sub, joinFn, docId, ttlMs) {
+    var host = document.getElementById('slToasts');
+    var t = document.createElement('div');
+    t.className = 'sl-toast';
+    t.innerHTML = '<div class="sl-toast-title"></div><div class="sl-toast-sub"></div>' +
+      '<div class="sl-toast-row"></div>';
+    t.querySelector('.sl-toast-title').textContent = title;
+    t.querySelector('.sl-toast-sub').textContent = sub;
+    var row = t.querySelector('.sl-toast-row');
+    if (joinFn) {
+      var jb = document.createElement('button');
+      jb.type = 'button'; jb.className = 'sl-toast-btn sl-join'; jb.textContent = '🎮 Join!';
+      jb.addEventListener('click', function () { remove(); joinFn(); });
+      row.appendChild(jb);
+    }
+    var db2 = document.createElement('button');
+    db2.type = 'button'; db2.className = 'sl-toast-btn sl-dismiss'; db2.textContent = joinFn ? 'Not now' : 'Close';
+    db2.addEventListener('click', remove);
+    row.appendChild(db2);
+    function remove() {
+      try { t.remove(); } catch (e) {}
+      if (docId) delete toastByDoc[docId];
+    }
+    host.appendChild(t);
+    if (docId) toastByDoc[docId] = remove;
+    setTimeout(remove, ttlMs || 60000);
+    try { if (typeof playSfx === 'function' && joinFn) playSfx('correct'); } catch (e) {}
+    return remove;
+  }
+
+  /* ---------------- challenge broadcast ---------------- */
+  var myChallengeDoc = null;
+  window.cloudAnnounceChallenge = function (game, code) {
+    if (!me() || !db) return;
+    window.cloudRetractChallenge();
+    var ref = db.collection('challenges').doc();
+    myChallengeDoc = ref;
+    ref.set({
+      game: game, code: code, host: myName(), hostUid: me().uid,
+      familyCode: myFamily(), at: Date.now(), status: 'open'
+    }).catch(function () { myChallengeDoc = null; });
+  };
+  window.cloudRetractChallenge = function () {
+    if (myChallengeDoc) {
+      try { myChallengeDoc.delete().catch(function () {}); } catch (e) {}
+      myChallengeDoc = null;
+    }
+  };
+  window.addEventListener('beforeunload', function () { window.cloudRetractChallenge(); });
+
+  function joinFnFor(game, code) {
+    return function () {
+      try {
+        if (game === 'flags' && typeof fcJoinStart === 'function') {
+          fcJoinStart();
+          document.getElementById('fcJoinInput').value = code;
+          fcGuestConnect();
+        } else if (game === 'tt' && typeof tcJoinStart === 'function') {
+          tcJoinStart();
+          document.getElementById('tcJoinInput').value = code;
+          tcGuestConnect();
+        } else if (game === 'onepct' && typeof window.op2JoinWithCode === 'function') {
+          window.op2JoinWithCode(code);
+        } else if (game === 'debate' && typeof window.dbJoinWithCode === 'function') {
+          window.dbJoinWithCode(code);
+        }
+      } catch (e) { console.warn('join failed', e); }
+    };
+  }
+
+  var chUnsub = null, seen = {};
+  function watchChallenges() {
+    if (chUnsub || !me()) return;
+    try {
+      chUnsub = db.collection('challenges').orderBy('at', 'desc').limit(8)
+        .onSnapshot(function (snap) {
+          snap.docChanges().forEach(function (ch) {
+            var d = ch.doc.data(), id = ch.doc.id;
+            if (ch.type === 'removed') {
+              if (toastByDoc[id]) toastByDoc[id]();
+              return;
+            }
+            if (ch.type !== 'added') return;
+            if (seen[id]) return;
+            seen[id] = true;
+            if (!d || d.status !== 'open') return;
+            if (Date.now() - (d.at || 0) > CH_MAX_AGE_MS) return;
+            if (me() && d.hostUid === me().uid) return;
+            var meta = GAME_META[d.game] || { emoji: '🎮', name: 'Challenge' };
+            toast(meta.emoji + ' ' + d.host + ' started a ' + meta.name + '!',
+              'Code ' + d.code + (d.familyCode ? ' · family ' + d.familyCode : '') + ' — want to play?',
+              joinFnFor(d.game, d.code), id, 120000);
+          });
+        }, function () { chUnsub = null; });
+    } catch (e) {}
+  }
+
+  auth.onAuthStateChanged(function (u) {
+    if (u) {
+      setTimeout(function () { beat(); refreshCount(); watchChallenges(); }, 1500);
+    } else {
+      var pill = document.getElementById('liveUsersPill');
+      if (pill) pill.style.display = 'none';
+      if (chUnsub) { try { chUnsub(); } catch (e) {} chUnsub = null; }
+    }
+  });
 })();
 </script>
 

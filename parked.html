@@ -4547,6 +4547,13 @@ function requestUserAccess(u, purpose) {
 
 /* Ensure older save files have the new fields without blowing away progress. */
 function migrateUser(u) {
+  /* V48.5: every player — new, existing, and Guest — gets x1 and x2
+     mastered by default, once. Records are only ever raised, never reset. */
+  if (!u.boot12) {
+    u.boot12 = true;
+    if (!u.cells) u.cells = {};
+    if (typeof bootstrap12 === 'function') bootstrap12(u);
+  }
   if (!u.tricks)     u.tricks = {};
   if (!u.trickMastery) u.trickMastery = {};
   if (!u.lightning)  u.lightning = { best: 0, lastPlayed: null };
@@ -25054,10 +25061,17 @@ var OP_BANK = [
       nxt.textContent = 'Take a bow 🎤';
     } else {
       if (!bankEmpty) sfx('lose');
+      /* the sign-off matches how far they actually got — no "great run"
+         for going out on the first question */
+      var soloRunMsg;
+      if (solo.idx === 0)      soloRunMsg = '💀 Out on the very first question — unlucky! Shake it off and go again.';
+      else if (solo.idx < 4)   soloRunMsg = '💀 Knocked out on the ' + STAGES[solo.idx] + '% question. Warm-up over — go again!';
+      else if (solo.idx < 9)   soloRunMsg = '💀 Knocked out on the ' + STAGES[solo.idx] + '% question. Solid effort!';
+      else if (solo.idx < 13)  soloRunMsg = '💀 Knocked out on the ' + STAGES[solo.idx] + '% question. Great run!';
+      else                     soloRunMsg = '💀 Knocked out on the ' + STAGES[solo.idx] + '% question — SO close to the 1% Club!';
       document.getElementById('opFeedback').innerHTML +=
         '<div style="margin-top:10px;font-family:\'Baloo 2\',sans-serif;font-size:19px;font-weight:800;color:#e74c3c;">' +
-        (bankEmpty ? 'You have played every question — more coming soon!'
-                   : '💀 Knocked out on the ' + STAGES[solo.idx] + '% question. Great run!') + '</div>';
+        (bankEmpty ? 'You have played every question — more coming soon!' : soloRunMsg) + '</div>';
       nxt.textContent = 'Back';
     }
     nxt.style.display = '';

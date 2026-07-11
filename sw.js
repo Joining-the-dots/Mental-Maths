@@ -1,7 +1,7 @@
 /* Conway Family Learning Lab — service worker
    Bump CACHE_VERSION whenever you deploy a change to index.html or assets,
    so returning users get the new version instead of a stale cache. */
-const CACHE_VERSION = 'tt-quest-v54';
+const CACHE_VERSION = 'tt-quest-v55';
 const APP_SHELL = [
   './',
   './index.html',
@@ -36,7 +36,8 @@ self.addEventListener('activate', (event) => {
    - Navigation requests (HTML): network first, fall back to cached index.html
      so fresh deploys reach the user while offline launch still works.
    - Same-origin GETs: cache-first, update in background.
-   - Google Fonts: cache-first with opportunistic runtime caching.
+   - Fonts/CDN (Google Fonts, jsdelivr, unpkg): cache-first with opportunistic
+     runtime caching.
    - Everything else: pass through. */
 self.addEventListener('fetch', (event) => {
   const req = event.request;
@@ -72,4 +73,8 @@ self.addEventListener('fetch', (event) => {
             return res;
           })
           .catch(() => cached);
-        return cached |
+        return cached || fetchPromise;
+      })
+    );
+  }
+});

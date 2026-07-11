@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex">
+<title>Learning Lab — Control Centre</title>
+<style>
+  :root {
+    --ink: #2b2b3a; --ink-soft: #7c8696; --bg: #f2f0fa; --card: #ffffff;
+    --accent: #6c5ce7; --good: #2ecc71; --warn: #ff9f43; --bad: #e74c3c;
+    --radius: 14px; --shadow: 0 3px 12px rgba(60,50,110,0.10);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+    background: var(--bg); color: var(--ink); padding: 20px; }
+  h1 { font-size: 24px; margin: 0 0 4px; }
+  h2 { font-size: 17px; margin: 22px 0 10px; }
+  .sub { color: var(--ink-soft); font-size: 13.5px; margin: 0 0 18px; }
+  .card { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow);
+    padding: 16px 18px; margin-bottom: 12px; }
+  .pill { display: inline-block; border-radius: 999px; padding: 3px 10px; font-size: 12px;
+    font-weight: 700; background: #eceaf6; color: var(--accent); margin-left: 6px; }
+  .warnpill { background: #fdeeee; color: var(--bad); }
+  .buyrow { display: flex; align-items: center; gap: 10px; padding: 9px 0;
+    border-bottom: 1px solid #f0eef8; }
+  .buyrow:last-child { border-bottom: none; }
+  .buyrow .who { font-weight: 700; min-width: 90px; }
+  .buyrow .what { flex: 1; }
+  .buyrow .when { color: var(--ink-soft); font-size: 12px; }
+  button { font-family: inherit; font-size: 13.5px; font-weight: 700; border: none;
+    border-radius: 9px; padding: 8px 14px; cursor: pointer; }
+  .btn-act { background: var(--good); color: #fff; }
+  .btn-ghost { background: #eceaf6; color: var(--accent); }
+  .users { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
+  .ucard { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow);
+    padding: 16px; cursor: pointer; border-top: 4px solid var(--accent); }
+  .ucard:hover { transform: translateY(-2px); }
+  .ucard .av { font-size: 34px; }
+  .ucard .nm { font-size: 18px; font-weight: 800; margin: 2px 0; }
+  .ucard .meta { font-size: 12.5px; color: var(--ink-soft); line-height: 1.6; }
+  .bar { height: 10px; background: #eceaf6; border-radius: 999px; overflow: hidden; margin: 3px 0 8px; }
+  .bar > div { height: 100%; border-radius: 999px; background: var(--accent); }
+  .statrow { display: flex; justify-content: space-between; font-size: 13.5px; padding: 3px 0; }
+  .statrow b { font-variant-numeric: tabular-nums; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 720px) { .grid2 { grid-template-columns: 1fr; } }
+  .daybars { display: flex; gap: 3px; align-items: flex-end; height: 70px; margin-top: 6px; }
+  .daybar { flex: 1; background: var(--accent); border-radius: 4px 4px 0 0; min-height: 2px;
+    position: relative; }
+  .daybar span { position: absolute; bottom: -18px; left: 50%; transform: translateX(-50%);
+    font-size: 9.5px; color: var(--ink-soft); white-space: nowrap; }
+  .back { background: none; border: none; color: var(--accent); font-weight: 800;
+    font-size: 14px; cursor: pointer; padding: 0 0 12px; }
+  #gate { max-width: 360px; margin: 12vh auto; text-align: center; }
+  #gate input { font-size: 18px; padding: 10px 14px; border: 2px solid #d9d2ee;
+    border-radius: 10px; width: 100%; text-align: center; margin: 10px 0; }
+  .muted { color: var(--ink-soft); font-size: 13px; }
+  .empty { color: var(--ink-soft); font-style: italic; font-size: 13.5px; }
+</style>
+</head>
+<body>
+
+<div id="gate" class="card">
+  <h1>🔐 Control Centre</h1>
+  <p class="sub">Grown-ups only. Enter the master password.</p>
+  <input id="gatePass" type="password" placeholder="Password" autocomplete="off">
+  <button class="btn-act" id="gateGo" style="width:100%;">Enter</button>
+  <p class="muted" id="gateMsg"></p>
+</div>
+
+<div id="main" style="display:none; max-width:1000px; margin:0 auto;">
+  <h1>🎛️ Learning Lab — Control Centre</h1>
+  <p class="sub">Usage and rewards for every player on <b>this device/browser</b>. Idle time (game left open, nobody playing) is not counted. <button class="btn-ghost" onclick="location.reload()">↻ Refresh</button></p>
+  <div id="content"></div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  var STORAGE_KEY = 'timesTableQuest_v1';
+  var MASTER = 'JC';
+  var APP_NAMES = {
+    maths: '🔢 Maths', spell: '🪄 Spelling', flags: '🏳️ Flags', mysteries: '🔍 Mysteries',
+    people: '🤝 People Skills', onepct: '🏆 1% Challenge', shop: '🎁 Shop',
+    palace: '🧠 Memory Madness', story: '✍️ Story', chess: '♟️ Chess', unknown: '❓ Other'
+  };
+
+  function loadState() {
+    try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || { users: {} }; }
+    catch (e) { return { users: {} }; }
+  }
+  function saveState(st) {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(st)); } catch (e) {}
+  }
+  function esc(x) {
+    return String(x == null ? '' : x).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+  function fmtSecs(s) {
+    s = Math.round(s || 0);
+    if (s < 60) return s + 's';
+    var m = Math.round(s / 60);
+    if (m < 60) return m + ' min';
+    return Math.floor(m / 60) + 'h ' + (m % 60) + 'm';
+  }
+  function fmtDate(iso) {
+    if (!iso) return '—';
+    try {
+      var d = new Date(iso);
+      return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) + ' ' +
+             d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+    } catch (e) { return '—'; }
+  }
+  function totalSecs(u) {
+    var g = (u.usage && u.usage.apps) || {};
+    var t = 0; for (var k in g) t += g[k];
+    return t;
+  }
+  function masteredCells(u) {
+    /* same rule as the app's masteryLevel(): correct>=2 && streak>=2 */
+    var n = 0, c = u.cells || {};
+    for (var k in c) {
+      var r = c[k];
+      if (r && (r.correct || 0) >= 2 && (r.streak || 0) >= 2) n++;
+    }
+    return n;
+  }
+  function spellMastered(u) {
+    var n = 0, r = (u.spell && u.spell.right) || {};
+    for (var w in r) if (r[w] >= 3) n++;
+    return n;
+  }
+  function peopleDone(u) {
+    var d = (u.people && u.people.done) || {};
+    return Object.keys(d).length;
+  }
+  function mystSolved(u) {
+    var d = (u.mysteries && u.mysteries.solved) || {};
+    return Object.keys(d).length;
+  }
+
+  /* ---------- gate ---------- */
+  document.getElementById('gateGo').addEventListener('click', tryGate);
+  document.getElementById('gatePass').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') tryGate();
+  });
+  function tryGate() {
+    var v = document.getElementById('gatePass').value;
+    if (v === MASTER) {
+      document.getElementById('gate').style.display = 'none';
+      document.getElementById('main').style.display = '';
+      renderHome();
+    } else {
+      document.getElementById('gateMsg').textContent = 'Not quite — try again.';
+    }
+  }
+
+  /* ---------- views ---------- */
+  function renderHome() {
+    var st = loadState();
+    var host = document.getElementById('content');
+    var names = Object.keys(st.users || {});
+    var h = '';
+
+    /* pending purchases across all users */
+    var pending = [];
+    names.forEach(function (n) {
+      var red = (st.users[n].shop && st.users[n].shop.redeemed) || [];
+      red.forEach(function (r, i) {
+        if (!r.actioned) pending.push({ user: n, idx: i, r: r });
+      });
+    });
+    h += '<h2>🛎️ Rewards waiting for you to action' +
+      (pending.length ? '<span class="pill warnpill">' + pending.length + '</span>' : '') + '</h2>';
+    h += '<div class="card" id="pendingCard">';
+    if (!pending.length) h += '<div class="empty">Nothing waiting — all rewards actioned. ✓</div>';
+    pending.forEach(function (p, k) {
+      h += '<div class="buyrow" data-user="' + esc(p.user) + '" data-idx="' + p.idx + '">' +
+        '<div class="who">' + esc(p.user) + '</div>' +
+        '<div class="what">' + esc(p.r.icon || '🎁') + ' ' + esc(p.r.name) +
+          ' <span class="muted">· ' + (p.r.cost || 0) + ' ⭐</span></div>' +
+        '<div class="when">' + fmtDate(p.r.date) + '</div>' +
+        '<button class="btn-act">✓ Done</button></div>';
+    });
+    h += '</div>';
+
+    h += '<h2>👤 Players</h2>';
+    if (!names.length) h += '<div class="card empty">No players yet on this device.</div>';
+    h += '<div class="users">';
+    names.forEach(function (n) {
+      var u = st.users[n];
+      var g = u.usage || {};
+      h += '<div class="ucard" data-user="' + esc(n) + '">' +
+        '<span class="av">' + esc(u.avatar || '😀') + '</span>' +
+        '<div class="nm">' + esc(n) + '</div>' +
+        '<div class="meta">' +
+          '⏱️ ' + fmtSecs(totalSecs(u)) + ' active total<br>' +
+          '⭐ ' + (u.points || 0) + ' points (earned ' + (u.pointsEarned || 0) + ')<br>' +
+          '📅 last seen ' + fmtDate(g.lastSeen) + '<br>' +
+          '🔁 ' + (g.sessions || 0) + ' sessions</div></div>';
+    });
+    h += '</div>';
+    host.innerHTML = h;
+
+    host.querySelectorAll('#pendingCard .btn-act').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var row = b.closest('.buyrow');
+        var st2 = loadState();
+        var red = (st2.users[row.dataset.user].shop || {}).redeemed || [];
+        if (red[row.dataset.idx]) {
+          red[row.dataset.idx].actioned = true;
+          red[row.dataset.idx].actionedAt = new Date().toISOString();
+          saveState(st2);
+        }
+        renderHome();
+      });
+    });
+    host.querySelectorAll('.ucard').forEach(function (c) {
+      c.addEventListener('click', function () { renderUser(c.dataset.user); });
+    });
+  }
+
+  function renderUser(name) {
+    var st = loadState();
+    var u = st.users[name];
+    if (!u) return renderHome();
+    var g = u.usage || {}; var apps = g.apps || {}; var days = g.days || {};
+    var host = document.getElementById('content');
+    var total = totalSecs(u) || 1;
+
+    var appRows = Object.keys(apps).sort(function (a, b) { return apps[b] - apps[a]; })
+      .map(function (a) {
+        var pct = Math.round(apps[a] / total * 100);
+        return '<div class="statrow"><span>' + (APP_NAMES[a] || esc(a)) + '</span><b>' +
+          fmtSecs(apps[a]) + ' · ' + pct + '%</b></div>' +
+          '<div class="bar"><div style="width:' + pct + '%"></div></div>';
+      }).join('') || '<div class="empty">No tracked activity yet (tracking starts with this update).</div>';
+
+    /* last 14 days */
+    var dayKeys = [];
+    for (var i = 13; i >= 0; i--) {
+      var d = new Date(); d.setDate(d.getDate() - i);
+      dayKeys.push(d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2));
+    }
+    var maxDay = 1;
+    dayKeys.forEach(function (k) { if ((days[k] || 0) > maxDay) maxDay = days[k]; });
+    var dayBars = dayKeys.map(function (k, i) {
+      var v = days[k] || 0;
+      var lbl = (i % 2 === 0) ? '<span>' + k.slice(8) + '/' + k.slice(5, 7) + '</span>' : '';
+      return '<div class="daybar" style="height:' + Math.max(3, Math.round(v / maxDay * 100)) + '%" title="' +
+        k + ': ' + fmtSecs(v) + '">' + lbl + '</div>';
+    }).join('');
+
+    var red = (u.shop && u.shop.redeemed) || [];
+    var buys = red.slice().reverse().map(function (r) {
+      return '<div class="buyrow"><div class="what">' + esc(r.icon || '🎁') + ' ' + esc(r.name) +
+        ' <span class="muted">· ' + (r.cost || 0) + ' ⭐</span></div>' +
+        '<div class="when">' + fmtDate(r.date) + '</div>' +
+        '<span class="pill' + (r.actioned ? '' : ' warnpill') + '">' + (r.actioned ? 'done' : 'WAITING') + '</span></div>';
+    }).join('') || '<div class="empty">No rewards redeemed yet.</div>';
+
+    var op = u.onepct || {};
+    var opBest = typeof op.bestIdx === 'number' && op.bestIdx >= 0
+      ? (op.bestIdx >= 15 ? '1% CLUB!' : ([90,80,70,60,50,45,40,35,30,25,20,15,10,5,1][op.bestIdx] + '%')) : '—';
+
+    host.innerHTML =
+      '<button class="back" id="backBtn">‹ All players</button>' +
+      '<div class="card"><span style="font-size:34px;">' + esc(u.avatar || '😀') + '</span> ' +
+      '<span style="font-size:22px;font-weight:800;">' + esc(name) + '</span>' +
+      '<span class="pill">⭐ ' + (u.points || 0) + ' points</span>' +
+      '<span class="pill">last seen ' + fmtDate(g.lastSeen) + '</span></div>' +
+      '<div class="grid2">' +
+        '<div class="card"><h2 style="margin-top:0;">⏱️ Where the time goes</h2>' + appRows + '</div>' +
+        '<div class="card"><h2 style="margin-top:0;">📅 Last 14 days</h2>' +
+          '<div class="daybars">' + dayBars + '</div>' +
+          '<div style="height:20px;"></div>' +
+          '<div class="statrow"><span>Total active time</span><b>' + fmtSecs(total) + '</b></div>' +
+          '<div class="statrow"><span>Sessions</span><b>' + (g.sessions || 0) + '</b></div>' +
+        '</div>' +
+        '<div class="card"><h2 style="margin-top:0;">📈 Progress</h2>' +
+          '<div class="statrow"><span>Times-table cells mastered</span><b>' + masteredCells(u) + '</b></div>' +
+          '<div class="statrow"><span>Spelling words mastered</span><b>' + spellMastered(u) + '</b></div>' +
+          '<div class="statrow"><span>Mysteries solved</span><b>' + mystSolved(u) + '</b></div>' +
+          '<div class="statrow"><span>People-skills items done</span><b>' + peopleDone(u) + '</b></div>' +
+          '<div class="statrow"><span>1% Challenge best</span><b>' + opBest + '</b></div>' +
+          '<div class="statrow"><span>1% questions cracked</span><b>' + (op.correct || 0) + '</b></div>' +
+          '<div class="statrow"><span>Spelling boss wins</span><b>' + ((u.spell && u.spell.bossWins) || 0) + '</b></div>' +
+          '<div class="statrow"><span>Lightning best</span><b>' + ((u.lightning && u.lightning.best) || 0) + '</b></div>' +
+          '<div class="statrow"><span>Points earned all-time</span><b>' + (u.pointsEarned || 0) + '</b></div>' +
+        '</div>' +
+        '<div class="card"><h2 style="margin-top:0;">🎁 Rewards redeemed</h2>' + buys + '</div>' +
+      '</div>';
+    document.getElementById('backBtn').addEventListener('click', renderHome);
+  }
+})();
+</script>
+</body>
+</html>

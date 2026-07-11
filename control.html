@@ -216,14 +216,59 @@
     });
   }
 
+var APP_LABELS = { maths:'🔢 Maths', spell:'🪄 Spelling', flags:'🏳️ Flags', mysteries:'🔍 Mysteries', people:'🤝 People Skills', onepct:'🏆 1% Challenge', shop:'🎁 Shop', palace:'🧠 Memory', story:'✍️ Story', chess:'♟️ Chess', unknown:'❓' };
+  var presenceUnsub = null;
+  function watchPresence() {
+    if (presenceUnsub || !fdb) return;
+    try {
+      presenceUnsub = fdb.collection('presence').onSnapshot(function (snap) {
+        var cut = Date.now() - 3 * 60 * 1000;
+        var rows = snap.docs.map(function (d) { return d.data(); })
+          .filter(function (p) { return (p.lastSeen || 0) > cut; })
+          .sort(function (a, b) { return b.lastSeen - a.lastSeen; });
+        var el = document.getElementById('liveNow');
+        if (!el) return;
+        if (!rows.length) { el.innerHTML = '<div class="empty">Nobody online right now.</div>'; return; }
+        el.innerHTML = rows.map(function (p) {
+          var ago = Math.max(0, Math.round((Date.now() - p.lastSeen) / 1000));
+          return '<div class="buyrow"><div class="who">🟢 ' + esc(p.username || '?') +
+            (p.anon ? ' <span class="pill">guest</span>' : (p.familyCode ? ' <span class="pill">' + esc(p.familyCode) + '</span>' : '')) +
+            '</div><div class="what">' + (APP_LABELS[p.app] || '❓') + '</div>' +
+            '<div class="when">' + (ago < 50 ? 'just now' : Math.round(ago / 60) + ' min ago') + '</div></div>';
+        }).join('');
+      });
+    } catch (e) {}
+  }
+  var cloudRefreshIv = null;
+  function refreshCloudDocs() {
+    var p = cloud.isAdmin
+      ? fdb.collection('users').get().then(function (qs) {
+          cloud.docs = qs.docs.map(function (d) { var x = d.data(); x._uid = d.id; return x; });
+        })
+      : Promise.all(cloud.myFamilies.map(function (code) {
+          return fdb.collection('users').where('familyCode', '==', code).get();
+        })).then(function (results) {
+          cloud.docs = [];
+          results.forEach(function (qs) {
+            qs.docs.forEach(function (d) { var x = d.data(); x._uid = d.id; cloud.docs.push(x); });
+          });
+        });
+    return p.then(renderCloudHome).catch(function () {});
+  }
+
   function renderCloudHome() {
+    watchPresence();
+    if (!cloudRefreshIv) cloudRefreshIv = setInterval(refreshCloudDocs, 60000);
     var host = document.getElementById('content');
     var byFam = {};
+    var guests = [];
     cloud.docs.forEach(function (d) {
+      if (d.anon) { guests.push(d); return; }
       var f = d.familyCode || '???';
       (byFam[f] = byFam[f] || []).push(d);
     });
     var h = '<h2>☁️ ' + (cloud.isAdmin ? 'All families (admin view)' : 'Your family across every device') + '</h2>';
+    h += '<h2>🟢 Online right now <span class="pill">live</span></h2><div class="card" id="liveNow"><div class="empty">Watching…</div></div>';
 
     /* pending purchases across visible users */
     var pending = [];
@@ -248,7 +293,6 @@
       h += '<h2>👨‍👩‍👧 ' + esc(fam.name || 'Family') + ' <span class="pill">code ' + esc(code) + '</span></h2><div class="users">';
       byFam[code].forEach(function (d) {
         var u = d.state || {};
-        var g = u.usage || {};
         h += '<div class="ucard" data-uid="' + esc(d._uid) + '">' +
           '<span class="av">' + esc(u.avatar || '😀') + '</span>' +
           '<div class="nm">' + esc(d.username) + '</div>' +
@@ -258,6 +302,19 @@
       });
       h += '</div>';
     });
+    if (cloud.isAdmin && guests.length) {
+      h += '<h2>👤 Guests — playing without an account</h2><div class="users">';
+      guests.forEach(function (d) {
+        var u = d.state || {};
+        h += '<div class="ucard" data-uid="' + esc(d._uid) + '" style="border-top-color:#b9c0cc;">' +
+          '<span class="av">' + esc(u.avatar || '⚪') + '</span>' +
+          '<div class="nm">' + esc(d.username) + ' <span class="pill">guest</span></div>' +
+          '<div class="meta">⏱️ ' + fmtSecs(totalSecs(u)) + ' active total<br>' +
+          '⭐ ' + (u.points || 0) + ' points<br>' +
+          '📅 last synced ' + fmtDate(d.updatedAtIso) + '</div></div>';
+      });
+      h += '</div>';
+    }
     host.innerHTML = h;
 
     host.querySelectorAll('#cloudPending .btn-act').forEach(function (b) {

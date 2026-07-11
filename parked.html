@@ -27518,6 +27518,8 @@ var SPELL_BANKS = {
           if (u && state.activeUser === cl.boundName) {
             u._localUpdatedAt = Date.now();
             cl.dirty = true;
+          } else if (cl.user && cl.user.isAnonymous) {
+            cl.dirty = true;   /* guest play still reports usage */
           }
         } catch (e) {}
         return rawSave();
@@ -27539,13 +27541,63 @@ var SPELL_BANKS = {
     if (cl.user && cl.dirty) { try { pushNow('unload'); } catch (e) {} }
   });
 
-  /* keep the session across reloads */
+  /* keep the session across reloads. Live V3.2: visitors who never log in
+     get an invisible anonymous identity so their usage still reaches the
+     grown-up dashboard (requires the Anonymous provider to be enabled). */
+  function guestName() {
+    try { return (state.activeUser || 'Guest'); } catch (e) { return 'Guest'; }
+  }
+  window.cloudGuestName = guestName;
+  var guestSyncIv = null;
+  function startGuestSync() {
+    if (guestSyncIv) return;
+    guestSyncIv = setInterval(function () {
+      try {
+        if (!cl.user || !cl.user.isAnonymous || !db || document.hidden) return;
+        if (!cl.dirty) return;
+        var u = (typeof currentUser === 'function') ? currentUser() : null;
+        if (!u) return;
+        cl.dirty = false;
+        db.collection('users').doc(cl.user.uid).set({
+          anon: true,
+          username: guestName(),
+          usernameLower: guestName().toLowerCase(),
+          familyCode: '',
+          updatedAt: Date.now(),
+          updatedAtIso: nowIso(),
+          state: prunedState(u)
+        }).catch(function () { cl.dirty = true; });
+      } catch (e) {}
+    }, 90000);
+  }
   if (auth) {
     auth.onAuthStateChanged(function (u) {
+      if (u && u.isAnonymous) {
+        /* guest telemetry only — no account flow */
+        cl.user = u; cl.doc = null; cl.boundName = null;
+        cl.dirty = true;
+        startGuestSync();
+        renderBadge();
+        return;
+      }
       if (u && !cl.user) afterSignIn(u);
-      if (!u) { cl.user = null; cl.boundName = null; }
+      if (!u) {
+        cl.user = null; cl.boundName = null;
+        /* fall back to an anonymous identity so usage still reports */
+        setTimeout(function () {
+          try {
+            if (!auth.currentUser) auth.signInAnonymously().catch(function () {});
+          } catch (e) {}
+        }, 2500);
+      }
       renderBadge();
     });
+    /* first visit: no auth state at all yet */
+    setTimeout(function () {
+      try {
+        if (!auth.currentUser) auth.signInAnonymously().catch(function () {});
+      } catch (e) {}
+    }, 4000);
   }
 
   /* ---------- UI ---------- */
@@ -27651,7 +27703,7 @@ var SPELL_BANKS = {
     try {
       var pill = document.getElementById('userPill');
       if (pill) {
-        pill.title = cl.user
+        pill.title = (cl.user && !cl.user.isAnonymous)
           ? ('Signed in to the cloud as ' + (cl.doc ? cl.doc.username : '') +
              (cl.lastError ? ' — ⚠ ' + cl.lastError : (cl.dirty ? ' — syncing soon' : ' — synced')))
           : 'Switch player (not signed in to the cloud)';
@@ -27662,7 +27714,7 @@ var SPELL_BANKS = {
   }
 
   function fillModalSection(host) {
-    if (cl.user && cl.doc) {
+    if (cl.user && !cl.user.isAnonymous && cl.doc) {
       host.innerHTML =
         '<div class="cl-row"><span class="cl-status">☁️ Signed in as <b>' + cl.doc.username + '</b>' +
         (cl.doc.familyCode ? ' · family <b>' + cl.doc.familyCode + '</b>' : '') +
@@ -27755,7 +27807,7 @@ var SPELL_BANKS = {
   var auth, db;
   try { auth = firebase.auth(); db = firebase.firestore(); } catch (e) { return; }
 
-  var HEARTBEAT_MS = 90000;
+  var HEARTBEAT_MS = 45000;
   var LIVE_WINDOW_MS = 3 * 60 * 1000;
   var CH_MAX_AGE_MS = 3 * 60 * 1000;
 
@@ -27768,8 +27820,13 @@ var SPELL_BANKS = {
 
   function me() { return auth.currentUser; }
   function myName() {
-    try { return (window.cloudState && window.cloudState.doc && window.cloudState.doc.username) || 'Someone'; }
-    catch (e) { return 'Someone'; }
+    try {
+      if (window.cloudState && window.cloudState.doc && window.cloudState.doc.username) {
+        return window.cloudState.doc.username;
+      }
+      if (typeof window.cloudGuestName === 'function') return window.cloudGuestName() + ' (guest)';
+      return 'Someone';
+    } catch (e) { return 'Someone'; }
   }
   function myFamily() {
     try { return (window.cloudState && window.cloudState.doc && window.cloudState.doc.familyCode) || ''; }
@@ -27784,8 +27841,11 @@ var SPELL_BANKS = {
   function beat() {
     if (!me() || document.hidden) return;
     if (Date.now() - lastPoke > LIVE_WINDOW_MS) return;   /* idle — don't count as live */
+    var app = 'unknown';
+    try { if (typeof getActiveApp === 'function') app = getActiveApp(); } catch (e) {}
     db.collection('presence').doc(me().uid).set({
-      username: myName(), familyCode: myFamily(), lastSeen: Date.now()
+      username: myName(), familyCode: myFamily(), lastSeen: Date.now(),
+      app: app, anon: !!(me() && me().isAnonymous)
     }).catch(function () {});
   }
   setInterval(beat, HEARTBEAT_MS);

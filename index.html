@@ -27375,27 +27375,45 @@ var SPELL_BANKS = {
     var username = opts.username.trim();
     if (!validUsername(username)) return Promise.reject(new Error('Usernames are 3-15 letters/numbers, no spaces.'));
     if (!opts.password || !opts.password.length) opts.password = derivePass(username);
-    var famCodeP;
-    if (opts.familyCode) {
-      var code = opts.familyCode.trim().toUpperCase();
-      famCodeP = db.collection('families').doc(code).get().then(function (s) {
-        if (!s.exists) throw new Error('That family code was not found — check it with whoever started the family.');
-        return { code: code, isNew: false };
-      });
-    } else {
-      var newCode = genFamilyCode();
-      famCodeP = Promise.resolve({ code: newCode, isNew: true, name: (opts.familyName || 'My family').trim() });
-    }
-    return famCodeP.then(function (fam) {
-      return auth.createUserWithEmailAndPassword(emailFor(username), opts.password).then(function (cred) {
-        var uid = cred.user.uid;
-        var chain = Promise.resolve();
-        if (fam.isNew) {
-          chain = db.collection('families').doc(fam.code).set({
-            name: fam.name, ownerUid: uid, ownerUsername: username, createdAt: nowIso()
+    /* Rules only allow signed-in reads, so make the account FIRST, then
+       sort the family out — rolling the account back if the code is bad. */
+    return auth.createUserWithEmailAndPassword(emailFor(username), opts.password).then(function (cred) {
+      var uid = cred.user.uid;
+      var famP;
+      if (opts.familyCode) {
+        var code = opts.familyCode.trim().toUpperCase();
+        famP = db.collection('families').doc(code).get().then(function (s) {
+          if (!s.exists) {
+            var err = new Error('That family code was not found — check it with whoever started the family.');
+            err._rollback = true;
+            throw err;
+          }
+          return { code: code, isNew: false };
+        });
+      } else {
+        var famName = (opts.familyName || 'My family').trim();
+        var tryCreate = function (attempt) {
+          var newCode = genFamilyCode();
+          var ref = db.collection('families').doc(newCode);
+          return ref.get().then(function (s) {
+            if (s.exists) {
+              if (attempt >= 6) { var e2 = new Error('Could not make a family code — try again.'); e2._rollback = true; throw e2; }
+              return tryCreate(attempt + 1);
+            }
+            return ref.set({
+              name: famName, ownerUid: uid, ownerUsername: username, createdAt: nowIso()
+            }).then(function () { return { code: newCode, isNew: true, name: famName }; });
           });
+        };
+        famP = tryCreate(0);
+      }
+      return famP.catch(function (e) {
+        if (e && e._rollback) {
+          return cred.user.delete().catch(function () {}).then(function () { throw e; });
         }
-        return chain.then(function () {
+        throw e;
+      }).then(function (fam) {
+        return Promise.resolve().then(function () {
           /* seed state from a chosen local profile, or fresh */
           var seed;
           if (opts.claimName && state.users[opts.claimName]) {

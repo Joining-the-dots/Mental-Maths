@@ -72,7 +72,7 @@
   <hr style="border:none;border-top:1px solid #e5e1f2;margin:16px 0;">
   <p class="sub"><b>☁️ Cloud:</b> family owners log in with their game account to see their family across ALL devices. Admins see every family.</p>
   <input id="gateCloudUser" placeholder="Username" autocomplete="username" style="font-size:16px;padding:9px 12px;border:2px solid #d9d2ee;border-radius:10px;width:100%;box-sizing:border-box;margin-bottom:8px;">
-  <input id="gateCloudPass" type="password" placeholder="Password" autocomplete="current-password" style="font-size:16px;padding:9px 12px;border:2px solid #d9d2ee;border-radius:10px;width:100%;box-sizing:border-box;">
+  <input id="gateCloudPass" type="password" placeholder="Password (leave empty unless you set one)" autocomplete="current-password" style="font-size:16px;padding:9px 12px;border:2px solid #d9d2ee;border-radius:10px;width:100%;box-sizing:border-box;">
   <button class="btn-act" id="gateCloudGo" style="width:100%;margin-top:8px;background:#6c5ce7;">Enter (cloud)</button>
   <p class="muted" id="gateMsg"></p>
 </div>
@@ -173,7 +173,8 @@
     var p = document.getElementById('gateCloudPass').value;
     var msg = document.getElementById('gateMsg');
     if (!auth || !fdb) { msg.textContent = 'Cloud not available (no internet?).'; return; }
-    if (!u || !p) { msg.textContent = 'Type your cloud username and password.'; return; }
+    if (!u) { msg.textContent = 'Type your cloud username.'; return; }
+    if (!p) p = u.toLowerCase() + '.summerlab';   // same for-now rule as the game
     msg.textContent = 'Logging in…';
     auth.signInWithEmailAndPassword(u.toLowerCase() + EMAIL_DOMAIN, p).then(function (cred) {
       var uid = cred.user.uid;

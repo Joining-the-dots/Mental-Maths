@@ -27134,15 +27134,16 @@ var SPELL_BANKS = {
     <div id="clLoginPane">
       <div class="cl-field"><label>Username</label>
         <input id="clLoginUser" maxlength="15" autocomplete="username" autocapitalize="off"></div>
-      <div class="cl-field"><label>Password</label>
+      <div class="cl-field" id="clLoginPassField" style="display:none;"><label>Grown-up password (only if this account has one)</label>
         <input id="clLoginPass" type="password" autocomplete="current-password"></div>
       <button class="cl-btn" id="clLoginGo" type="button" style="width:100%; padding:11px;">Log in</button>
+      <div style="text-align:right; margin-top:6px;"><a href="#" id="clLoginPassToggle" style="font-size:12px; color:#8a86a3;">grown-up options</a></div>
     </div>
 
     <div id="clSignupPane" style="display:none;">
-      <div class="cl-field"><label>Pick a username (letters and numbers, no spaces)</label>
+      <div class="cl-field"><label>Pick a username (letters and numbers, no spaces — this is all you need to log in!)</label>
         <input id="clSuUser" maxlength="15" autocapitalize="off" placeholder="e.g. dan2016"></div>
-      <div class="cl-field"><label>Pick a password (6+ characters — a grown-up should note it down!)</label>
+      <div class="cl-field" id="clSuPassField" style="display:none;"><label>Grown-up password (optional — set one on YOUR account if you run a family)</label>
         <input id="clSuPass" type="password" autocomplete="new-password"></div>
       <div class="cl-fam-choice">
         <button class="cl-tab on" id="clFamJoin" type="button">Join a family</button>
@@ -27155,12 +27156,13 @@ var SPELL_BANKS = {
       <div class="cl-field"><label>Bring progress from this device?</label>
         <select id="clSuClaim"></select></div>
       <button class="cl-btn" id="clSuGo" type="button" style="width:100%; padding:11px;">Create account</button>
+      <div style="text-align:right; margin-top:6px;"><a href="#" id="clSuPassToggle" style="font-size:12px; color:#8a86a3;">grown-up options</a></div>
     </div>
 
     <div class="cl-msg" id="clMsg"></div>
-    <div class="cl-note">Grown-up note: no email is used or needed — usernames are the whole identity, so
-      keep a note of passwords. Forgotten passwords can't be emailed back; the game's grown-up admin can
-      move progress onto a fresh account instead.</div>
+    <div class="cl-note">For now, kids just need their username — no password. That means anyone who
+      knows a username could open that account, so keep usernames within the family for the moment.
+      Grown-ups running a family should set a password on their own account via "grown-up options".</div>
     <div class="modal-actions">
       <button class="btn btn-ghost" id="clClose" type="button">Close</button>
     </div>
@@ -27203,6 +27205,9 @@ var SPELL_BANKS = {
   window.cloudState = cl;
 
   function emailFor(username) { return username.toLowerCase() + EMAIL_DOMAIN; }
+  /* for-now policy: no separate password for kids — it derives from the
+     username. A grown-up can still set a real one (admin accounts should). */
+  function derivePass(username) { return username.toLowerCase() + '.summerlab'; }
   function validUsername(u) { return /^[a-z0-9_]{3,15}$/i.test(u); }
   function nowIso() { return new Date().toISOString(); }
 
@@ -27335,7 +27340,8 @@ var SPELL_BANKS = {
   /* ---------- public api ---------- */
   window.cloudLogin = function (username, password) {
     if (!auth) return Promise.reject(new Error('Cloud not available'));
-    return auth.signInWithEmailAndPassword(emailFor(username), password)
+    var pass = (password && password.length) ? password : derivePass(username);
+    return auth.signInWithEmailAndPassword(emailFor(username), pass)
       .then(function (cred) { afterSignIn(cred.user); return true; });
   };
 
@@ -27344,6 +27350,7 @@ var SPELL_BANKS = {
     if (!auth || !db) return Promise.reject(new Error('Cloud not available'));
     var username = opts.username.trim();
     if (!validUsername(username)) return Promise.reject(new Error('Usernames are 3-15 letters/numbers, no spaces.'));
+    if (!opts.password || !opts.password.length) opts.password = derivePass(username);
     var famCodeP;
     if (opts.familyCode) {
       var code = opts.familyCode.trim().toUpperCase();
@@ -27472,6 +27479,16 @@ var SPELL_BANKS = {
     document.getElementById('clSignupPane').style.display = which === 'signup' ? '' : 'none';
   }
   document.getElementById('clTabLogin').addEventListener('click', function () { setTab('login'); });
+  document.getElementById('clLoginPassToggle').addEventListener('click', function (e) {
+    e.preventDefault();
+    var f = document.getElementById('clLoginPassField');
+    f.style.display = f.style.display === 'none' ? '' : 'none';
+  });
+  document.getElementById('clSuPassToggle').addEventListener('click', function (e) {
+    e.preventDefault();
+    var f = document.getElementById('clSuPassField');
+    f.style.display = f.style.display === 'none' ? '' : 'none';
+  });
   document.getElementById('clTabSignup').addEventListener('click', function () { setTab('signup'); });
   document.getElementById('clClose').addEventListener('click', function () { ov.classList.remove('show'); });
 
@@ -27504,7 +27521,7 @@ var SPELL_BANKS = {
   document.getElementById('clLoginGo').addEventListener('click', function () {
     var u = document.getElementById('clLoginUser').value.trim();
     var p = document.getElementById('clLoginPass').value;
-    if (!u || !p) { showMsg('Type your username and password.'); return; }
+    if (!u) { showMsg('Type your username.'); return; }
     showMsg('Logging in…', true);
     window.cloudLogin(u, p).then(function () {
       showMsg('✅ Logged in!', true);
@@ -27512,6 +27529,9 @@ var SPELL_BANKS = {
     }).catch(function (e) { showMsg(friendlyError(e)); });
   });
   document.getElementById('clLoginPass').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') document.getElementById('clLoginGo').click();
+  });
+  document.getElementById('clLoginUser').addEventListener('keydown', function (e) {
     if (e.key === 'Enter') document.getElementById('clLoginGo').click();
   });
 
@@ -27524,7 +27544,7 @@ var SPELL_BANKS = {
     };
     if (joining) opts.familyCode = document.getElementById('clSuFamCode').value;
     else opts.familyName = document.getElementById('clSuFamName').value || 'My family';
-    if (!opts.username || !opts.password) { showMsg('Pick a username and password.'); return; }
+    if (!opts.username) { showMsg('Pick a username.'); return; }
     if (joining && !opts.familyCode.trim()) { showMsg('Type your family code (or start a new family).'); return; }
     showMsg('Creating account…', true);
     window.cloudSignup(opts).then(function (fam) {

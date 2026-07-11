@@ -27080,5 +27080,529 @@ var SPELL_BANKS = {
 })();
 </script>
 
+<!-- ============================================================
+     Live V2: Summer Lab cloud accounts (Firebase).
+     Username + password login from any device. Usernames map to
+     invisible pseudo-emails (<username>@summer-lab.kids) — no real
+     email involved. Progress lives in Firestore (users/{uid}.state),
+     synced ~once a minute while playing and on exit, last-writer-
+     wins by updatedAt. Family codes group accounts; the family
+     creator owns the family (their control-centre sees its kids);
+     admins (admins/{uid} doc) see everyone.
+     The game degrades gracefully: no internet / no login = the
+     same local play as before.
+     ============================================================ -->
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+<style>
+  .cl-section { border: 2px dashed #d9d2ee; border-radius: 12px; padding: 10px 12px; margin: 0 0 14px; }
+  .cl-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .cl-status { font-size: 13px; font-weight: 700; color: var(--ink-soft); }
+  .cl-status b { color: #6c5ce7; }
+  .cl-btn { font-family: inherit; font-weight: 800; font-size: 13px; border: none; cursor: pointer;
+    border-radius: 999px; padding: 7px 14px; background: #6c5ce7; color: #fff; }
+  .cl-btn.ghost { background: #eceaf6; color: #6c5ce7; }
+  #clOverlay .modal { max-width: 430px; }
+  .cl-tabs { display: flex; gap: 6px; margin-bottom: 12px; }
+  .cl-tab { flex: 1; font-family: inherit; font-weight: 800; font-size: 14px; border: 2px solid #d9d2ee;
+    background: #fff; color: var(--ink-soft); border-radius: 10px; padding: 8px; cursor: pointer; }
+  .cl-tab.on { background: #6c5ce7; border-color: #6c5ce7; color: #fff; }
+  .cl-field { margin-bottom: 9px; }
+  .cl-field label { display: block; font-size: 12.5px; font-weight: 800; color: var(--ink-soft); margin-bottom: 3px; }
+  .cl-field input, .cl-field select { width: 100%; box-sizing: border-box; font-family: inherit; font-size: 15px;
+    padding: 9px 12px; border: 2px solid #d9d2ee; border-radius: 10px; outline: none; }
+  .cl-field input:focus { border-color: #6c5ce7; }
+  .cl-fam-choice { display: flex; gap: 6px; margin-bottom: 9px; }
+  .cl-msg { min-height: 20px; font-size: 13px; font-weight: 700; margin-top: 6px; }
+  .cl-msg.err { color: #c0392b; }
+  .cl-msg.ok { color: #1e9e54; }
+  .cl-note { font-size: 12px; color: var(--ink-soft); line-height: 1.45; margin-top: 8px; }
+</style>
+
+<div class="overlay" id="clOverlay">
+  <div class="modal" role="dialog" aria-modal="true">
+    <h2>☁️ Family account</h2>
+    <p class="sub">Log in on any device and your points, mastery and prizes follow you.</p>
+    <div class="cl-tabs">
+      <button class="cl-tab on" id="clTabLogin" type="button">Log in</button>
+      <button class="cl-tab" id="clTabSignup" type="button">New account</button>
+    </div>
+
+    <div id="clLoginPane">
+      <div class="cl-field"><label>Username</label>
+        <input id="clLoginUser" maxlength="15" autocomplete="username" autocapitalize="off"></div>
+      <div class="cl-field"><label>Password</label>
+        <input id="clLoginPass" type="password" autocomplete="current-password"></div>
+      <button class="cl-btn" id="clLoginGo" type="button" style="width:100%; padding:11px;">Log in</button>
+    </div>
+
+    <div id="clSignupPane" style="display:none;">
+      <div class="cl-field"><label>Pick a username (letters and numbers, no spaces)</label>
+        <input id="clSuUser" maxlength="15" autocapitalize="off" placeholder="e.g. dan2016"></div>
+      <div class="cl-field"><label>Pick a password (6+ characters — a grown-up should note it down!)</label>
+        <input id="clSuPass" type="password" autocomplete="new-password"></div>
+      <div class="cl-fam-choice">
+        <button class="cl-tab on" id="clFamJoin" type="button">Join a family</button>
+        <button class="cl-tab" id="clFamNew" type="button">Start a new family</button>
+      </div>
+      <div class="cl-field" id="clFamCodeField"><label>Family code (from whoever started your family)</label>
+        <input id="clSuFamCode" maxlength="8" autocapitalize="characters" placeholder="e.g. LION42"></div>
+      <div class="cl-field" id="clFamNameField" style="display:none;"><label>Family name</label>
+        <input id="clSuFamName" maxlength="24" placeholder="e.g. The Conways"></div>
+      <div class="cl-field"><label>Bring progress from this device?</label>
+        <select id="clSuClaim"></select></div>
+      <button class="cl-btn" id="clSuGo" type="button" style="width:100%; padding:11px;">Create account</button>
+    </div>
+
+    <div class="cl-msg" id="clMsg"></div>
+    <div class="cl-note">Grown-up note: no email is used or needed — usernames are the whole identity, so
+      keep a note of passwords. Forgotten passwords can't be emailed back; the game's grown-up admin can
+      move progress onto a fresh account instead.</div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="clClose" type="button">Close</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var FB_CONFIG = {
+    apiKey: "AIzaSyDFD_ETJUfIEgaElsTTqgTjKllPr5uJK_I",
+    authDomain: "summer-lab.firebaseapp.com",
+    projectId: "summer-lab",
+    storageBucket: "summer-lab.firebasestorage.app",
+    messagingSenderId: "38811699762",
+    appId: "1:38811699762:web:2b6c66af167b717c698a2b"
+  };
+  var EMAIL_DOMAIN = '@summer-lab.kids';
+  var SYNC_EVERY_MS = 60000;
+
+  var fb = null, auth = null, db = null;
+  try {
+    if (typeof firebase !== 'undefined') {
+      fb = firebase.initializeApp(FB_CONFIG);
+      auth = firebase.auth();
+      db = firebase.firestore();
+    }
+  } catch (e) { console.warn('cloud: firebase init failed', e); }
+
+  var cl = {
+    user: null,          /* firebase user */
+    doc: null,           /* users/{uid} data */
+    boundName: null,     /* local state.users key this account drives */
+    dirty: false,
+    syncing: false,
+    lastSyncAt: 0,
+    lastError: ''
+  };
+  window.cloudState = cl;
+
+  function emailFor(username) { return username.toLowerCase() + EMAIL_DOMAIN; }
+  function validUsername(u) { return /^[a-z0-9_]{3,15}$/i.test(u); }
+  function nowIso() { return new Date().toISOString(); }
+
+  function friendlyError(e) {
+    var c = (e && e.code) || '';
+    if (c.indexOf('auth/invalid-credential') >= 0 || c.indexOf('auth/wrong-password') >= 0 ||
+        c.indexOf('auth/user-not-found') >= 0) return 'Wrong username or password.';
+    if (c.indexOf('auth/email-already-in-use') >= 0) return 'That username is taken — try another.';
+    if (c.indexOf('auth/weak-password') >= 0) return 'Password needs at least 6 characters.';
+    if (c.indexOf('auth/network-request-failed') >= 0) return 'No internet — try again when online.';
+    if (c.indexOf('permission-denied') >= 0) return 'Cloud permissions not set up yet (grown-up: paste the security rules).';
+    return (e && e.message) ? String(e.message).slice(0, 120) : 'Something went wrong.';
+  }
+
+  /* ---------- pruning: keep the cloud copy comfortably under limits ---------- */
+  function prunedState(u) {
+    var c;
+    try { c = JSON.parse(JSON.stringify(u)); } catch (e) { return null; }
+    try {
+      if (c.usage && c.usage.days) {
+        var keys = Object.keys(c.usage.days).sort();
+        keys.slice(0, Math.max(0, keys.length - 90)).forEach(function (k) { delete c.usage.days[k]; });
+      }
+      if (c.usage && c.usage.appDays) {
+        var k2 = Object.keys(c.usage.appDays).sort();
+        k2.slice(0, Math.max(0, k2.length - 30)).forEach(function (k) { delete c.usage.appDays[k]; });
+      }
+      if (c.onepct && c.onepct.asked && Object.keys(c.onepct.asked).length > 1400) c.onepct.asked = {};
+      if (c.shop && Array.isArray(c.shop.redeemed) && c.shop.redeemed.length > 120) {
+        c.shop.redeemed = c.shop.redeemed.slice(-120);
+      }
+      if (c.daily) {
+        var dk = Object.keys(c.daily).sort();
+        dk.slice(0, Math.max(0, dk.length - 120)).forEach(function (k) { delete c.daily[k]; });
+      }
+      var size = JSON.stringify(c).length;
+      if (size > 850000) {
+        /* last resort — drop the biggest map and warn */
+        console.warn('cloud: state very large (' + size + '), dropping onepct.asked');
+        if (c.onepct) c.onepct.asked = {};
+      }
+    } catch (e) {}
+    return c;
+  }
+
+  /* ---------- sync engine ---------- */
+  function boundUser() {
+    if (!cl.boundName) return null;
+    try { return state.users[cl.boundName] || null; } catch (e) { return null; }
+  }
+
+  function pushNow(reason) {
+    if (!db || !cl.user) return Promise.resolve(false);
+    var u = boundUser();
+    if (!u) return Promise.resolve(false);
+    if (cl.syncing) return Promise.resolve(false);
+    cl.syncing = true;
+    var body = {
+      username: cl.doc && cl.doc.username ? cl.doc.username : cl.boundName,
+      usernameLower: (cl.doc && cl.doc.usernameLower) || cl.boundName.toLowerCase(),
+      familyCode: (cl.doc && cl.doc.familyCode) || '',
+      updatedAt: Date.now(),
+      updatedAtIso: nowIso(),
+      state: prunedState(u)
+    };
+    return db.collection('users').doc(cl.user.uid).set(body)
+      .then(function () {
+        cl.dirty = false;
+        cl.lastSyncAt = Date.now();
+        cl.lastError = '';
+        u._cloudSyncedAt = body.updatedAt;
+        try { saveState._raw ? saveState._raw() : null; } catch (e) {}
+        renderBadge();
+        return true;
+      })
+      .catch(function (e) {
+        cl.lastError = friendlyError(e);
+        console.warn('cloud push failed', e);
+        renderBadge();
+        return false;
+      })
+      .finally(function () { cl.syncing = false; });
+  }
+
+  function adoptCloudState(docData) {
+    /* make/replace the local profile from the cloud copy */
+    var name = docData.username;
+    var st = docData.state || {};
+    st.name = name;
+    state.users[name] = st;
+    state.activeUser = name;
+    cl.boundName = name;
+    try { migrateUser(state.users[name]); } catch (e) {}
+    try { saveState._raw ? saveState._raw() : saveState(); } catch (e) {}
+    try {
+      buildGrid(); refreshCells();
+      if (typeof updatePointsDisplay === 'function') updatePointsDisplay();
+      if (typeof setActiveApp === 'function' && typeof getActiveApp === 'function') setActiveApp(getActiveApp());
+      if (typeof renderUserModal === 'function') renderUserModal();
+    } catch (e) {}
+  }
+
+  function afterSignIn(fbUser) {
+    cl.user = fbUser;
+    if (!db) return;
+    db.collection('users').doc(fbUser.uid).get().then(function (snap) {
+      if (!snap.exists) { cl.lastError = 'Account has no saved data yet.'; renderBadge(); return; }
+      var data = snap.data();
+      cl.doc = data;
+      var name = data.username;
+      var local = state.users[name];
+      var localStamp = local && local._localUpdatedAt ? local._localUpdatedAt : 0;
+      var localSynced = local && local._cloudSyncedAt ? local._cloudSyncedAt : 0;
+      cl.boundName = name;
+      if (local && localStamp > (data.updatedAt || 0) && localStamp > localSynced) {
+        /* this device played offline more recently than the cloud copy — push ours */
+        state.activeUser = name;
+        pushNow('local-newer');
+        try { if (typeof renderUserModal === 'function') renderUserModal(); } catch (e) {}
+      } else {
+        adoptCloudState(data);
+      }
+      renderBadge();
+    }).catch(function (e) {
+      cl.lastError = friendlyError(e);
+      renderBadge();
+    });
+  }
+
+  /* ---------- public api ---------- */
+  window.cloudLogin = function (username, password) {
+    if (!auth) return Promise.reject(new Error('Cloud not available'));
+    return auth.signInWithEmailAndPassword(emailFor(username), password)
+      .then(function (cred) { afterSignIn(cred.user); return true; });
+  };
+
+  window.cloudSignup = function (opts) {
+    /* opts: { username, password, familyCode | familyName, claimName | null } */
+    if (!auth || !db) return Promise.reject(new Error('Cloud not available'));
+    var username = opts.username.trim();
+    if (!validUsername(username)) return Promise.reject(new Error('Usernames are 3-15 letters/numbers, no spaces.'));
+    var famCodeP;
+    if (opts.familyCode) {
+      var code = opts.familyCode.trim().toUpperCase();
+      famCodeP = db.collection('families').doc(code).get().then(function (s) {
+        if (!s.exists) throw new Error('That family code was not found — check it with whoever started the family.');
+        return { code: code, isNew: false };
+      });
+    } else {
+      var newCode = genFamilyCode();
+      famCodeP = Promise.resolve({ code: newCode, isNew: true, name: (opts.familyName || 'My family').trim() });
+    }
+    return famCodeP.then(function (fam) {
+      return auth.createUserWithEmailAndPassword(emailFor(username), opts.password).then(function (cred) {
+        var uid = cred.user.uid;
+        var chain = Promise.resolve();
+        if (fam.isNew) {
+          chain = db.collection('families').doc(fam.code).set({
+            name: fam.name, ownerUid: uid, ownerUsername: username, createdAt: nowIso()
+          });
+        }
+        return chain.then(function () {
+          /* seed state from a chosen local profile, or fresh */
+          var seed;
+          if (opts.claimName && state.users[opts.claimName]) {
+            seed = JSON.parse(JSON.stringify(state.users[opts.claimName]));
+            seed.name = username;
+          } else {
+            seed = makeUser(username, '😀');
+          }
+          try { migrateUser(seed); } catch (e) {}
+          cl.user = cred.user;
+          cl.doc = { username: username, usernameLower: username.toLowerCase(), familyCode: fam.code };
+          state.users[username] = seed;
+          state.activeUser = username;
+          cl.boundName = username;
+          try { saveState._raw ? saveState._raw() : saveState(); } catch (e) {}
+          return pushNow('signup').then(function () {
+            try {
+              buildGrid(); refreshCells();
+              if (typeof renderUserModal === 'function') renderUserModal();
+              if (typeof updatePointsDisplay === 'function') updatePointsDisplay();
+            } catch (e) {}
+            return fam;
+          });
+        });
+      });
+    });
+  };
+
+  window.cloudLogout = function () {
+    var done = function () {
+      cl.user = null; cl.doc = null; cl.boundName = null; cl.dirty = false;
+      renderBadge();
+      try { if (typeof renderUserModal === 'function') renderUserModal(); } catch (e) {}
+    };
+    if (!auth) { done(); return Promise.resolve(); }
+    return pushNow('logout').then(function () { return auth.signOut(); }).then(done).catch(done);
+  };
+
+  window.cloudSyncNow = function () { cl.dirty = true; return pushNow('manual'); };
+
+  function genFamilyCode() {
+    var animals = ['LION', 'BEAR', 'WOLF', 'HAWK', 'FROG', 'DEER', 'PUMA', 'LYNX', 'SEAL', 'CROW'];
+    return animals[Math.floor(Math.random() * animals.length)] + String(10 + Math.floor(Math.random() * 90));
+  }
+
+  /* ---------- hook saveState so plays mark the account dirty ---------- */
+  try {
+    if (typeof saveState === 'function' && !saveState._cloudWrapped) {
+      var rawSave = saveState;
+      var wrapped = function () {
+        try {
+          var u = boundUser();
+          if (u && state.activeUser === cl.boundName) {
+            u._localUpdatedAt = Date.now();
+            cl.dirty = true;
+          }
+        } catch (e) {}
+        return rawSave();
+      };
+      wrapped._cloudWrapped = true;
+      wrapped._raw = rawSave;
+      window.saveState = wrapped;
+      saveState = wrapped;
+    }
+  } catch (e) {}
+
+  setInterval(function () {
+    if (cl.user && cl.dirty && !document.hidden) pushNow('interval');
+  }, SYNC_EVERY_MS);
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden && cl.user && cl.dirty) pushNow('hide');
+  });
+  window.addEventListener('beforeunload', function () {
+    if (cl.user && cl.dirty) { try { pushNow('unload'); } catch (e) {} }
+  });
+
+  /* keep the session across reloads */
+  if (auth) {
+    auth.onAuthStateChanged(function (u) {
+      if (u && !cl.user) afterSignIn(u);
+      if (!u) { cl.user = null; cl.boundName = null; }
+      renderBadge();
+    });
+  }
+
+  /* ---------- UI ---------- */
+  var ov = document.getElementById('clOverlay');
+  function showMsg(text, ok) {
+    var m = document.getElementById('clMsg');
+    m.textContent = text || '';
+    m.className = 'cl-msg ' + (ok ? 'ok' : 'err');
+  }
+  function openCloudOverlay(tab) {
+    fillClaimOptions();
+    setTab(tab || 'login');
+    showMsg('');
+    ov.classList.add('show');
+  }
+  window.openCloudOverlay = openCloudOverlay;
+
+  function setTab(which) {
+    document.getElementById('clTabLogin').classList.toggle('on', which === 'login');
+    document.getElementById('clTabSignup').classList.toggle('on', which === 'signup');
+    document.getElementById('clLoginPane').style.display = which === 'login' ? '' : 'none';
+    document.getElementById('clSignupPane').style.display = which === 'signup' ? '' : 'none';
+  }
+  document.getElementById('clTabLogin').addEventListener('click', function () { setTab('login'); });
+  document.getElementById('clTabSignup').addEventListener('click', function () { setTab('signup'); });
+  document.getElementById('clClose').addEventListener('click', function () { ov.classList.remove('show'); });
+
+  document.getElementById('clFamJoin').addEventListener('click', function () {
+    this.classList.add('on');
+    document.getElementById('clFamNew').classList.remove('on');
+    document.getElementById('clFamCodeField').style.display = '';
+    document.getElementById('clFamNameField').style.display = 'none';
+  });
+  document.getElementById('clFamNew').addEventListener('click', function () {
+    this.classList.add('on');
+    document.getElementById('clFamJoin').classList.remove('on');
+    document.getElementById('clFamCodeField').style.display = 'none';
+    document.getElementById('clFamNameField').style.display = '';
+  });
+
+  function fillClaimOptions() {
+    var sel = document.getElementById('clSuClaim');
+    sel.innerHTML = '<option value="">Start fresh</option>';
+    try {
+      Object.keys(state.users || {}).forEach(function (n) {
+        var o = document.createElement('option');
+        o.value = n;
+        o.textContent = 'Bring "' + n + '" from this device';
+        sel.appendChild(o);
+      });
+    } catch (e) {}
+  }
+
+  document.getElementById('clLoginGo').addEventListener('click', function () {
+    var u = document.getElementById('clLoginUser').value.trim();
+    var p = document.getElementById('clLoginPass').value;
+    if (!u || !p) { showMsg('Type your username and password.'); return; }
+    showMsg('Logging in…', true);
+    window.cloudLogin(u, p).then(function () {
+      showMsg('✅ Logged in!', true);
+      setTimeout(function () { ov.classList.remove('show'); }, 700);
+    }).catch(function (e) { showMsg(friendlyError(e)); });
+  });
+  document.getElementById('clLoginPass').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') document.getElementById('clLoginGo').click();
+  });
+
+  document.getElementById('clSuGo').addEventListener('click', function () {
+    var joining = document.getElementById('clFamJoin').classList.contains('on');
+    var opts = {
+      username: document.getElementById('clSuUser').value.trim(),
+      password: document.getElementById('clSuPass').value,
+      claimName: document.getElementById('clSuClaim').value || null
+    };
+    if (joining) opts.familyCode = document.getElementById('clSuFamCode').value;
+    else opts.familyName = document.getElementById('clSuFamName').value || 'My family';
+    if (!opts.username || !opts.password) { showMsg('Pick a username and password.'); return; }
+    if (joining && !opts.familyCode.trim()) { showMsg('Type your family code (or start a new family).'); return; }
+    showMsg('Creating account…', true);
+    window.cloudSignup(opts).then(function (fam) {
+      showMsg(fam.isNew
+        ? '✅ Account made! Your family code is ' + fam.code + ' — write it down and share it with your family.'
+        : '✅ Account made and joined the family!', true);
+      if (!fam.isNew) setTimeout(function () { ov.classList.remove('show'); }, 900);
+    }).catch(function (e) { showMsg(friendlyError(e)); });
+  });
+
+  /* cloud section inside the Who's playing modal + status on the pill */
+  function renderBadge() {
+    try {
+      var pill = document.getElementById('userPill');
+      if (pill) {
+        pill.title = cl.user
+          ? ('Signed in to the cloud as ' + (cl.doc ? cl.doc.username : '') +
+             (cl.lastError ? ' — ⚠ ' + cl.lastError : (cl.dirty ? ' — syncing soon' : ' — synced')))
+          : 'Switch player (not signed in to the cloud)';
+      }
+      var host = document.getElementById('clModalSection');
+      if (host) fillModalSection(host);
+    } catch (e) {}
+  }
+
+  function fillModalSection(host) {
+    if (cl.user && cl.doc) {
+      host.innerHTML =
+        '<div class="cl-row"><span class="cl-status">☁️ Signed in as <b>' + cl.doc.username + '</b>' +
+        (cl.doc.familyCode ? ' · family <b>' + cl.doc.familyCode + '</b>' : '') +
+        (cl.lastError ? ' · <span style="color:#c0392b;">⚠ ' + cl.lastError + '</span>'
+                      : (cl.dirty ? ' · saving…' : ' · ✓ saved to cloud')) +
+        '</span><button class="cl-btn ghost" id="clSyncBtn" type="button">Sync now</button>' +
+        '<button class="cl-btn ghost" id="clOutBtn" type="button">Log out</button></div>';
+      var sb = document.getElementById('clSyncBtn');
+      if (sb) sb.addEventListener('click', function () { window.cloudSyncNow(); });
+      var ob = document.getElementById('clOutBtn');
+      if (ob) ob.addEventListener('click', function () { window.cloudLogout(); });
+    } else {
+      host.innerHTML =
+        '<div class="cl-row"><span class="cl-status">☁️ Play from any device — points and prizes follow you.</span>' +
+        '<button class="cl-btn" id="clInBtn" type="button">Log in</button>' +
+        '<button class="cl-btn ghost" id="clNewBtn" type="button">Create account</button></div>';
+      var ib = document.getElementById('clInBtn');
+      if (ib) ib.addEventListener('click', function () { openCloudOverlay('login'); });
+      var nb = document.getElementById('clNewBtn');
+      if (nb) nb.addEventListener('click', function () { openCloudOverlay('signup'); });
+    }
+  }
+
+  /* wrap renderUserModal to prepend the cloud section */
+  try {
+    if (typeof renderUserModal === 'function' && !renderUserModal._cloudWrapped) {
+      var rawRUM = renderUserModal;
+      var wrappedRUM = function () {
+        var out = rawRUM.apply(this, arguments);
+        try {
+          var modal = document.querySelector('#userOverlay .modal');
+          if (modal && !document.getElementById('clModalSection')) {
+            var sec = document.createElement('div');
+            sec.className = 'cl-section';
+            sec.id = 'clModalSection';
+            var h2 = modal.querySelector('h2');
+            if (h2 && h2.nextSibling) modal.insertBefore(sec, h2.nextSibling.nextSibling || h2.nextSibling);
+            else modal.insertBefore(sec, modal.firstChild);
+          }
+          var host = document.getElementById('clModalSection');
+          if (host) fillModalSection(host);
+        } catch (e) {}
+        return out;
+      };
+      wrappedRUM._cloudWrapped = true;
+      window.renderUserModal = wrappedRUM;
+      renderUserModal = wrappedRUM;
+    }
+  } catch (e) {}
+
+  renderBadge();
+})();
+</script>
+
 </body>
 </html>

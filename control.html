@@ -58,14 +58,22 @@
   .muted { color: var(--ink-soft); font-size: 13px; }
   .empty { color: var(--ink-soft); font-style: italic; font-size: 13.5px; }
 </style>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 </head>
 <body>
 
 <div id="gate" class="card">
   <h1>🔐 Control Centre</h1>
-  <p class="sub">Grown-ups only. Enter the master password.</p>
-  <input id="gatePass" type="password" placeholder="Password" autocomplete="off">
-  <button class="btn-act" id="gateGo" style="width:100%;">Enter</button>
+  <p class="sub"><b>This device:</b> enter the master password to see players on this device/browser.</p>
+  <input id="gatePass" type="password" placeholder="Master password" autocomplete="off">
+  <button class="btn-act" id="gateGo" style="width:100%;">Enter (this device)</button>
+  <hr style="border:none;border-top:1px solid #e5e1f2;margin:16px 0;">
+  <p class="sub"><b>☁️ Cloud:</b> family owners log in with their game account to see their family across ALL devices. Admins see every family.</p>
+  <input id="gateCloudUser" placeholder="Username" autocomplete="username" style="font-size:16px;padding:9px 12px;border:2px solid #d9d2ee;border-radius:10px;width:100%;box-sizing:border-box;margin-bottom:8px;">
+  <input id="gateCloudPass" type="password" placeholder="Password" autocomplete="current-password" style="font-size:16px;padding:9px 12px;border:2px solid #d9d2ee;border-radius:10px;width:100%;box-sizing:border-box;">
+  <button class="btn-act" id="gateCloudGo" style="width:100%;margin-top:8px;background:#6c5ce7;">Enter (cloud)</button>
   <p class="muted" id="gateMsg"></p>
 </div>
 
@@ -139,8 +147,145 @@
     return Object.keys(d).length;
   }
 
+  /* ---------- cloud mode ---------- */
+  var FB_CONFIG = {
+    apiKey: "AIzaSyDFD_ETJUfIEgaElsTTqgTjKllPr5uJK_I",
+    authDomain: "summer-lab.firebaseapp.com",
+    projectId: "summer-lab",
+    storageBucket: "summer-lab.firebasestorage.app",
+    messagingSenderId: "38811699762",
+    appId: "1:38811699762:web:2b6c66af167b717c698a2b"
+  };
+  var EMAIL_DOMAIN = '@summer-lab.kids';
+  var auth = null, fdb = null;
+  try {
+    if (typeof firebase !== 'undefined') {
+      firebase.initializeApp(FB_CONFIG);
+      auth = firebase.auth();
+      fdb = firebase.firestore();
+    }
+  } catch (e) {}
+
+  var cloud = { docs: [], families: {}, isAdmin: false, myFamilies: [] };
+
+  function cloudEnter() {
+    var u = document.getElementById('gateCloudUser').value.trim();
+    var p = document.getElementById('gateCloudPass').value;
+    var msg = document.getElementById('gateMsg');
+    if (!auth || !fdb) { msg.textContent = 'Cloud not available (no internet?).'; return; }
+    if (!u || !p) { msg.textContent = 'Type your cloud username and password.'; return; }
+    msg.textContent = 'Logging in…';
+    auth.signInWithEmailAndPassword(u.toLowerCase() + EMAIL_DOMAIN, p).then(function (cred) {
+      var uid = cred.user.uid;
+      return fdb.collection('admins').doc(uid).get().catch(function () { return { exists: false }; })
+        .then(function (adm) {
+          cloud.isAdmin = adm && adm.exists;
+          if (cloud.isAdmin) {
+            return fdb.collection('users').get().then(function (qs) {
+              cloud.docs = qs.docs.map(function (d) { var x = d.data(); x._uid = d.id; return x; });
+              return fdb.collection('families').get();
+            }).then(function (fq) {
+              fq.docs.forEach(function (d) { cloud.families[d.id] = d.data(); });
+            });
+          }
+          return fdb.collection('families').where('ownerUid', '==', uid).get().then(function (fq) {
+            cloud.myFamilies = fq.docs.map(function (d) { cloud.families[d.id] = d.data(); return d.id; });
+            if (!cloud.myFamilies.length) throw new Error('This account does not own a family, and is not an admin.');
+            var gets = cloud.myFamilies.map(function (code) {
+              return fdb.collection('users').where('familyCode', '==', code).get();
+            });
+            return Promise.all(gets).then(function (results) {
+              cloud.docs = [];
+              results.forEach(function (qs) {
+                qs.docs.forEach(function (d) { var x = d.data(); x._uid = d.id; cloud.docs.push(x); });
+              });
+            });
+          });
+        });
+    }).then(function () {
+      document.getElementById('gate').style.display = 'none';
+      document.getElementById('main').style.display = '';
+      renderCloudHome();
+    }).catch(function (e) {
+      var c = (e && e.code) || '';
+      msg.textContent =
+        c.indexOf('auth/') >= 0 ? 'Wrong username or password.' :
+        c.indexOf('permission-denied') >= 0 ? 'Cloud permissions not set up yet (paste the security rules).' :
+        (e.message || 'Could not log in.');
+    });
+  }
+
+  function renderCloudHome() {
+    var host = document.getElementById('content');
+    var byFam = {};
+    cloud.docs.forEach(function (d) {
+      var f = d.familyCode || '???';
+      (byFam[f] = byFam[f] || []).push(d);
+    });
+    var h = '<h2>☁️ ' + (cloud.isAdmin ? 'All families (admin view)' : 'Your family across every device') + '</h2>';
+
+    /* pending purchases across visible users */
+    var pending = [];
+    cloud.docs.forEach(function (d) {
+      var red = (d.state && d.state.shop && d.state.shop.redeemed) || [];
+      red.forEach(function (r, i) { if (!r.actioned) pending.push({ d: d, idx: i, r: r }); });
+    });
+    h += '<h2>🛎️ Rewards waiting' + (pending.length ? '<span class="pill warnpill">' + pending.length + '</span>' : '') + '</h2>';
+    h += '<div class="card" id="cloudPending">';
+    if (!pending.length) h += '<div class="empty">Nothing waiting. ✓</div>';
+    pending.forEach(function (p, k) {
+      h += '<div class="buyrow" data-k="' + k + '"><div class="who">' + esc(p.d.username) + '</div>' +
+        '<div class="what">' + esc(p.r.icon || '🎁') + ' ' + esc(p.r.name) +
+        ' <span class="muted">· ' + (p.r.cost || 0) + ' ⭐</span></div>' +
+        '<div class="when">' + fmtDate(p.r.date) + '</div>' +
+        '<button class="btn-act">✓ Done</button></div>';
+    });
+    h += '</div>';
+
+    Object.keys(byFam).sort().forEach(function (code) {
+      var fam = cloud.families[code] || {};
+      h += '<h2>👨‍👩‍👧 ' + esc(fam.name || 'Family') + ' <span class="pill">code ' + esc(code) + '</span></h2><div class="users">';
+      byFam[code].forEach(function (d) {
+        var u = d.state || {};
+        var g = u.usage || {};
+        h += '<div class="ucard" data-uid="' + esc(d._uid) + '">' +
+          '<span class="av">' + esc(u.avatar || '😀') + '</span>' +
+          '<div class="nm">' + esc(d.username) + '</div>' +
+          '<div class="meta">⏱️ ' + fmtSecs(totalSecs(u)) + ' active total<br>' +
+          '⭐ ' + (u.points || 0) + ' points (earned ' + (u.pointsEarned || 0) + ')<br>' +
+          '📅 last synced ' + fmtDate(d.updatedAtIso) + '</div></div>';
+      });
+      h += '</div>';
+    });
+    host.innerHTML = h;
+
+    host.querySelectorAll('#cloudPending .btn-act').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var p = pending[parseInt(b.closest('.buyrow').dataset.k, 10)];
+        p.r.actioned = true;
+        p.r.actionedAt = new Date().toISOString();
+        fdb.collection('users').doc(p.d._uid).set(p.d).then(renderCloudHome)
+          .catch(function () { alert('Could not save — check the security rules allow family owners to write.'); });
+      });
+    });
+    host.querySelectorAll('.ucard').forEach(function (c) {
+      c.addEventListener('click', function () {
+        var d = cloud.docs.find(function (x) { return x._uid === c.dataset.uid; });
+        if (d) renderCloudUser(d);
+      });
+    });
+  }
+
+  function renderCloudUser(d) {
+    renderUserFrom(d.state || {}, d.username, renderCloudHome, d);
+  }
+
   /* ---------- gate ---------- */
   document.getElementById('gateGo').addEventListener('click', tryGate);
+  document.getElementById('gateCloudGo').addEventListener('click', cloudEnter);
+  document.getElementById('gateCloudPass').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') cloudEnter();
+  });
   document.getElementById('gatePass').addEventListener('keydown', function (e) {
     if (e.key === 'Enter') tryGate();
   });
@@ -224,6 +369,10 @@
     var st = loadState();
     var u = st.users[name];
     if (!u) return renderHome();
+    renderUserFrom(u, name, renderHome, null);
+  }
+
+  function renderUserFrom(u, name, backFn, clDoc) {
     var g = u.usage || {}; var apps = g.apps || {}; var days = g.days || {};
     var host = document.getElementById('content');
     var total = totalSecs(u) || 1;
@@ -264,7 +413,8 @@
       ? (op.bestIdx >= 15 ? '1% CLUB!' : ([90,80,70,60,50,45,40,35,30,25,20,15,10,5,1][op.bestIdx] + '%')) : '—';
 
     host.innerHTML =
-      '<button class="back" id="backBtn">‹ All players</button>' +
+      '<button class="back" id="backBtn">‹ Back</button>' +
+      (clDoc ? '<div class="muted" style="margin-bottom:8px;">☁️ cloud account · family ' + esc(clDoc.familyCode || '') + ' · last synced ' + fmtDate(clDoc.updatedAtIso) + '</div>' : '') +
       '<div class="card"><span style="font-size:34px;">' + esc(u.avatar || '😀') + '</span> ' +
       '<span style="font-size:22px;font-weight:800;">' + esc(name) + '</span>' +
       '<span class="pill">⭐ ' + (u.points || 0) + ' points</span>' +
@@ -290,7 +440,7 @@
         '</div>' +
         '<div class="card"><h2 style="margin-top:0;">🎁 Rewards redeemed</h2>' + buys + '</div>' +
       '</div>';
-    document.getElementById('backBtn').addEventListener('click', renderHome);
+    document.getElementById('backBtn').addEventListener('click', backFn || renderHome);
   }
 })();
 </script>

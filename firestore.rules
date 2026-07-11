@@ -1,0 +1,36 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function isAdmin() {
+      return signedIn() &&
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+    function ownsFamily(code) {
+      return signedIn() && code != null && code != '' &&
+        get(/databases/$(database)/documents/families/$(code)).data.ownerUid == request.auth.uid;
+    }
+
+    // Each player's account: themselves, their family's owner, and admins.
+    match /users/{uid} {
+      allow read, write: if signedIn() && request.auth.uid == uid;
+      allow read, write: if isAdmin();
+      allow read, write: if ownsFamily(resource.data.familyCode);
+    }
+
+    // Families: anyone signed in may read (needed to check a code exists
+    // when joining); only the creator may create their own family.
+    match /families/{code} {
+      allow read: if signedIn();
+      allow create: if signedIn() && request.resource.data.ownerUid == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+
+    // Admin flags are set by hand in the Firebase console, never from the app.
+    match /admins/{uid} {
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow write: if false;
+    }
+  }
+}

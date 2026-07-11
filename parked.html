@@ -23093,8 +23093,8 @@ tcGameOverlay.addEventListener('click', (e) => { if (e.target === tcGameOverlay)
       </div>
     </div>
     <div class="op-spectate" id="op2Spectate"></div>
-    <div style="text-align:center;font-size:15px;letter-spacing:2px;" id="op2Lives"></div>
-    <div class="op-stagechip" id="op2StageChip"></div>
+    <div style="text-align:center;font-size:14px;letter-spacing:3px;margin:12px 0 8px;color:#7c8696;font-weight:700;" id="op2Lives"></div>
+    <div class="op-stagechip" id="op2StageChip" style="margin:0 0 14px;"></div>
     <div class="op-q" id="op2Q"></div>
     <div class="op-timerbar" id="op2TimerBar"><div style="width:100%"></div></div>
     <div class="op-lifelines">
@@ -24843,7 +24843,7 @@ var OP_BANK = [
 
   var STAGES = [90,80,70,60,50,45,40,35,30,25,20,15,10,5,1];
   var STAGE_PTS = { 90:2, 80:2, 70:3, 60:3, 50:4, 45:4, 40:5, 35:5, 30:6, 25:6, 20:8, 15:8, 10:10, 5:12, 1:15 };
-  var Q_SECS = 30, TIME_BOOST = 15;
+  var Q_SECS = 60, TIME_BOOST = 30;   /* a full minute per question — kids need thinking room */
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
@@ -24938,7 +24938,7 @@ var OP_BANK = [
         '<div class="op-stat"><b>' + o.clubWins + '</b><span>times in the 1% Club</span></div>' +
         '<div class="op-stat"><b>' + o.correct + '</b><span>questions cracked</span></div>' +
       '</div>' +
-      '<div class="op-how"><b>How it works:</b> 30 seconds a question, and one wrong answer knocks you out — ' +
+      '<div class="op-how"><b>How it works:</b> a full minute per question, and one wrong answer knocks you out — ' +
       'exactly like the show. You get two lifelines per game: <b>⏭️ one Pass</b> (skip a question and stay in) and ' +
       '<b>⏱️ one +50% time</b>. Harder questions earn more ⭐ points for the Shop. Survive all 15 and you join the 1% Club! 🎉</div>';
     document.getElementById('opPlaySolo').addEventListener('click', soloStart);
@@ -25422,22 +25422,31 @@ var OP_BANK = [
     updateLifelineBtns('op2', g);
     var amAlive = meAlive();
     document.getElementById('op2Spectate').textContent = amAlive ? '' :
-      '💀 You’re out — watching ' + g.theirName + ' play on.';
+      '💀 You’re out — keep answering for fun while ' + g.theirName + ' plays on! (Your answers don’t count.)';
     var optsEl = document.getElementById('op2Options');
     optsEl.innerHTML = '';
+    g.funPick = null;
     q.options.forEach(function (opt, i) {
       var b = document.createElement('button');
       b.type = 'button'; b.className = 'ft-option'; b.textContent = opt;
-      b.disabled = !amAlive;
-      b.addEventListener('click', function () { p2MyAnswer(i, b); });
+      b.addEventListener('click', function () {
+        if (meAlive()) { p2MyAnswer(i, b); return; }
+        /* knocked out — still play along, it just never counts */
+        if (g.funPick != null || g.locked) return;
+        g.funPick = i;
+        b.classList.add('sel');
+        Array.prototype.forEach.call(optsEl.children, function (x) { x.disabled = true; });
+        document.getElementById('op2MePick').textContent = 'You: 🎈 answered (for fun)';
+      });
       optsEl.appendChild(b);
     });
     if (!amAlive) {
       document.getElementById('op2Pass').disabled = true;
       document.getElementById('op2Time').disabled = true;
-      /* the knocked-out player auto-reports so the round can resolve */
+      /* the knocked-out player auto-reports so the round can resolve —
+         their taps above are just for fun and never sent */
       g.myAnswer = { idx: -3 };
-      document.getElementById('op2MePick').textContent = 'You: 💀 out';
+      document.getElementById('op2MePick').textContent = 'You: 💀 out — play for fun!';
       if (g.role === 'guest') {
         try { p2Conn.send({ type: 'answer', qIdx: g.qIdx, idx: -3 }); } catch (e) {}
       } else p2HostMaybeResolve();
@@ -25574,11 +25583,12 @@ var OP_BANK = [
     g.locked = true;
     var q = g.questions[g.qIdx];
     var myPick = g.role === 'host' ? hostPick : guestPick;
+    var paintPick = (myPick === -3 && g.funPick != null) ? g.funPick : myPick;
     var optsEl = document.getElementById('op2Options');
     Array.prototype.forEach.call(optsEl.children, function (b, i) {
       b.disabled = true;
       if (i === correctIdx) b.classList.add('correct');
-      else if (i === myPick) b.classList.add('wrong');
+      else if (i === paintPick) b.classList.add('wrong');
     });
     document.getElementById('op2MeScore').textContent = (g.role === 'host' ? g.hostScore : g.guestScore);
     document.getElementById('op2ThemScore').textContent = (g.role === 'host' ? g.guestScore : g.hostScore);
@@ -25591,7 +25601,13 @@ var OP_BANK = [
     if (lifeSaved) {
       sfx('wrong');
       html = '<span style="color:#e6324b;font-weight:800;">💥 You BOTH got it wrong! ❤️ One team life used — same round, new question…</span>';
-    } else if (!iWasAliveBefore) html = '<span style="color:#8a86a3;font-weight:800;">Watching…</span>';
+    } else if (!iWasAliveBefore) {
+      if (g.funPick != null) {
+        html = g.funPick === correctIdx
+          ? '<span style="color:#1e9e54;font-weight:800;">🎈 You’d have got that one! (doesn’t count — you’re out)</span>'
+          : '<span style="color:#8a86a3;font-weight:800;">🎈 Wrong anyway — phew, it doesn’t count!</span>';
+      } else html = '<span style="color:#8a86a3;font-weight:800;">Watching…</span>';
+    }
     else if (right) {
       sfx('correct');
       try { if (typeof awardPoints === 'function') awardPoints(STAGE_PTS[q.stage]); } catch (e) {}

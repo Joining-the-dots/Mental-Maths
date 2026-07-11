@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover" />
-<title>Conway Family Learning Lab — V48</title>
+<title>Conway Family Learning Lab — Live V1</title>
 
 <!-- PWA -->
 <link rel="manifest" href="manifest.json">
@@ -2846,7 +2846,7 @@
   <div class="brand">
     <span class="logo">🧪</span>
     Conway Family Learning Lab
-    <span style="font-family: 'Fredoka', sans-serif; font-size: 13px; font-weight: 600; color: var(--ink-soft); -webkit-text-fill-color: var(--ink-soft); background: var(--neutral); padding: 2px 8px; border-radius: 999px; margin-left: 6px; letter-spacing: 0.5px;">V48</span>
+    <span style="font-family: 'Fredoka', sans-serif; font-size: 13px; font-weight: 600; color: var(--ink-soft); -webkit-text-fill-color: var(--ink-soft); background: var(--neutral); padding: 2px 8px; border-radius: 999px; margin-left: 6px; letter-spacing: 0.5px;">Live V1</span>
   </div>
 
   <button class="user-pill" id="userPill" title="Switch player">
@@ -2969,6 +2969,11 @@
     <span class="legend-swatch"><span class="sw" style="background: #c9f2d6"></span> Got right</span>
     <span class="legend-swatch"><span class="sw" style="background: linear-gradient(135deg, #ffe680, #ffb347)"></span> Mastered ⭐</span>
     <span class="grid-hint">Tip: tap a cell to practise. Scroll to explore.</span>
+    <div class="grid-mode-toggle" id="gridSizeToggle" title="How much of the grid to show">
+      <button class="gm-btn" data-max="20" type="button">Up to 20</button>
+      <button class="gm-btn" data-max="50" type="button">Up to 50</button>
+      <button class="gm-btn" data-max="100" type="button">Full 100</button>
+    </div>
     <div class="grid-mode-toggle" id="gridModeToggle">
       <button class="gm-btn on" data-mode="completed" type="button">✅ Completed</button>
       <button class="gm-btn" data-mode="trick" type="button">🎨 Tricks</button>
@@ -4914,7 +4919,7 @@ function submitLrAnswer() {
     showLrBonus();
     playSfx('correct');
     awardPoints(1);   // V31: lightning answers are fast-fire → 1 pt each
-    document.getElementById('lrFeedback').innerHTML = `<div class="feedback good" style="padding:6px 10px"><b>✅ ${a}×${b}=${correct}</b> · +2s</div>`;
+    document.getElementById('lrFeedback').innerHTML = `<div class="feedback good" style="padding:6px 10px"><b>✅ ${a}×${b}=${correct}</b> · +2s · <span style="color:#ff9f43;">+1 ⭐</span></div>`;
     if (newlyUnlocked) setTimeout(() => showWildAppeared(ex.id), 100);
     setTimeout(nextLrQuestion, 250);
   } else {
@@ -5850,7 +5855,7 @@ function lpCheck() {
       return;
     }
     fb.className = 'lp-fb ok';
-    fb.innerHTML = '✓ ' + lp.a + ' × ' + lp.b + ' = ' + ans;
+    fb.innerHTML = '✓ ' + lp.a + ' × ' + lp.b + ' = ' + ans + '  <span style="color:#ff9f43;">+2 ⭐</span>';
     setTimeout(lpNextQuestion, 650);
   } else {
     try { playSfx('wrong'); } catch (e) {}
@@ -7126,10 +7131,18 @@ function renderWhiteboard(a, b) {
 const gridEl = document.getElementById('grid');
 const gridFrame = document.getElementById('gridFrame');
 
+/* V48.4: how much of the 100x100 grid to show — 20, 50 or the lot. */
+function gridMaxN() {
+  try {
+    const v = parseInt(localStorage.getItem('ttq_gridMax'), 10);
+    return (v === 20 || v === 50) ? v : 100;
+  } catch (e) { return 100; }
+}
 function buildGrid(opts) {
   opts = opts || {};
   const u = ensureUser();
-  const cols = GRID_N;
+  const cols = gridMaxN();
+  gridEl.style.gridTemplateColumns = 'var(--cell) repeat(' + cols + ', var(--cell))';
 
   gridEl.innerHTML = '';
 
@@ -7149,7 +7162,7 @@ function buildGrid(opts) {
     frag.appendChild(h);
   }
 
-  for (let r = 1; r <= GRID_N; r++) {
+  for (let r = 1; r <= cols; r++) {
     const rh = document.createElement('div');
     rh.className = 'hdr left' + (r % 10 === 0 ? ' tenth' : '');
     rh.textContent = r;
@@ -7168,7 +7181,28 @@ function buildGrid(opts) {
 
   gridEl.appendChild(frag);
   if (typeof renderTrickPanel === 'function') renderTrickPanel();
+  syncGridSizeToggle();
 }
+function syncGridSizeToggle() {
+  const tg = document.getElementById('gridSizeToggle');
+  if (!tg) return;
+  const cur = gridMaxN();
+  tg.querySelectorAll('.gm-btn').forEach(function (b) {
+    b.classList.toggle('on', parseInt(b.dataset.max, 10) === cur);
+  });
+}
+(function wireGridSizeToggle() {
+  const tg = document.getElementById('gridSizeToggle');
+  if (!tg) return;
+  tg.querySelectorAll('.gm-btn').forEach(function (b) {
+    b.addEventListener('click', function () {
+      try { localStorage.setItem('ttq_gridMax', b.dataset.max); } catch (e) {}
+      buildGrid();
+      refreshCells();
+      if (typeof applyGridMode === 'function') applyGridMode();
+    });
+  });
+})();
 
 /* Pin top/left/corner headers by writing scrollLeft/scrollTop into CSS vars
    on the grid. The .hdr rules consume these with translateX/Y. This replaces
@@ -7293,6 +7327,7 @@ function submitAnswer() {
 
   const u = ensureUser();
   const rec = cellRecord(u, a, b);
+  const wasMastered = masteryLevel(rec) === 'mastered';   // before this answer counts
   rec.attempts++;
   rec.lastAt = new Date().toISOString();
   u.stats.totalAttempts++;
@@ -7318,15 +7353,19 @@ function submitAnswer() {
     newlyUnlocked = unlockTrick(ex.id);
 
     const nowMastered = masteryLevel(rec) === 'mastered';
+    const newlyMastered = nowMastered && !wasMastered;
     playSfx('correct');
-    awardPoints(nowMastered ? 5 : 2);   // V31: bonus points for mastering a cell
+    /* V48.4: 1 point per correct answer, +2 bonus at the moment a cell is
+       FIRST mastered. Re-answering an already-mastered cell pays 1, not 5. */
+    const cellPts = newlyMastered ? 3 : 1;
+    awardPoints(cellPts);
     qFeedback.innerHTML = `
       <div class="feedback good">
-        <h3>✅ Correct!</h3>
+        <h3>✅ Correct! <span style="color:#ff9f43;">+${cellPts} ⭐</span></h3>
         <div>${a} × ${b} = <b>${correct}</b> — in ${elapsed.toFixed(1)}s.</div>
-        ${nowMastered ? '<div style="margin-top:6px;">⭐ Mastered this one!</div>' : ''}
+        ${newlyMastered ? '<div style="margin-top:6px;">⭐ Mastered this one! (that includes a +2 bonus)</div>' : ''}
       </div>`;
-    if (nowMastered) popConfetti();
+    if (newlyMastered) popConfetti();
     qSubmit.style.display = 'none';
     qNext.style.display = '';
   } else {
@@ -7876,7 +7915,7 @@ function submitDdAnswer() {
     playSfx('correct');
     awardPoints(3);   // V31: daily drill correct answer
     document.getElementById('ddFeedback').innerHTML =
-      `<div class="feedback good"><h3>✅ ${a} × ${b} = <b>${correct}</b></h3></div>`;
+      `<div class="feedback good"><h3>✅ ${a} × ${b} = <b>${correct}</b> <span style="color:#ff9f43;">+3 ⭐</span></h3></div>`;
   } else {
     // Don't reveal the answer — note that it was wrong (already counted)
     // and let them try the same question again.
@@ -8570,7 +8609,7 @@ function ftAnswer(picked) {
   // Feedback
   const fb = document.getElementById('ftFeedback');
   fb.innerHTML = correct
-    ? `<span style="color:#1f8a4f;">✅ ${q.flag} ${q.name} — capital ${q.capital}</span>`
+    ? `<span style="color:#1f8a4f;">✅ ${q.flag} ${q.name} — capital ${q.capital} · <span style="color:#ff9f43;">+2 ⭐</span></span>`
     : `<span style="color:#c0392b;">❌ It was ${q.flag} ${q.name} — capital ${q.capital}</span>`;
 
   setTimeout(() => {
@@ -22292,7 +22331,7 @@ tcGameOverlay.addEventListener('click', (e) => { if (e.target === tcGameOverlay)
         return;
       }
       fb.className = 'lp-fb ok';
-      fb.innerHTML = '✓ Correct!';
+      fb.innerHTML = '✓ Correct! <span style="color:#ff9f43;">+2 ⭐</span>';
       setTimeout(apNext, 650);
     } else {
       try { playSfx('wrong'); } catch(e){}

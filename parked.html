@@ -7637,10 +7637,9 @@ document.getElementById('createUserBtn').addEventListener('click', () => {
   input.value = '';
   if (passInput) passInput.value = '';
   saveState();
-  // One-time bootstrap prompt: already know your 1s and 2s?
-  if (confirm(`Welcome, ${name}! Already know your ×1 and ×2 times tables?\n\nClick OK to mark them all mastered, or Cancel to start fresh.`)) {
-    bootstrap12(state.users[name]);
-  }
+  // V48.5: new players start with x1 and x2 already mastered by default —
+  // nobody should have to grind those, and the grid feels started.
+  bootstrap12(state.users[name]);
   buildGrid();
   refreshCells();
   renderUserModal();

@@ -7365,6 +7365,11 @@ function submitAnswer() {
        FIRST mastered. Re-answering an already-mastered cell pays 1, not 5. */
     const cellPts = newlyMastered ? 3 : 1;
     awardPoints(cellPts);
+    /* Live V3.1: remember what was just answered so the same cell can't be
+       re-practised until 2 other questions have been done */
+    if (!Array.isArray(u.recent)) u.recent = [];
+    u.recent.push(cellKey(a, b));
+    if (u.recent.length > 10) u.recent.shift();
     qFeedback.innerHTML = `
       <div class="feedback good">
         <h3>✅ Correct! <span style="color:#ff9f43;">+${cellPts} ⭐</span></h3>
@@ -7479,10 +7484,40 @@ function popConfetti() {
 }
 
 /* --------------- Event wiring --------------- */
+/* Live V3.1: a just-answered cell stays locked until 2 other questions
+   have been answered — no green-to-gold farming on one square. */
+function cellLockNeed(r, c) {
+  const u = currentUser();
+  if (!u || !Array.isArray(u.recent) || !u.recent.length) return 0;
+  const k = cellKey(r, c);
+  let others = 0;
+  for (let i = u.recent.length - 1; i >= 0; i--) {
+    if (u.recent[i] === k) return Math.max(0, 2 - others);
+    others++;
+    if (others >= 2) return 0;
+  }
+  return 0;
+}
+function gridLockToast(r, c, need) {
+  try { playSfx('wrong'); } catch (e) {}
+  const host = document.getElementById('slToasts');
+  const msg = 'You just did ' + r + ' × ' + c + ' — answer ' + need + ' other question' +
+    (need > 1 ? 's' : '') + ' first, then come back to it!';
+  if (!host) { alert('🔒 ' + msg); return; }
+  const t = document.createElement('div');
+  t.className = 'sl-toast';
+  t.innerHTML = '<div class="sl-toast-title">🔒 Not so fast!</div><div class="sl-toast-sub"></div>';
+  t.querySelector('.sl-toast-sub').textContent = msg;
+  host.appendChild(t);
+  setTimeout(() => { try { t.remove(); } catch (e) {} }, 5000);
+}
+
 gridEl.addEventListener('click', (e) => {
   const cell = e.target.closest('.cell');
   if (!cell) return;
   const r = +cell.dataset.r, c = +cell.dataset.c;
+  const lockNeed = cellLockNeed(r, c);
+  if (lockNeed > 0) { gridLockToast(r, c, lockNeed); return; }
   // V14: if the primary trick is not yet learned, teach it interactively first.
   const u = ensureUser(); migrateUser(u);
   const ex = (typeof explain === 'function') ? explain(r, c) : null;

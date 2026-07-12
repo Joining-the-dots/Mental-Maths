@@ -27721,11 +27721,36 @@ var SPELL_BANKS = {
         (cl.lastError ? ' · <span style="color:#c0392b;">⚠ ' + cl.lastError + '</span>'
                       : (cl.dirty ? ' · saving…' : ' · ✓ saved to cloud')) +
         '</span><button class="cl-btn ghost" id="clSyncBtn" type="button">Sync now</button>' +
-        '<button class="cl-btn ghost" id="clOutBtn" type="button">Log out</button></div>';
+        '<button class="cl-btn ghost" id="clOutBtn" type="button">Log out</button>' +
+        '<button class="cl-btn ghost" id="clPassBtn" type="button" title="Grown-ups: replace the automatic password with a real one">🔑 Set password</button></div>';
       var sb = document.getElementById('clSyncBtn');
       if (sb) sb.addEventListener('click', function () { window.cloudSyncNow(); });
       var ob = document.getElementById('clOutBtn');
       if (ob) ob.addEventListener('click', function () { window.cloudLogout(); });
+      var pb = document.getElementById('clPassBtn');
+      if (pb) pb.addEventListener('click', function () {
+        var np = prompt('New password for this account (6+ characters).\nGrown-ups: do this for YOUR account — kids\u2019 accounts can stay password-free.');
+        if (np == null) return;
+        if (np.length < 6) { alert('Needs at least 6 characters.'); return; }
+        cl.user.updatePassword(np).then(function () {
+          alert('\u2705 Password changed. Use it (via \u201cgrown-up options\u201d) next time you log in \u2014 the automatic one no longer works.');
+        }).catch(function (e) {
+          if (e && String(e.code).indexOf('requires-recent-login') >= 0) {
+            /* quietly re-verify with the derived password, then retry */
+            var cred = firebase.auth.EmailAuthProvider.credential(
+              cl.user.email, cl.doc.usernameLower + '.summerlab');
+            cl.user.reauthenticateWithCredential(cred).then(function () {
+              return cl.user.updatePassword(np);
+            }).then(function () {
+              alert('\u2705 Password changed. Use it next time you log in.');
+            }).catch(function () {
+              alert('Please log out, log back in, and try Set password again.');
+            });
+          } else {
+            alert('Could not change it: ' + (e && e.message ? e.message : 'unknown error'));
+          }
+        });
+      });
     } else {
       host.innerHTML =
         '<div class="cl-row"><span class="cl-status">☁️ Play from any device — points and prizes follow you.</span>' +

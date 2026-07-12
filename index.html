@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover" />
-<title>Conway Family Learning Lab — Live V4.1</title>
+<title>Conway Family Learning Lab — Live V4.2</title>
 
 <!-- PWA -->
 <link rel="manifest" href="manifest.json">
@@ -2916,7 +2916,7 @@ function slWakeRelease() {
   <div class="brand">
     <span class="logo">🧪</span>
     Conway Family Learning Lab
-    <span style="font-family: 'Fredoka', sans-serif; font-size: 13px; font-weight: 600; color: var(--ink-soft); -webkit-text-fill-color: var(--ink-soft); background: var(--neutral); padding: 2px 8px; border-radius: 999px; margin-left: 6px; letter-spacing: 0.5px;">Live V4.1</span>
+    <span style="font-family: 'Fredoka', sans-serif; font-size: 13px; font-weight: 600; color: var(--ink-soft); -webkit-text-fill-color: var(--ink-soft); background: var(--neutral); padding: 2px 8px; border-radius: 999px; margin-left: 6px; letter-spacing: 0.5px;">Live V4.2</span>
   </div>
 
   <button class="user-pill" id="userPill" title="Switch player">
@@ -5967,7 +5967,11 @@ function learnStartPractice(id) {
   const map = buildTrickSampleMap();
   const samples = (map[id] || []).slice();
   if (!samples.length) return;
-  lp = { id: id, correct: 0, samples: samples, a: 0, b: 0, answered: false };
+  /* Live V4.2: the 10 needn't come in one sitting — carry on from the
+     saved count (re-practising a learned trick starts fresh) */
+  const rec = learnRec(id);
+  const carried = rec.done ? 0 : Math.min(rec.correct || 0, 9);
+  lp = { id: id, correct: carried, samples: samples, a: 0, b: 0, answered: false };
   lpNextQuestion();
 }
 function lpNextQuestion() {
@@ -22901,7 +22905,13 @@ tcGameOverlay.addEventListener('click', (e) => { if (e.target === tcGameOverlay)
       recOf(op, id).watched = true; save(); openTrick(op, id);
     });
   }
-  function startPractice(op, id) { ap = { op:op, id:id, correct:0, q:null, answered:false }; apNext(); }
+  function startPractice(op, id) {
+    /* Live V4.2: continue from the saved count — no starting over */
+    const rec = recOf(op, id);
+    const carried = rec.done ? 0 : Math.min(rec.correct || 0, 9);
+    ap = { op:op, id:id, correct:carried, q:null, answered:false };
+    apNext();
+  }
   function apNext() {
     if (!ap) return;
     ap.q = tById(ap.op, ap.id).gen();

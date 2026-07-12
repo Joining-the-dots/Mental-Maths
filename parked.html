@@ -5966,7 +5966,11 @@ function learnStartPractice(id) {
   const map = buildTrickSampleMap();
   const samples = (map[id] || []).slice();
   if (!samples.length) return;
-  lp = { id: id, correct: 0, samples: samples, a: 0, b: 0, answered: false };
+  /* Live V4.2: the 10 needn't come in one sitting — carry on from the
+     saved count (re-practising a learned trick starts fresh) */
+  const rec = learnRec(id);
+  const carried = rec.done ? 0 : Math.min(rec.correct || 0, 9);
+  lp = { id: id, correct: carried, samples: samples, a: 0, b: 0, answered: false };
   lpNextQuestion();
 }
 function lpNextQuestion() {
@@ -22899,7 +22903,13 @@ tcGameOverlay.addEventListener('click', (e) => { if (e.target === tcGameOverlay)
       recOf(op, id).watched = true; save(); openTrick(op, id);
     });
   }
-  function startPractice(op, id) { ap = { op:op, id:id, correct:0, q:null, answered:false }; apNext(); }
+  function startPractice(op, id) {
+    /* Live V4.2: continue from the saved count — no starting over */
+    const rec = recOf(op, id);
+    const carried = rec.done ? 0 : Math.min(rec.correct || 0, 9);
+    ap = { op:op, id:id, correct:carried, q:null, answered:false };
+    apNext();
+  }
   function apNext() {
     if (!ap) return;
     ap.q = tById(ap.op, ap.id).gen();

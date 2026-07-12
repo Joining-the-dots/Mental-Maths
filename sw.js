@@ -1,7 +1,7 @@
 /* Conway Family Learning Lab — service worker
    Bump CACHE_VERSION whenever you deploy a change to index.html or assets,
    so returning users get the new version instead of a stale cache. */
-const CACHE_VERSION = 'tt-quest-v58';
+const CACHE_VERSION = 'tt-quest-v59';
 const APP_SHELL = [
   './',
   './index.html',

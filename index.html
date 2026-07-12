@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover" />
-<title>Conway Family Learning Lab — Live V3</title>
+<title>Conway Family Learning Lab — Live V4</title>
 
 <!-- PWA -->
 <link rel="manifest" href="manifest.json">
@@ -2836,6 +2836,76 @@
 <body>
 <script src="./flags-data.js"></script>
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script>
+/* Multiplayer connection settings.
+   PeerJS ships its own STUN + TURN defaults; passing a custom config
+   REPLACES them wholesale, so we read the library defaults and APPEND the
+   family's Metered relay (free tier). The relay is only used when a direct
+   device-to-device link is impossible (strict routers, phone data). */
+var SL_PEER_OPTS = (function () {
+  var METERED_USER = '09a27f7f67f9de8448c2daca';
+  var METERED_PASS = 'Av0kKMRv9wE49Muf';
+  var extra = [
+    { urls: 'stun:stun.relay.metered.ca:80' },
+    { urls: 'turn:global.relay.metered.ca:80', username: METERED_USER, credential: METERED_PASS },
+    { urls: 'turn:global.relay.metered.ca:80?transport=tcp', username: METERED_USER, credential: METERED_PASS },
+    { urls: 'turn:global.relay.metered.ca:443', username: METERED_USER, credential: METERED_PASS },
+    { urls: 'turns:global.relay.metered.ca:443?transport=tcp', username: METERED_USER, credential: METERED_PASS }
+  ];
+  var base = null;
+  try {
+    var d = window.peerjs && window.peerjs.util && window.peerjs.util.defaultConfig;
+    if (d && d.iceServers && d.iceServers.length) base = JSON.parse(JSON.stringify(d.iceServers));
+  } catch (e) {}
+  if (!base) {
+    /* PeerJS 1.5.x defaults, pinned in case the library stops exposing them */
+    base = [
+      { urls: ['stun:stun.l.google.com:19302', 'stun:global.stun.twilio.com:3478'] },
+      { urls: ['turn:eu-0.turn.peerjs.com:3478', 'turn:us-0.turn.peerjs.com:3478'],
+        username: 'peerjs', credential: 'peerjsp' }
+    ];
+  }
+  return { config: { iceServers: base.concat(extra), sdpSemantics: 'unified-plan' } };
+})();
+
+/* Keep a host's game code registered: if the link to the matchmaking server
+   drops, reconnect under the SAME code so a joining friend can still find it. */
+function slKeepAlive(p, statusId) {
+  p.on('disconnected', function () {
+    if (p.destroyed) return;
+    var el = document.getElementById(statusId);
+    if (el) el.textContent = 'Reconnecting to the game server…';
+    var tries = 0;
+    (function again() {
+      if (p.destroyed || !p.disconnected) return;
+      if (++tries > 8) {
+        var m = document.getElementById(statusId);
+        if (m) m.textContent = 'Lost the game server — close this and start a fresh game.';
+        return;
+      }
+      try { p.reconnect(); } catch (e) {}
+      setTimeout(again, 2500);
+    })();
+  });
+}
+
+/* Best-effort screen wake lock while hosting/joining so the phone doesn't
+   sleep and kill the game code. Safe no-op where unsupported. */
+var _slWake = null;
+function slWakeLock() {
+  try {
+    if (!navigator.wakeLock || _slWake) return;
+    navigator.wakeLock.request('screen').then(function (w) {
+      _slWake = w;
+      if (w && w.addEventListener) w.addEventListener('release', function () { if (_slWake === w) _slWake = null; });
+    }).catch(function () {});
+  } catch (e) {}
+}
+function slWakeRelease() {
+  try { if (_slWake) _slWake.release(); } catch (e) {}
+  _slWake = null;
+}
+</script>
 <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js"></script>
 <!-- V28: Three.js (r128 — last UMD release, so no ES module gymnastics).
@@ -2846,7 +2916,7 @@
   <div class="brand">
     <span class="logo">🧪</span>
     Conway Family Learning Lab
-    <span style="font-family: 'Fredoka', sans-serif; font-size: 13px; font-weight: 600; color: var(--ink-soft); -webkit-text-fill-color: var(--ink-soft); background: var(--neutral); padding: 2px 8px; border-radius: 999px; margin-left: 6px; letter-spacing: 0.5px;">Live V3</span>
+    <span style="font-family: 'Fredoka', sans-serif; font-size: 13px; font-weight: 600; color: var(--ink-soft); -webkit-text-fill-color: var(--ink-soft); background: var(--neutral); padding: 2px 8px; border-radius: 999px; margin-left: 6px; letter-spacing: 0.5px;">Live V4</span>
   </div>
 
   <button class="user-pill" id="userPill" title="Switch player">
@@ -3173,7 +3243,7 @@
 <div class="overlay" id="tmSetupOverlay">
   <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="tmSetupTitle">
     <h2 id="tmSetupTitle">🎓 Learn Tricks</h2>
-    <p class="sub">Learn the tricks one at a time. Watch each trick's whiteboard, then get 10 right — that unlocks the next trick and lights up its squares on the grid.</p>
+    <p class="sub">Learn the tricks one at a time. Watch each trick's whiteboard, then <b>get 10 practice questions right — that unlocks the next trick and wins you a +10 ⭐ bonus!</b> Learned tricks light up their squares on the grid.</p>
     <div class="tm-picker-grid" id="tmPickerGrid"></div>
     <div class="tm-mastery-note" id="tmMasteryNote"></div>
     <div class="modal-actions">
@@ -4585,6 +4655,29 @@ function migrateUser(u) {
     if (!u.cells) u.cells = {};
     if (typeof bootstrap12 === 'function') bootstrap12(u);
   }
+  /* One-time fix (12 Jul 2026): Joshua filled the ×16 column by counting up
+     in 16s. Clear his ×16 marks so he re-earns them properly — points and
+     everything else stay. Applies only to the cloud-bound record of
+     joshua @ family LION78; the flag rides the synced blob so it never
+     re-runs after his device picks it up. */
+  if (!u.fix16_20260712) {
+    try {
+      var _cs = window.cloudState;
+      if (_cs && _cs.doc && _cs.doc.usernameLower === 'joshua' &&
+          _cs.doc.familyCode === 'LION78' && _cs.boundName === u.name && u.cells) {
+        Object.keys(u.cells).forEach(function (k) {
+          var _p = k.split('x');
+          if (+_p[0] === 16 || +_p[1] === 16) delete u.cells[k];
+        });
+        if (Array.isArray(u.recent)) u.recent = u.recent.filter(function (k) {
+          var _p = k.split('x');
+          return +_p[0] !== 16 && +_p[1] !== 16;
+        });
+        if (typeof bootstrap12 === 'function') bootstrap12(u);   // restore the ×1/×2 gift
+        u.fix16_20260712 = true;
+      }
+    } catch (e) {}
+  }
   if (!u.tricks)     u.tricks = {};
   if (!u.trickMastery) u.trickMastery = {};
   if (!u.lightning)  u.lightning = { best: 0, lastPlayed: null };
@@ -5734,7 +5827,8 @@ function renderTrickPanel() {
   if (!panel) return;
   const ord = learnOrder();
   panel.innerHTML = '<div class="tp-head">🎓 Tricks to learn <span class="tp-count">' +
-    learnedCount() + '/' + ord.length + '</span></div>';
+    learnedCount() + '/' + ord.length + '</span></div>' +
+    '<div style="font-size:11.5px;color:var(--ink-soft);margin:2px 0 8px;font-weight:700;">🔓 Unlock tricks to earn bonus ⭐!</div>';
   ord.forEach(function (id) {
     const cat = TRICK_CATALOG[id];
     if (!cat) return;
@@ -5802,6 +5896,7 @@ function openLearnTrick(id) {
       '<span class="learn-step-n">' + (rec.done ? '✓' : '2') + '</span>' +
       '<div class="learn-step-b"><b>Practice — get 10 right</b> ' +
       '<span class="learn-prog">' + correct + ' / 10</span>' +
+      '<div style="font-size:12px;font-weight:800;color:#6c5ce7;margin-top:2px;">🔓 10/10 unlocks the next trick <span style="color:#ff9f43;">+ 10 ⭐ bonus</span></div>' +
       '<div><button class="btn btn-primary" id="learnPracticeBtn" type="button"' +
         (rec.watched ? '' : ' disabled') + '>' +
         (rec.done ? '↺ Practise again' : '✏ Start practice') + '</button></div></div></div>' +
@@ -5906,6 +6001,34 @@ function lpRender() {
   });
   setTimeout(function () { try { inp.focus(); } catch (e) {} }, 40);
 }
+/* V4.1: first-time trick completion — full-screen celebration naming the
+   next unlocked trick, plus the 10 ⭐ bonus (awarded by the caller).
+   o = { emoji, name, next: {emoji, name} | null, onGo } */
+function slTrickParty(o) {
+  var d = document.createElement('div');
+  d.style.cssText = 'position:fixed;inset:0;z-index:10000;background:rgba(30,25,60,0.6);display:flex;align-items:center;justify-content:center;padding:16px;';
+  d.innerHTML =
+    '<div style="background:#fff;border-radius:18px;box-shadow:0 18px 60px rgba(0,0,0,0.35);max-width:420px;width:100%;text-align:center;padding:26px 22px;">' +
+      '<div style="font-size:64px;">' + (o.emoji || '🎓') + '</div>' +
+      '<h2 style="margin:6px 0 2px;font-family:\'Baloo 2\', sans-serif;">TRICK LEARNED!</h2>' +
+      '<div class="sl-party-name" style="font-weight:800;color:#6c5ce7;"></div>' +
+      '<div style="margin:10px 0 2px;font-size:24px;font-weight:800;color:#ff9f43;">+10 ⭐ BONUS</div>' +
+      (o.next
+        ? '<div style="margin-top:10px;padding:10px;border-radius:12px;background:#f6f7fb;">🔓 <b>Next trick unlocked:</b><br><span style="font-size:18px;" class="sl-party-next"></span></div>'
+        : '<div style="margin-top:10px;font-weight:800;">🏆 That was the LAST trick — you\u2019ve learned them all!</div>') +
+      '<button class="btn btn-tm" style="margin-top:14px;" type="button">' + (o.next ? 'Take me to it ›' : 'Brilliant!') + '</button>' +
+    '</div>';
+  /* names go in via textContent — trick names are data, not markup */
+  d.querySelector('.sl-party-name').textContent = o.name || '';
+  var nx = d.querySelector('.sl-party-next');
+  if (nx && o.next) nx.textContent = (o.next.emoji ? o.next.emoji + ' ' : '') + (o.next.name || '');
+  document.body.appendChild(d);
+  d.querySelector('button').addEventListener('click', function () {
+    try { d.remove(); } catch (e) {}
+    if (o.onGo) o.onGo();
+  });
+}
+
 function lpCheck() {
   if (!lp) return;
   if (lp.answered) { lpNextQuestion(); return; }
@@ -5925,11 +6048,28 @@ function lpCheck() {
     try { if (typeof awardPoints === 'function') awardPoints(2); } catch (e) {}
     try { playSfx('correct'); } catch (e) {}
     if (lp.correct >= 10) {
-      learnMarkDone(lp.id);
+      const id = lp.id;
+      const firstTime = learnMarkDone(id);
       fb.className = 'lp-fb ok';
       fb.innerHTML = '🎉 That’s 10 — trick learned!';
-      const id = lp.id; lp = null;
-      setTimeout(function () { openLearnTrick(id); }, 1500);
+      lp = null;
+      if (firstTime) {
+        try { if (typeof awardPoints === 'function') awardPoints(10); } catch (e) {}
+        try { playSfx('fanfare'); } catch (e) {}
+        try { popConfetti(); setTimeout(popConfetti, 450); } catch (e) {}
+        const cat = TRICK_CATALOG[id] || {};
+        const nextId = (typeof learnCurrentId === 'function') ? learnCurrentId() : null;
+        const ncat = nextId ? (TRICK_CATALOG[nextId] || {}) : null;
+        setTimeout(function () {
+          slTrickParty({
+            emoji: cat.emoji || '🎓', name: cat.name || '',
+            next: ncat ? { emoji: ncat.emoji || '', name: ncat.name || '' } : null,
+            onGo: function () { openLearnTrick(nextId || id); }
+          });
+        }, 350);
+      } else {
+        setTimeout(function () { openLearnTrick(id); }, 1500);
+      }
       return;
     }
     fb.className = 'lp-fb ok';
@@ -7313,7 +7453,7 @@ function refreshCells() {
     // grid doesn't reveal the answer for cells the kid hasn't truly nailed.
     if (level === 'mastered') {
       cell.classList.add(level);
-      cell.textContent = r * c;
+      cell.textContent = '✓';   // Live V4: gold means done — never shows the answer
     } else if (level === 'untried') {
       cell.textContent = '·';
     } else {
@@ -7536,7 +7676,10 @@ function pickNext() {
   if (!pool.length) {
     return [Math.ceil(Math.random()*12), Math.ceil(Math.random()*12)];
   }
-  return pool[Math.floor(Math.random() * pool.length)];
+  /* respect the grid locks (just-answered + no-counting-up) when possible */
+  const unlocked = pool.filter(function (p) { return !cellLockInfo(p[0], p[1]); });
+  const from = unlocked.length ? unlocked : pool;
+  return from[Math.floor(Math.random() * from.length)];
 }
 
 function popConfetti() {
@@ -7556,25 +7699,52 @@ function popConfetti() {
 }
 
 /* --------------- Event wiring --------------- */
-/* Live V3.1: a just-answered cell stays locked until 2 other questions
-   have been answered — no green-to-gold farming on one square. */
-function cellLockNeed(r, c) {
-  const u = currentUser();
-  if (!u || !Array.isArray(u.recent) || !u.recent.length) return 0;
-  const k = cellKey(r, c);
-  let others = 0;
-  for (let i = u.recent.length - 1; i >= 0; i--) {
-    if (u.recent[i] === k) return Math.max(0, 2 - others);
-    others++;
-    if (others >= 2) return 0;
-  }
-  return 0;
+/* Live V4: two grid locks, both driven by u.recent (last answered cells).
+   1. A just-answered cell needs 2 other questions before it can be
+      re-practised (no green-to-gold farming on one square).
+   2. The 3 cells immediately HIGHER in the same times table as a
+      just-answered cell need 3 other questions first — so you can't walk
+      the 16 column by adding 16 each time.
+   Cells are canonical lo x hi keys, so a key belongs to TWO tables: it is
+   position hi in table lo AND position lo in table hi. */
+function slStepUp(lo, hi, lo2, hi2) {
+  /* is (lo,hi) 1-3 steps up the same times table as (lo2,hi2)? */
+  return (lo === lo2 && hi > hi2 && hi - hi2 <= 3) ||
+         (lo === hi2 && hi > lo2 && hi - lo2 <= 3) ||
+         (hi === lo2 && lo > hi2 && lo - hi2 <= 3) ||
+         (hi === hi2 && lo > lo2 && lo - lo2 <= 3);
 }
-function gridLockToast(r, c, need) {
+function cellLockInfo(r, c) {
+  const u = currentUser();
+  if (!u || !Array.isArray(u.recent) || !u.recent.length) return null;
+  const lo = Math.min(r, c), hi = Math.max(r, c);
+  const k = lo + 'x' + hi;
+  const L = u.recent.length;
+  let worst = null;
+  for (let i = L - 1; i >= 0; i--) {
+    const after = L - 1 - i;            // questions answered since that one
+    if (after >= 3) break;
+    const p = u.recent[i].split('x');
+    const lo2 = +p[0], hi2 = +p[1];
+    let need = 0, kind = null;
+    if (u.recent[i] === k) {
+      if (after < 2) { need = 2 - after; kind = 'same'; }
+    } else if (slStepUp(lo, hi, lo2, hi2)) {
+      need = 3 - after; kind = 'near';
+    }
+    if (need > 0 && (!worst || need > worst.need)) worst = { need: need, kind: kind, from: [lo2, hi2] };
+  }
+  return worst;
+}
+function gridLockToast(r, c, info) {
   try { playSfx('wrong'); } catch (e) {}
   const host = document.getElementById('slToasts');
-  const msg = 'You just did ' + r + ' × ' + c + ' — answer ' + need + ' other question' +
-    (need > 1 ? 's' : '') + ' first, then come back to it!';
+  const need = info.need;
+  const qs = need + ' other question' + (need > 1 ? 's' : '');
+  const msg = info.kind === 'near'
+    ? 'No counting up! ' + r + ' × ' + c + ' is right next to ' + info.from[0] + ' × ' + info.from[1] +
+      ' — answer ' + qs + ' first.'
+    : 'You just did ' + r + ' × ' + c + ' — answer ' + qs + ' first, then come back to it!';
   if (!host) { alert('🔒 ' + msg); return; }
   const t = document.createElement('div');
   t.className = 'sl-toast';
@@ -7588,8 +7758,8 @@ gridEl.addEventListener('click', (e) => {
   const cell = e.target.closest('.cell');
   if (!cell) return;
   const r = +cell.dataset.r, c = +cell.dataset.c;
-  const lockNeed = cellLockNeed(r, c);
-  if (lockNeed > 0) { gridLockToast(r, c, lockNeed); return; }
+  const lockInfo = cellLockInfo(r, c);
+  if (lockInfo) { gridLockToast(r, c, lockInfo); return; }
   // V14: if the primary trick is not yet learned, teach it interactively first.
   const u = ensureUser(); migrateUser(u);
   const ex = (typeof explain === 'function') ? explain(r, c) : null;
@@ -8836,6 +9006,7 @@ document.getElementById('fcJoinInput').addEventListener('keydown', (e) => {
 });
 
 function fcCleanupAndClose() {
+    slWakeRelease();
   try { if (window.cloudRetractChallenge) cloudRetractChallenge(); } catch (e) {}
   try { if (fcConn) fcConn.close(); } catch (e) {}
   try { if (fcPeer) fcPeer.destroy(); } catch (e) {}
@@ -8860,7 +9031,7 @@ function fcOpenHostPeer(code, attempt) {
     document.getElementById('fcHostStatus').textContent = 'Network busy. Please try again.';
     return;
   }
-  fcPeer = new Peer(FC_PEER_PREFIX + code);
+  fcPeer = new Peer(FC_PEER_PREFIX + code, SL_PEER_OPTS);
   /* watchdog: if this peer hasn't reached the server in 8s, tear it down
      and retry (a wedged websocket otherwise spins forever) */
   (function (p) {
@@ -8871,6 +9042,8 @@ function fcOpenHostPeer(code, attempt) {
       fcOpenHostPeer(code, attempt + 1);
     }, 8000);
   })(fcPeer);
+  slKeepAlive(fcPeer, 'fcHostStatus');
+  slWakeLock();
   fcPeer.on('open', () => {
     document.getElementById('fcHostStatus').textContent = 'Waiting for your friend to join…';
     try { if (window.cloudAnnounceChallenge) cloudAnnounceChallenge('flags', code); } catch (e) {}
@@ -8949,7 +9122,8 @@ function fcGuestConnect() {
     return;
   }
   document.getElementById('fcJoinStatus').textContent = 'Connecting…';
-  fcPeer = new Peer();   // anonymous peer for guest
+  slWakeLock();
+  fcPeer = new Peer(SL_PEER_OPTS);   // anonymous peer for guest
   (function (p) {
     setTimeout(function () {
       if (p !== fcPeer || p.destroyed || p.open) return;
@@ -8957,28 +9131,42 @@ function fcGuestConnect() {
       document.getElementById('fcJoinStatus').textContent = 'Can\u2019t reach the game server \u2014 check the internet and try Join again.';
     }, 8000);
   })(fcPeer);
+  var slFcFail = null;
   fcPeer.on('open', () => {
-    fcConn = fcPeer.connect(FC_PEER_PREFIX + code);
-    fcConn.on('open', () => {
-      const u = ensureUser(); migrateUser(u);
-      const myName = (u && u.name) || 'Guest';
-      fcConn.send({ type: 'hello', guestName: myName });
-      document.getElementById('fcJoinStatus').textContent = 'Connected!';
-      // Wait for host's init message
-    });
-    fcConn.on('data', (msg) => fcHandleMessage(msg));
-    fcConn.on('close', () => fcHandleDisconnect());
-    fcConn.on('error', (err) => {
-      document.getElementById('fcJoinStatus').textContent = 'Could not connect to ' + code + '.';
-    });
-    // If the connection never opens, surface a friendly timeout
-    setTimeout(() => {
-      if (fcConn && !fcConn.open) {
-        document.getElementById('fcJoinStatus').textContent = 'No response from ' + code + '. Check the code — and make sure your friend started a FLAGS challenge (codes only work in the same game).';
+    const st = document.getElementById('fcJoinStatus');
+    let tries = 0;
+    function attempt() {
+      tries++;
+      let done = false;
+      const c = fcPeer.connect(FC_PEER_PREFIX + code);
+      fcConn = c;
+      function giveUpOrRetry() {
+        if (done || c.open || fcConn !== c) return;
+        done = true;
+        try { c.close(); } catch (e) {}
+        if (tries < 3) {
+          if (st) st.textContent = 'No answer from ' + code + ' — trying again (' + (tries + 1) + ' of 3)…';
+          setTimeout(attempt, 1500);
+        } else if (st) {
+          st.textContent = 'Can\u2019t find a game with code ' + code + '. Ask your friend to KEEP their waiting screen open, read the code off their screen right now, and check you\u2019re both in FLAGS.';
+        }
       }
-    }, 8000);
+      slFcFail = giveUpOrRetry;
+      c.on('open', () => {
+        const u = ensureUser(); migrateUser(u);
+        const myName = (u && u.name) || 'Guest';
+        c.send({ type: 'hello', guestName: myName });
+        if (st) st.textContent = 'Connected!';
+      });
+      c.on('data', (msg) => fcHandleMessage(msg));
+      c.on('close', () => fcHandleDisconnect());
+      c.on('error', giveUpOrRetry);
+      setTimeout(giveUpOrRetry, 8000);
+    }
+    attempt();
   });
   fcPeer.on('error', (err) => {
+    if (err && err.type === 'peer-unavailable') { if (slFcFail) slFcFail(); return; }
     document.getElementById('fcJoinStatus').textContent = 'Network error: ' + (err.message || err.type || 'unknown');
   });
 }
@@ -16129,6 +16317,7 @@ document.getElementById('tcJoinConnect').addEventListener('click', () => tcGuest
 document.getElementById('tcJoinInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') tcGuestConnect(); });
 
 function tcCleanupAndClose() {
+    slWakeRelease();
   try { if (window.cloudRetractChallenge) cloudRetractChallenge(); } catch (e) {}
   try { if (tcConn) tcConn.close(); } catch (e) {}
   try { if (tcPeer) tcPeer.destroy(); } catch (e) {}
@@ -16146,7 +16335,7 @@ function tcHostStart() {
 }
 function tcOpenHostPeer(code, attempt) {
   if (attempt >= 5) { document.getElementById('tcHostStatus').textContent = 'Network busy. Please try again.'; return; }
-  tcPeer = new Peer(TC_PEER_PREFIX + code);
+  tcPeer = new Peer(TC_PEER_PREFIX + code, SL_PEER_OPTS);
   /* watchdog: if this peer hasn't reached the server in 8s, tear it down
      and retry (a wedged websocket otherwise spins forever) */
   (function (p) {
@@ -16157,6 +16346,8 @@ function tcOpenHostPeer(code, attempt) {
       tcOpenHostPeer(code, attempt + 1);
     }, 8000);
   })(tcPeer);
+  slKeepAlive(tcPeer, 'tcHostStatus');
+  slWakeLock();
   tcPeer.on('open', () => { document.getElementById('tcHostStatus').textContent = 'Waiting for your friend to join…'; try { if (window.cloudAnnounceChallenge) cloudAnnounceChallenge('tt', code); } catch (e) {} });
   tcPeer.on('error', (err) => {
     if (err && (err.type === 'unavailable-id' || /taken/i.test(err.message || ''))) {
@@ -16222,7 +16413,8 @@ function tcGuestConnect() {
   const code = document.getElementById('tcJoinInput').value.trim().toUpperCase();
   if (code.length !== 4) { document.getElementById('tcJoinStatus').textContent = 'Please enter a 4-letter code.'; return; }
   document.getElementById('tcJoinStatus').textContent = 'Connecting…';
-  tcPeer = new Peer();
+  slWakeLock();
+  tcPeer = new Peer(SL_PEER_OPTS);
   (function (p) {
     setTimeout(function () {
       if (p !== tcPeer || p.destroyed || p.open) return;
@@ -16230,20 +16422,44 @@ function tcGuestConnect() {
       document.getElementById('tcJoinStatus').textContent = 'Can\u2019t reach the game server \u2014 check the internet and try Join again.';
     }, 8000);
   })(tcPeer);
+  var slTcFail = null;
   tcPeer.on('open', () => {
-    tcConn = tcPeer.connect(TC_PEER_PREFIX + code);
-    tcConn.on('open', () => {
-      const u = ensureUser(); migrateUser(u);
-      const myName = (u && u.name) || 'Guest';
-      tcConn.send({ type: 'hello', guestName: myName });
-      document.getElementById('tcJoinStatus').textContent = 'Connected!';
-    });
-    tcConn.on('data', (msg) => tcHandleMessage(msg));
-    tcConn.on('close', () => tcHandleDisconnect());
-    tcConn.on('error', () => { document.getElementById('tcJoinStatus').textContent = 'Could not connect to ' + code + '.'; });
-    setTimeout(() => { if (tcConn && !tcConn.open) document.getElementById('tcJoinStatus').textContent = 'No response from ' + code + '. Check the code — and make sure your friend started a TIMES TABLES challenge (codes only work in the same game).'; }, 8000);
+    const st = document.getElementById('tcJoinStatus');
+    let tries = 0;
+    function attempt() {
+      tries++;
+      let done = false;
+      const c = tcPeer.connect(TC_PEER_PREFIX + code);
+      tcConn = c;
+      function giveUpOrRetry() {
+        if (done || c.open || tcConn !== c) return;
+        done = true;
+        try { c.close(); } catch (e) {}
+        if (tries < 3) {
+          if (st) st.textContent = 'No answer from ' + code + ' — trying again (' + (tries + 1) + ' of 3)…';
+          setTimeout(attempt, 1500);
+        } else if (st) {
+          st.textContent = 'Can\u2019t find a game with code ' + code + '. Ask your friend to KEEP their waiting screen open, read the code off their screen right now, and check you\u2019re both in TIMES TABLES.';
+        }
+      }
+      slTcFail = giveUpOrRetry;
+      c.on('open', () => {
+        const u = ensureUser(); migrateUser(u);
+        const myName = (u && u.name) || 'Guest';
+        c.send({ type: 'hello', guestName: myName });
+        if (st) st.textContent = 'Connected!';
+      });
+      c.on('data', (msg) => tcHandleMessage(msg));
+      c.on('close', () => tcHandleDisconnect());
+      c.on('error', giveUpOrRetry);
+      setTimeout(giveUpOrRetry, 8000);
+    }
+    attempt();
   });
-  tcPeer.on('error', (err) => { document.getElementById('tcJoinStatus').textContent = 'Network error: ' + (err.message || err.type || 'unknown'); });
+  tcPeer.on('error', (err) => {
+    if (err && err.type === 'peer-unavailable') { if (slTcFail) slTcFail(); return; }
+    document.getElementById('tcJoinStatus').textContent = 'Network error: ' + (err.message || err.type || 'unknown');
+  });
 }
 
 function tcHandleMessage(msg) {
@@ -21924,6 +22140,13 @@ tcGameOverlay.addEventListener('click', (e) => { if (e.target === tcGameOverlay)
   /* ---------- entry point: Trick Master setup button ---------- */
   const tmWbBtn = document.getElementById('tmWhiteboardBtn');
   if (tmWbBtn) tmWbBtn.addEventListener('click', function () {
+    /* V4.1: this used to open the parent recording studio (parked), which
+       looks broken to kids. Play the real whiteboard lesson instead — the
+       trick page that's open, or the one you're up to on the ladder. */
+    const id = (typeof learnOpenId !== 'undefined' && learnOpenId) ||
+               (typeof learnCurrentId === 'function' && learnCurrentId()) ||
+               (typeof learnOrder === 'function' && learnOrder()[0]) || null;
+    if (id && typeof learnWatch === 'function') { learnWatch(id); return; }
     const so = document.getElementById('tmSetupOverlay');
     if (so) so.classList.remove('show');
     wbOpen();
@@ -22600,9 +22823,10 @@ tcGameOverlay.addEventListener('click', (e) => { if (e.target === tcGameOverlay)
   var panelOp = null;
   function markDone(op, id) {
     const rec = recOf(op, id);
-    if (rec.done) return;
+    if (rec.done) return false;
     rec.done = true; save();
     if (panelOp === op) renderPanel();
+    return true;
   }
 
   /* ---------- the tricks panel (right of the practice) ---------- */
@@ -22611,7 +22835,8 @@ tcGameOverlay.addEventListener('click', (e) => { if (e.target === tcGameOverlay)
     if (!panel || !panelOp) return;
     const list = tList(panelOp);
     panel.innerHTML = '<div class="tp-head">🎓 Tricks <span class="tp-count">' +
-      doneCount(panelOp) + '/' + list.length + '</span></div>';
+      doneCount(panelOp) + '/' + list.length + '</span></div>' +
+      '<div style="font-size:11.5px;color:var(--ink-soft);margin:2px 0 8px;font-weight:700;">🔓 Unlock tricks to earn bonus ⭐!</div>';
     list.forEach(function (t, i) {
       const st = stateOf(panelOp, t.id);
       const row = document.createElement('button');
@@ -22662,6 +22887,7 @@ tcGameOverlay.addEventListener('click', (e) => { if (e.target === tcGameOverlay)
         '<span class="learn-step-n">' + (rec.done ? '✓' : '2') + '</span>' +
         '<div class="learn-step-b"><b>Practice — get 10 right</b> ' +
         '<span class="learn-prog">' + correct + ' / 10</span>' +
+        '<div style="font-size:12px;font-weight:800;color:#6c5ce7;margin-top:2px;">🔓 10/10 unlocks the next trick <span style="color:#ff9f43;">+ 10 ⭐ bonus</span></div>' +
         '<div><button class="btn btn-primary" id="atPractice" type="button"' +
           (rec.watched ? '' : ' disabled') + '>' +
           (rec.done ? '↺ Practise again' : '✏ Start practice') + '</button></div></div></div>' +
@@ -22739,11 +22965,28 @@ tcGameOverlay.addEventListener('click', (e) => { if (e.target === tcGameOverlay)
       try { if (typeof awardPoints==='function') awardPoints(2); } catch(e){}
       try { playSfx('correct'); } catch(e){}
       if (ap.correct >= 10) {
-        markDone(ap.op, ap.id);
+        const op = ap.op, id = ap.id;
+        const firstTime = markDone(op, id);
         fb.className = 'lp-fb ok';
         fb.innerHTML = '🎉 That is 10 — trick learned!';
-        const op = ap.op, id = ap.id; ap = null;
-        setTimeout(function () { openTrick(op, id); }, 1500);
+        ap = null;
+        if (firstTime && typeof slTrickParty === 'function') {
+          try { if (typeof awardPoints==='function') awardPoints(10); } catch(e){}
+          try { playSfx('fanfare'); } catch(e){}
+          try { popConfetti(); setTimeout(popConfetti, 450); } catch(e){}
+          const nid = curId(op);
+          const nt = nid ? tById(op, nid) : null;
+          const t0 = tById(op, id) || {};
+          setTimeout(function () {
+            slTrickParty({
+              emoji: t0.emoji || '🎓', name: t0.name || '',
+              next: nt ? { emoji: nt.emoji || '', name: nt.name || '' } : null,
+              onGo: function () { openTrick(op, nid || id); }
+            });
+          }, 350);
+        } else {
+          setTimeout(function () { openTrick(op, id); }, 1500);
+        }
         return;
       }
       fb.className = 'lp-fb ok';
@@ -23003,6 +23246,7 @@ tcGameOverlay.addEventListener('click', (e) => { if (e.target === tcGameOverlay)
   };
 
   function cleanup() {
+    slWakeRelease();
     try { if (window.cloudRetractChallenge) cloudRetractChallenge(); } catch (e) {}
     try { if (dbConn) dbConn.close(); } catch (e) {}
     try { if (dbPeer) dbPeer.destroy(); } catch (e) {}
@@ -23045,7 +23289,7 @@ tcGameOverlay.addEventListener('click', (e) => { if (e.target === tcGameOverlay)
       document.getElementById('dbHostStatus').textContent = 'Network busy. Please try again.';
       return;
     }
-    dbPeer = new Peer(DB_PEER_PREFIX + code);
+    dbPeer = new Peer(DB_PEER_PREFIX + code, SL_PEER_OPTS);
   /* watchdog: if this peer hasn't reached the server in 8s, tear it down
      and retry (a wedged websocket otherwise spins forever) */
   (function (p) {
@@ -23056,6 +23300,8 @@ tcGameOverlay.addEventListener('click', (e) => { if (e.target === tcGameOverlay)
       openHostPeer(code, attempt + 1);
     }, 8000);
   })(dbPeer);
+  slKeepAlive(dbPeer, 'dbHostStatus');
+  slWakeLock();
     dbPeer.on('open', function () {
       document.getElementById('dbHostStatus').textContent = 'Waiting for your opponent to join…';
       try { if (window.cloudAnnounceChallenge) cloudAnnounceChallenge('debate', code); } catch (e) {}
@@ -23109,7 +23355,8 @@ tcGameOverlay.addEventListener('click', (e) => { if (e.target === tcGameOverlay)
       return;
     }
     document.getElementById('dbJoinStatus').textContent = 'Connecting…';
-    dbPeer = new Peer();
+  slWakeLock();
+    dbPeer = new Peer(SL_PEER_OPTS);
   (function (p) {
     setTimeout(function () {
       if (p !== dbPeer || p.destroyed || p.open) return;
@@ -23117,24 +23364,40 @@ tcGameOverlay.addEventListener('click', (e) => { if (e.target === tcGameOverlay)
       document.getElementById('dbJoinStatus').textContent = 'Can\u2019t reach the game server \u2014 check the internet and try Join again.';
     }, 8000);
   })(dbPeer);
+    var slDbFail = null;
     dbPeer.on('open', function () {
-      dbConn = dbPeer.connect(DB_PEER_PREFIX + code);
-      dbConn.on('open', function () {
-        dbConn.send({ type: 'hello', guestName: myName() });
-        document.getElementById('dbJoinStatus').textContent = 'Connected!';
-      });
-      dbConn.on('data', handleMsg);
-      dbConn.on('close', handleDisconnect);
-      dbConn.on('error', function () {
-        document.getElementById('dbJoinStatus').textContent = 'Could not connect to ' + code + '.';
-      });
-      setTimeout(function () {
-        if (dbConn && !dbConn.open) {
-          document.getElementById('dbJoinStatus').textContent = 'No response from ' + code + '. Check the code — and make sure your friend started a DEBATE (codes only work in the same game).';
+      var st = document.getElementById('dbJoinStatus');
+      var tries = 0;
+      function attempt() {
+        tries++;
+        var done = false;
+        var c = dbPeer.connect(DB_PEER_PREFIX + code);
+        dbConn = c;
+        function giveUpOrRetry() {
+          if (done || c.open || dbConn !== c) return;
+          done = true;
+          try { c.close(); } catch (e) {}
+          if (tries < 3) {
+            if (st) st.textContent = 'No answer from ' + code + ' — trying again (' + (tries + 1) + ' of 3)…';
+            setTimeout(attempt, 1500);
+          } else if (st) {
+            st.textContent = 'Can\u2019t find a game with code ' + code + '. Ask your friend to KEEP their waiting screen open, read the code off their screen right now, and check you\u2019re both in DEBATE.';
+          }
         }
-      }, 8000);
+        slDbFail = giveUpOrRetry;
+        c.on('open', function () {
+          c.send({ type: 'hello', guestName: myName() });
+          if (st) st.textContent = 'Connected!';
+        });
+        c.on('data', handleMsg);
+        c.on('close', handleDisconnect);
+        c.on('error', giveUpOrRetry);
+        setTimeout(giveUpOrRetry, 8000);
+      }
+      attempt();
     });
     dbPeer.on('error', function (err) {
+      if (err && err.type === 'peer-unavailable') { if (slDbFail) slDbFail(); return; }
       document.getElementById('dbJoinStatus').textContent = 'Network error: ' + (err.message || err.type || 'unknown');
     });
   }
@@ -25531,6 +25794,7 @@ var OP_BANK = [
   var g2O = document.getElementById('op2GameOverlay');
 
   function p2Cleanup() {
+    slWakeRelease();
     try { if (window.cloudRetractChallenge) cloudRetractChallenge(); } catch (e) {}
     p2DropLobby();
     try { if (p2Conn) p2Conn.close(); } catch (e) {}
@@ -25574,12 +25838,15 @@ var OP_BANK = [
   var p2Lobby = null;
   function p2RegisterLobby() {
     try {
-      p2Lobby = new Peer(OP2_PREFIX + 'lobby');
+      p2Lobby = new Peer(OP2_PREFIX + 'lobby', SL_PEER_OPTS);
       p2Lobby.on('connection', function (conn) {
         conn.on('open', function () {
           try {
             var code = (document.getElementById('op2HostCode').textContent || '').trim();
-            if (/^[A-Z]{4}$/.test(code)) conn.send({ type: 'code', code: code });
+            /* only advertise a code that is really live right now — a stale
+               tab must not hand out a dead code */
+            if (/^[A-Z]{4}$/.test(code) && p2Role === 'host' && p2Peer && p2Peer.open &&
+                !p2Conn && h2O.classList.contains('show')) conn.send({ type: 'code', code: code });
           } catch (e) {}
           setTimeout(function () { try { conn.close(); } catch (e) {} }, 900);
         });
@@ -25606,7 +25873,7 @@ var OP_BANK = [
       document.getElementById('op2HostStatus').textContent = 'Network busy. Please try again.';
       return;
     }
-    p2Peer = new Peer(OP2_PREFIX + code);
+    p2Peer = new Peer(OP2_PREFIX + code, SL_PEER_OPTS);
   /* watchdog: if this peer hasn't reached the server in 8s, tear it down
      and retry (a wedged websocket otherwise spins forever) */
   (function (p) {
@@ -25617,6 +25884,8 @@ var OP_BANK = [
       p2OpenHostPeer(code, attempt + 1);
     }, 8000);
   })(p2Peer);
+  slKeepAlive(p2Peer, 'op2HostStatus');
+  slWakeLock();
     p2Peer.on('open', function () {
       document.getElementById('op2HostStatus').textContent = 'Waiting for your friend to join…';
       try { if (window.cloudAnnounceChallenge) cloudAnnounceChallenge('onepct', code); } catch (e) {}
@@ -25673,7 +25942,7 @@ var OP_BANK = [
     setTimeout(function () { document.getElementById('op2JoinInput').focus(); }, 80);
     /* V48.3: ask the host's lobby for the code so it fills itself in */
     try {
-      var disc = new Peer();
+      var disc = new Peer(SL_PEER_OPTS);
       var done = false;
       function finish(code) {
         if (done) return;
@@ -25706,7 +25975,8 @@ var OP_BANK = [
       return;
     }
     document.getElementById('op2JoinStatus').textContent = 'Connecting…';
-    p2Peer = new Peer();
+  slWakeLock();
+    p2Peer = new Peer(SL_PEER_OPTS);
   (function (p) {
     setTimeout(function () {
       if (p !== p2Peer || p.destroyed || p.open) return;
@@ -25714,24 +25984,40 @@ var OP_BANK = [
       document.getElementById('op2JoinStatus').textContent = 'Can\u2019t reach the game server \u2014 check the internet and try Join again.';
     }, 8000);
   })(p2Peer);
+    var slP2Fail = null;
     p2Peer.on('open', function () {
-      p2Conn = p2Peer.connect(OP2_PREFIX + code);
-      p2Conn.on('open', function () {
-        p2Conn.send({ type: 'hello', guestName: p2Name() });
-        document.getElementById('op2JoinStatus').textContent = 'Connected!';
-      });
-      p2Conn.on('data', p2HandleMsg);
-      p2Conn.on('close', p2HandleDisconnect);
-      p2Conn.on('error', function () {
-        document.getElementById('op2JoinStatus').textContent = 'Could not connect to ' + code + '.';
-      });
-      setTimeout(function () {
-        if (p2Conn && !p2Conn.open) {
-          document.getElementById('op2JoinStatus').textContent = 'No response from ' + code + '. Check the code — and make sure your friend started a 1% CHALLENGE (codes only work in the same game).';
+      var st = document.getElementById('op2JoinStatus');
+      var tries = 0;
+      function attempt() {
+        tries++;
+        var done = false;
+        var c = p2Peer.connect(OP2_PREFIX + code);
+        p2Conn = c;
+        function giveUpOrRetry() {
+          if (done || c.open || p2Conn !== c) return;
+          done = true;
+          try { c.close(); } catch (e) {}
+          if (tries < 3) {
+            if (st) st.textContent = 'No answer from ' + code + ' — trying again (' + (tries + 1) + ' of 3)…';
+            setTimeout(attempt, 1500);
+          } else if (st) {
+            st.textContent = 'Can\u2019t find a game with code ' + code + '. Ask your friend to KEEP their waiting screen open, read the code off their screen right now, and check you\u2019re both in the 1% CHALLENGE.';
+          }
         }
-      }, 8000);
+        slP2Fail = giveUpOrRetry;
+        c.on('open', function () {
+          c.send({ type: 'hello', guestName: p2Name() });
+          if (st) st.textContent = 'Connected!';
+        });
+        c.on('data', p2HandleMsg);
+        c.on('close', p2HandleDisconnect);
+        c.on('error', giveUpOrRetry);
+        setTimeout(giveUpOrRetry, 8000);
+      }
+      attempt();
     });
     p2Peer.on('error', function (err) {
+      if (err && err.type === 'peer-unavailable') { if (slP2Fail) slP2Fail(); return; }
       document.getElementById('op2JoinStatus').textContent = 'Network error: ' + (err.message || err.type || 'unknown');
     });
   }
@@ -27347,13 +27633,26 @@ var SPELL_BANKS = {
       .replace(/[•·]/g, ', ')
       .replace(/\s+/g, ' ').trim();
   }
+  /* Live V4: share the recording out by each line's SPOKEN length, not
+     evenly — a steady narrator then stays in step with the writing. */
+  function lineFractions() {
+    if (!st) return null;
+    if (st.cumFrac && st.cumFrac.length === st.lines.length) return st.cumFrac;
+    var w = st.lines.map(function (l) { return Math.max(4, speechText(l).length); });
+    var total = w.reduce(function (a, b) { return a + b; }, 0) || 1;
+    var cum = [], run = 0;
+    for (var i = 0; i < w.length; i++) { run += w[i]; cum.push(run / total); }
+    st.cumFrac = cum;
+    return cum;
+  }
   function speak(line) {
     return new Promise(function (resolve) {
       if (st && st.parentAudio) {
-        /* parent voice narrates the whole lesson — pace this line to an even
-           share of the recording instead of using the robot voice */
-        var a = st.parentAudio, li = st.li, n = st.lines.length;
-        var target = (a.duration && isFinite(a.duration)) ? ((li + 1) / n) * a.duration : null;
+        /* parent voice narrates the whole lesson — hold this line until the
+           recording reaches the END of this line's proportional slice */
+        var a = st.parentAudio, li = st.li;
+        var cum = lineFractions();
+        var target = (a.duration && isFinite(a.duration) && cum) ? cum[li] * a.duration : null;
         if (target == null) { setTimeout(resolve, 2200); return; }
         var iv = setInterval(function () {
           if (!st || st.parentAudio !== a) { clearInterval(iv); resolve(); return; }
@@ -27408,6 +27707,17 @@ var SPELL_BANKS = {
       cur.className = 'cursor';
       lineEl.appendChild(cur);
       var i = 0;
+      /* with a recording, pace the marker so the line finishes writing
+         about when its narration slice does */
+      var charMs = CHAR_MS;
+      if (st.parentAudio && st.parentAudio.duration && isFinite(st.parentAudio.duration)) {
+        var cum = lineFractions();
+        if (cum) {
+          var fracStart = st.li > 0 ? cum[st.li - 1] : 0;
+          var segMs = (cum[st.li] - fracStart) * st.parentAudio.duration * 1000;
+          charMs = Math.max(16, Math.min(70, (segMs - 350) / Math.max(1, flat.length)));
+        }
+      }
       st.writeTimer = setInterval(function () {
         if (!st || !st.playing) return;
         if (i >= flat.length) {
@@ -27419,7 +27729,7 @@ var SPELL_BANKS = {
         spans[flat[i].pi].textContent += flat[i].ch;
         i++;
         lineEl.parentNode.scrollTop = lineEl.parentNode.scrollHeight;
-      }, CHAR_MS);
+      }, charMs);
     });
   }
 
@@ -27441,7 +27751,7 @@ var SPELL_BANKS = {
       setTimeout(function () {
         if (!st || st.lineToken !== token) return;
         playFrom(li + 1);
-      }, 550);
+      }, st.parentAudio ? 120 : 550);
     });
   }
 

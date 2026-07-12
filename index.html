@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover" />
-<title>Conway Family Learning Lab — Live V4.3</title>
+<title>Conway Family Learning Lab — Live V4.4</title>
 
 <!-- PWA -->
 <link rel="manifest" href="manifest.json">
@@ -2916,7 +2916,7 @@ function slWakeRelease() {
   <div class="brand">
     <span class="logo">🧪</span>
     Conway Family Learning Lab
-    <span style="font-family: 'Fredoka', sans-serif; font-size: 13px; font-weight: 600; color: var(--ink-soft); -webkit-text-fill-color: var(--ink-soft); background: var(--neutral); padding: 2px 8px; border-radius: 999px; margin-left: 6px; letter-spacing: 0.5px;">Live V4.3</span>
+    <span style="font-family: 'Fredoka', sans-serif; font-size: 13px; font-weight: 600; color: var(--ink-soft); -webkit-text-fill-color: var(--ink-soft); background: var(--neutral); padding: 2px 8px; border-radius: 999px; margin-left: 6px; letter-spacing: 0.5px;">Live V4.4</span>
   </div>
 
   <button class="user-pill" id="userPill" title="Switch player">
@@ -17571,10 +17571,28 @@ tcGameOverlay.addEventListener('click', (e) => { if (e.target === tcGameOverlay)
     const culprit = {};
     attrKeys.forEach(k => { culprit[k] = pick(rng, attrValues(k)); });
 
+    /* Live V4.4: plant an elimination ladder — decoy i matches the culprit
+       on the first i attributes and differs on all the rest. Whatever
+       truthful clues are chosen, one of these falls at each step and at
+       least two suspects are still standing before the final clue. */
+    function plantLadder(c) {
+      for (let i = 1; i < attrKeys.length; i++) {
+        const d = {};
+        attrKeys.forEach((k, ai) => {
+          if (ai < i) d[k] = culprit[k];
+          else {
+            const opts = attrValues(k).filter(v => v !== culprit[k]);
+            d[k] = opts.length ? pick(rng, opts) : culprit[k];
+          }
+        });
+        c.push(d);
+      }
+    }
     let cast = null;
     for (let attempt = 0; attempt < 500 && !cast; attempt++) {
       const c = [Object.assign({}, culprit)];
-      for (let i = 1; i < nSuspects; i++) {
+      plantLadder(c);
+      for (let i = c.length; i < nSuspects; i++) {
         let s = null;
         for (let t = 0; t < 90; t++) {
           const cand = {};
@@ -17596,8 +17614,9 @@ tcGameOverlay.addEventListener('click', (e) => { if (e.target === tcGameOverlay)
     }
     if (!cast) {
       cast = [Object.assign({}, culprit)];
+      plantLadder(cast);
       const flip = attrKeys[1] || 'gender';
-      for (let i = 1; i < nSuspects; i++) {
+      for (let i = cast.length; i < nSuspects; i++) {
         const s = {};
         attrKeys.forEach(k => { s[k] = pick(rng, attrValues(k)); });
         const opts = attrValues(flip).filter(v => v !== culprit[flip]);
@@ -17630,30 +17649,85 @@ tcGameOverlay.addEventListener('click', (e) => { if (e.target === tcGameOverlay)
     function surviveClue(attrs, cl) {
       return cl.neg ? attrs[cl.attrKey] !== cl.value : attrs[cl.attrKey] === culprit[cl.attrKey];
     }
-    const plan = [];
-    let R = cast.slice();
-    attrKeys.forEach((k, i) => {
-      const last = i === attrKeys.length - 1;
-      let neg = false, v = culprit[k];
-      if (!last && rng() < 0.65) {
-        /* try a NOT clue on the value most common among current suspects */
+    /* Live V4.4: pacing-aware clue plan — the case must stay open until
+       the FINAL clue. Rules: every clue keeps the culprit standing; every
+       clue before the last leaves >= 2 suspects; clues strictly cross
+       somebody off wherever possible; the last clue leaves exactly the
+       culprit. Retried deterministically until all of that holds. */
+    const plan = (function () {
+      function candidatesFor(k, R, preferNot) {
         const counts = {};
         R.forEach(a => { if (a[k] !== culprit[k]) counts[a[k]] = (counts[a[k]] || 0) + 1; });
-        const vals = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
-        if (vals.length) { neg = true; v = isNaN(+vals[0]) ? vals[0] : +vals[0]; }
+        const cands = Object.keys(counts).sort((a, b) => counts[b] - counts[a])
+          .map(v => ({ attrKey: k, value: (isNaN(+v) ? v : +v), neg: true }));
+        const isClue = { attrKey: k, value: culprit[k], neg: false };
+        if (preferNot) cands.push(isClue); else cands.unshift(isClue);
+        /* neutral fallbacks: true NOT-statements that cross nobody off —
+           better a flat clue than a case that closes early */
+        attrValues(k).forEach(v => {
+          if (v !== culprit[k] && !R.some(a => a[k] === v)) {
+            cands.push({ attrKey: k, value: (isNaN(+v) ? v : +v), neg: true });
+          }
+        });
+        return cands;
       }
-      plan.push({ attrKey: k, value: v, neg: neg });
-      R = R.filter(a => surviveClue(a, plan[plan.length - 1]));
-    });
-    /* guarantee uniqueness: flip NOT-clues to IS-clues until one suspect stands */
-    for (let f = 0; f < plan.length; f++) {
-      R = cast.filter(a => plan.every(cl => surviveClue(a, cl)));
-      if (R.length <= 1) break;
-      const flip = plan.find(cl => cl.neg);
-      if (!flip) break;
-      flip.neg = false;
-      flip.value = culprit[flip.attrKey];
-    }
+      function buildOnce() {
+        const p = [];
+        let R = cast.slice();
+        for (let i = 0; i < attrKeys.length; i++) {
+          const k = attrKeys[i];
+          const last = i === attrKeys.length - 1;
+          const cands = candidatesFor(k, R, rng() < 0.65);
+          const after = cl => R.filter(a => surviveClue(a, cl));
+          let chosen;
+          if (!last) {
+            chosen = cands.find(cl => { const n = after(cl).length; return n >= 2 && n < R.length; }) ||
+                     cands.find(cl => after(cl).length >= 2) ||
+                     cands[0];
+          } else {
+            chosen = cands.find(cl => {
+              const A = after(cl);
+              return A.length === 1 && attrKeys.every(kk => A[0][kk] === culprit[kk]);
+            }) || { attrKey: k, value: culprit[k], neg: false };
+          }
+          p.push(chosen);
+          R = after(chosen);
+        }
+        /* if somehow more than one still stands, sharpen NOT-clues to
+           IS-clues from the END backwards (protects early pacing) */
+        for (let f = p.length - 1; f >= 0; f--) {
+          const S = cast.filter(a => p.every(cl => surviveClue(a, cl)));
+          if (S.length <= 1) break;
+          if (!p[f].neg) continue;
+          p[f].neg = false;
+          p[f].value = culprit[p[f].attrKey];
+        }
+        return p;
+      }
+      function stats(p) {
+        let R = cast.slice(), minPrefix = Infinity, strict = true;
+        for (let i = 0; i < p.length; i++) {
+          const before = R.length;
+          R = R.filter(a => surviveClue(a, p[i]));
+          if (R.length >= before) strict = false;
+          if (i < p.length - 1) minPrefix = Math.min(minPrefix, R.length);
+        }
+        return {
+          unique: R.length === 1 && attrKeys.every(kk => R[0][kk] === culprit[kk]),
+          paced: minPrefix >= 2,
+          strict: strict
+        };
+      }
+      let paced = null, unique = null;
+      for (let attempt = 0; attempt < 30; attempt++) {
+        const p = buildOnce();
+        const st = stats(p);
+        if (st.unique && st.paced && st.strict) return p;
+        if (st.unique && st.paced && !paced) paced = p;
+        if (st.unique && !unique) unique = p;
+      }
+      return paced || unique || buildOnce();
+    })();
 
     const newTypes = shuffle(rng, ['map','shape','code']);
     const oldTypes = shuffle(rng, ['sequence','compare','riddle','sums','truefalse','oddoneout']);
@@ -18329,6 +18403,61 @@ tcGameOverlay.addEventListener('click', (e) => { if (e.target === tcGameOverlay)
   if (closeBtn) closeBtn.addEventListener('click', closeMystery);
   const ov = document.getElementById('mysteryOverlay');
   if (ov) ov.addEventListener('click', function (e) { if (e.target === ov) closeMystery(); });
+
+  /* QA: exhaustive logic audit over every case. hard = broken deduction,
+     soft = clues that cross nobody off (allowed but counted). */
+  window._mystAudit = function () {
+    const hard = [], soft = [];
+    let checked = 0;
+    MYSTERY_DEFS.forEach(function (def) {
+      const m = buildMystery(def);
+      checked++;
+      const issues = [], warns = [];
+      let R = m.suspects.slice();
+      m.clues.forEach(function (cl, i) {
+        const before = R.length;
+        R = R.filter(function (s) {
+          return cl.neg ? s.attrs[cl.attrKey] !== cl.value : s.attrs[cl.attrKey] === cl.value;
+        });
+        if (!R.some(function (s) { return s.isCulprit; })) issues.push('culprit eliminated at clue ' + (i + 1));
+        if (i < m.clues.length - 1 && R.length < 2) issues.push('finished early: ' + R.length + ' left after clue ' + (i + 1) + ' of ' + m.clues.length);
+        if (R.length >= before) warns.push('clue ' + (i + 1) + ' crosses nobody off');
+      });
+      if (R.length !== 1) issues.push('ends with ' + R.length + ' suspects');
+      else if (!R[0].isCulprit) issues.push('ends on the wrong suspect');
+      m.clues.forEach(function (cl, i) {
+        const pz = cl.puzzle;
+        if (!pz) { issues.push('clue ' + (i + 1) + ' has no puzzle'); return; }
+        if (pz.type === 'map') {
+          const names = pz.landmarks.map(function (l) { return l.name; });
+          if (names.indexOf(pz.answer) < 0) issues.push('map answer not a landmark');
+          if (pz.answer === pz.start) issues.push('map answer = start');
+          const spots = {};
+          pz.landmarks.forEach(function (l) {
+            const key = l.r + ',' + l.c;
+            if (spots[key]) issues.push('map landmarks overlap');
+            spots[key] = 1;
+          });
+        }
+        if (pz.type === 'shape') {
+          const fakes = pz.options.filter(function (o) { return o.fake; });
+          if (fakes.length !== 1) issues.push('shape has ' + fakes.length + ' fakes');
+          else if (pz.options.some(function (o) { return !o.fake && JSON.stringify(o.cells) === JSON.stringify(fakes[0].cells); }))
+            issues.push('shape fake identical to a real option');
+        }
+        if (pz.type === 'code') {
+          const dec = pz.cipher.split(' ').map(function (e) {
+            for (const ch in pz.key) if (pz.key[ch] === e) return ch;
+            return '?';
+          }).join('');
+          if (dec !== pz.word) issues.push('code does not decode to its word');
+        }
+      });
+      if (issues.length) hard.push({ id: def.id, title: def.title, issues: issues });
+      if (warns.length) soft.push({ id: def.id, warns: warns });
+    });
+    return { checked: checked, hardFailures: hard, softWarnings: soft };
+  };
 
   window.mysteriesRender = mysteriesRender;
 })();

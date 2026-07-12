@@ -8859,6 +8859,16 @@ function fcOpenHostPeer(code, attempt) {
     return;
   }
   fcPeer = new Peer(FC_PEER_PREFIX + code);
+  /* watchdog: if this peer hasn't reached the server in 8s, tear it down
+     and retry (a wedged websocket otherwise spins forever) */
+  (function (p) {
+    setTimeout(function () {
+      if (p !== fcPeer || p.destroyed || p.open) return;
+      try { p.destroy(); } catch (e) {}
+      document.getElementById('fcHostStatus').textContent = 'Slow connection — trying again…';
+      fcOpenHostPeer(code, attempt + 1);
+    }, 8000);
+  })(fcPeer);
   fcPeer.on('open', () => {
     document.getElementById('fcHostStatus').textContent = 'Waiting for your friend to join…';
     try { if (window.cloudAnnounceChallenge) cloudAnnounceChallenge('flags', code); } catch (e) {}
@@ -8938,6 +8948,13 @@ function fcGuestConnect() {
   }
   document.getElementById('fcJoinStatus').textContent = 'Connecting…';
   fcPeer = new Peer();   // anonymous peer for guest
+  (function (p) {
+    setTimeout(function () {
+      if (p !== fcPeer || p.destroyed || p.open) return;
+      try { p.destroy(); } catch (e) {}
+      document.getElementById('fcJoinStatus').textContent = 'Can\u2019t reach the game server \u2014 check the internet and try Join again.';
+    }, 8000);
+  })(fcPeer);
   fcPeer.on('open', () => {
     fcConn = fcPeer.connect(FC_PEER_PREFIX + code);
     fcConn.on('open', () => {
@@ -16128,6 +16145,16 @@ function tcHostStart() {
 function tcOpenHostPeer(code, attempt) {
   if (attempt >= 5) { document.getElementById('tcHostStatus').textContent = 'Network busy. Please try again.'; return; }
   tcPeer = new Peer(TC_PEER_PREFIX + code);
+  /* watchdog: if this peer hasn't reached the server in 8s, tear it down
+     and retry (a wedged websocket otherwise spins forever) */
+  (function (p) {
+    setTimeout(function () {
+      if (p !== tcPeer || p.destroyed || p.open) return;
+      try { p.destroy(); } catch (e) {}
+      document.getElementById('tcHostStatus').textContent = 'Slow connection — trying again…';
+      tcOpenHostPeer(code, attempt + 1);
+    }, 8000);
+  })(tcPeer);
   tcPeer.on('open', () => { document.getElementById('tcHostStatus').textContent = 'Waiting for your friend to join…'; try { if (window.cloudAnnounceChallenge) cloudAnnounceChallenge('tt', code); } catch (e) {} });
   tcPeer.on('error', (err) => {
     if (err && (err.type === 'unavailable-id' || /taken/i.test(err.message || ''))) {
@@ -16194,6 +16221,13 @@ function tcGuestConnect() {
   if (code.length !== 4) { document.getElementById('tcJoinStatus').textContent = 'Please enter a 4-letter code.'; return; }
   document.getElementById('tcJoinStatus').textContent = 'Connecting…';
   tcPeer = new Peer();
+  (function (p) {
+    setTimeout(function () {
+      if (p !== tcPeer || p.destroyed || p.open) return;
+      try { p.destroy(); } catch (e) {}
+      document.getElementById('tcJoinStatus').textContent = 'Can\u2019t reach the game server \u2014 check the internet and try Join again.';
+    }, 8000);
+  })(tcPeer);
   tcPeer.on('open', () => {
     tcConn = tcPeer.connect(TC_PEER_PREFIX + code);
     tcConn.on('open', () => {
@@ -23010,6 +23044,16 @@ tcGameOverlay.addEventListener('click', (e) => { if (e.target === tcGameOverlay)
       return;
     }
     dbPeer = new Peer(DB_PEER_PREFIX + code);
+  /* watchdog: if this peer hasn't reached the server in 8s, tear it down
+     and retry (a wedged websocket otherwise spins forever) */
+  (function (p) {
+    setTimeout(function () {
+      if (p !== dbPeer || p.destroyed || p.open) return;
+      try { p.destroy(); } catch (e) {}
+      document.getElementById('dbHostStatus').textContent = 'Slow connection — trying again…';
+      openHostPeer(code, attempt + 1);
+    }, 8000);
+  })(dbPeer);
     dbPeer.on('open', function () {
       document.getElementById('dbHostStatus').textContent = 'Waiting for your opponent to join…';
       try { if (window.cloudAnnounceChallenge) cloudAnnounceChallenge('debate', code); } catch (e) {}
@@ -23064,6 +23108,13 @@ tcGameOverlay.addEventListener('click', (e) => { if (e.target === tcGameOverlay)
     }
     document.getElementById('dbJoinStatus').textContent = 'Connecting…';
     dbPeer = new Peer();
+  (function (p) {
+    setTimeout(function () {
+      if (p !== dbPeer || p.destroyed || p.open) return;
+      try { p.destroy(); } catch (e) {}
+      document.getElementById('dbJoinStatus').textContent = 'Can\u2019t reach the game server \u2014 check the internet and try Join again.';
+    }, 8000);
+  })(dbPeer);
     dbPeer.on('open', function () {
       dbConn = dbPeer.connect(DB_PEER_PREFIX + code);
       dbConn.on('open', function () {
@@ -25554,6 +25605,16 @@ var OP_BANK = [
       return;
     }
     p2Peer = new Peer(OP2_PREFIX + code);
+  /* watchdog: if this peer hasn't reached the server in 8s, tear it down
+     and retry (a wedged websocket otherwise spins forever) */
+  (function (p) {
+    setTimeout(function () {
+      if (p !== p2Peer || p.destroyed || p.open) return;
+      try { p.destroy(); } catch (e) {}
+      document.getElementById('op2HostStatus').textContent = 'Slow connection — trying again…';
+      p2OpenHostPeer(code, attempt + 1);
+    }, 8000);
+  })(p2Peer);
     p2Peer.on('open', function () {
       document.getElementById('op2HostStatus').textContent = 'Waiting for your friend to join…';
       try { if (window.cloudAnnounceChallenge) cloudAnnounceChallenge('onepct', code); } catch (e) {}
@@ -25644,6 +25705,13 @@ var OP_BANK = [
     }
     document.getElementById('op2JoinStatus').textContent = 'Connecting…';
     p2Peer = new Peer();
+  (function (p) {
+    setTimeout(function () {
+      if (p !== p2Peer || p.destroyed || p.open) return;
+      try { p.destroy(); } catch (e) {}
+      document.getElementById('op2JoinStatus').textContent = 'Can\u2019t reach the game server \u2014 check the internet and try Join again.';
+    }, 8000);
+  })(p2Peer);
     p2Peer.on('open', function () {
       p2Conn = p2Peer.connect(OP2_PREFIX + code);
       p2Conn.on('open', function () {

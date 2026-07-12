@@ -7698,52 +7698,29 @@ function popConfetti() {
 }
 
 /* --------------- Event wiring --------------- */
-/* Live V4: two grid locks, both driven by u.recent (last answered cells).
-   1. A just-answered cell needs 2 other questions before it can be
-      re-practised (no green-to-gold farming on one square).
-   2. The 3 cells immediately HIGHER in the same times table as a
-      just-answered cell need 3 other questions first — so you can't walk
-      the 16 column by adding 16 each time.
-   Cells are canonical lo x hi keys, so a key belongs to TWO tables: it is
-   position hi in table lo AND position lo in table hi. */
-function slStepUp(lo, hi, lo2, hi2) {
-  /* is (lo,hi) 1-3 steps up the same times table as (lo2,hi2)? */
-  return (lo === lo2 && hi > hi2 && hi - hi2 <= 3) ||
-         (lo === hi2 && hi > lo2 && hi - lo2 <= 3) ||
-         (hi === lo2 && lo > hi2 && lo - hi2 <= 3) ||
-         (hi === hi2 && lo > lo2 && lo - lo2 <= 3);
-}
+/* Live V4.1: one grid lock, driven by u.recent (last answered cells): a
+   just-answered cell needs 2 other questions before it can be re-practised
+   (no green-to-gold farming on one square). The V4 "no counting up" lock on
+   the next cells in the same table was removed 12 Jul 2026 — it annoyed
+   the kids more than it protected the practice. */
 function cellLockInfo(r, c) {
   const u = currentUser();
   if (!u || !Array.isArray(u.recent) || !u.recent.length) return null;
-  const lo = Math.min(r, c), hi = Math.max(r, c);
-  const k = lo + 'x' + hi;
+  const k = Math.min(r, c) + 'x' + Math.max(r, c);
   const L = u.recent.length;
-  let worst = null;
   for (let i = L - 1; i >= 0; i--) {
     const after = L - 1 - i;            // questions answered since that one
-    if (after >= 3) break;
-    const p = u.recent[i].split('x');
-    const lo2 = +p[0], hi2 = +p[1];
-    let need = 0, kind = null;
-    if (u.recent[i] === k) {
-      if (after < 2) { need = 2 - after; kind = 'same'; }
-    } else if (slStepUp(lo, hi, lo2, hi2)) {
-      need = 3 - after; kind = 'near';
-    }
-    if (need > 0 && (!worst || need > worst.need)) worst = { need: need, kind: kind, from: [lo2, hi2] };
+    if (after >= 2) break;
+    if (u.recent[i] === k) return { need: 2 - after, kind: 'same' };
   }
-  return worst;
+  return null;
 }
 function gridLockToast(r, c, info) {
   try { playSfx('wrong'); } catch (e) {}
   const host = document.getElementById('slToasts');
   const need = info.need;
   const qs = need + ' other question' + (need > 1 ? 's' : '');
-  const msg = info.kind === 'near'
-    ? 'No counting up! ' + r + ' × ' + c + ' is right next to ' + info.from[0] + ' × ' + info.from[1] +
-      ' — answer ' + qs + ' first.'
-    : 'You just did ' + r + ' × ' + c + ' — answer ' + qs + ' first, then come back to it!';
+  const msg = 'You just did ' + r + ' × ' + c + ' — answer ' + qs + ' first, then come back to it!';
   if (!host) { alert('🔒 ' + msg); return; }
   const t = document.createElement('div');
   t.className = 'sl-toast';

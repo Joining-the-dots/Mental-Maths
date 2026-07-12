@@ -8972,7 +8972,7 @@ function fcGuestConnect() {
     // If the connection never opens, surface a friendly timeout
     setTimeout(() => {
       if (fcConn && !fcConn.open) {
-        document.getElementById('fcJoinStatus').textContent = 'No response from ' + code + '. Wrong code?';
+        document.getElementById('fcJoinStatus').textContent = 'No response from ' + code + '. Check the code — and make sure your friend started a FLAGS challenge (codes only work in the same game).';
       }
     }, 8000);
   });
@@ -16239,7 +16239,7 @@ function tcGuestConnect() {
     tcConn.on('data', (msg) => tcHandleMessage(msg));
     tcConn.on('close', () => tcHandleDisconnect());
     tcConn.on('error', () => { document.getElementById('tcJoinStatus').textContent = 'Could not connect to ' + code + '.'; });
-    setTimeout(() => { if (tcConn && !tcConn.open) document.getElementById('tcJoinStatus').textContent = 'No response from ' + code + '. Wrong code?'; }, 8000);
+    setTimeout(() => { if (tcConn && !tcConn.open) document.getElementById('tcJoinStatus').textContent = 'No response from ' + code + '. Check the code — and make sure your friend started a TIMES TABLES challenge (codes only work in the same game).'; }, 8000);
   });
   tcPeer.on('error', (err) => { document.getElementById('tcJoinStatus').textContent = 'Network error: ' + (err.message || err.type || 'unknown'); });
 }
@@ -23128,7 +23128,7 @@ tcGameOverlay.addEventListener('click', (e) => { if (e.target === tcGameOverlay)
       });
       setTimeout(function () {
         if (dbConn && !dbConn.open) {
-          document.getElementById('dbJoinStatus').textContent = 'No response from ' + code + '. Wrong code?';
+          document.getElementById('dbJoinStatus').textContent = 'No response from ' + code + '. Check the code — and make sure your friend started a DEBATE (codes only work in the same game).';
         }
       }, 8000);
     });
@@ -25725,7 +25725,7 @@ var OP_BANK = [
       });
       setTimeout(function () {
         if (p2Conn && !p2Conn.open) {
-          document.getElementById('op2JoinStatus').textContent = 'No response from ' + code + '. Wrong code?';
+          document.getElementById('op2JoinStatus').textContent = 'No response from ' + code + '. Check the code — and make sure your friend started a 1% CHALLENGE (codes only work in the same game).';
         }
       }, 8000);
     });

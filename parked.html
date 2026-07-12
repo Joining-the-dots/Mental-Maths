@@ -3644,8 +3644,38 @@
     content: "✕"; position: absolute; inset: 0; display: flex; align-items: center;
     justify-content: center; font-size: 40px; font-weight: 900; color: #e74c3c;
   }
-  .myst-suspect.accusable { cursor: pointer; border-color: #ff9f43; box-shadow: 0 0 0 3px rgba(255,159,67,0.3); }
-  .myst-suspect.accusable:hover { transform: scale(1.05); }
+  .myst-suspect.accusable { border-color: #ff9f43; box-shadow: 0 0 0 3px rgba(255,159,67,0.3); }
+  .myst-suspect { cursor: pointer; }
+  .myst-suspect:hover { transform: scale(1.04); }
+  .myst-suspect.shake { animation: mystShake 0.4s; }
+  .myst-track { margin: 8px 0 0; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .myst-track-fb { font-size: 13px; font-weight: 700; min-height: 18px; }
+  .myst-instruction { background: #fff3e6; border-left: 4px solid #ff9f43; border-radius: 8px;
+    padding: 8px 12px; margin-top: 8px; font-size: 13.5px; font-weight: 700; color: #7a4a12; }
+  /* map trail */
+  .myst-map { display: grid; grid-template-columns: repeat(5, 52px); gap: 4px; justify-content: center; margin: 10px 0; }
+  .myst-map-cell { width: 52px; height: 52px; border-radius: 10px; background: #eef3e6;
+    border: 2px solid #d8e2c8; display: flex; align-items: center; justify-content: center;
+    font-size: 26px; }
+  .myst-map-cell.lm { background: #fff; border-color: #b8c8a0; cursor: pointer; }
+  .myst-map-cell.lm:hover { transform: scale(1.08); }
+  .myst-map-cell.start { border-color: #6c5ce7; box-shadow: 0 0 0 3px rgba(108,92,231,0.25); }
+  .myst-map-cell.good { border-color: #2ecc71; background: #eafaf0; }
+  .myst-map-cell.shake { animation: mystShake 0.4s; }
+  @keyframes mystShake { 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
+  /* spot the fake */
+  .myst-shapes { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; margin: 10px 0; }
+  .myst-shape-opt { background: #fff; border: 3px solid #d9d2ee; border-radius: 12px; padding: 8px; cursor: pointer; }
+  .myst-shape-opt:hover { border-color: #6c5ce7; }
+  .myst-shape-opt.bad { border-color: #e74c3c; animation: mystShake 0.4s; }
+  .myst-shape-opt.good { border-color: #2ecc71; background: #eafaf0; }
+  .myst-shape-grid { display: grid; gap: 2px; }
+  .myst-shape-blk { width: 16px; height: 16px; border-radius: 3px; }
+  /* secret code */
+  .myst-code-key { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin: 8px 0; }
+  .myst-code-pair { background: #fff; border: 2px solid #d9d2ee; border-radius: 10px;
+    padding: 4px 9px; font-size: 15px; font-weight: 800; }
+  .myst-cipher { text-align: center; font-size: 30px; letter-spacing: 8px; margin: 8px 0; }
   .myst-suspect.culprit { border-color: #2ecc71; box-shadow: 0 0 0 4px rgba(46,204,113,0.4); }
 
   .myst-clue {
@@ -5742,6 +5772,11 @@ var lp = null;   // active practice state
 
 function openLearnTrick(id) {
   learnOpenId = id; lp = null;
+  /* V4: first time on a trick? The whiteboard IS the front door. */
+  if (!learnRec(id).watched && !openLearnTrick._suppressAuto) {
+    learnWatch(id);
+    return;
+  }
   if (typeof tmSetupOverlay !== 'undefined' && tmSetupOverlay) tmSetupOverlay.classList.add('show');
   const grid = document.getElementById('tmPickerGrid');
   if (!grid) return;
@@ -5783,17 +5818,53 @@ function openLearnTrick(id) {
   if (pb && rec.watched) pb.addEventListener('click', function () { learnStartPractice(id); });
 }
 
+/* V4: full spoken lesson scripts for every grid trick — shown on the
+   tecmath whiteboard with narration (your recording, or the built-in
+   voice files, or speech synthesis as a last resort). */
+const TT_LESSON_SCRIPTS = {"four": "Quick one to start us off — what's 7 times 4? … If that popped out in under ten seconds, brilliant, you already know this trick. If not, no panic — you're about to learn it right now. Here's the secret: to multiply by 4, you don't multiply at all. You double the number, then double it again. Two easy doubles instead of one hard multiply. Watch it work on 7 times 4. Double 7 is 14. Now double 14 — that's 28. So 7 times 4 is 28. Done, no fuss. Your turn — pause me if you need to: what's 6 times 4? … And what's 9 times 4? … Have a proper go before I tell you… Right, let's check together. 6 times 4: double 6 is 12, double 12 is 24. So 6 times 4 is 24. And 9 times 4: double 9 is 18, double 18 is 36. So 9 times 4 is 36. See? Two little doubles and the 4 times table just opens up. Go smash the practice — you've got this one.", "five": "Here's a quick challenge — what's 8 times 5? … Got it in under ten seconds? Then you're already halfway to being a fives master. Took a bit longer? Perfect, because this trick makes it easy every single time. To multiply by 5, times the number by 10 first, then cut your answer in half. That's it — times 10, then halve. Let's walk through 8 times 5. First, 8 times 10 is 80. Now halve it — half of 80 is 40. So 8 times 5 is 40. Easy as that. Your turn — pause me if you need a moment: what's 6 times 5? … And what's 12 times 5? … Have a real go before I give the game away… Ready? Let's check them together. 6 times 5: 6 times 10 is 60, and half of 60 is 30. So 6 times 5 is 30. Now 12 times 5: 12 times 10 is 120, and half of 120 is 60. So 12 times 5 is 60. Times 10, then halve — every single time. That's a trick you'll use forever. Nice work.", "six": "Quick fire — what's 7 times 6? … If you rattled that off in under ten seconds, you're already flying. If it made you pause, stick with me, because this one's about to get much easier. The trick: to multiply by 6, do times 5 first — that's the easy bit — then add one more lot of your number. Times 5, plus one more lot. Let's take 7 times 6 through it. First, 7 times 5 is 35. Now add one more 7: 35 plus 7 is 42. So 7 times 6 is 42. Lovely. Your turn — pause me if you need to: what's 8 times 6? … And what's 9 times 6? … Have a proper think before I spill the answers… Let's check them together. 8 times 6: 8 times 5 is 40, add one more 8, and 40 plus 8 is 48. So 8 times 6 is 48. Now 9 times 6: 9 times 5 is 45, add one more 9, and 45 plus 9 is 54. So 9 times 6 is 54. That's it — the sixes just became fives with a bonus. Go show them who's boss.", "seven_split": "Try this one — what's 8 times 7? … If that landed in under ten seconds, take a bow, because that's one of the trickiest facts in the whole table. If not, don't worry — most people find the sevens hard, and this trick fixes that. Here's the idea: 7 is just 5 plus 2. So times 7 is times 5 plus times 2 — two easy sums instead of one tough one. Let's do 8 times 7 properly. 8 times 5 is 40. 8 times 2 is 16. Now add them: 40 plus 16 is 56. So 8 times 7 is 56. Your turn — pause me whenever you like: what's 6 times 7? … And what's 9 times 7? … Give them a real go first… Right, checking time. 6 times 7: 6 times 5 is 30, and 6 times 2 is 12. Then 30 plus 12 is 42. So 6 times 7 is 42. Now 9 times 7: 9 times 5 is 45, and 9 times 2 is 18. Then 45 plus 18 is 63. So 9 times 7 is 63. See? You've just tamed the sevens — that's a trick plenty of grown-ups never learn.", "eight": "Speedy one — what's 6 times 8? … Under ten seconds? You're a natural. Slower than that? No bother at all — this trick turns the eights into something you can do half asleep. To multiply by 8, you double the number three times in a row. That's the whole trick. Double, double, double. Let's run 6 times 8 through it. Double 6 is 12. Double 12 is 24. Double 24 is 48. So 6 times 8 is 48 — three quick doubles and you're home. Your turn — pause me if you need thinking time: what's 7 times 8? … And what's 9 times 8? … Have a proper crack at both before I tell you… Let's check them together. 7 times 8: double 7 is 14, double 14 is 28, double 28 is 56. So 7 times 8 is 56. Now 9 times 8: double 9 is 18, double 18 is 36, double 36 is 72. So 9 times 8 is 72. Double, double, double — that's all the eights ever ask of you. Go and have fun with the practice, you've earned it.", "nine_finger": "Quick test — what's 7 times 9? … If you nailed it in under ten seconds, superb. If not, get ready, because the answer to every single nine is hiding in your hands. Hold up all 10 fingers. To multiply a number by 9, bend down that number finger — counting from the left. Then just read your hands: fingers to the left of the bent one are the tens, fingers to the right are the ones. Let's do 7 times 9. Bend down finger number 7. Look left — 6 fingers standing. Look right — 3 fingers standing. 6 and 3 — that's 63. So 7 times 9 is 63. Your turn — hands up, pause me if you need to: what's 4 times 9? … And what's 8 times 9? … Try it on your fingers first… Let's check. 4 times 9: bend down finger number 4. That leaves 3 on the left and 6 on the right — 3 and 6, so 36. And 8 times 9: bend finger number 8. That's 7 on the left, 2 on the right — 72. So 8 times 9 is 72. Your hands know the whole nine times table — how brilliant is that?", "nine": "Here's your challenge — what's 6 times 9? … Cracked it in under ten seconds? You're already ahead of the game. If it took longer, that's absolutely fine — this trick makes the nines a doddle. The idea: 9 is just one less than 10. So to multiply by 9, do times 10 first, then take one lot of your number away. Let's push 6 times 9 through it. 6 times 10 is 60. Now take away one 6: 60 minus 6 is 54. So 6 times 9 is 54. Two steps, both easy. Your turn — pause me if you want a moment: what's 7 times 9? … And what's 8 times 9? … Have a genuine go before the answers arrive… Right, let's check them together. 7 times 9: 7 times 10 is 70, take away one 7, and 70 minus 7 is 63. So 7 times 9 is 63. Now 8 times 9: 8 times 10 is 80, take away one 8, and 80 minus 8 is 72. So 8 times 9 is 72. Times 10, minus one lot — and suddenly the nines are on your side. Lovely work.", "ten": "Lightning round — what's 7 times 10? … If you said 70 before I'd even finished asking, congratulations, you might already own the easiest trick in the whole book. If you hesitated, you'll never hesitate again after this. Times 10 works like this: just put a 0 on the end of the number. What's really happening is every digit slides up one place, and a 0 fills the gap — but all you have to do is pop that 0 on. So for 7 times 10: take the 7, put a 0 on the end, and you get 70. That's genuinely the whole thing. Your turn — pause me if you like: what's 9 times 10? … And here's a bigger one — what's 34 times 10? … Say them out loud before I do… Let's check together. 9 times 10: put a 0 on the end of 9 and you get 90. And 34 times 10: put a 0 on the end of 34 — the 3 and the 4 slide up a place — and you get 340. So 34 times 10 is 340. Easiest trick in the book, and now it's yours. Off you go.", "eleven_split": "Quick one — what's 7 times 11? … If that flew out in under ten seconds, you've clearly met this trick before. If not, you're about to love it, because it might be the friendliest trick going. To multiply a single digit by 11, you just write the digit twice. That's it — the number looks in the mirror and there's your answer. So for 7 times 11: take the 7, write it twice — 7 and 7 — and you get 77. So 7 times 11 is 77. It really is that quick. Your turn — pause me if you need to: what's 4 times 11? … And what's 9 times 11? … Say them before I do — I bet you can… Let's check together. 4 times 11: write the 4 twice — 4 and 4 — that's 44. So 4 times 11 is 44. And 9 times 11: write the 9 twice — 9 and 9 — that's 99. So 9 times 11 is 99. The number simply looks in the mirror, and the elevens are done. See? You've got this one — go and dazzle someone with it.", "eleven_carry": "Quick challenge — what's 35 times 11? … Tricky-sounding, isn't it? If you got it in under ten seconds, you're already a times-11 wizard. If not, stick with me, because this one feels like actual magic. For a two-digit number times 11, add the two digits together and slot the answer in between them. That's it — the outside digits stay put, and their sum squeezes into the middle. Let's do 35 times 11. The digits are 3 and 5. 3 plus 5 is 8. Slot the 8 between the 3 and the 5 — 3, 8, 5. So 35 times 11 is 385. Your turn — pause me if you need to: what's 26 times 11? … and what's 57 times 11? … Careful with the second one — have a proper go before I tell you. Ready? 26 times 11: 2 plus 6 is 8, slot it in — 2, 8, 6 — that's 286. Now 57 times 11: 5 plus 7 is 12, and that's ten or more, so the 2 goes in the middle and the 1 carries onto the 5, making 6 — 6, 2, 7 — that's 627. See? You just did a trick most grown-ups have never even heard of.", "twelve": "Quick one — what's 6 times 12? … If that popped out in a few seconds, brilliant, you already own this trick. If it didn't, no worries at all — you're about to learn the easy way. Here's the secret: 12 is just 10 plus 2. So times 12 means times 10 plus times 2 — two sums you already find easy, stuck together. Let's walk through 6 times 12. First, 6 times 10 is 60. Next, 6 times 2 is 12. Now add them: 60 plus 12 is 72. So 6 times 12 is 72. No twelve times table needed — just tens and twos. Your turn — pause me if you like: what's 7 times 12? … and what's 9 times 12? … Have a real go before I give the game away… Right, let's check together. 7 times 12: 7 times 10 is 70, 7 times 2 is 14, and 70 plus 14 is 84. And 9 times 12: 9 times 10 is 90, 9 times 2 is 18, and 90 plus 18 is 108. That's it — you've just cracked the twelves. Go smash the practice.", "twentyfive": "Here's a spicy one — what's 8 times 25? … If you rattled that off in under ten seconds, you already think like a mathematician. If not, hang about, because this trick makes it easy every time. The secret is that 25 is a quarter of 100. So to times by 25, times by 100 first — dead easy — then divide by 4. Watch it work on 8 times 25. 8 times 100 is 800. Now divide by 4: 800 divided by 4 is 200. So 8 times 25 is 200. Think of it like money — 8 coins worth 25 pence each make 2 pounds. Your turn — pause me if you need thinking time: what's 12 times 25? … and what's 6 times 25? … Have a proper go before I spill the answers… Okay, checking together. 12 times 25: 12 times 100 is 1200, and 1200 divided by 4 is 300. So 12 times 25 is 300. Now 6 times 25: 6 times 100 is 600, and 600 divided by 4 is 150. So 6 times 25 is 150. See? Twenty-fives are basically pocket money maths — you've got this one.", "fifty": "Try this one on for size — what's 6 times 50? … Got it in a flash? Then you're already halfway to being a human calculator. If it took a while, perfect — this trick is about to make it easy forever. Here's the idea: 50 is half of 100. So times 50 means times 100 first, then halve the answer. Watch. 6 times 50: first, 6 times 100 is 600. Now halve it: half of 600 is 300. So 6 times 50 is 300. Two baby steps instead of one big scary multiply. Your turn — pause me whenever you like: what's 8 times 50? … and what's 14 times 50? … Don't peek — have a genuine go first… Right, let's check them together. 8 times 50: 8 times 100 is 800, and half of 800 is 400. So 8 times 50 is 400. Now 14 times 50: 14 times 100 is 1400, and half of 1400 is 700. So 14 times 50 is 700. And that's the whole trick — times 100, cut it in half. You now do fifties faster than most grown-ups. Off you go and prove it.", "ninetynine": "Big one coming — what's 7 times 99? … If you nailed that in under ten seconds, take a bow. If your brain went a bit fuzzy, that's completely normal — and this trick will un-fuzz it in about thirty seconds. Here's the thinking: 99 is just one less than 100. So times 99 means times 100 — easy — then take away one lot of your number. Let's run 7 times 99 through it. 7 times 100 is 700. Now take away one 7: 700 minus 7 is 693. So 7 times 99 is 693. Looks like genius maths — it's really just one takeaway. Your turn — pause me if you need a beat: what's 4 times 99? … and what's 8 times 99? … Have a proper crack before I tell you… Let's check together. 4 times 99: 4 times 100 is 400, take away one 4, and 400 minus 4 is 396. So 4 times 99 is 396. Now 8 times 99: 8 times 100 is 800, take away one 8, and 800 minus 8 is 792. So 8 times 99 is 792. See? Ninety-nines aren't scary — they're just hundreds in disguise. Go show them who's boss.", "hundred": "Speed round — what's 7 times 100? … If you said 700 before I finished asking, you're flying. If you hesitated, no bother — this is honestly the friendliest trick in the whole book. To times by 100, just put two zeros on the end. That's the whole trick. What's really happening is every digit jumping up two places, and the zeros filling the gaps behind it. So for 7 times 100: take the 7, pop two zeros on the end, and you get 700. Done. It works for big numbers too — 42 times 100 is 4200, four thousand two hundred, just like that. Your turn — pause me if you want a moment: what's 9 times 100? … and what's 36 times 100? … Say them out loud before I do… Let's check together. 9 times 100: take the 9, add two zeros — 900. And 36 times 100: take the 36, add two zeros — 3600, that's three thousand six hundred. Every digit slid up two places and the zeros filled in behind. That's it — probably the quickest trick you'll ever learn, and you'll use it your whole life. Nice work.", "round_adjust": "Right, a proper brain-stretcher — what's 6 times 29? … If you got 174 in under ten seconds, honestly, hats off. If your brain said no thanks, that's exactly why this trick exists. Here's the idea: when a number is close to something tidy, use the tidy number instead, then fix it afterwards. 29 is awkward, but 30 is lovely. Watch. 6 times 29: pretend it's 6 times 30, which is 180. But hang on — we used one extra lot of 6, so take a 6 back: 180 minus 6 is 174. So 6 times 29 is 174. Round up, multiply, pay it back. Your turn — pause me if you need to: what's 4 times 39? … and what's 7 times 19? … Have a proper go before I jump in… Let's check together. 4 times 39: 39 is nearly 40, and 4 times 40 is 160. We used one extra 4, so take it back: 160 minus 4 is 156. Now 7 times 19: 19 is nearly 20, and 7 times 20 is 140. Take back the extra 7: 140 minus 7 is 133. See? Awkward numbers can't hide near tidy ones any more — you've got this.", "split_tens": "Quick fire — what's 7 times 40? … If that was out of your mouth in a couple of seconds, superb, you already feel this trick in your bones. If not, don't worry — it's a two-step wonder. When you multiply by a round number like 40, split it: do the small times first, then add the zero back on. So times 40 is really times 4, with a zero stuck on the end. Watch it on 7 times 40. First, 7 times 4 is 28. Now add the zero: 280. So 7 times 40 is 280, two hundred and eighty. Big scary forties become friendly little fours. Your turn — pause me if you need a think: what's 6 times 30? … and what's 8 times 70? … Have a real go before I say anything… Let's check together. 6 times 30: 6 times 3 is 18, add the zero, and you get 180. Now 8 times 70: 8 times 7 is 56, add the zero, and you get 560, five hundred and sixty. That's the whole move — shrink it, multiply, add the zero back. You now eat round numbers for breakfast. Go get the practice done.", "split_place": "Here's a chunky one — what's 6 times 23? … If you cracked that in under ten seconds, you're seriously sharp. If it felt too big, brilliant — because this trick chops big numbers down to size. For a big number, break it into tens and ones, multiply each bit on its own, then add the answers up. Let's do 6 times 23. Split 23 into 20 and 3. First bit: 6 times 20 is 120. Second bit: 6 times 3 is 18. Now add them: 120 plus 18 is 138. So 6 times 23 is 138. One hard sum turned into two easy ones. Your turn — pause me if you need to: what's 4 times 32? … and what's 7 times 24? … Give them a proper go before I chime in… Let's check together. 4 times 32: split 32 into 30 and 2. 4 times 30 is 120, and 4 times 2 is 8. Add them: 120 plus 8 is 128. Now 7 times 24: split 24 into 20 and 4. 7 times 20 is 140, and 7 times 4 is 28. Add them: 140 plus 28 is 168. See? Split it, smash each piece, stick it back together — you've got this one for life.", "square_five": "Quick challenge — what's 35 times 35? … If that popped out in under ten seconds, you're already a squaring wizard. If not, stick with me, because this one feels like actual magic. Any number ending in 5 is easy to square. Take the front part, multiply it by one more than itself, then stick 25 on the end. That's it. Let's do 35 squared together. The front part is 3. One more than 3 is 4, and 3 times 4 is 12. Now stick 25 on the end of the 12 … 1225. So 35 times 35 is 1225. Your turn — pause me if you need to: what's 25 squared? … and what's 45 squared? … Have a proper go before I tell you… Right, let's check. 25 squared: the front is 2, and 2 times 3 is 6. Stick 25 on the end … 625. Now 45 squared: the front is 4, and 4 times 5 is 20. Stick 25 on the end … 2025. So 45 times 45 is 2025. See? Looks like magic — but it's maths, and now it's yours. Go smash the practice.", "square_ten": "Here's a big-sounding one — what's 70 times 70? … Got it in a flash? Then you already own this trick. If it felt scary, don't worry — it's about to become one of your easiest. To square a round number like 70, just square the front digit, then stick two zeros on the end. Two tiny steps. Watch it work on 70 squared. The front digit is 7. 7 times 7 is 49. Now stick two zeros on … 4900. So 70 times 70 is 4900. A huge sum, done with one little times-table fact. Your turn — pause me if you need to: what's 40 squared? … and what's 90 squared? … Have a real go before I say anything… Ready? Let's check together. 40 squared: the front digit is 4, and 4 times 4 is 16. Two zeros on the end … 1600. So 40 times 40 is 1600. Now 90 squared: 9 times 9 is 81. Two zeros on … 8100. So 90 times 90 is 8100. That's it — giant squares from tiny facts. You've got this one completely.", "square_close": "Try this monster — what's 29 times 29? … If you cracked that in ten seconds, take a bow. If your brain went blank, perfect — this trick was made for you. To square a number just under a tidy one, use this: the square equals one less times one more, plus 1. So instead of the awkward number, you multiply its two neighbours and add 1. Let's do 29 squared. The neighbours of 29 are 28 and 30. 30 times 28 is 840 — that's just 3 times 28 with a zero on. Now add 1 … 841. So 29 times 29 is 841. Your turn — pause me if you need to: what's 19 squared? … and what's 39 squared? … Have a proper try first… Let's check them. 19 squared: neighbours are 18 and 20. 20 times 18 is 360. Add 1 … 361. So 19 times 19 is 361. Now 39 squared: neighbours are 38 and 40. 40 times 38 is 1520. Add 1 … 1521. So 39 times 39 is 1521. See? You just squared numbers most grown-ups would reach for a calculator on.", "both_five": "Deep breath — what's 45 times 25? … If you rattled that off in ten seconds, you're seriously sharp. If not, brilliant — you're about to learn a proper showpiece. When both numbers end in 5, do this: multiply the front digits, then add half the sum of the fronts, and finish by sticking 25 on the end. Watch it on 45 times 25. The fronts are 4 and 2. 4 times 2 is 8. Now the fronts added: 4 plus 2 is 6, and half of 6 is 3. 8 plus 3 is 11. Stick 25 on the end … 1125. So 45 times 25 is 1125. Your turn — pause me if you need to: what's 35 times 15? … and what's 55 times 35? … Give them a real go… Checking time. 35 times 15: fronts are 3 and 1, and 3 times 1 is 3. Fronts add to 4, half is 2. 3 plus 2 is 5. Stick 25 on … 525. Now 55 times 35: 5 times 3 is 15. Fronts add to 8, half is 4. 15 plus 4 is 19. Stick 25 on … 1925. That's it — you now know a trick most grown-ups don't.", "teens": "Quick one — what's 13 times 14? … Under ten seconds? You're flying. Took longer? No worries at all — teens times teens has a lovely shortcut. Here's how it goes: add the ones digit of one number onto the other number, times that by 10, then add the product of the two ones digits. Let's walk 13 times 14 through it. The ones digits are 3 and 4. Take 13 and add the 4 … 17. 17 times 10 is 170. Now multiply the ones: 3 times 4 is 12. 170 plus 12 is 182. So 13 times 14 is 182. Your turn — pause me if you need to: what's 12 times 15? … and what's 14 times 16? … Have a proper go before I tell you… Let's check together. 12 times 15: 12 plus 5 is 17, and 17 times 10 is 170. The ones: 2 times 5 is 10. 170 plus 10 is 180. So 12 times 15 is 180. Now 14 times 16: 14 plus 6 is 20, and 20 times 10 is 200. The ones: 4 times 6 is 24. 200 plus 24 is 224. See? Teens don't scare you any more — go smash the practice.", "same_tens": "Here's a tough-looking one — what's 23 times 26? … If you nailed it inside ten seconds, hats off. If your eyes went wide, stay with me — there's a neat route through. When both numbers share the same tens digit, use that round tens number as your base. Add the ones digit of one number onto the other, multiply by the base, then add the ones digits multiplied together. Let's do 23 times 26 — the base is 20. Take 23 and add the 6 … 29. 29 times 20 is 580. Now the ones: 3 times 6 is 18. 580 plus 18 is 598. So 23 times 26 is 598. Your turn — pause me if you need to: what's 21 times 24? … and what's 32 times 34? … Have a real crack first… Let's check. 21 times 24: base 20. 21 plus 4 is 25, and 25 times 20 is 500. Ones: 1 times 4 is 4. 500 plus 4 is 504. Now 32 times 34: base 30. 32 plus 4 is 36, and 36 times 30 is 1080. Ones: 2 times 4 is 8. 1080 plus 8 is 1088. Brilliant — that's two-digit multiplying without a pencil in sight.", "same_tens_ones10": "Ready for a whopper? What's 43 times 47? … If you said 2021 within ten seconds, you might already know the secret. If not — oh, you're going to love this. Here's a beauty: when the tens digits match and the ones digits add to 10, multiply the tens digit by one more than itself for the front of your answer, then multiply the ones digits for the back. Write the two parts together and you're done. Watch 43 times 47. The tens digit is 4, and 4 times 5 is 20 — that's the front. The ones are 3 and 7, and 3 times 7 is 21 — that's the back. Put them together: 20, then 21 … 2021. So 43 times 47 is 2021. Instant! Your turn — pause me if you need to: what's 62 times 68? … and what's 24 times 26? … Give them a proper go… Let's check. 62 times 68: tens digit 6, and 6 times 7 is 42. Ones: 2 times 8 is 16. Together … 4216. Now 24 times 26: 2 times 3 is 6, and 4 times 6 is 24. Together … 624. See? You've got a party trick for life now.", "tens10_same_ones": "Try this beast — what's 46 times 66? … If that took you under ten seconds, I'm impressed. If not, good news: there's a twin trick that makes it easy. This one works when the tens digits add to 10 and the ones digits match. Multiply the tens digits together and add one lot of the ones digit — that's the front of your answer. Then square the ones digit — that's the back. Watch 46 times 66. The tens are 4 and 6, and 4 times 6 is 24. Add the ones digit, 6 … 30. That's the front. Now square the ones: 6 times 6 is 36. Write them together: 30, then 36 … 3036. So 46 times 66 is 3036. Your turn — pause me if you need to: what's 34 times 74? … and what's 47 times 67? … Have a proper go before I spill the answers… Checking. 34 times 74: tens 3 and 7, and 3 times 7 is 21. Add the ones digit, 4 … 25. Ones squared: 4 times 4 is 16. Together … 2516. Now 47 times 67: 4 times 6 is 24, plus 7 is 31. Then 7 times 7 is 49. Together … 3149. That's it — you now know a trick most grown-ups don't.", "nikhilam": "Last-boss question — what's 97 times 94? … If you got that in under ten seconds, you're basically a calculator. If not, don't panic — this ancient trick makes it feel easy. It's called Nikhilam, and it works for numbers just under 100. Find how far each number is from 100 — those are the gaps. Cross-subtract: take one number and subtract the other number's gap — that's the front of your answer. Then multiply the two gaps for the back. Let's do 97 times 94. The gap for 97 is 3, and the gap for 94 is 6. Cross-subtract: 97 minus 6 is 91 — the front. Gaps multiplied: 3 times 6 is 18 — the back. Together … 9118. So 97 times 94 is 9118. Your turn — pause me if you need to: what's 96 times 93? … and what's 98 times 95? … Have a real go first… Let's check. 96 times 93: gaps are 4 and 7. 96 minus 7 is 89. Gaps: 4 times 7 is 28. Together … 8928. Now 98 times 95: gaps are 2 and 5. 98 minus 5 is 93. Gaps: 2 times 5 is 10. Together … 9310. An ancient Indian trick — and now it lives in your head.", "nikhilam_ten": "Quick fire — what's 8 times 7? … If that popped out in a flash, brilliant, you already own this one. If it didn't — no worries at all, here comes a lovely trick. It's the cross trick, and it works for numbers near 10. See how far each number is from 10 — those are the gaps. Cross-subtract one gap from the other number to get your tens, then multiply the gaps together to get your ones. Watch it work on 8 times 7. 8 is 2 away from 10, and 7 is 3 away. Cross-subtract: 8 minus 3 is 5 — that's your tens, so 50. Multiply the gaps: 2 times 3 is 6 — that's your ones. Put them together: 56. Your turn — pause me if you need to: what's 9 times 7? … and what's 8 times 6? … Have a proper go before I tell you… Right, let's check. 9 times 7: the gaps are 1 and 3. 9 minus 3 is 6, and 1 times 3 is 3 — so 63. Now 8 times 6: the gaps are 2 and 4. 8 minus 4 is 4, and 2 times 4 is 8 — so 48. See? Two crosses and you're done — go smash the practice.", "diff_squares": "Here's a sneaky one — what's 18 times 22? … If you cracked that in ten seconds, take a bow. If not, stick with me, because this trick makes it almost instant. When two numbers sit evenly around a nice middle number, square the middle, then subtract the square of the gap. That's the whole trick. Look at 18 times 22. They sit evenly around 20 — one is 2 below, one is 2 above. 20 squared is 400. The gap is 2, and 2 squared is 4. 400 minus 4 is 396. So 18 times 22 is 396. Magic. Your turn — pause me if you need to: what's 29 times 31? … and what's 17 times 23? … Have a proper think before I spill the answers… Ready? 29 times 31 sits around 30. 30 squared is 900. The gap is 1, and 1 squared is 1. 900 minus 1 is 899. And 17 times 23 sits around 20. 20 squared is 400. The gap is 3, and 3 squared is 9. 400 minus 9 is 391. That's it — you now know a trick most grown-ups have never even heard of.", "anchor_step": "Quick one — what's 7 times 8? … Got it in a blink? Then you already know today's secret. Took a while? Perfect — this trick is about to make it easy forever. Here it is: if you know your square numbers, the neighbours come free. A number times its next-door neighbour is just the square, plus or minus one step. Watch. 7 times 8 — start from 7 squared, which is 49, then add one more 7: 49 plus 7 is 56. Or come from the other side: 8 squared is 64, take away one 8, and 64 minus 8 is 56 again. Same answer both ways. Your turn — pause me if you need to: what's 6 times 7? … and what's 8 times 9? … Have a proper go before I tell you… Let's check together. 6 times 7: 6 squared is 36, add one more 6 — 36 plus 6 is 42. And 8 times 9: 8 squared is 64, add one more 8 — 64 plus 8 is 72. Or 9 squared is 81, minus 9 — 72 again. Every square you know unlocks its neighbours. See? You've got this one — go show it off.", "halve_double": "Try this monster — what's 16 times 25? … If you rattled that off in under ten seconds, you're already flying. If your brain went blank — no worries at all, this trick turns monsters into kittens. It's called halve and double. If one number is even, halve it, and double the other one — the answer stays exactly the same. Do it again and again until the sum looks friendly. Watch 16 times 25. Halve 16 to get 8, double 25 to get 50. Now it's 8 times 50, which is 400. Fancy another round? Halve 8 to get 4, double 50 to get 100 — 4 times 100 is 400. Same answer, much kinder numbers. Your turn — pause me if you need to: what's 12 times 15? … and what's 18 times 35? … Have a proper go before I jump in… Checking time. 12 times 15: halve 12 to get 6, double 15 to get 30 — 6 times 30 is 180. And 18 times 35: halve 18 to get 9, double 35 to get 70 — 9 times 70 is 630. See? Squash and stretch, and the hard sums melt away — go smash the practice.", "factor_regroup": "Speedy one for you — what's 18 times 5? … Under ten seconds? You legend. Longer? Stick around, because this trick does the heavy lifting for you. The idea: break a number into friendlier factors, then regroup them so a pair makes 10 or 100. Tens and hundreds do all the work. Let's run 18 times 5 through it. 18 is 9 times 2. So the sum is really 9 times 2 times 5 — and look, 2 times 5 is 10. Now it's just 9 times 10, which is 90. So 18 times 5 is 90. Your turn — pause me if you need to: what's 16 times 5? … and what's 25 times 8? … Have a proper go before I give the game away… Let's check them together. 16 times 5: split 16 into 8 times 2, then 2 times 5 is 10, and 8 times 10 is 80. Now 25 times 8: split 8 into 4 times 2, then 25 times 4 is 100, and 100 times 2 is 200. Spot the pairs that make 10 or 100 and the sum practically solves itself. That's it — another trick in your back pocket. Go use it.", "finger_six_ten": "Quick challenge — what's 7 times 8? … If that took you no time at all, lovely. If it's one of those sums that always wobbles — good news, the answer is literally in your hands. Number your fingers from 6 to 10 on each hand, with the thumbs as 6. To multiply, touch the two fingers for your numbers together. Count the touching fingers and everything below — that's your tens. Then multiply the leftover fingers above, one hand times the other — that's your ones. For 7 times 8: touch the 7 finger to the 8 finger. Touching plus below makes 5 fingers, so that's 50. Above, there are 3 fingers on one hand and 2 on the other: 3 times 2 is 6. 50 plus 6 is 56. Your turn — hands ready, pause me if you need to: what's 6 times 9? … and what's 8 times 8? … Have a proper go before I check… Here we go. 6 times 9: touching plus below is 1 plus 4 — 5 fingers, so 50. Above: 4 times 1 is 4. 50 plus 4 is 54. And 8 times 8: touching plus below is 3 plus 3 — 6 fingers, so 60. Above: 2 times 2 is 4. 60 plus 4 is 64. Your hands carry this table everywhere — brilliant, isn't it?"};
+function ttScriptLines(id) {
+  const t = TT_LESSON_SCRIPTS[id];
+  if (!t) return null;
+  /* split into whiteboard-sized lines at sentence ends */
+  const parts = t.match(/[^.!?…]+[.!?…]+(?:\s|$)/g) || [t];
+  const lines = [];
+  let buf = '';
+  parts.forEach(p => {
+    if ((buf + p).length > 110 && buf) { lines.push(buf.trim()); buf = p; }
+    else buf += p;
+  });
+  if (buf.trim()) lines.push(buf.trim());
+  return lines;
+}
 function learnWatch(id) {
-  const map = buildTrickSampleMap();
-  const samples = map[id] || [];
-  const pair = samples.length ? samples[(Math.random() * samples.length) | 0] : [2, 6];
   if (typeof tmSetupOverlay !== 'undefined' && tmSetupOverlay) tmSetupOverlay.classList.remove('show');
-  showInteractiveTrick(pair[0], pair[1], id, function () {
+  const done = function () {
     learnRec(id).watched = true;
     if (typeof saveState === 'function') saveState();
     if (typeof tmSetupOverlay !== 'undefined' && tmSetupOverlay) tmSetupOverlay.classList.add('show');
     openLearnTrick(id);
-  });
+  };
+  const lines = ttScriptLines(id);
+  const cat = TRICK_CATALOG[id] || {};
+  if (lines && typeof window.wbTecPlay === 'function') {
+    window.wbTecPlay({
+      emoji: cat.emoji || '✨', title: cat.name || 'Maths trick',
+      lines: lines, audioKey: 'tt-' + id,
+      onDone: done,
+      onRead: function () {
+        /* fall back to the interactive worked example */
+        const map = buildTrickSampleMap();
+        const samples = map[id] || [];
+        const pair = samples.length ? samples[(Math.random() * samples.length) | 0] : [2, 6];
+        showInteractiveTrick(pair[0], pair[1], id, done);
+      }
+    });
+    return;
+  }
+  const map = buildTrickSampleMap();
+  const samples = map[id] || [];
+  const pair = samples.length ? samples[(Math.random() * samples.length) | 0] : [2, 6];
+  showInteractiveTrick(pair[0], pair[1], id, done);
 }
 
 function learnStartPractice(id) {
@@ -16749,7 +16820,92 @@ tcGameOverlay.addEventListener('click', (e) => { if (e.target === tcGameOverlay)
     return { type:'oddoneout', rule: ruleLabel(rule), options: shuffle(rng, conformers.concat([odd])), odd: odd };
   }
 
+  /* ---------- V4: map trail ---------- */
+  var MAP_LANDMARKS = [['⛲','the fountain'],['🌳','the big oak'],['🏫','the school'],['🏪','the sweet shop'],
+    ['🏰','the castle'],['🎪','the circus tent'],['⛪','the old church'],['🎠','the carousel']];
+  function genMapWalk(tier, rng) {
+    const size = 5;
+    const count = tier <= 2 ? 4 : 6;
+    const lms = shuffle(rng, MAP_LANDMARKS).slice(0, count);
+    const cells = [];
+    for (let r = 0; r < size; r++) for (let c = 0; c < size; c++) cells.push([r, c]);
+    const spots = shuffle(rng, cells).slice(0, count);
+    const placed = lms.map((lm, i) => ({ emoji: lm[0], name: lm[1], r: spots[i][0], c: spots[i][1] }));
+    const start = placed[0];
+    const target = placed[1 + Math.floor(rng() * (placed.length - 1))];
+    /* build legs from start to target (optionally with a wiggle for older kids) */
+    const legs = [];
+    let cr = start.r, cc = start.c;
+    if (tier >= 3 && rng() < 0.7) {
+      const wig = 1 + Math.floor(rng() * 2);
+      if (cc + wig < size) { legs.push(['east', wig]); cc += wig; }
+      else if (cc - wig >= 0) { legs.push(['west', wig]); cc -= wig; }
+    }
+    const dc = target.c - cc, dr = target.r - cr;
+    if (dc !== 0) legs.push([dc > 0 ? 'east' : 'west', Math.abs(dc)]);
+    if (dr !== 0) legs.push([dr > 0 ? 'south' : 'north', Math.abs(dr)]);
+    if (!legs.length) legs.push(['east', 0]);
+    const dirText = legs.filter(l => l[1] > 0)
+      .map(l => l[1] + ' square' + (l[1] > 1 ? 's' : '') + ' ' + l[0]).join(', then ');
+    return { type: 'map', size: size, landmarks: placed, start: start.name,
+      text: 'Start at ' + start.emoji + ' ' + start.name + '. Walk ' + dirText + '. Tap where you end up!',
+      answer: target.name };
+  }
+
+  /* ---------- V4: spot the fake (rotation vs mirror) ---------- */
+  var CHIRAL_SHAPES = [
+    [[0,0],[1,0],[2,0],[2,1]],                 /* L */
+    [[0,1],[0,2],[1,0],[1,1]],                 /* S */
+    [[0,0],[0,1],[1,1],[1,2],[2,1]],           /* F-ish */
+    [[0,0],[1,0],[1,1],[2,0],[3,0]],           /* Y */
+    [[0,0],[0,1],[1,0],[1,1],[2,0]]            /* P */
+  ];
+  function shpRot(cells) { return cells.map(p => [p[1], -p[0]]); }
+  function shpMirror(cells) { return cells.map(p => [p[0], -p[1]]); }
+  function shpNorm(cells) {
+    const minR = Math.min.apply(null, cells.map(p => p[0]));
+    const minC = Math.min.apply(null, cells.map(p => p[1]));
+    return cells.map(p => [p[0] - minR, p[1] - minC]).sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  }
+  function genShapeFake(tier, rng) {
+    const base = CHIRAL_SHAPES[Math.floor(rng() * (tier <= 2 ? 2 : CHIRAL_SHAPES.length))];
+    const rots = [0, 1, 2, 3].map(n => {
+      let c = base.slice();
+      for (let i = 0; i < n; i++) c = shpRot(c);
+      return shpNorm(c);
+    });
+    const realThree = shuffle(rng, rots).slice(0, 3);
+    let fake = shpMirror(base);
+    const fr = Math.floor(rng() * 4);
+    for (let i = 0; i < fr; i++) fake = shpRot(fake);
+    fake = shpNorm(fake);
+    const options = realThree.map(cells => ({ cells: cells, fake: false }));
+    options.push({ cells: fake, fake: true });
+    return { type: 'shape', options: shuffle(rng, options) };
+  }
+
+  /* ---------- V4: secret code ---------- */
+  var CODE_WORDS_EASY = ['PUPPY','DRAGON','BANANA','ROCKET','PIRATE','WIZARD'];
+  var CODE_WORDS_HARD = ['BISCUIT','TREASURE','MYSTERY','DETECTIVE','SUSPECT'];
+  var CODE_EMOJI = ['🌟','🍎','🐝','🌈','⚡','🎈','🐟','🌙','🍄','🔥','❄️','🎵','🌻','🐢','🍩','🔔'];
+  function genCodeWord(tier, rng) {
+    const pool = tier <= 2 ? CODE_WORDS_EASY : CODE_WORDS_EASY.concat(CODE_WORDS_HARD);
+    const word = pool[Math.floor(rng() * pool.length)];
+    const uniq = [];
+    word.split('').forEach(ch => { if (uniq.indexOf(ch) < 0) uniq.push(ch); });
+    const decoys = 'XZQJK'.split('').filter(ch => uniq.indexOf(ch) < 0).slice(0, 2);
+    const letters = shuffle(rng, uniq.concat(decoys));
+    const emo = shuffle(rng, CODE_EMOJI).slice(0, letters.length);
+    const key = {};
+    letters.forEach((ch, i) => { key[ch] = emo[i]; });
+    return { type: 'code', word: word, key: key, letters: letters,
+      cipher: word.split('').map(ch => key[ch]).join(' ') };
+  }
+
   function makePuzzle(type, tier, rng) {
+    if (type === 'map') return genMapWalk(tier, rng);
+    if (type === 'shape') return genShapeFake(tier, rng);
+    if (type === 'code') return genCodeWord(tier, rng);
     switch (type) {
       case 'sequence':  return genSequence(tier, rng);
       case 'compare':   return genCompare(tier, rng);
@@ -16761,8 +16917,9 @@ tcGameOverlay.addEventListener('click', (e) => { if (e.target === tcGameOverlay)
     }
   }
   function puzzleName(type) {
-    return { sequence:'Number Trail', compare:'Crack the Code', riddle:'Number Riddles',
-      sums:'Solve the Sums', truefalse:'Right or Wrong', oddoneout:'Odd One Out' }[type] || 'Puzzle';
+    return { sequence:'Number Trail', compare:'Bigger or Smaller', riddle:'Number Riddles',
+      sums:'Solve the Sums', truefalse:'Right or Wrong', oddoneout:'Odd One Out',
+      map:'The Map Trail', shape:'Spot the Fake', code:'The Secret Code' }[type] || 'Puzzle';
   }
 
   /* ---------- mystery builder (guarantees exactly one culprit) ---------- */
@@ -16823,14 +16980,55 @@ tcGameOverlay.addEventListener('click', (e) => { if (e.target === tcGameOverlay)
     const culpritSuspect = suspects[0];
     const shown = shuffle(rng, suspects);
 
-    const pzTypes = shuffle(rng, ['sequence','compare','riddle','sums','truefalse','oddoneout']);
-    const clues = attrKeys.map((k, i) => {
-      const meta = attrMeta(k, culprit[k]);
-      const type = pzTypes[i % pzTypes.length];
+    /* V4: deduction clues. Mostly "the culprit is NOT ..." statements the
+       child applies by crossing suspects off. Simulated as we build so the
+       full set always leaves exactly one suspect standing. */
+    function negate(reveal) {
+      if (reveal.indexOf('is ') === 0) return 'is NOT ' + reveal.slice(3);
+      if (reveal.indexOf('has ') === 0) return 'does NOT have ' + reveal.slice(4);
+      if (reveal.indexOf('loves ') === 0) return 'does NOT love ' + reveal.slice(6);
+      return 'is NOT someone who ' + reveal;
+    }
+    function surviveClue(attrs, cl) {
+      return cl.neg ? attrs[cl.attrKey] !== cl.value : attrs[cl.attrKey] === culprit[cl.attrKey];
+    }
+    const plan = [];
+    let R = cast.slice();
+    attrKeys.forEach((k, i) => {
+      const last = i === attrKeys.length - 1;
+      let neg = false, v = culprit[k];
+      if (!last && rng() < 0.65) {
+        /* try a NOT clue on the value most common among current suspects */
+        const counts = {};
+        R.forEach(a => { if (a[k] !== culprit[k]) counts[a[k]] = (counts[a[k]] || 0) + 1; });
+        const vals = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
+        if (vals.length) { neg = true; v = isNaN(+vals[0]) ? vals[0] : +vals[0]; }
+      }
+      plan.push({ attrKey: k, value: v, neg: neg });
+      R = R.filter(a => surviveClue(a, plan[plan.length - 1]));
+    });
+    /* guarantee uniqueness: flip NOT-clues to IS-clues until one suspect stands */
+    for (let f = 0; f < plan.length; f++) {
+      R = cast.filter(a => plan.every(cl => surviveClue(a, cl)));
+      if (R.length <= 1) break;
+      const flip = plan.find(cl => cl.neg);
+      if (!flip) break;
+      flip.neg = false;
+      flip.value = culprit[flip.attrKey];
+    }
+
+    const newTypes = shuffle(rng, ['map','shape','code']);
+    const oldTypes = shuffle(rng, ['sequence','compare','riddle','sums','truefalse','oddoneout']);
+    const clues = plan.map((cl, i) => {
+      const meta = attrMeta(cl.attrKey, cl.value);
+      const phrase = meta ? meta.reveal : '';
+      const type = (i % 2 === 0) ? newTypes[(i / 2) % newTypes.length] : oldTypes[((i - 1) / 2) % oldTypes.length];
       return {
-        attrKey: k,
-        value: culprit[k],
-        reveal: 'The culprit ' + (meta ? meta.reveal : '') + '.',
+        attrKey: cl.attrKey,
+        value: cl.value,
+        neg: cl.neg,
+        reveal: 'The culprit ' + (cl.neg ? negate(phrase) : phrase) + '.',
+        instruction: '🕵️ Your job: cross off everyone who ' + (cl.neg ? phrase : negate(phrase)) + '!',
         puzzle: makePuzzle(type, def.tier, makeRng('mystery::' + def.id + '::clue' + i))
       };
     });
@@ -17056,10 +17254,102 @@ tcGameOverlay.addEventListener('click', (e) => { if (e.target === tcGameOverlay)
     }, onSolved);
   }
 
+  function renderMapWalk(pz, host, onSolved) {
+    host.appendChild(el('div','myst-pz-prompt','🗺️ ' + pz.text));
+    const grid = el('div','myst-map');
+    let done = false;
+    for (let r = 0; r < pz.size; r++) {
+      for (let c = 0; c < pz.size; c++) {
+        const lm = pz.landmarks.find(l => l.r === r && l.c === c);
+        const cell = el('div','myst-map-cell' + (lm ? ' lm' : ''), lm ? lm.emoji : '·');
+        if (lm && lm.name === pz.start) {
+          cell.classList.add('start');
+          cell.title = 'Start here';
+        }
+        if (lm) {
+          cell.addEventListener('click', function () {
+            if (done) return;
+            if (lm.name === pz.answer) {
+              done = true;
+              cell.classList.add('good');
+              try { playSfx('correct'); } catch (e) {}
+              setTimeout(onSolved, 560);
+            } else {
+              cell.classList.remove('shake'); void cell.offsetWidth; cell.classList.add('shake');
+              try { playSfx('wrong'); } catch (e) {}
+            }
+          });
+        }
+        grid.appendChild(cell);
+      }
+    }
+    host.appendChild(grid);
+    host.appendChild(el('div','myst-pz-feedback','North is up ⬆️, east is right ➡️. Trace it with your finger!'));
+  }
+
+  function renderShapeFake(pz, host, onSolved) {
+    host.appendChild(el('div','myst-pz-prompt','🔄 Three of these badges are the SAME shape, just turned round. One is a sneaky mirror-image fake — tap the fake!'));
+    const wrap = el('div','myst-shapes');
+    let done = false;
+    const colors = ['#e6324b','#3b6fd6','#2e9e3f','#ef7d18'];
+    pz.options.forEach(function (opt, oi) {
+      const btn = el('button','myst-shape-opt');
+      btn.type = 'button';
+      const maxR = Math.max.apply(null, opt.cells.map(p => p[0])) + 1;
+      const maxC = Math.max.apply(null, opt.cells.map(p => p[1])) + 1;
+      const g = el('div','myst-shape-grid');
+      g.style.gridTemplateColumns = 'repeat(' + maxC + ', 16px)';
+      for (let r = 0; r < maxR; r++) {
+        for (let c = 0; c < maxC; c++) {
+          const blk = el('div','myst-shape-blk');
+          blk.style.background = opt.cells.some(p => p[0] === r && p[1] === c) ? colors[oi % 4] : 'transparent';
+          g.appendChild(blk);
+        }
+      }
+      btn.appendChild(g);
+      btn.addEventListener('click', function () {
+        if (done) return;
+        if (opt.fake) {
+          done = true;
+          btn.classList.add('good');
+          try { playSfx('correct'); } catch (e) {}
+          setTimeout(onSolved, 560);
+        } else {
+          btn.classList.remove('bad'); void btn.offsetWidth; btn.classList.add('bad');
+          try { playSfx('wrong'); } catch (e) {}
+        }
+      });
+      wrap.appendChild(btn);
+    });
+    host.appendChild(wrap);
+  }
+
+  function renderCodeWord(pz, host, onSolved) {
+    host.appendChild(el('div','myst-pz-prompt','🔐 Crack the code! Use the key to decode the secret word, then type it in.'));
+    const key = el('div','myst-code-key');
+    pz.letters.forEach(function (ch) {
+      key.appendChild(el('span','myst-code-pair', pz.key[ch] + ' = ' + ch));
+    });
+    host.appendChild(key);
+    host.appendChild(el('div','myst-cipher', pz.cipher));
+    const inp = document.createElement('input');
+    inp.className = 'myst-in';
+    inp.type = 'text'; inp.autocomplete = 'off'; inp.maxLength = 12;
+    inp.style.cssText = 'display:block;margin:0 auto;width:200px;text-align:center;text-transform:uppercase;';
+    host.appendChild(inp);
+    addCheck(host, function () {
+      const good = inp.value.trim().toUpperCase() === pz.word;
+      inp.classList.toggle('good', good);
+      inp.classList.toggle('bad', !good);
+      return good;
+    }, onSolved);
+  }
+
   function renderPuzzle(pz, host, onSolved) {
     host.innerHTML = '';
     const map = { sequence:renderSequence, compare:renderCompare, riddle:renderRiddle,
-      sums:renderSums, truefalse:renderTrueFalse, oddoneout:renderOddOneOut };
+      sums:renderSums, truefalse:renderTrueFalse, oddoneout:renderOddOneOut,
+      map:renderMapWalk, shape:renderShapeFake, code:renderCodeWord };
     (map[pz.type] || renderSums)(pz, host, onSolved);
   }
 
@@ -17107,6 +17397,20 @@ tcGameOverlay.addEventListener('click', (e) => { if (e.target === tcGameOverlay)
       attrs.appendChild(el('div','myst-attr-chip', meta ? meta.chip : ''));
     });
     card.appendChild(attrs);
+    /* V4: YOU do the crossing off. Tap to cross a suspect out, tap again to
+       bring them back. In the accuse phase, tapping someone still in the
+       frame accuses them. */
+    card.addEventListener('click', function () {
+      if (m.phase === 'done') return;
+      if (m.phase === 'accuse' && !m.eliminated[s.name]) {
+        if (confirm('Accuse ' + s.name + ' ' + s.face + ' of the crime?')) makeAccusation(s, m);
+        return;
+      }
+      m.eliminated[s.name] = !m.eliminated[s.name];
+      card.classList.toggle('crossed', !!m.eliminated[s.name]);
+      try { playSfx(m.eliminated[s.name] ? 'correct' : 'wrong'); } catch (e) {}
+      updateRemaining(m);
+    });
     return card;
   }
 
@@ -17139,6 +17443,7 @@ tcGameOverlay.addEventListener('click', (e) => { if (e.target === tcGameOverlay)
     body.appendChild(el('div','myst-story', m.def.intro));
 
     body.appendChild(sectionLabel('🕵️ The Suspects'));
+    body.appendChild(el('div','myst-pz-feedback','Solve each clue, then TAP suspects to cross them off yourself — tap again if you change your mind. Real detectives keep their own notes!'));
     const remEl = el('div','myst-remaining','');
     m.dom.remEl = remEl;
     body.appendChild(remEl);
@@ -17150,6 +17455,35 @@ tcGameOverlay.addEventListener('click', (e) => { if (e.target === tcGameOverlay)
       board.appendChild(c);
     });
     body.appendChild(board);
+    const track = el('div','myst-track');
+    const trackBtn = el('button','btn btn-ghost','🕵️ Am I on track?');
+    trackBtn.type = 'button';
+    const trackFb = el('div','myst-track-fb','');
+    trackBtn.addEventListener('click', function () {
+      const revealed = m.clues.slice(0, m.cluesDone);
+      if (!revealed.length) { trackFb.textContent = 'Crack a clue first!'; return; }
+      let wrong = 0, missed = 0;
+      m.suspects.forEach(sp => {
+        const shouldBeOut = revealed.some(cl =>
+          cl.neg ? sp.attrs[cl.attrKey] === cl.value : sp.attrs[cl.attrKey] !== cl.value);
+        if (m.eliminated[sp.name] && !shouldBeOut) wrong++;
+        if (!m.eliminated[sp.name] && shouldBeOut) missed++;
+      });
+      if (!wrong && !missed) {
+        trackFb.textContent = '✅ Spot on — your detective work matches the clues so far!';
+        trackFb.style.color = '#1e9e54';
+      } else {
+        const bits = [];
+        if (wrong) bits.push(wrong + ' crossed off who the clues do NOT rule out');
+        if (missed) bits.push(missed + ' still standing who the clues DO rule out');
+        trackFb.textContent = '🤔 Check again: ' + bits.join(', and ') + '.';
+        trackFb.style.color = '#c0392b';
+      }
+      try { playSfx((!wrong && !missed) ? 'correct' : 'wrong'); } catch (e) {}
+    });
+    track.appendChild(trackBtn);
+    track.appendChild(trackFb);
+    body.appendChild(track);
     updateRemaining(m);
 
     body.appendChild(sectionLabel('🧩 The Clues'));
@@ -17174,20 +17508,11 @@ tcGameOverlay.addEventListener('click', (e) => { if (e.target === tcGameOverlay)
     ce._status.textContent = 'Cracked';
     ce._body.innerHTML = '';
     ce._body.appendChild(revealEl(c.reveal));
+    ce._body.appendChild(el('div','myst-instruction', c.instruction));
     m.cluesDone = i + 1;
+    updateRemaining(m);
 
-    const newlyOut = m.suspects.filter(s => !m.eliminated[s.name] && s.attrs[c.attrKey] !== c.value);
-    newlyOut.forEach((s, idx) => {
-      m.eliminated[s.name] = true;
-      const card = m.dom.suspectEls[s.name];
-      setTimeout(function () {
-        if (card) card.classList.add('crossed');
-        updateRemaining(m);
-      }, 200 + idx * 120);
-    });
-    if (!newlyOut.length) updateRemaining(m);
-
-    const afterDelay = 200 + newlyOut.length * 120 + 280;
+    const afterDelay = 500;
     if (m.cluesDone >= m.clues.length) {
       setTimeout(function () { enterAccusePhase(m); }, afterDelay);
     } else {
@@ -17210,15 +17535,16 @@ tcGameOverlay.addEventListener('click', (e) => { if (e.target === tcGameOverlay)
     m.suspects.forEach(s => {
       if (!m.eliminated[s.name]) {
         const card = m.dom.suspectEls[s.name];
-        if (card) {
-          card.classList.add('accusable');
-          card.addEventListener('click', function () { makeAccusation(s, m); });
-        }
+        if (card) card.classList.add('accusable');
       }
     });
     const acc = el('div','myst-accuse');
     acc.appendChild(el('h3', null, '🎯 Time to accuse!'));
-    acc.appendChild(el('p', null, 'Every clue is cracked. One suspect is still in the frame — tap them to name the culprit!'));
+    acc.appendChild(el('p', null, 'Every clue is cracked. Finish your crossing-off — exactly ONE suspect should fit ALL the clues. Tap them to accuse! (You can still tap crossed-off suspects to bring them back.)'));
+    const accFb = el('div','myst-track-fb','');
+    accFb.style.marginTop = '6px';
+    acc.appendChild(accFb);
+    m.dom.accFb = accFb;
     m.dom.tail.innerHTML = '';
     m.dom.tail.appendChild(acc);
     try { acc.scrollIntoView({ behavior:'smooth', block:'nearest' }); } catch (e) {}
@@ -17234,6 +17560,17 @@ tcGameOverlay.addEventListener('click', (e) => { if (e.target === tcGameOverlay)
 
   function makeAccusation(s, m) {
     if (m.phase !== 'accuse') return;
+    if (!s.isCulprit) {
+      /* wrong accusation — gentle bounce, stay in the game */
+      const card = m.dom.suspectEls[s.name];
+      if (card) { card.classList.remove('shake'); void card.offsetWidth; card.classList.add('shake'); }
+      try { playSfx('wrong'); } catch (e) {}
+      if (m.dom.accFb) {
+        m.dom.accFb.textContent = '❌ Not ' + s.name + '! Check each clue against their chips — someone else fits ALL of them. (Psst: try “Am I on track?”)';
+        m.dom.accFb.style.color = '#c0392b';
+      }
+      return;
+    }
     m.phase = 'done';
     m.suspects.forEach(x => {
       const card = m.dom.suspectEls[x.name];

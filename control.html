@@ -50,6 +50,16 @@
     position: relative; }
   .daybar span { position: absolute; bottom: -18px; left: 50%; transform: translateX(-50%);
     font-size: 9.5px; color: var(--ink-soft); white-space: nowrap; }
+  /* instant hover tooltip: the ::before strip makes the whole 70px column
+     hoverable even when the bar itself is a sliver */
+  .daybar::before { content: ''; position: absolute; left: -2px; right: -2px; bottom: 0; height: 70px; }
+  .daybar:hover { background: #4b3fb5; }
+  .daybar:hover::after { content: attr(data-tip); position: absolute; left: 50%; bottom: 76px;
+    transform: translateX(-50%); background: #1d2733; color: #fff; font-size: 12px; font-weight: 700;
+    padding: 4px 9px; border-radius: 7px; white-space: nowrap; z-index: 20;
+    box-shadow: 0 3px 10px rgba(0,0,0,0.25); pointer-events: none; }
+  .daybars .daybar:first-child:hover::after { left: 0; transform: none; }
+  .daybars .daybar:last-child:hover::after { left: auto; right: 0; transform: none; }
   .back { background: none; border: none; color: var(--accent); font-weight: 800;
     font-size: 14px; cursor: pointer; padding: 0 0 12px; }
   #gate { max-width: 360px; margin: 12vh auto; text-align: center; }
@@ -454,8 +464,11 @@ var APP_LABELS = { maths:'🔢 Maths', spell:'🪄 Spelling', flags:'🏳️ Fla
     var dayBars = dayKeys.map(function (k, i) {
       var v = days[k] || 0;
       var lbl = (i % 2 === 0) ? '<span>' + k.slice(8) + '/' + k.slice(5, 7) + '</span>' : '';
-      return '<div class="daybar" style="height:' + Math.max(3, Math.round(v / maxDay * 100)) + '%" title="' +
-        k + ': ' + fmtSecs(v) + '">' + lbl + '</div>';
+      var nice = new Date(k + 'T12:00:00').toLocaleDateString('en-GB',
+        { weekday: 'short', day: 'numeric', month: 'short' });
+      var tip = nice + ' — ' + (v ? fmtSecs(v) : 'no play');
+      return '<div class="daybar" style="height:' + Math.max(3, Math.round(v / maxDay * 100)) + '%" data-tip="' +
+        tip + '" title="' + tip + '">' + lbl + '</div>';
     }).join('');
 
     var red = (u.shop && u.shop.redeemed) || [];

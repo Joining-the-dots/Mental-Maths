@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover" />
-<title>Conway Family Learning Lab — Live V4.5</title>
+<title>Conway Family Learning Lab — Live V4.6</title>
 
 <!-- PWA -->
 <link rel="manifest" href="manifest.json">
@@ -2916,7 +2916,7 @@ function slWakeRelease() {
   <div class="brand">
     <span class="logo">🧪</span>
     Conway Family Learning Lab
-    <span style="font-family: 'Fredoka', sans-serif; font-size: 13px; font-weight: 600; color: var(--ink-soft); -webkit-text-fill-color: var(--ink-soft); background: var(--neutral); padding: 2px 8px; border-radius: 999px; margin-left: 6px; letter-spacing: 0.5px;">Live V4.5</span>
+    <span style="font-family: 'Fredoka', sans-serif; font-size: 13px; font-weight: 600; color: var(--ink-soft); -webkit-text-fill-color: var(--ink-soft); background: var(--neutral); padding: 2px 8px; border-radius: 999px; margin-left: 6px; letter-spacing: 0.5px;">Live V4.6</span>
   </div>
 
   <button class="user-pill" id="userPill" title="Switch player">
@@ -29381,6 +29381,101 @@ var SPELL_BANKS = {
     else if (!u && plane) cleanup();   /* switched to another player */
   }, 3000);
   setTimeout(window.slBonusChipSync, 800);
+})();
+</script>
+<style>
+  @keyframes slChSlide { from { transform: translate(-50%, -130%); } to { transform: translate(-50%, 0); } }
+  @keyframes slChPulse { 0%,100% { box-shadow: 0 6px 24px rgba(232,69,60,0.45); } 50% { box-shadow: 0 6px 36px rgba(255,159,67,0.9); } }
+  #slChallengeBanner { position: fixed; top: 10px; left: 50%; transform: translateX(-50%); z-index: 9600;
+    background: linear-gradient(135deg, #ff5aa3, #ff9f43); color: #fff; font-weight: 800;
+    padding: 12px 40px 12px 16px; border-radius: 14px; max-width: min(92vw, 560px); font-size: 15px;
+    animation: slChSlide 0.5s ease-out, slChPulse 1.6s infinite; line-height: 1.45; }
+  #slChallengeBanner .x { position: absolute; top: 6px; right: 12px; cursor: pointer; font-weight: 800; opacity: 0.85; }
+</style>
+<script>
+/* Parent-set daily challenges: flash the target on the right child's
+   screen, watch for the trick flipping to done, pay the bonus once. */
+(function () {
+  'use strict';
+  var SL_DAILY_CHALLENGES = [
+    { id: 'josh-six-20260713', user: 'joshua', family: 'LION78', date: '2026-07-13',
+      ladder: 'tt', trick: 'six', points: 25,
+      label: '✏️ 6️⃣ “Times five, plus one more lot”' },
+    { id: 'mia-leftright-20260713', user: 'mia', family: 'LION78', date: '2026-07-13',
+      ladder: 'add', trick: 'leftright', points: 25,
+      label: '➕ the Addition trick “Left to Right”' }
+  ];
+  function todayKey() {
+    var d = new Date();
+    return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
+  }
+  function trickRec(u, ch) {
+    if (ch.ladder === 'tt') return (u.learn || {})[ch.trick] || null;
+    var ml = u.mathLearn || {};
+    return (ml[ch.ladder] || {})[ch.trick] || null;
+  }
+  function activeChallenge() {
+    try {
+      var cs = window.cloudState;
+      if (!cs || !cs.doc) return null;
+      var u = (typeof currentUser === 'function') ? currentUser() : null;
+      if (!u || cs.boundName !== u.name) return null;
+      for (var i = 0; i < SL_DAILY_CHALLENGES.length; i++) {
+        var ch = SL_DAILY_CHALLENGES[i];
+        if (cs.doc.usernameLower !== ch.user || cs.doc.familyCode !== ch.family) continue;
+        if (todayKey() !== ch.date) continue;
+        if (u.challenges && u.challenges[ch.id]) continue;          /* already paid */
+        var r = trickRec(u, ch);
+        if (ch._doneAtStart === undefined) ch._doneAtStart = !!(r && r.done);
+        if (ch._doneAtStart) continue;   /* finished before the offer reached them */
+        return { ch: ch, u: u, done: !!(r && r.done) };
+      }
+    } catch (e) {}
+    return null;
+  }
+  var banner = null;
+  function dropBanner() { if (banner) { try { banner.remove(); } catch (e) {} banner = null; } }
+  function showBanner(ch) {
+    if (banner) return;
+    banner = document.createElement('div');
+    banner.id = 'slChallengeBanner';
+    banner.innerHTML = '<span class="x" title="Hide">✕</span>🚨 <b>BONUS POINTS ALERT</b> — complete ' +
+      ch.label + ' today and get a bonus <b>' + ch.points + ' points</b>!';
+    banner.querySelector('.x').addEventListener('click', function () {
+      ch._dismissed = true;
+      dropBanner();
+    });
+    document.body.appendChild(banner);
+  }
+  function award(ch, u) {
+    if (!u.challenges || typeof u.challenges !== 'object') u.challenges = {};
+    u.challenges[ch.id] = { at: new Date().toISOString(), points: ch.points };
+    dropBanner();
+    try { awardPoints(ch.points); } catch (e) {}
+    try { playSfx('fanfare'); } catch (e) {}
+    try { popConfetti(); setTimeout(popConfetti, 400); } catch (e) {}
+    /* let the trick-learned party land first, then this on top */
+    setTimeout(function () {
+      var d = document.createElement('div');
+      d.style.cssText = 'position:fixed;inset:0;z-index:10001;background:rgba(30,25,60,0.6);display:flex;align-items:center;justify-content:center;padding:16px;';
+      d.innerHTML =
+        '<div style="background:#fff;border-radius:18px;box-shadow:0 18px 60px rgba(0,0,0,0.35);max-width:420px;width:100%;text-align:center;padding:26px 22px;">' +
+          '<div style="font-size:60px;">🎯</div>' +
+          '<h2 style="margin:6px 0 2px;font-family:\'Baloo 2\', sans-serif;">DAILY CHALLENGE SMASHED!</h2>' +
+          '<div style="font-weight:800;color:#6c5ce7;">' + ch.label + ' — done today, as asked.</div>' +
+          '<div style="margin:12px 0 4px;font-size:26px;font-weight:800;color:#ff9f43;">+' + ch.points + ' ⭐ BONUS</div>' +
+          '<button class="btn btn-primary" style="margin-top:12px;" type="button">Brilliant!</button>' +
+        '</div>';
+      document.body.appendChild(d);
+      d.querySelector('button').addEventListener('click', function () { try { d.remove(); } catch (e) {} });
+    }, 2500);
+  }
+  setInterval(function () {
+    var a = activeChallenge();
+    if (!a) { dropBanner(); return; }
+    if (a.done) { award(a.ch, a.u); return; }
+    if (!a.ch._dismissed) showBanner(a.ch);
+  }, 5000);
 })();
 </script>
 </body>

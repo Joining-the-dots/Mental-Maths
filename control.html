@@ -60,6 +60,13 @@
     box-shadow: 0 3px 10px rgba(0,0,0,0.25); pointer-events: none; }
   .daybars .daybar:first-child:hover::after { left: 0; transform: none; }
   .daybars .daybar:last-child:hover::after { left: auto; right: 0; transform: none; }
+  .trickchips { display: flex; flex-wrap: wrap; gap: 5px; margin: 4px 0 12px; }
+  .trickchip { font-size: 11.5px; font-weight: 700; padding: 3px 9px; border-radius: 999px;
+    background: #eef1f6; color: #4a5568; }
+  .trickchip.done { background: #e5f6ea; color: #1e7d3f; }
+  .trickchip.prog { background: #fff3d9; color: #8a6100; }
+  .trickchip.next { background: #ecebfb; color: #5a4fd0; }
+  .trickchip.all { background: #ffe9f2; color: #c02466; }
   .back { background: none; border: none; color: var(--accent); font-weight: 800;
     font-size: 14px; cursor: pointer; padding: 0 0 12px; }
   #gate { max-width: 360px; margin: 12vh auto; text-align: center; }
@@ -453,6 +460,36 @@ var APP_LABELS = { maths:'🔢 Maths', spell:'🪄 Spelling', flags:'🏳️ Fla
           '<div class="bar"><div style="width:' + pct + '%"></div></div>';
       }).join('') || '<div class="empty">No tracked activity yet (tracking starts with this update).</div>';
 
+    /* mental maths tricks — every ladder, with done chips + next-up */
+    var TRICK_DEX = {"tt": [{"id": "four", "name": "Double, double", "emoji": "✖️"}, {"id": "five", "name": "Times ten, then halve", "emoji": "✋"}, {"id": "six", "name": "Times five, plus one more lot", "emoji": "6️⃣"}, {"id": "seven_split", "name": "Times five, plus times two", "emoji": "7️⃣"}, {"id": "eight", "name": "Double three times", "emoji": "🎱"}, {"id": "nine_finger", "name": "Nine fingers", "emoji": "🖐️"}, {"id": "nine", "name": "Times ten, minus one lot", "emoji": "9️⃣"}, {"id": "ten", "name": "Times ten", "emoji": "🔟"}, {"id": "eleven_split", "name": "Times eleven (single digit)", "emoji": "✂️"}, {"id": "eleven_carry", "name": "Times eleven (two digits, with carry)", "emoji": "📤"}, {"id": "twelve", "name": "Times ten plus times two", "emoji": "🥚"}, {"id": "twentyfive", "name": "Times hundred, divided by four", "emoji": "🍀"}, {"id": "fifty", "name": "Times hundred, halved", "emoji": "⚖️"}, {"id": "ninetynine", "name": "Times hundred, minus one lot", "emoji": "🎯"}, {"id": "hundred", "name": "Times hundred", "emoji": "💯"}, {"id": "round_adjust", "name": "Round to a tidy number, then adjust", "emoji": "🔄"}, {"id": "split_place", "name": "Split by place value", "emoji": "📦"}, {"id": "square_five", "name": "Squaring a number ending in 5", "emoji": "🟦"}, {"id": "square_ten", "name": "Squaring a round ten", "emoji": "🟡"}, {"id": "square_close", "name": "Square via the next round number", "emoji": "🪞"}, {"id": "both_five", "name": "Both numbers end in 5", "emoji": "🎣"}, {"id": "teens", "name": "Teens × Teens (11 – 19)", "emoji": "🦸"}, {"id": "same_tens", "name": "Same tens digit", "emoji": "🪩"}, {"id": "same_tens_ones10", "name": "Same tens, ones add to 10", "emoji": "👯"}, {"id": "tens10_same_ones", "name": "Tens add to 10, same ones", "emoji": "⚔️"}, {"id": "nikhilam", "name": "Close to 100", "emoji": "🧙"}, {"id": "nikhilam_ten", "name": "Close to 10", "emoji": "🪄"}, {"id": "diff_squares", "name": "Square the middle, minus the gap²", "emoji": "🪞"}, {"id": "anchor_step", "name": "One step from a square", "emoji": "⚓"}, {"id": "halve_double", "name": "Halve and double", "emoji": "⚖️"}, {"id": "factor_regroup", "name": "Regroup the factors", "emoji": "🧱"}, {"id": "finger_six_ten", "name": "Two-hand finger trick (6 – 10)", "emoji": "🤲"}], "add": [{"id": "leftright", "name": "Left to Right", "emoji": "➡️"}, {"id": "bonds", "name": "Number Bonds", "emoji": "🔟"}, {"id": "bigger", "name": "Bigger Number First", "emoji": "🔢"}, {"id": "counton", "name": "Count On", "emoji": "👆"}, {"id": "doubles", "name": "Doubles", "emoji": "👯"}, {"id": "neardoubles", "name": "Near Doubles", "emoji": "✨"}, {"id": "maketen", "name": "Make Ten", "emoji": "🎯"}, {"id": "spottens", "name": "Spot the Tens", "emoji": "🔍"}, {"id": "roundadjust", "name": "Round and Adjust", "emoji": "🔄"}, {"id": "givetake", "name": "Give and Take", "emoji": "🤝"}, {"id": "add9", "name": "Add 9 and 99", "emoji": "9️⃣"}], "sub": [{"id": "takeaway", "name": "Take Away in Parts", "emoji": "➖"}, {"id": "countback", "name": "Count Back", "emoji": "👇"}, {"id": "countup", "name": "Count Up", "emoji": "🪜"}, {"id": "bridgedown", "name": "Bridge Down", "emoji": "🌉"}, {"id": "thinkadd", "name": "Think Addition", "emoji": "🔄"}, {"id": "roundadjust", "name": "Round and Adjust", "emoji": "⤴️"}, {"id": "samediff", "name": "Same Difference", "emoji": "⚖️"}, {"id": "subfrom100", "name": "Subtract from 100", "emoji": "💯"}, {"id": "sub9", "name": "Subtract 9 and 99", "emoji": "9️⃣"}], "div": [{"id": "inverse", "name": "Times Tables Backwards", "emoji": "↩️"}, {"id": "div10", "name": "÷ 10, 100, 1000", "emoji": "🔟"}, {"id": "rule2510", "name": "The 2, 5, 10 Test", "emoji": "👀"}, {"id": "rule39", "name": "Digit Sum for 3 and 9", "emoji": "➕"}, {"id": "div4", "name": "÷ 4 = Halve Twice", "emoji": "✂️"}, {"id": "div8", "name": "÷ 8 = Halve Three Times", "emoji": "✂️✂️"}, {"id": "div5", "name": "÷ 5 = Double then ÷ 10", "emoji": "⚡"}, {"id": "rule48", "name": "Last Two for 4, Last Three for 8", "emoji": "🔎"}, {"id": "simplify", "name": "Halve Both First", "emoji": "⚖️"}, {"id": "chunk", "name": "Split the Dividend", "emoji": "🧩"}, {"id": "leftright", "name": "Front-End First", "emoji": "➡️"}, {"id": "partial", "name": "Subtract Friendly Chunks", "emoji": "🪜"}, {"id": "estimate", "name": "Round to Estimate", "emoji": "≈"}, {"id": "rule11", "name": "The 11 Test", "emoji": "1️⃣1️⃣"}, {"id": "rule7", "name": "The 7 Trick", "emoji": "7️⃣"}], "frac": [{"id": "samebottom", "name": "Same Bottom → Add the Tops", "emoji": "➕"}, {"id": "memorise", "name": "Magic Fraction Facts", "emoji": "✨"}, {"id": "fracof", "name": "Fraction of a Number", "emoji": "🔪"}, {"id": "simplifyfrac", "name": "Simplify by Halving", "emoji": "⚖️"}, {"id": "slashzeros", "name": "Slash the Zeros", "emoji": "/0"}, {"id": "benchmark", "name": "Compare to One Half", "emoji": "½"}, {"id": "crossmult", "name": "Cross-Multiply to Compare", "emoji": "❌"}, {"id": "cancelmul", "name": "Cancel Before Multiplying", "emoji": "❎"}, {"id": "kcf", "name": "Keep, Change, Flip", "emoji": "🔄"}, {"id": "butterfly", "name": "Butterfly Method", "emoji": "🦋"}, {"id": "commondenom", "name": "Spot the Easy Common Bottom", "emoji": "👀"}, {"id": "fractopct", "name": "Fraction → Percent", "emoji": "％"}], "pct": [{"id": "find10", "name": "10% — Shift the Decimal", "emoji": "🔟"}, {"id": "find1", "name": "1% — Shift TWICE", "emoji": "1️⃣"}, {"id": "pctfrac", "name": "% ↔ Fraction Magic", "emoji": "🔮"}, {"id": "build", "name": "Build from 10, 5 and 1", "emoji": "🧱"}, {"id": "halfdouble", "name": "Halve and Double", "emoji": "🔁"}, {"id": "swap", "name": "Swap the Numbers", "emoji": "🔀"}, {"id": "isofov", "name": "\"Is over Of\"", "emoji": "➗"}, {"id": "multiplier", "name": "Multiplier Method (+% or −%)", "emoji": "×"}, {"id": "chain", "name": "Chain Two %s with Multipliers", "emoji": "⛓️"}, {"id": "reverse", "name": "Reverse Percentages", "emoji": "⏪"}, {"id": "tips", "name": "Tip Combos", "emoji": "🍽️"}, {"id": "fracpct", "name": "Use a Fraction for Tidy %s", "emoji": "🍰"}]};
+    function trickRows(uu) {
+      var sections = [['tt', '✖️ Times tables'], ['add', '➕ Addition'], ['sub', '➖ Subtraction'],
+                      ['div', '➗ Division'], ['frac', '🍕 Fractions'], ['pct', '💯 Percentages']];
+      var stores = { tt: uu.learn || {} };
+      var ml = uu.mathLearn || {};
+      ['add', 'sub', 'div', 'frac', 'pct'].forEach(function (op) { stores[op] = ml[op] || {}; });
+      return sections.map(function (sec) {
+        var key = sec[0], list = TRICK_DEX[key] || [];
+        var chips = '', doneN = 0, nextShown = false;
+        list.forEach(function (t) {
+          var rec = stores[key][t.id] || {};
+          if (rec.done) {
+            doneN++;
+            chips += '<span class="trickchip done">' + esc(t.emoji) + ' ' + esc(t.name) + ' ✓</span>';
+          } else if (!nextShown) {
+            nextShown = true;
+            var n = Math.min(rec.correct || 0, 10);
+            chips += (rec.watched || n > 0)
+              ? '<span class="trickchip prog">✏️ ' + esc(t.emoji) + ' ' + esc(t.name) + ' · ' + n + '/10</span>'
+              : '<span class="trickchip next">🔒 Next up: ' + esc(t.emoji) + ' ' + esc(t.name) + '</span>';
+          }
+        });
+        if (list.length && doneN === list.length) chips += '<span class="trickchip all">🏆 All learned!</span>';
+        return '<div class="statrow"><span>' + sec[1] + '</span><b>' + doneN + ' / ' + list.length + ' learned</b></div>' +
+          '<div class="trickchips">' + chips + '</div>';
+      }).join('');
+    }
+
     /* last 14 days */
     var dayKeys = [];
     for (var i = 13; i >= 0; i--) {
@@ -509,6 +546,7 @@ var APP_LABELS = { maths:'🔢 Maths', spell:'🪄 Spelling', flags:'🏳️ Fla
           '<div class="statrow"><span>Lightning best</span><b>' + ((u.lightning && u.lightning.best) || 0) + '</b></div>' +
           '<div class="statrow"><span>Points earned all-time</span><b>' + (u.pointsEarned || 0) + '</b></div>' +
         '</div>' +
+        '<div class="card" style="grid-column:1/-1;"><h2 style="margin-top:0;">🎓 Mental maths tricks learned</h2>' + trickRows(u) + '</div>' +
         '<div class="card"><h2 style="margin-top:0;">🎁 Rewards redeemed</h2>' + buys + '</div>' +
       '</div>';
     document.getElementById('backBtn').addEventListener('click', backFn || renderHome);

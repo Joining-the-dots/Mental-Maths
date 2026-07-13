@@ -4738,6 +4738,7 @@ function updatePointsDisplay() {
   if (el) el.textContent = pts;
   const sb = document.getElementById('shopBalance');
   if (sb) sb.textContent = pts;
+  try { if (typeof window.slBonusChipSync === 'function') window.slBonusChipSync(); } catch (e) {}
 }
 
 /* Record that a trick has been seen. Returns true if this is the first time
@@ -29269,5 +29270,116 @@ var SPELL_BANKS = {
 })();
 </script>
 
+<style>
+  @keyframes slPlaneFly { 0% { transform: translateX(-70vw); } 100% { transform: translateX(160vw); } }
+  #slBonusPlane { position: fixed; top: 11vh; left: 0; z-index: 9500; cursor: pointer;
+    display: flex; align-items: center; animation: slPlaneFly 12s linear infinite;
+    filter: drop-shadow(0 5px 10px rgba(0,0,0,0.22)); user-select: none; -webkit-user-select: none; }
+  #slBonusPlane .sl-plane-banner { background: #fff7d6; border: 2px solid #e8b93c; color: #7a5b00;
+    font-weight: 800; font-size: 14px; padding: 7px 12px; border-radius: 8px; white-space: nowrap;
+    box-shadow: 0 3px 8px rgba(0,0,0,0.12); }
+  #slBonusPlane .sl-plane-rope { width: 16px; height: 2px; background: #a8b0bd; }
+  #slBonusPlane .sl-plane { font-size: 34px; }
+</style>
+<script>
+/* One-time bonus drop for Joshua — flown in as promised. The plane keeps
+   circling every pass until he taps Accept; the flag then rides his cloud
+   blob so it never comes back. */
+(function () {
+  'use strict';
+  var PROMO = 'planePromised20260712';
+
+  window.slBonusChipSync = function () {
+    try {
+      var u = (typeof currentUser === 'function') ? currentUser() : null;
+      var pill = document.getElementById('pointsPill');
+      if (!pill) return;
+      var chip = document.getElementById('slBonusChip');
+      var n = (u && u.bonusDrops && u.bonusDrops.count) ? u.bonusDrops.count : 0;
+      if (!n) { if (chip) chip.remove(); return; }
+      if (!chip) {
+        chip = document.createElement('span');
+        chip.id = 'slBonusChip';
+        chip.className = 'points-pill';
+        chip.title = 'Bonus drops accepted';
+        pill.parentNode.insertBefore(chip, pill.nextSibling);
+      }
+      chip.textContent = '🪂 ' + n + ' bonus drop' + (n > 1 ? 's' : '');
+    } catch (e) {}
+  };
+
+  function eligible() {
+    try {
+      var cs = window.cloudState;
+      if (!cs || !cs.doc || cs.doc.usernameLower !== 'joshua' || cs.doc.familyCode !== 'LION78') return null;
+      var u = (typeof currentUser === 'function') ? currentUser() : null;
+      if (!u || cs.boundName !== u.name) return null;
+      if (u.bonusDrops && u.bonusDrops[PROMO]) return null;
+      return u;
+    } catch (e) { return null; }
+  }
+
+  var plane = null, popup = null, timer = null;
+  function cleanup() {
+    if (plane) { try { plane.remove(); } catch (e) {} plane = null; }
+    if (popup) { try { popup.remove(); } catch (e) {} popup = null; }
+  }
+  function accept() {
+    var u = eligible();
+    cleanup();
+    if (!u) return;
+    if (!u.bonusDrops || typeof u.bonusDrops !== 'object') u.bonusDrops = { count: 0 };
+    u.bonusDrops.count = (u.bonusDrops.count || 0) + 1;
+    u.bonusDrops[PROMO] = true;
+    u.bonusDrops.last = new Date().toISOString();
+    if (timer) { clearInterval(timer); timer = null; }
+    try { awardPoints(10); } catch (e) {}
+    try { playSfx('fanfare'); } catch (e) {}
+    try { popConfetti(); setTimeout(popConfetti, 400); } catch (e) {}
+    window.slBonusChipSync();
+  }
+  function showPopup() {
+    if (popup) return;
+    if (plane) plane.style.animationPlayState = 'paused';
+    popup = document.createElement('div');
+    popup.style.cssText = 'position:fixed;inset:0;z-index:10000;background:rgba(30,25,60,0.6);display:flex;align-items:center;justify-content:center;padding:16px;';
+    popup.innerHTML =
+      '<div style="background:#fff;border-radius:18px;box-shadow:0 18px 60px rgba(0,0,0,0.35);max-width:400px;width:100%;text-align:center;padding:26px 22px;">' +
+        '<div style="font-size:60px;">🪂</div>' +
+        '<h2 style="margin:6px 0 2px;font-family:\'Baloo 2\', sans-serif;">BONUS DROP</h2>' +
+        '<div style="font-weight:800;color:#6c5ce7;">As promised, Joshua!</div>' +
+        '<div style="margin:12px 0 4px;font-size:26px;font-weight:800;color:#ff9f43;">+10 ⭐</div>' +
+        '<button class="btn btn-primary" style="margin-top:12px;" type="button">🎁 Accept</button>' +
+      '</div>';
+    document.body.appendChild(popup);
+    popup.querySelector('button').addEventListener('click', accept);
+  }
+  function launchPlane() {
+    if (plane) return;
+    plane = document.createElement('div');
+    plane.id = 'slBonusPlane';
+    plane.innerHTML =
+      '<span class="sl-plane-banner">🎁 BONUS DROP AS PROMISED — tap to accept!</span>' +
+      '<span class="sl-plane-rope"></span>' +
+      '<span class="sl-plane">✈️</span>';
+    plane.addEventListener('click', showPopup);
+    document.body.appendChild(plane);
+  }
+
+  /* the cloud identity arrives asynchronously after boot — keep watching
+     for a while; the offer simply returns on the next refresh if unclaimed */
+  var checks = 0;
+  timer = setInterval(function () {
+    checks++;
+    if (checks > 200) { clearInterval(timer); timer = null; return; }
+    window.slBonusChipSync();
+    if (popup) return;
+    var u = eligible();
+    if (u && !plane) launchPlane();
+    else if (!u && plane) cleanup();   /* switched to another player */
+  }, 3000);
+  setTimeout(window.slBonusChipSync, 800);
+})();
+</script>
 </body>
 </html>

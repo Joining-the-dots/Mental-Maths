@@ -28014,8 +28014,7 @@ var SPELL_BANKS = {
     { key:'y12', name:'Year 1–2',  emoji:'🐣' },
     { key:'y34', name:'Year 3–4',  emoji:'🦉' },
     { key:'y56', name:'Year 5–6',  emoji:'🦅' },
-    { key:'fun', name:'Fun pack',  emoji:'🎉' },
-    { key:'custom', name:'My school list', emoji:'🏫' }
+    { key:'fun', name:'Fun pack',  emoji:'🎉' }
   ];
   var RANKS = [
     [0,   'Apprentice ✨'], [10, 'Initiate 🪄'], [25, 'Conjurer 🎩'],
@@ -28034,6 +28033,7 @@ var SPELL_BANKS = {
     if (!u.spell || typeof u.spell !== 'object') u.spell = {};
     var sp = u.spell;
     if (!sp.band) sp.band = 'y34';
+    if (sp.band === 'custom') sp.band = 'y34';   /* school-list mode removed */
     if (!sp.right || typeof sp.right !== 'object') sp.right = {};    /* word -> times right */
     if (!sp.wrong || typeof sp.wrong !== 'object') sp.wrong = {};    /* word -> times wrong */
     if (!sp.rightDays || typeof sp.rightDays !== 'object') sp.rightDays = {}; /* word -> [YYYY-MM-DD] unpeeked-right days */
@@ -28221,9 +28221,6 @@ var SPELL_BANKS = {
         '<button class="sp-mode" data-mode="book" style="border-top-color:#ff9f43;">' +
           '<div class="sp-mode-emoji">📖</div><div class="sp-mode-title">Spellbook</div>' +
           '<div class="sp-mode-desc">Browse every word: hear it, see the tricky part, learn the syllable chant.</div></button>' +
-        '<button class="sp-mode" data-mode="custom" style="border-top-color:#00b4d8;">' +
-          '<div class="sp-mode-emoji">🏫</div><div class="sp-mode-title">My School List</div>' +
-          '<div class="sp-mode-desc">Type in this week’s school spellings and quest on exactly those words.</div></button>' +
       '</div>' +
       '<div class="sp-stats">' +
         '<div class="sp-stat"><b>' + sp.cast + '</b><span>spells cast</span></div>' +

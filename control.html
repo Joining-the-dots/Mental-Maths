@@ -60,6 +60,14 @@
     box-shadow: 0 3px 10px rgba(0,0,0,0.25); pointer-events: none; }
   .daybars .daybar:first-child:hover::after { left: 0; transform: none; }
   .daybars .daybar:last-child:hover::after { left: auto; right: 0; transform: none; }
+  .spellrow { display: flex; align-items: center; gap: 8px; padding: 5px 0; border-bottom: 1px dashed #edf0f5; flex-wrap: wrap; }
+  .spellrow .w { font-weight: 800; min-width: 110px; }
+  .spellrow .marks { display: flex; gap: 3px; flex-wrap: wrap; }
+  .spellmark { font-size: 12px; font-weight: 800; width: 20px; height: 20px; border-radius: 5px;
+    display: inline-flex; align-items: center; justify-content: center; }
+  .spellmark.ok { background: #e5f6ea; color: #1e7d3f; }
+  .spellmark.no { background: #fdeaea; color: #c0392b; }
+  .spellrow .tot { margin-left: auto; font-size: 12px; color: var(--ink-soft); font-weight: 700; white-space: nowrap; }
   .trickchips { display: flex; flex-wrap: wrap; gap: 5px; margin: 4px 0 12px; }
   .trickchip { font-size: 11.5px; font-weight: 700; padding: 3px 9px; border-radius: 999px;
     background: #eef1f6; color: #4a5568; }
@@ -490,6 +498,46 @@ var APP_LABELS = { maths:'🔢 Maths', spell:'🪄 Spelling', flags:'🏳️ Fla
       }).join('');
     }
 
+    /* spelling attempt log */
+    function spellRows(uu) {
+      var sp = uu.spell || {};
+      var right = sp.right || {}, wrong = sp.wrong || {}, att = sp.attempts || {};
+      var days = sp.rightDays || {}, legacy = sp.masteredLegacy || {};
+      var words = {};
+      Object.keys(right).forEach(function (w) { words[w] = 1; });
+      Object.keys(wrong).forEach(function (w) { words[w] = 1; });
+      Object.keys(att).forEach(function (w) { words[w] = 1; });
+      var list = Object.keys(words);
+      if (!list.length) return '<div class="empty">No spelling attempts yet.</div>';
+      function lastDate(w) {
+        var L = att[w];
+        return L && L.length ? L[L.length - 1].d : '';
+      }
+      list.sort(function (a, b) {
+        var d = lastDate(b).localeCompare(lastDate(a));
+        return d !== 0 ? d : a.localeCompare(b);
+      });
+      var html = '<div class="muted" style="font-size:12px;margin-bottom:6px;">Most recent first · ✓/✗ per attempt (👀 = peeked) · mastered = right on 3 different days</div>';
+      list.slice(0, 250).forEach(function (w) {
+        var L = att[w] || [];
+        var marks = L.map(function (a) {
+          return '<span class="spellmark ' + (a.ok ? 'ok' : 'no') + '" title="' + esc(a.d) + (a.p ? ' (peeked)' : '') + '">' +
+            (a.ok ? '✓' : '✗') + (a.p ? '👀' : '') + '</span>';
+        }).join('');
+        var r = right[w] || 0, x = wrong[w] || 0;
+        var tries = r + x;
+        var extra = tries > L.length ? ' (' + (tries - L.length) + ' earlier)' : '';
+        var dcount = (days[w] || []).length;
+        var mastered = legacy[w] || dcount >= 3;
+        var mBadge = mastered ? ' · <span style="color:#b8860b;">🏅 mastered</span>' : (dcount ? ' · ' + dcount + '/3 days' : '');
+        html += '<div class="spellrow"><span class="w">' + esc(w) + '</span>' +
+          '<span class="marks">' + (marks || '<span class="muted" style="font-size:11px;">before tracking</span>') + '</span>' +
+          '<span class="tot">' + tries + ' tries · ' + r + '✓ ' + x + '✗' + extra + mBadge + '</span></div>';
+      });
+      if (list.length > 250) html += '<div class="muted" style="font-size:12px;margin-top:6px;">…and ' + (list.length - 250) + ' more words.</div>';
+      return html;
+    }
+
     /* last 14 days */
     var dayKeys = [];
     for (var i = 13; i >= 0; i--) {
@@ -547,6 +595,7 @@ var APP_LABELS = { maths:'🔢 Maths', spell:'🪄 Spelling', flags:'🏳️ Fla
           '<div class="statrow"><span>Points earned all-time</span><b>' + (u.pointsEarned || 0) + '</b></div>' +
         '</div>' +
         '<div class="card" style="grid-column:1/-1;"><h2 style="margin-top:0;">🎓 Mental maths tricks learned</h2>' + trickRows(u) + '</div>' +
+        '<div class="card" style="grid-column:1/-1;"><h2 style="margin-top:0;">🪄 Spelling — every word tried</h2>' + spellRows(u) + '</div>' +
         '<div class="card"><h2 style="margin-top:0;">🎁 Rewards redeemed</h2>' + buys + '</div>' +
       '</div>';
     document.getElementById('backBtn').addEventListener('click', backFn || renderHome);

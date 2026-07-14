@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover" />
-<title>Conway Family Learning Lab — Live V4.8</title>
+<title>Conway Family Learning Lab — Live V4.9</title>
 
 <!-- PWA -->
 <link rel="manifest" href="manifest.json">
@@ -2916,7 +2916,7 @@ function slWakeRelease() {
   <div class="brand">
     <span class="logo">🧪</span>
     Conway Family Learning Lab
-    <span style="font-family: 'Fredoka', sans-serif; font-size: 13px; font-weight: 600; color: var(--ink-soft); -webkit-text-fill-color: var(--ink-soft); background: var(--neutral); padding: 2px 8px; border-radius: 999px; margin-left: 6px; letter-spacing: 0.5px;">Live V4.8</span>
+    <span style="font-family: 'Fredoka', sans-serif; font-size: 13px; font-weight: 600; color: var(--ink-soft); -webkit-text-fill-color: var(--ink-soft); background: var(--neutral); padding: 2px 8px; border-radius: 999px; margin-left: 6px; letter-spacing: 0.5px;">Live V4.9</span>
   </div>
 
   <button class="user-pill" id="userPill" title="Switch player">
@@ -28024,7 +28024,7 @@ var SPELL_BANKS = {
     [50,  'Enchanter 🌟'], [90, 'Sorcerer 🔮'], [140, 'Wizard 🧙'],
     [200, 'Grand Wizard 👑'], [280, 'Archmage 🐉'], [365, 'Spellmaster Supreme 🏆']
   ];
-  var MASTER_AT = 3;          /* right 3 times (not necessarily consecutive sessions) = mastered */
+  var MASTER_AT = 3;          /* right (without peeking) on 3 DIFFERENT days = mastered */
   var QUEST_LEN = 10, POTION_LEN = 8, BOSS_HP = 8;
 
   function sfx(k) { try { if (typeof playSfx === 'function') playSfx(k); } catch (e) {} }
@@ -28038,6 +28038,14 @@ var SPELL_BANKS = {
     if (!sp.band) sp.band = 'y34';
     if (!sp.right || typeof sp.right !== 'object') sp.right = {};    /* word -> times right */
     if (!sp.wrong || typeof sp.wrong !== 'object') sp.wrong = {};    /* word -> times wrong */
+    if (!sp.rightDays || typeof sp.rightDays !== 'object') sp.rightDays = {}; /* word -> [YYYY-MM-DD] unpeeked-right days */
+    if (!sp.attempts || typeof sp.attempts !== 'object') sp.attempts = {};    /* word -> [{d,ok,p}] last 12 */
+    if (!sp.masteredLegacy || typeof sp.masteredLegacy !== 'object') {
+      /* one-time snapshot (V4.9): words mastered under the old
+         3-rights-total rule stay mastered; no bonus re-fires for them */
+      sp.masteredLegacy = {};
+      for (var lw in sp.right) if (sp.right[lw] >= 3) sp.masteredLegacy[lw] = 1;
+    }
     if (!Array.isArray(sp.custom)) sp.custom = [];                   /* [{word, sentence}] */
     if (typeof sp.cast !== 'number') sp.cast = 0;
     if (typeof sp.bossWins !== 'number') sp.bossWins = 0;
@@ -28053,9 +28061,19 @@ var SPELL_BANKS = {
     }
     return SPELL_BANKS[key] || [];
   }
+  function slSpellToday() {
+    var d = new Date();
+    return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
+  }
+  function slSpellLog(sp, word, ok, peeked) {
+    var L = sp.attempts[word] = sp.attempts[word] || [];
+    L.push({ d: slSpellToday(), ok: ok ? 1 : 0, p: peeked ? 1 : 0 });
+    if (L.length > 12) L.shift();
+  }
   function masteredCount() {
-    var sp = spU(), n = 0;
-    for (var w in sp.right) if (sp.right[w] >= MASTER_AT) n++;
+    var sp = spU(), n = 0, seen = {};
+    for (var w in sp.masteredLegacy) { seen[w] = 1; n++; }
+    for (var w2 in sp.rightDays) if (!seen[w2] && sp.rightDays[w2].length >= MASTER_AT) n++;
     return n;
   }
   function rankOf(n) {
@@ -28066,7 +28084,10 @@ var SPELL_BANKS = {
     }
     return { name: r, next: next };
   }
-  function isMastered(w) { return (spU().right[w] || 0) >= MASTER_AT; }
+  function isMastered(w) {
+    var sp = spU();
+    return !!sp.masteredLegacy[w] || (sp.rightDays[w] || []).length >= MASTER_AT;
+  }
 
   /* ---------- speech ---------- */
   var spVoice = null;
@@ -28141,9 +28162,9 @@ var SPELL_BANKS = {
     var tricky = [], fresh = [], learning = [], mastered = [];
     pool.forEach(function (w) {
       var r = sp.right[w.word] || 0, x = sp.wrong[w.word] || 0;
-      if (x > r && r < MASTER_AT) tricky.push(w);
+      if (x > r && !isMastered(w.word)) tricky.push(w);
       else if (r === 0 && x === 0) fresh.push(w);
-      else if (r < MASTER_AT) learning.push(w);
+      else if (!isMastered(w.word)) learning.push(w);
       else mastered.push(w);
     });
     function shuf(a) {
@@ -28217,9 +28238,9 @@ var SPELL_BANKS = {
           '<span style="background:#e5f6ea;color:#1e7d3f;padding:4px 10px;border-radius:999px;">✨ First try right · +2 ⭐</span>' +
           '<span style="background:#eef1f6;color:#4a5568;padding:4px 10px;border-radius:999px;">🔁 Right after retries · +1 ⭐</span>' +
           '<span style="background:#e3f4ec;color:#177245;padding:4px 10px;border-radius:999px;">🧪 Potion word · +2 ⭐</span>' +
-          '<span style="background:#fff3d9;color:#8a6100;padding:4px 10px;border-radius:999px;">🏅 Word mastered (3 right answers) · +5 ⭐ bonus</span>' +
+          '<span style="background:#fff3d9;color:#8a6100;padding:4px 10px;border-radius:999px;">🏅 Word mastered (right on 3 different days) · +3 ⭐ bonus</span>' +
           '<span style="background:#ffe9f2;color:#c02466;padding:4px 10px;border-radius:999px;">🐉 Boss beaten · +25 ⭐</span>' +
-          '<span style="background:#ecebfb;color:#5a4fd0;padding:4px 10px;border-radius:999px;">👀 Peeking never loses points</span>' +
+          '<span style="background:#ecebfb;color:#5a4fd0;padding:4px 10px;border-radius:999px;">👀 Peek and it still casts — but pays 0 ⭐ for that word</span>' +
         '</div>' +
       '</div>' +
       '<div id="spExtra"></div>';
@@ -28403,21 +28424,30 @@ var SPELL_BANKS = {
       sp.right[w.word] = (sp.right[w.word] || 0) + 1;
       g.streak += 1;
       var firstTry = g.tries === 0;
-      /* Live V4.8: 2 ⭐ first try, 1 ⭐ after retries, 2 ⭐ potion words —
-         and peeking never costs points */
-      var pts = g.mode === 'potion' ? 2 : (firstTry ? 2 : 1);
+      /* Live V4.9: peeking pays 0 for that word (and the day doesn't count
+         towards mastery) — otherwise 2 first try, 1 after retries, 2 for
+         potion words. Mastery = right on 3 different days, +3 bonus. */
+      var pts = g.peeked ? 0 : (g.mode === 'potion' ? 2 : (firstTry ? 2 : 1));
       var bonus = '';
-      if (sp.right[w.word] === MASTER_AT) {
-        pts += 5;
-        bonus = ' 🏅 WORD MASTERED +5';
-        try { if (typeof popConfetti === 'function') popConfetti(); } catch (e) {}
+      slSpellLog(sp, w.word, true, g.peeked);
+      if (!g.peeked) {
+        var dk = slSpellToday();
+        var days = sp.rightDays[w.word] = sp.rightDays[w.word] || [];
+        if (days.indexOf(dk) < 0) days.push(dk);
+        if (!sp.masteredLegacy[w.word] && days.length === MASTER_AT) {
+          pts += 3;
+          bonus = ' 🏅 WORD MASTERED +3';
+          try { if (typeof popConfetti === 'function') popConfetti(); } catch (e) {}
+        }
       }
-      try { if (typeof awardPoints === 'function') awardPoints(pts); } catch (e) {}
+      if (pts > 0) { try { if (typeof awardPoints === 'function') awardPoints(pts); } catch (e) {} }
       sfx('correct');
       document.getElementById('spWordBig').innerHTML = highlightWord(w);
       document.getElementById('spDiff').innerHTML = letterDiff(guess, w.word);
       document.getElementById('spFeedback').innerHTML =
-        '<span style="color:#1e9e54;">✨ The spell casts! +' + pts + ' ⭐' + bonus + '</span>';
+        pts > 0
+          ? '<span style="color:#1e9e54;">✨ The spell casts! +' + pts + ' ⭐' + bonus + '</span>'
+          : '<span style="color:#1e9e54;">✨ The spell casts! <span style="color:#8a6100;">👀 peeked — 0 ⭐ for this word</span></span>';
       if (g.mode === 'boss') {
         g.bossHp -= 1;
         var face = document.getElementById('spBossFace');
@@ -28429,6 +28459,7 @@ var SPELL_BANKS = {
       toNext(true);
     } else {
       sp.wrong[w.word] = (sp.wrong[w.word] || 0) + 1;
+      slSpellLog(sp, w.word, false, g.peeked);
       g.streak = 0;
       g.tries += 1;
       sfx('wrong');
@@ -29194,6 +29225,11 @@ var SPELL_BANKS = {
       if (c.onepct && c.onepct.asked && Object.keys(c.onepct.asked).length > 1400) c.onepct.asked = {};
       if (c.shop && Array.isArray(c.shop.redeemed) && c.shop.redeemed.length > 120) {
         c.shop.redeemed = c.shop.redeemed.slice(-120);
+      }
+      if (c.spell && c.spell.attempts) {
+        for (var aw in c.spell.attempts) {
+          if (c.spell.attempts[aw].length > 6) c.spell.attempts[aw] = c.spell.attempts[aw].slice(-6);
+        }
       }
       if (c.daily) {
         var dk = Object.keys(c.daily).sort();
@@ -30120,6 +30156,114 @@ var SPELL_BANKS = {
     if (a.done) { award(a.ch, a.u); return; }
     if (!a.ch._dismissed) showBanner(a.ch);
   }, 5000);
+})();
+</script>
+<script>
+/* One-day event (13 Jul 2026): 10-minute DOUBLE POINTS on the Spelling
+   tab for Joshua and Mia. Notice on load -> OK starts a corner countdown
+   -> spelling points earned in the window are tallied -> paid AGAIN at
+   the end with a congratulations popup. Survives reloads mid-window. */
+(function () {
+  'use strict';
+  var RUSH = { key: 'spellRush20260714', date: '2026-07-14', mins: 10, users: ['joshua', 'mia'], family: 'LION78' };
+  function todayKey() {
+    var d = new Date();
+    return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
+  }
+  function eligibleUser() {
+    try {
+      var cs = window.cloudState;
+      if (!cs || !cs.doc || RUSH.users.indexOf(cs.doc.usernameLower) < 0 || cs.doc.familyCode !== RUSH.family) return null;
+      var u = (typeof currentUser === 'function') ? currentUser() : null;
+      if (!u || cs.boundName !== u.name) return null;
+      return u;
+    } catch (e) { return null; }
+  }
+  /* tally spelling-tab points earned during the window */
+  var baseAward = null;
+  function ensureWrap() {
+    if (baseAward || typeof window.awardPoints !== 'function') return;
+    baseAward = window.awardPoints;
+    window.awardPoints = function (n) {
+      try {
+        var u = eligibleUser();
+        var st = u && u[RUSH.key];
+        if (u && st && st.startedAt && !st.done && Date.now() - st.startedAt < RUSH.mins * 60000 &&
+            n > 0 && typeof getActiveApp === 'function' && getActiveApp() === 'spell') {
+          st.tally = (st.tally || 0) + n;
+        }
+      } catch (e) {}
+      return baseAward.apply(this, arguments);
+    };
+  }
+  var chip = null, offered = false;
+  function dropChip() { if (chip) { try { chip.remove(); } catch (e) {} chip = null; } }
+  function fmt(ms) {
+    var t = Math.max(0, Math.ceil(ms / 1000));
+    return Math.floor(t / 60) + ':' + ('0' + (t % 60)).slice(-2);
+  }
+  function showChip(st) {
+    if (!chip) {
+      chip = document.createElement('div');
+      chip.style.cssText = 'position:fixed;bottom:14px;right:14px;z-index:9600;background:linear-gradient(135deg,#6c5ce7,#00b4d8);color:#fff;font-weight:800;font-size:14px;padding:9px 14px;border-radius:999px;box-shadow:0 6px 20px rgba(0,0,0,0.3);';
+      document.body.appendChild(chip);
+    }
+    chip.textContent = '⚡ 2× spelling · ' + fmt(st.startedAt + RUSH.mins * 60000 - Date.now()) + ' · banked ' + (st.tally || 0) + ' ⭐';
+  }
+  function centrePopup(html) {
+    var d = document.createElement('div');
+    d.style.cssText = 'position:fixed;inset:0;z-index:10002;background:rgba(30,25,60,0.6);display:flex;align-items:center;justify-content:center;padding:16px;';
+    d.innerHTML = '<div style="background:#fff;border-radius:18px;box-shadow:0 18px 60px rgba(0,0,0,0.35);max-width:430px;width:100%;text-align:center;padding:26px 22px;">' + html + '</div>';
+    document.body.appendChild(d);
+    return d;
+  }
+  function offer(u) {
+    offered = true;
+    var d = centrePopup(
+      '<div style="font-size:60px;">⚡</div>' +
+      '<h2 style="margin:6px 0 2px;font-family:\'Baloo 2\', sans-serif;">DOUBLE POINTS!</h2>' +
+      '<div style="font-weight:700;line-height:1.5;">For the next TEN MINUTES, any points you earn on the <b>🪄 Spelling tab</b> will be <b>DOUBLED</b> at the end of the ten minutes.</div>' +
+      '<button class="btn btn-primary" style="margin-top:14px;" type="button">OK — start the clock! ⏱️</button>');
+    d.querySelector('button').addEventListener('click', function () {
+      try { d.remove(); } catch (e) {}
+      u[RUSH.key] = { startedAt: Date.now(), tally: 0 };
+      try { if (typeof saveState === 'function') saveState(); } catch (e) {}
+      try { if (typeof setActiveApp === 'function') setActiveApp('spell'); } catch (e) {}
+    });
+  }
+  function payout(u, st) {
+    st.done = true;
+    st.bonus = st.tally || 0;
+    dropChip();
+    if (st.bonus > 0 && baseAward) { try { baseAward(st.bonus); } catch (e) {} }
+    try { if (typeof saveState === 'function') saveState(); } catch (e) {}
+    if (st.bonus > 0) {
+      try { playSfx('fanfare'); } catch (e) {}
+      try { popConfetti(); setTimeout(popConfetti, 400); } catch (e) {}
+    }
+    var d = centrePopup(
+      '<div style="font-size:60px;">🎉</div>' +
+      '<h2 style="margin:6px 0 2px;font-family:\'Baloo 2\', sans-serif;">CONGRATULATIONS!</h2>' +
+      (st.bonus > 0
+        ? '<div style="font-weight:700;">Your ten minutes are up — you earned <b>' + st.bonus + ' ⭐</b> spelling, so you get</div>' +
+          '<div style="margin:10px 0 4px;font-size:28px;font-weight:800;color:#ff9f43;">+' + st.bonus + ' ⭐ BONUS</div>'
+        : '<div style="font-weight:700;">The ten minutes are up — no spelling points this time, so no bonus. Next time!</div>') +
+      '<button class="btn btn-primary" style="margin-top:12px;" type="button">Brilliant!</button>');
+    d.querySelector('button').addEventListener('click', function () { try { d.remove(); } catch (e) {} });
+  }
+  setInterval(function () {
+    ensureWrap();
+    var u = eligibleUser();
+    if (!u) { dropChip(); return; }
+    var st = u[RUSH.key];
+    if (!st) {
+      if (todayKey() === RUSH.date && !offered) offer(u);
+      return;
+    }
+    if (st.done) { dropChip(); return; }
+    if (Date.now() - st.startedAt >= RUSH.mins * 60000) { payout(u, st); return; }
+    showChip(st);
+  }, 1000);
 })();
 </script>
 </body>

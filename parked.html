@@ -28209,6 +28209,17 @@ var SPELL_BANKS = {
         '<div class="sp-stat"><b>' + m + ' / ' + (total + sp.custom.length) + '</b><span>mastered</span></div>' +
         '<div class="sp-stat"><b>' + sp.bossWins + '</b><span>bosses beaten</span></div>' +
       '</div>' +
+      '<div class="sp-points" style="background:#fff;border-radius:var(--radius);box-shadow:var(--shadow);padding:12px 16px;margin-top:12px;">' +
+        '<div style="font-weight:800;margin-bottom:6px;">⭐ How the points work</div>' +
+        '<div style="display:flex;flex-wrap:wrap;gap:6px;font-size:12.5px;font-weight:700;">' +
+          '<span style="background:#e5f6ea;color:#1e7d3f;padding:4px 10px;border-radius:999px;">✨ First try right · +2 ⭐</span>' +
+          '<span style="background:#eef1f6;color:#4a5568;padding:4px 10px;border-radius:999px;">🔁 Right after retries · +1 ⭐</span>' +
+          '<span style="background:#e3f4ec;color:#177245;padding:4px 10px;border-radius:999px;">🧪 Potion word · +2 ⭐</span>' +
+          '<span style="background:#fff3d9;color:#8a6100;padding:4px 10px;border-radius:999px;">🏅 Word mastered (3 right answers) · +5 ⭐ bonus</span>' +
+          '<span style="background:#ffe9f2;color:#c02466;padding:4px 10px;border-radius:999px;">🐉 Boss beaten · +25 ⭐</span>' +
+          '<span style="background:#ecebfb;color:#5a4fd0;padding:4px 10px;border-radius:999px;">👀 Peeking never loses points</span>' +
+        '</div>' +
+      '</div>' +
       '<div id="spExtra"></div>';
 
     view.querySelectorAll('.sp-band').forEach(function (b) {
@@ -28390,8 +28401,9 @@ var SPELL_BANKS = {
       sp.right[w.word] = (sp.right[w.word] || 0) + 1;
       g.streak += 1;
       var firstTry = g.tries === 0;
-      var pts = g.mode === 'potion' ? 2 : (firstTry ? 3 : 1);
-      if (g.peeked && pts > 1) pts -= 1;
+      /* Live V4.8: 2 ⭐ first try, 1 ⭐ after retries, 2 ⭐ potion words —
+         and peeking never costs points */
+      var pts = g.mode === 'potion' ? 2 : (firstTry ? 2 : 1);
       var bonus = '';
       if (sp.right[w.word] === MASTER_AT) {
         pts += 5;

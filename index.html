@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover" />
-<title>Conway Family Learning Lab — Live V4.10</title>
+<title>Conway Family Learning Lab — Live V4.11</title>
 
 <!-- PWA -->
 <link rel="manifest" href="manifest.json">
@@ -2916,7 +2916,7 @@ function slWakeRelease() {
   <div class="brand">
     <span class="logo">🧪</span>
     Conway Family Learning Lab
-    <span style="font-family: 'Fredoka', sans-serif; font-size: 13px; font-weight: 600; color: var(--ink-soft); -webkit-text-fill-color: var(--ink-soft); background: var(--neutral); padding: 2px 8px; border-radius: 999px; margin-left: 6px; letter-spacing: 0.5px;">Live V4.10</span>
+    <span style="font-family: 'Fredoka', sans-serif; font-size: 13px; font-weight: 600; color: var(--ink-soft); -webkit-text-fill-color: var(--ink-soft); background: var(--neutral); padding: 2px 8px; border-radius: 999px; margin-left: 6px; letter-spacing: 0.5px;">Live V4.11</span>
   </div>
 
   <button class="user-pill" id="userPill" title="Switch player">
@@ -28418,7 +28418,9 @@ var SPELL_BANKS = {
     }
 
     if (right) {
-      sp.right[w.word] = (sp.right[w.word] || 0) + 1;
+      /* V4.11: a peeked spelling is copying, not spelling — it doesn't
+         count as a correct in the record */
+      if (!g.peeked) sp.right[w.word] = (sp.right[w.word] || 0) + 1;
       g.streak += 1;
       var firstTry = g.tries === 0;
       /* Live V4.9: peeking pays 0 for that word (and the day doesn't count
@@ -28444,7 +28446,7 @@ var SPELL_BANKS = {
       document.getElementById('spFeedback').innerHTML =
         pts > 0
           ? '<span style="color:#1e9e54;">✨ The spell casts! +' + pts + ' ⭐' + bonus + '</span>'
-          : '<span style="color:#1e9e54;">✨ The spell casts! <span style="color:#8a6100;">👀 peeked — 0 ⭐ for this word</span></span>';
+          : '<span style="color:#1e9e54;">✨ The spell casts! <span style="color:#8a6100;">👀 peeked — no points and it doesn’t count. It’ll come back to try for real!</span></span>';
       if (g.mode === 'boss') {
         g.bossHp -= 1;
         var face = document.getElementById('spBossFace');

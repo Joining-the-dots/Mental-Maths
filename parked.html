@@ -28416,7 +28416,9 @@ var SPELL_BANKS = {
     }
 
     if (right) {
-      sp.right[w.word] = (sp.right[w.word] || 0) + 1;
+      /* V4.11: a peeked spelling is copying, not spelling — it doesn't
+         count as a correct in the record */
+      if (!g.peeked) sp.right[w.word] = (sp.right[w.word] || 0) + 1;
       g.streak += 1;
       var firstTry = g.tries === 0;
       /* Live V4.9: peeking pays 0 for that word (and the day doesn't count
@@ -28442,7 +28444,7 @@ var SPELL_BANKS = {
       document.getElementById('spFeedback').innerHTML =
         pts > 0
           ? '<span style="color:#1e9e54;">✨ The spell casts! +' + pts + ' ⭐' + bonus + '</span>'
-          : '<span style="color:#1e9e54;">✨ The spell casts! <span style="color:#8a6100;">👀 peeked — 0 ⭐ for this word</span></span>';
+          : '<span style="color:#1e9e54;">✨ The spell casts! <span style="color:#8a6100;">👀 peeked — no points and it doesn’t count. It’ll come back to try for real!</span></span>';
       if (g.mode === 'boss') {
         g.bossHp -= 1;
         var face = document.getElementById('spBossFace');

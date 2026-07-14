@@ -328,17 +328,23 @@ var APP_LABELS = { maths:'🔢 Maths', spell:'🪄 Spelling', flags:'🏳️ Fla
       h += '</div>';
     });
     if (cloud.isAdmin && guests.length) {
-      h += '<h2>👤 Guests — playing without an account</h2><div class="users">';
-      guests.forEach(function (d) {
-        var u = d.state || {};
-        h += '<div class="ucard" data-uid="' + esc(d._uid) + '" style="border-top-color:#b9c0cc;">' +
-          '<span class="av">' + esc(u.avatar || '⚪') + '</span>' +
-          '<div class="nm">' + esc(d.username) + ' <span class="pill">guest</span></div>' +
-          '<div class="meta">⏱️ ' + fmtSecs(totalSecs(u)) + ' active total<br>' +
-          '⭐ ' + (u.points || 0) + ' points<br>' +
-          '📅 last synced ' + fmtDate(d.updatedAtIso) + '</div></div>';
-      });
-      h += '</div>';
+      /* passers-by under 5 minutes of play are noise — hide them */
+      var realGuests = guests.filter(function (d) { return totalSecs(d.state || {}) >= 300; });
+      var hiddenGuests = guests.length - realGuests.length;
+      if (realGuests.length || hiddenGuests) {
+        h += '<h2>👤 Guests — playing without an account</h2><div class="users">';
+        realGuests.forEach(function (d) {
+          var u = d.state || {};
+          h += '<div class="ucard" data-uid="' + esc(d._uid) + '" style="border-top-color:#b9c0cc;">' +
+            '<span class="av">' + esc(u.avatar || '⚪') + '</span>' +
+            '<div class="nm">' + esc(d.username) + ' <span class="pill">guest</span></div>' +
+            '<div class="meta">⏱️ ' + fmtSecs(totalSecs(u)) + ' active total<br>' +
+            '⭐ ' + (u.points || 0) + ' points<br>' +
+            '📅 last synced ' + fmtDate(d.updatedAtIso) + '</div></div>';
+        });
+        h += '</div>';
+        if (hiddenGuests) h += '<p class="muted" style="margin-top:6px;">…plus ' + hiddenGuests + ' guest visit' + (hiddenGuests > 1 ? 's' : '') + ' under 5 minutes, hidden.</p>';
+      }
     }
     host.innerHTML = h;
 
@@ -415,9 +421,13 @@ var APP_LABELS = { maths:'🔢 Maths', spell:'🪄 Spelling', flags:'🏳️ Fla
     h += '<h2>👤 Players</h2>';
     if (!names.length) h += '<div class="card empty">No players yet on this device.</div>';
     h += '<div class="users">';
+    var shortGuest = 0;
     names.forEach(function (n) {
       var u = st.users[n];
       var g = u.usage || {};
+      /* the throwaway Guest profile only earns a card after 5 minutes of
+         real play — named players always show */
+      if (n === 'Guest' && totalSecs(u) < 300) { shortGuest++; return; }
       h += '<div class="ucard" data-user="' + esc(n) + '">' +
         '<span class="av">' + esc(u.avatar || '😀') + '</span>' +
         '<div class="nm">' + esc(n) + '</div>' +
@@ -428,6 +438,7 @@ var APP_LABELS = { maths:'🔢 Maths', spell:'🪄 Spelling', flags:'🏳️ Fla
           '🔁 ' + (g.sessions || 0) + ' sessions</div></div>';
     });
     h += '</div>';
+    if (shortGuest) h += '<p class="muted" style="margin-top:6px;">…the Guest profile is hidden until it has 5 minutes of play.</p>';
     host.innerHTML = h;
 
     host.querySelectorAll('#pendingCard .btn-act').forEach(function (b) {

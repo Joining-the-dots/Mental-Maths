@@ -2943,7 +2943,7 @@ function slWakeRelease() {
   <button class="app-tab" data-app="flags" style="display:none;">🏳️ Flags</button>
   <button class="app-tab active" data-app="palace">🧠 Memory Madness</button>
   <button class="app-tab" data-app="mysteries" style="display:none;">🔍 Mysteries</button>
-  <button class="app-tab" data-app="people" style="display:none;">🤝 People Skills</button>
+  <button class="app-tab" data-app="people">🤝 People Skills</button>
   <button class="app-tab" data-app="onepct" style="display:none;">🏆 The 1% Challenge</button>
   <button class="app-tab" data-app="story">✍️ Story</button>
   <button class="app-tab" data-app="chess">♟️ Chess</button>
@@ -8373,8 +8373,8 @@ function flagsTotal() { return (window.COUNTRIES || []).length; }
 function getActiveApp() {
   try {
     let a = localStorage.getItem('ttq_activeAppParked') || 'palace';
-    // PARKED build: only these three sections are available here.
-    if (a !== 'palace' && a !== 'story' && a !== 'chess') a = 'palace';
+    // PARKED build: only these sections are available here.
+    if (a !== 'palace' && a !== 'story' && a !== 'chess' && a !== 'people') a = 'palace';
     return a;
   } catch (e) { return 'palace'; }
 }

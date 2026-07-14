@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover" />
-<title>Conway Family Learning Lab — Live V4.15</title>
+<title>Conway Family Learning Lab — Live V4.16</title>
 
 <!-- PWA -->
 <link rel="manifest" href="manifest.json">
@@ -2916,7 +2916,7 @@ function slWakeRelease() {
   <div class="brand">
     <span class="logo">🧪</span>
     Conway Family Learning Lab
-    <span style="font-family: 'Fredoka', sans-serif; font-size: 13px; font-weight: 600; color: var(--ink-soft); -webkit-text-fill-color: var(--ink-soft); background: var(--neutral); padding: 2px 8px; border-radius: 999px; margin-left: 6px; letter-spacing: 0.5px;">Live V4.15</span>
+    <span style="font-family: 'Fredoka', sans-serif; font-size: 13px; font-weight: 600; color: var(--ink-soft); -webkit-text-fill-color: var(--ink-soft); background: var(--neutral); padding: 2px 8px; border-radius: 999px; margin-left: 6px; letter-spacing: 0.5px;">Live V4.16</span>
   </div>
 
   <button class="user-pill" id="userPill" title="Switch player">
@@ -2944,7 +2944,9 @@ function slWakeRelease() {
        the wiring below still finds them. -->
   <button class="app-tab" data-app="palace" style="display:none;">🧠 Memory Madness</button>
   <button class="app-tab" data-app="mysteries">🔍 Mysteries</button>
-  <button class="app-tab" data-app="people">🤝 People Skills</button>
+  <!-- V4.16: People Skills parked in parked.html for rework, like
+       Memory Madness / Story / Chess -->
+  <button class="app-tab" data-app="people" style="display:none;">🤝 People Skills</button>
   <button class="app-tab" data-app="onepct">🏆 The 1% Challenge</button>
   <button class="app-tab" data-app="story" style="display:none;">✍️ Story</button>
   <button class="app-tab" data-app="chess" style="display:none;">♟️ Chess</button>
@@ -8376,7 +8378,7 @@ function getActiveApp() {
     let a = localStorage.getItem('ttq_activeApp') || 'maths';
     if (a === 'tt' || a === 'problems') a = 'maths';   // migrate legacy values
     // V48: palace/story/chess are parked in parked.html — never restore into them here.
-    if (a === 'palace' || a === 'story' || a === 'chess') a = 'maths';
+    if (a === 'palace' || a === 'story' || a === 'chess' || a === 'people') a = 'maths';
     return a;
   } catch (e) { return 'maths'; }
 }

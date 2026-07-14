@@ -28115,9 +28115,10 @@ var SPELL_BANKS = {
   /* V48.2: if the family has recorded audio/words/<word>.mp3 (or .m4a),
      play that instead of the robot voice. Results are cached per word. */
   var spAudioCache = {};
-  function playWordFile(word) {
+  function playWordFile(word, variant) {
+    /* variant '.s' = the word-sentence-word recording for "In a sentence" */
     return new Promise(function (resolve) {
-      var key = word.toLowerCase();
+      var key = word.toLowerCase() + (variant || '');
       if (spAudioCache[key] === false) { resolve(false); return; }
       if (spAudioCache[key]) {
         try { spAudioCache[key].currentTime = 0; spAudioCache[key].play(); } catch (e) {}
@@ -28144,7 +28145,9 @@ var SPELL_BANKS = {
     playWordFile(w.word).then(function (ok) { if (!ok) say(w.word, 0.8); });
   }
   function saySentence(w) {
-    playWordFile(w.word).then(function (ok) {
+    /* prefer the family's word-sentence-word recording; otherwise the
+       robot voice reads the full pattern */
+    playWordFile(w.word, '.s').then(function (ok) {
       if (!ok) say(w.sentence ? (w.word + '. ' + w.sentence + '. ' + w.word + '.') : (w.word + '. ' + w.word + '.'), 0.9);
     });
   }

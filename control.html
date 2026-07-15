@@ -363,13 +363,20 @@ var APP_LABELS = { maths:'🔢 Maths', spell:'🪄 Spelling', flags:'🏳️ Fla
       /* passers-by under 5 minutes of play are noise — hide them */
       var realGuests = guests.filter(function (d) { return totalSecs(d.state || {}) >= 300; });
       var hiddenGuests = guests.length - realGuests.length;
+      /* a guest whose name matches a real account is probably that child
+         playing signed out — flag it so it isn't read as a new visitor */
+      var namedLower = {};
+      cloud.docs.forEach(function (d) { if (!d.anon && d.usernameLower) namedLower[d.usernameLower] = 1; });
       if (realGuests.length || hiddenGuests) {
         h += '<h2>👤 Guests — playing without an account</h2><div class="users">';
         realGuests.forEach(function (d) {
           var u = d.state || {};
+          var pill = namedLower[(d.usernameLower || '').toLowerCase()]
+            ? '<span class="pill warnpill">⚠ signed out of their account?</span>'
+            : '<span class="pill">guest</span>';
           h += '<div class="ucard" data-uid="' + esc(d._uid) + '" style="border-top-color:#b9c0cc;">' +
             '<span class="av">' + esc(u.avatar || '⚪') + '</span>' +
-            '<div class="nm">' + esc(d.username) + ' <span class="pill">guest</span></div>' +
+            '<div class="nm">' + esc(d.username) + ' ' + pill + '</div>' +
             '<div class="meta">⏱️ ' + fmtSecs(totalSecs(u)) + ' active total<br>' +
             '⭐ ' + (u.points || 0) + ' points<br>' +
             '📅 last synced ' + fmtDate(d.updatedAtIso) + '</div></div>';

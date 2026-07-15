@@ -4695,6 +4695,33 @@ function migrateUser(u) {
       }
     } catch (e) {}
   }
+  /* One-time (15 Jul 2026): Joshua changed his mind about his shop
+     purchase. His points were already restored by the earlier balance fix,
+     so this ONLY cancels the redemption record (no points are added) —
+     the most recent big redemption is marked cancelled + actioned so it
+     leaves the parent's waiting list. */
+  if (!u.refund20260715) {
+    try {
+      var _cs3 = window.cloudState;
+      if (_cs3 && _cs3.doc && _cs3.doc.usernameLower === 'joshua' &&
+          _cs3.doc.familyCode === 'LION78' && _cs3.boundName === u.name &&
+          u.shop && Array.isArray(u.shop.redeemed)) {
+        var _cand = null;
+        u.shop.redeemed.forEach(function (r) {
+          if (r && !r.cancelled && (r.cost || 0) >= 2000) {
+            if (!_cand || String(r.date || '') > String(_cand.date || '')) _cand = r;
+          }
+        });
+        if (_cand) {
+          _cand.cancelled = true;
+          _cand.actioned = true;
+          _cand.actionedAt = new Date().toISOString();
+          if (String(_cand.name).indexOf('↩️') !== 0) _cand.name = '↩️ Cancelled: ' + _cand.name;
+          u.refund20260715 = { cancelled: _cand.name, cost: _cand.cost, at: new Date().toISOString() };
+        }
+      }
+    } catch (e) {}
+  }
   if (!u.tricks)     u.tricks = {};
   if (!u.trickMastery) u.trickMastery = {};
   if (!u.lightning)  u.lightning = { best: 0, lastPlayed: null };
@@ -7957,11 +7984,17 @@ document.getElementById('bootstrap12Btn').addEventListener('click', () => {
   alert('📨 Request sent! Ask your grown-up to open the Control Centre.');
 });
 document.getElementById('userClose').addEventListener('click', () => {
+  if (userOverlay.classList.contains('sl-mandatory')) {
+    const inp = document.getElementById('newUserName');
+    if (inp) { inp.focus(); inp.placeholder = 'Type your name to start!'; }
+    return;
+  }
   userOverlay.classList.remove('show');
   refreshCells();
 });
 userOverlay.addEventListener('click', (e) => {
   if (e.target === userOverlay) {
+    if (userOverlay.classList.contains('sl-mandatory')) return;
     userOverlay.classList.remove('show');
     refreshCells();
   }
@@ -15832,7 +15865,7 @@ function pbRandom() {
    treats take a couple of good sessions and the £129 epics are the long
    game. Items with a verified product photo carry img; the rest show
    their emoji. */
-const SHOP_CATALOG_VERSION = 9;
+const SHOP_CATALOG_VERSION = 10;
 const SHOP_CATS = {"lego": "🧱 LEGO", "games": "🎲 Games", "plush": "🧸 Plush", "cards": "🎴 Cards & collect", "action": "🦸 Action & play", "racing": "🏁 Slot racing", "popmart": "🎁 Pop Mart", "craft": "🎨 Craft", "science": "🔬 Science", "sports": "⚽ Sports & outdoor", "tech": "📱 Tech", "pocket": "🍬 Pocket money"};
 const SHOP_DEFAULT_ITEMS = [
   {"id": "sv3_000", "icon": "🖐️", "name": "Sticky Hands Party Toys 12 Pack", "cost": 750, "price": "£2.99", "cat": "pocket", "url": "https://www.amazon.co.uk/s?k=sticky+hands+party+bag+toys"},
@@ -16211,7 +16244,17 @@ const SHOP_DEFAULT_ITEMS = [
   {"id": "sv3_373", "icon": "🖼️", "name": "Acrylic Display Case for Labubu / Pop Mart", "cost": 3350, "price": "£14.99", "cat": "popmart", "url": "https://www.amazon.co.uk/dp/B0DY5ZN25N", "img": "https://m.media-amazon.com/images/I/81je7BLWrSL._AC_UL320_.jpg"},
   {"id": "sv3_374", "icon": "🖼️", "name": "360° Rotating 2-Tier Figure Display Case", "cost": 4500, "price": "£19.99", "cat": "popmart", "url": "https://www.amazon.co.uk/dp/B0GG1RPT9S", "img": "https://m.media-amazon.com/images/I/81ue1UTUFVL._AC_UL320_.jpg"},
   {"id": "sv3_375", "icon": "🖼️", "name": "Rotating Blind-Box Figures Display Case", "cost": 3600, "price": "£15.99", "cat": "popmart", "url": "https://www.amazon.co.uk/dp/B0FPWZLKTJ", "img": "https://m.media-amazon.com/images/I/71GEmEZYZ+L._AC_UL320_.jpg"},
-  {"id": "sv3_376", "icon": "💡", "name": "Light-Up Acrylic Figure Display Case", "cost": 3350, "price": "£14.99", "cat": "popmart", "url": "https://www.amazon.co.uk/dp/B0FHW24G26", "img": "https://m.media-amazon.com/images/I/61MAAVjuraL._AC_UL320_.jpg"}
+  {"id": "sv3_376", "icon": "💡", "name": "Light-Up Acrylic Figure Display Case", "cost": 3350, "price": "£14.99", "cat": "popmart", "url": "https://www.amazon.co.uk/dp/B0FHW24G26", "img": "https://m.media-amazon.com/images/I/61MAAVjuraL._AC_UL320_.jpg"},
+  {"id": "sv3_377", "icon": "🌌", "name": "LED Star & Galaxy Projector with Remote", "cost": 4500, "price": "£19.99", "cat": "tech", "url": "https://www.amazon.co.uk/dp/B09FF9VMYJ", "img": "https://m.media-amazon.com/images/I/71HDYIYvk4L._AC_UL320_.jpg"},
+  {"id": "sv3_378", "icon": "⭐", "name": "CAIYUE Star & Nebula Night Projector", "cost": 4050, "price": "£17.99", "cat": "tech", "url": "https://www.amazon.co.uk/dp/B08K8F39GT", "img": "https://m.media-amazon.com/images/I/71RrwaVDUQL._AC_UL320_.jpg"},
+  {"id": "sv3_379", "icon": "🚀", "name": "Astronaut Galaxy Projector Night Light", "cost": 3350, "price": "£14.99", "cat": "tech", "url": "https://www.amazon.co.uk/dp/B0CQT7NRQ2", "img": "https://m.media-amazon.com/images/I/81ovhRUhveL._AC_UL320_.jpg"},
+  {"id": "sv3_380", "icon": "🌊", "name": "3-in-1 Galaxy, Nebula & Ocean Projector", "cost": 2100, "price": "£9.37", "cat": "tech", "url": "https://www.amazon.co.uk/dp/B0FF1MQGQ7", "img": "https://m.media-amazon.com/images/I/81ykZxuJODL._AC_UL320_.jpg"},
+  {"id": "sv3_381", "icon": "🌸", "name": "Star Projector Sensory Night Light (Pink)", "cost": 2650, "price": "£11.88", "cat": "tech", "url": "https://www.amazon.co.uk/dp/B09JGD5ZK6", "img": "https://m.media-amazon.com/images/I/71LA-cqXmlL._AC_UL320_.jpg"},
+  {"id": "sv3_382", "icon": "🌠", "name": "Star Night Light Projector (Blue)", "cost": 3050, "price": "£13.59", "cat": "tech", "url": "https://www.amazon.co.uk/dp/B09JGBQ2RT", "img": "https://m.media-amazon.com/images/I/61G3iV6nN3L._AC_UL320_.jpg"},
+  {"id": "sv3_383", "icon": "✨", "name": "HD 5D Holographic Galaxy Lamp", "cost": 3900, "price": "£17.29", "cat": "tech", "url": "https://www.amazon.co.uk/dp/B0H7BCX2NG", "img": "https://m.media-amazon.com/images/I/71FFTH+PPgL._AC_UL320_.jpg"},
+  {"id": "sv3_384", "icon": "🦖", "name": "Dinosaur Projector Night Light", "cost": 5400, "price": "£23.99", "cat": "tech", "url": "https://www.amazon.co.uk/dp/B0DWMFS9PD", "img": "https://m.media-amazon.com/images/I/81xxfozEyVL._AC_UL320_.jpg"},
+  {"id": "sv3_385", "icon": "🦄", "name": "Unicorn Star Projector Night Light", "cost": 6000, "price": "£26.59", "cat": "tech", "url": "https://www.amazon.co.uk/dp/B09KTY7GN3", "img": "https://m.media-amazon.com/images/I/81FEIgB9qnL._AC_UL320_.jpg"},
+  {"id": "sv3_386", "icon": "🎵", "name": "Galaxy Projector with White Noise & Bluetooth", "cost": 6750, "price": "£29.99", "cat": "tech", "url": "https://www.amazon.co.uk/dp/B0D14XZD75", "img": "https://m.media-amazon.com/images/I/71HYeJJyopL._AC_UL320_.jpg"}
 ];
 function shopGetItems() {
   const u = ensureUser(); migrateUser(u);
@@ -28875,6 +28918,34 @@ var SPELL_BANKS = {
       if (!sessionCounted[u.name]) { sessionCounted[u.name] = true; g.sessions += 1; }
       sinceSave += secs;
       if (sinceSave >= 60) { sinceSave = 0; if (typeof saveState === 'function') saveState(); }
+      /* V4.21: gentle one-time signup nudge after 15 active minutes
+         without an account */
+      try {
+        if (!localStorage.getItem('slSignupNudged')) {
+          var cs = window.cloudState;
+          if (!(cs && cs.doc)) {
+            var tot = 0, ap2 = g.apps || {};
+            for (var kk in ap2) tot += ap2[kk];
+            if (tot >= 900) {
+              localStorage.setItem('slSignupNudged', '1');
+              var host2 = document.getElementById('slToasts');
+              if (host2) {
+                var t2 = document.createElement('div');
+                t2.className = 'sl-toast';
+                t2.innerHTML = '<div class="sl-toast-title">💾 Enjoying it?</div>' +
+                  '<div class="sl-toast-sub">Create a free account so your points and progress are saved forever — on any device.</div>' +
+                  '<button class="btn btn-primary" style="margin-top:8px;" type="button">Create my account</button>';
+                t2.querySelector('button').addEventListener('click', function () {
+                  try { t2.remove(); } catch (e) {}
+                  if (typeof window.openCloudOverlay === 'function') window.openCloudOverlay('signup');
+                });
+                host2.appendChild(t2);
+                setTimeout(function () { try { t2.remove(); } catch (e) {} }, 40000);
+              }
+            }
+          }
+        }
+      } catch (e) {}
     } catch (e) {}
   }, TICK_MS);
   window.addEventListener('beforeunload', function () {
@@ -28883,6 +28954,19 @@ var SPELL_BANKS = {
 
   /* first-run nudge: if nobody has made a real player yet, open the
      player picker so scores and rewards save to a named profile. */
+  function slEnforceNamedPlayer() {
+    var ov = document.getElementById('userOverlay');
+    if (!ov) return true;
+    var real = Object.keys(state.users || {}).filter(function (n) { return n !== 'Guest'; });
+    var mandatory = real.length === 0;
+    ov.classList.toggle('sl-mandatory', mandatory);
+    document.querySelectorAll('#userList .user-row').forEach(function (r) {
+      var nm = r.querySelector('strong');
+      if (nm && nm.textContent.trim().indexOf('Guest') === 0) r.style.display = mandatory ? 'none' : '';
+    });
+    return !mandatory;
+  }
+  window.slEnforceNamedPlayer = slEnforceNamedPlayer;
   setTimeout(function () {
     try {
       var names = Object.keys(state.users || {});
@@ -28892,9 +28976,16 @@ var SPELL_BANKS = {
         var ov = document.getElementById('userOverlay');
         if (ov) {
           ov.classList.add('show');
+          /* V4.21: naming a player is now required — keep enforcing until
+             one exists (the picker can't be dismissed before that) */
+          var mandIv = setInterval(function () {
+            if (slEnforceNamedPlayer()) { clearInterval(mandIv); return; }
+            if (!ov.classList.contains('show')) ov.classList.add('show');
+          }, 600);
+          slEnforceNamedPlayer();
           var hint = document.createElement('p');
           hint.style.cssText = 'margin:4px 0 8px;font-size:13.5px;color:#6c5ce7;font-weight:700;';
-          hint.textContent = '👋 Make your player first — your stars, points and prizes save to it!';
+          hint.textContent = '👋 Make your player first — your stars, points and prizes save to it! 💡 Tip: once you’re playing, create a free account (☁️ button) so your progress is saved on any device.';
           var modal = ov.querySelector('.modal');
           if (modal && !modal.querySelector('.first-run-hint')) {
             hint.className = 'first-run-hint';
@@ -29468,6 +29559,7 @@ var SPELL_BANKS = {
   }
 
   function afterSignIn(fbUser) {
+    try { localStorage.setItem('slHadLogin', '1'); } catch (e) {}
     cl.user = fbUser;
     if (!db) return;
     db.collection('users').doc(fbUser.uid).get().then(function (snap) {
@@ -29672,26 +29764,52 @@ var SPELL_BANKS = {
         cl.dirty = true;
         startGuestSync();
         renderBadge();
+        /* V4.21: this device used to be logged in — if it lands anonymous,
+           the player probably got signed out without noticing */
+        try {
+          if (localStorage.getItem('slHadLogin') && !window._slSignedOutToastShown) {
+            window._slSignedOutToastShown = true;
+            setTimeout(function () {
+              if (cl.doc) return;   /* a named login arrived after all */
+              var host = document.getElementById('slToasts');
+              if (!host) return;
+              var t = document.createElement('div');
+              t.className = 'sl-toast';
+              t.innerHTML = '<div class="sl-toast-title">🔑 You\u2019re signed out</div>' +
+                '<div class="sl-toast-sub">Points are only saving on this device. Tap to log back in to your account.</div>' +
+                '<button class="btn btn-primary" style="margin-top:8px;" type="button">Log back in</button>';
+              t.querySelector('button').addEventListener('click', function () {
+                try { t.remove(); } catch (e) {}
+                if (typeof window.openCloudOverlay === 'function') window.openCloudOverlay('login');
+              });
+              host.appendChild(t);
+              setTimeout(function () { try { t.remove(); } catch (e) {} }, 45000);
+            }, 3000);
+          }
+        } catch (e) {}
         return;
       }
       if (u && !cl.user) afterSignIn(u);
       if (!u) {
         cl.user = null; cl.boundName = null;
-        /* fall back to an anonymous identity so usage still reports */
+        /* fall back to an anonymous identity so usage still reports.
+           V4.21: wait WELL past login-restore time — firing early could
+           replace a restoring named session and silently log a kid out. */
         setTimeout(function () {
           try {
             if (!auth.currentUser) auth.signInAnonymously().catch(function () {});
           } catch (e) {}
-        }, 2500);
+        }, 12000);
       }
       renderBadge();
     });
-    /* first visit: no auth state at all yet */
+    /* first visit: no auth state at all yet (V4.21: long delay so a
+       restoring named session always wins) */
     setTimeout(function () {
       try {
         if (!auth.currentUser) auth.signInAnonymously().catch(function () {});
       } catch (e) {}
-    }, 4000);
+    }, 15000);
   }
 
   /* ---------- UI ---------- */
@@ -30451,5 +30569,9 @@ var SPELL_BANKS = {
   }, 1000);
 })();
 </script>
+<style>
+  #userOverlay.sl-mandatory #userClose { display: none !important; }
+  #userOverlay.sl-mandatory #bootstrap12Btn { display: none !important; }
+</style>
 </body>
 </html>

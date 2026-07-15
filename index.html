@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover" />
-<title>Conway Family Learning Lab — Live V4.18</title>
+<title>Conway Family Learning Lab — Live V4.19</title>
 
 <!-- PWA -->
 <link rel="manifest" href="manifest.json">
@@ -2916,7 +2916,7 @@ function slWakeRelease() {
   <div class="brand">
     <span class="logo">🧪</span>
     Conway Family Learning Lab
-    <span style="font-family: 'Fredoka', sans-serif; font-size: 13px; font-weight: 600; color: var(--ink-soft); -webkit-text-fill-color: var(--ink-soft); background: var(--neutral); padding: 2px 8px; border-radius: 999px; margin-left: 6px; letter-spacing: 0.5px;">Live V4.18</span>
+    <span style="font-family: 'Fredoka', sans-serif; font-size: 13px; font-weight: 600; color: var(--ink-soft); -webkit-text-fill-color: var(--ink-soft); background: var(--neutral); padding: 2px 8px; border-radius: 999px; margin-left: 6px; letter-spacing: 0.5px;">Live V4.19</span>
   </div>
 
   <button class="user-pill" id="userPill" title="Switch player">
@@ -3159,8 +3159,8 @@ function slWakeRelease() {
     </div>
     <div id="qFeedback"></div>
     <div class="modal-actions">
-      <button class="btn btn-ghost" id="qClose">Close</button>
-      <button class="btn btn-primary" id="qNext" style="display:none;">Next ➜</button>
+      <button class="btn btn-ghost" id="qClose">‹ Back to times table board</button>
+      <button class="btn btn-primary" id="qNext" style="display:none;">🎲 Random multiplication</button>
     </div>
   </div>
 </div>
@@ -7682,12 +7682,14 @@ function submitAnswer() {
 
 function pickNext() {
   // Prefer cells that are not mastered; favour recent wrongs and untried.
+  // V4.19: only pick from the board being viewed (12 / 20 / 50).
   const u = ensureUser(); migrateUser(u);
+  const N = (typeof gridMaxN === 'function') ? gridMaxN() : 12;
   const notMastered = [];
   const recentWrong = [];
   const untried = [];
-  for (let r = 1; r <= GRID_N; r++) {
-    for (let c = 1; c <= GRID_N; c++) {
+  for (let r = 1; r <= N; r++) {
+    for (let c = 1; c <= N; c++) {
       const rec = u.cells[cellKey(r,c)];
       if (!rec) { untried.push([r,c]); continue; }
       const level = masteryLevel(rec);
@@ -7699,7 +7701,7 @@ function pickNext() {
   const pool = recentWrong.length ? recentWrong
              : (untried.length ? untried : notMastered);
   if (!pool.length) {
-    return [Math.ceil(Math.random()*12), Math.ceil(Math.random()*12)];
+    return [Math.ceil(Math.random()*N), Math.ceil(Math.random()*N)];
   }
   /* respect the grid locks (just-answered + no-counting-up) when possible */
   const unlocked = pool.filter(function (p) { return !cellLockInfo(p[0], p[1]); });
@@ -7827,6 +7829,7 @@ function renderUserModal() {
       buildGrid();
       refreshCells();
       renderUserModal();
+      if (typeof slX12Sync === 'function') slX12Sync();
       if (typeof updatePointsDisplay === 'function') updatePointsDisplay();
     });
     row.querySelector('.delete').addEventListener('click', (e) => {
@@ -7885,16 +7888,76 @@ function countMastered(u) {
 
 document.getElementById('userPill').addEventListener('click', () => {
   renderUserModal();
+  slX12Sync();
   userOverlay.classList.add('show');
 });
+/* V4.19: the ×1 & ×2 button shows the player's state and toggles it.
+   Skipped is the default (boot gift); asking to practise them sends a
+   request the parent approves or declines in the Control Centre. */
+function slX12State(u) {
+  if (!u.x12 || typeof u.x12 !== 'object') u.x12 = { status: 'skipped' };
+  return u.x12;
+}
+function slX12Sync() {
+  const b = document.getElementById('bootstrap12Btn');
+  if (!b) return;
+  const u = currentUser();
+  if (!u) { b.textContent = '⏩ ×1 & ×2'; return; }
+  const st = slX12State(u).status;
+  b.textContent = st === 'enabled' ? '✅ ×1 & ×2 enabled — tap to skip them'
+    : st === 'pending' ? '⏳ ×1 & ×2 request sent — waiting for a grown-up'
+    : '⏩ ×1 & ×2 skipped — tap to ask to practise them';
+}
+window.slApplyX12 = function (u, decision) {
+  if (decision === 'approved') {
+    Object.keys(u.cells || {}).forEach(k => {
+      const lo = parseInt(k, 10);
+      if (lo === 1 || lo === 2) delete u.cells[k];
+    });
+    u.x12 = { status: 'enabled', decidedAt: new Date().toISOString() };
+  } else {
+    u.x12 = { status: 'skipped', lastDecision: 'rejected', decidedAt: new Date().toISOString() };
+  }
+  saveState();
+  try { buildGrid(); refreshCells(); } catch (e) {}
+  slX12Sync();
+  try {
+    playSfx(decision === 'approved' ? 'win' : 'wrong');
+    const host = document.getElementById('slToasts');
+    if (host) {
+      const t = document.createElement('div');
+      t.className = 'sl-toast';
+      t.innerHTML = '<div class="sl-toast-title">' + (decision === 'approved' ? '✅ Request approved!' : '❌ Not this time') + '</div><div class="sl-toast-sub"></div>';
+      t.querySelector('.sl-toast-sub').textContent = decision === 'approved'
+        ? 'The ×1 and ×2 tables are on — go practise them!'
+        : 'Your grown-up said not right now.';
+      host.appendChild(t);
+      setTimeout(() => { try { t.remove(); } catch (e) {} }, 8000);
+    }
+  } catch (e) {}
+};
 document.getElementById('bootstrap12Btn').addEventListener('click', () => {
   const u = ensureUser();
   if (!u) { alert('Pick a player first.'); return; }
-  if (!confirm(`Mark all ×1 and ×2 cells mastered for ${u.name}?`)) return;
-  bootstrap12(u);
-  renderUserModal();
-  buildGrid();
-  refreshCells();
+  const st = slX12State(u).status;
+  if (st === 'pending') {
+    if (confirm('Your request is with a grown-up.\n\nCancel the request?')) {
+      u.x12 = { status: 'skipped' };
+      saveState(); slX12Sync();
+    }
+    return;
+  }
+  if (st === 'enabled') {
+    if (!confirm('Skip the ×1 and ×2 tables again for ' + u.name + '? They will show as already done.')) return;
+    bootstrap12(u);
+    u.x12 = { status: 'skipped', decidedAt: new Date().toISOString() };
+    saveState(); renderUserModal(); slX12Sync(); buildGrid(); refreshCells();
+    return;
+  }
+  if (!confirm('Ask your grown-up to switch ON the ×1 and ×2 tables for ' + u.name + '?\n\nThey will see the request in the Control Centre.')) return;
+  u.x12 = { status: 'pending', requestedAt: new Date().toISOString(), requestedAtMs: Date.now() };
+  saveState(); slX12Sync();
+  alert('📨 Request sent! Ask your grown-up to open the Control Centre.');
 });
 document.getElementById('userClose').addEventListener('click', () => {
   userOverlay.classList.remove('show');
@@ -30034,6 +30097,16 @@ var SPELL_BANKS = {
             if (ch.type !== 'added') return;
             if (seen[id]) return;
             seen[id] = true;
+            /* ×1&×2 approvals from the Control Centre ride this channel */
+            if (d && d.kind === 'x12' && me() && d.targetUid === me().uid) {
+              try {
+                var uu = (typeof currentUser === 'function') ? currentUser() : null;
+                if (uu && uu.x12 && uu.x12.status === 'pending' && typeof window.slApplyX12 === 'function') {
+                  window.slApplyX12(uu, d.decision === 'approved' ? 'approved' : 'rejected');
+                }
+              } catch (e) {}
+              return;
+            }
             if (!d || d.status !== 'open') return;
             if (Date.now() - (d.at || 0) > CH_MAX_AGE_MS) return;
             if (me() && d.hostUid === me().uid) return;

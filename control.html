@@ -282,6 +282,21 @@ var APP_LABELS = { maths:'🔢 Maths', spell:'🪄 Spelling', flags:'🏳️ Fla
     return p.then(renderCloudHome).catch(function () {});
   }
 
+
+  /* apply an x1/x2 decision to a user state blob */
+  function applyX12(stUser, approve) {
+    if (approve) {
+      var cells = stUser.cells || {};
+      Object.keys(cells).forEach(function (k) {
+        var lo = parseInt(k, 10);
+        if (lo === 1 || lo === 2) delete cells[k];
+      });
+      stUser.x12 = { status: 'enabled', decidedAt: new Date().toISOString() };
+    } else {
+      stUser.x12 = { status: 'skipped', lastDecision: 'rejected', decidedAt: new Date().toISOString() };
+    }
+  }
+
   function renderCloudHome() {
     watchPresence();
     if (!cloudRefreshIv) cloudRefreshIv = setInterval(refreshCloudDocs, 60000);
@@ -311,6 +326,22 @@ var APP_LABELS = { maths:'🔢 Maths', spell:'🪄 Spelling', flags:'🏳️ Fla
         ' <span class="muted">· ' + (p.r.cost || 0) + ' ⭐</span></div>' +
         '<div class="when">' + fmtDate(p.r.date) + '</div>' +
         '<button class="btn-act">✓ Done</button></div>';
+    });
+    h += '</div>';
+
+    /* x1/x2 enable requests */
+    var reqs = cloud.docs.filter(function (d) {
+      return d.state && d.state.x12 && d.state.x12.status === 'pending';
+    });
+    h += '<h2>📨 Requests' + (reqs.length ? '<span class="pill warnpill">' + reqs.length + '</span>' : '') + '</h2>';
+    h += '<div class="card" id="cloudReqs">';
+    if (!reqs.length) h += '<div class="empty">No requests. ✓</div>';
+    reqs.forEach(function (d, k) {
+      h += '<div class="buyrow" data-k="' + k + '"><div class="who">' + esc(d.username) + '</div>' +
+        '<div class="what">wants to practise the <b>×1 & ×2</b> times tables (currently skipped)</div>' +
+        '<div class="when">' + fmtDate(d.state.x12.requestedAt) + '</div>' +
+        '<button class="btn-act" data-dec="yes">✓ Approve</button>' +
+        '<button class="btn-ghost" data-dec="no">✕ Not now</button></div>';
     });
     h += '</div>';
 
@@ -349,6 +380,28 @@ var APP_LABELS = { maths:'🔢 Maths', spell:'🪄 Spelling', flags:'🏳️ Fla
     }
     host.innerHTML = h;
 
+    host.querySelectorAll('#cloudReqs [data-dec]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var reqs2 = cloud.docs.filter(function (d) {
+          return d.state && d.state.x12 && d.state.x12.status === 'pending';
+        });
+        var d = reqs2[parseInt(b.closest('.buyrow').dataset.k, 10)];
+        if (!d) return;
+        var approve = b.dataset.dec === 'yes';
+        applyX12(d.state, approve);
+        var jobs = [fdb.collection('users').doc(d._uid).set(d)];
+        /* a live device picks this up within seconds via the challenge channel */
+        jobs.push(fdb.collection('challenges').add({
+          kind: 'x12', targetUid: d._uid, decision: approve ? 'approved' : 'rejected',
+          hostUid: auth.currentUser.uid, host: 'Control Centre',
+          at: Date.now(), status: 'x12'
+        }));
+        Promise.all(jobs).then(renderCloudHome).catch(function () {
+          alert('Could not save the decision — check the connection and try again.');
+          renderCloudHome();
+        });
+      });
+    });
     host.querySelectorAll('#cloudPending .btn-act').forEach(function (b) {
       b.addEventListener('click', function () {
         var p = pending[parseInt(b.closest('.buyrow').dataset.k, 10)];
@@ -419,6 +472,23 @@ var APP_LABELS = { maths:'🔢 Maths', spell:'🪄 Spelling', flags:'🏳️ Fla
     });
     h += '</div>';
 
+    /* x1/x2 enable requests on this device */
+    var reqs = names.filter(function (n) {
+      var x = st.users[n].x12;
+      return x && x.status === 'pending';
+    });
+    h += '<h2>📨 Requests' + (reqs.length ? '<span class="pill warnpill">' + reqs.length + '</span>' : '') + '</h2>';
+    h += '<div class="card" id="reqCard">';
+    if (!reqs.length) h += '<div class="empty">No requests. ✓</div>';
+    reqs.forEach(function (n) {
+      h += '<div class="buyrow" data-user="' + esc(n) + '"><div class="who">' + esc(n) + '</div>' +
+        '<div class="what">wants to practise the <b>×1 & ×2</b> times tables (currently skipped)</div>' +
+        '<div class="when">' + fmtDate(st.users[n].x12.requestedAt) + '</div>' +
+        '<button class="btn-act" data-dec="yes">✓ Approve</button>' +
+        '<button class="btn-ghost" data-dec="no">✕ Not now</button></div>';
+    });
+    h += '</div>';
+
     h += '<h2>👤 Players</h2>';
     if (!names.length) h += '<div class="card empty">No players yet on this device.</div>';
     h += '<div class="users">';
@@ -442,6 +512,18 @@ var APP_LABELS = { maths:'🔢 Maths', spell:'🪄 Spelling', flags:'🏳️ Fla
     if (shortGuest) h += '<p class="muted" style="margin-top:6px;">…the Guest profile is hidden until it has 5 minutes of play.</p>';
     host.innerHTML = h;
 
+    host.querySelectorAll('#reqCard [data-dec]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var row = b.closest('.buyrow');
+        var st2 = loadState();
+        var uu = st2.users[row.dataset.user];
+        if (uu && uu.x12 && uu.x12.status === 'pending') {
+          applyX12(uu, b.dataset.dec === 'yes');
+          saveState(st2);
+        }
+        renderHome();
+      });
+    });
     host.querySelectorAll('#pendingCard .btn-act').forEach(function (b) {
       b.addEventListener('click', function () {
         var row = b.closest('.buyrow');

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover" />
-<title>Conway Family Learning Lab — Live V4.21</title>
+<title>Conway Family Learning Lab — Live V4.22</title>
 
 <!-- PWA -->
 <link rel="manifest" href="manifest.json">
@@ -2916,7 +2916,7 @@ function slWakeRelease() {
   <div class="brand">
     <span class="logo">🧪</span>
     Conway Family Learning Lab
-    <span style="font-family: 'Fredoka', sans-serif; font-size: 13px; font-weight: 600; color: var(--ink-soft); -webkit-text-fill-color: var(--ink-soft); background: var(--neutral); padding: 2px 8px; border-radius: 999px; margin-left: 6px; letter-spacing: 0.5px;">Live V4.21</span>
+    <span style="font-family: 'Fredoka', sans-serif; font-size: 13px; font-weight: 600; color: var(--ink-soft); -webkit-text-fill-color: var(--ink-soft); background: var(--neutral); padding: 2px 8px; border-radius: 999px; margin-left: 6px; letter-spacing: 0.5px;">Live V4.22</span>
   </div>
 
   <button class="user-pill" id="userPill" title="Switch player">
@@ -4721,6 +4721,40 @@ function migrateUser(u) {
           _cand.actionedAt = new Date().toISOString();
           if (String(_cand.name).indexOf('↩️') !== 0) _cand.name = '↩️ Cancelled: ' + _cand.name;
           u.refund20260715 = { cancelled: _cand.name, cost: _cand.cost, at: new Date().toISOString() };
+        }
+      }
+    } catch (e) {}
+  }
+  /* One-time (15 Jul 2026): refund Mia's 1,000-point bouncy balls — points
+     go BACK (she was never separately restored) and the record is
+     cancelled off the parent's waiting list. */
+  if (!u.refundMia20260715) {
+    try {
+      var _cs4 = window.cloudState;
+      if (_cs4 && _cs4.doc && _cs4.doc.usernameLower === 'mia' &&
+          _cs4.doc.familyCode === 'LION78' && _cs4.boundName === u.name &&
+          u.shop && Array.isArray(u.shop.redeemed)) {
+        var _mb = null;
+        u.shop.redeemed.forEach(function (r) {
+          if (r && !r.cancelled && /bounc/i.test(String(r.name || '')) && (r.cost || 0) === 1000) {
+            if (!_mb || String(r.date || '') > String(_mb.date || '')) _mb = r;
+          }
+        });
+        if (!_mb) {
+          /* fallback: her most recent 1,000-point redemption */
+          u.shop.redeemed.forEach(function (r) {
+            if (r && !r.cancelled && (r.cost || 0) === 1000) {
+              if (!_mb || String(r.date || '') > String(_mb.date || '')) _mb = r;
+            }
+          });
+        }
+        if (_mb) {
+          _mb.cancelled = true;
+          _mb.actioned = true;
+          _mb.actionedAt = new Date().toISOString();
+          if (String(_mb.name).indexOf('↩️') !== 0) _mb.name = '↩️ Cancelled: ' + _mb.name;
+          u.points = (u.points || 0) + 1000;
+          u.refundMia20260715 = { cancelled: _mb.name, refunded: 1000, at: new Date().toISOString() };
         }
       }
     } catch (e) {}

@@ -4722,6 +4722,40 @@ function migrateUser(u) {
       }
     } catch (e) {}
   }
+  /* One-time (15 Jul 2026): refund Mia's 1,000-point bouncy balls — points
+     go BACK (she was never separately restored) and the record is
+     cancelled off the parent's waiting list. */
+  if (!u.refundMia20260715) {
+    try {
+      var _cs4 = window.cloudState;
+      if (_cs4 && _cs4.doc && _cs4.doc.usernameLower === 'mia' &&
+          _cs4.doc.familyCode === 'LION78' && _cs4.boundName === u.name &&
+          u.shop && Array.isArray(u.shop.redeemed)) {
+        var _mb = null;
+        u.shop.redeemed.forEach(function (r) {
+          if (r && !r.cancelled && /bounc/i.test(String(r.name || '')) && (r.cost || 0) === 1000) {
+            if (!_mb || String(r.date || '') > String(_mb.date || '')) _mb = r;
+          }
+        });
+        if (!_mb) {
+          /* fallback: her most recent 1,000-point redemption */
+          u.shop.redeemed.forEach(function (r) {
+            if (r && !r.cancelled && (r.cost || 0) === 1000) {
+              if (!_mb || String(r.date || '') > String(_mb.date || '')) _mb = r;
+            }
+          });
+        }
+        if (_mb) {
+          _mb.cancelled = true;
+          _mb.actioned = true;
+          _mb.actionedAt = new Date().toISOString();
+          if (String(_mb.name).indexOf('↩️') !== 0) _mb.name = '↩️ Cancelled: ' + _mb.name;
+          u.points = (u.points || 0) + 1000;
+          u.refundMia20260715 = { cancelled: _mb.name, refunded: 1000, at: new Date().toISOString() };
+        }
+      }
+    } catch (e) {}
+  }
   if (!u.tricks)     u.tricks = {};
   if (!u.trickMastery) u.trickMastery = {};
   if (!u.lightning)  u.lightning = { best: 0, lastPlayed: null };

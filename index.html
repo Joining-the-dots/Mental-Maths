@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover" />
-<title>Conway Family Learning Lab — Live V4.19</title>
+<title>Conway Family Learning Lab — Live V4.20</title>
 
 <!-- PWA -->
 <link rel="manifest" href="manifest.json">
@@ -2916,7 +2916,7 @@ function slWakeRelease() {
   <div class="brand">
     <span class="logo">🧪</span>
     Conway Family Learning Lab
-    <span style="font-family: 'Fredoka', sans-serif; font-size: 13px; font-weight: 600; color: var(--ink-soft); -webkit-text-fill-color: var(--ink-soft); background: var(--neutral); padding: 2px 8px; border-radius: 999px; margin-left: 6px; letter-spacing: 0.5px;">Live V4.19</span>
+    <span style="font-family: 'Fredoka', sans-serif; font-size: 13px; font-weight: 600; color: var(--ink-soft); -webkit-text-fill-color: var(--ink-soft); background: var(--neutral); padding: 2px 8px; border-radius: 999px; margin-left: 6px; letter-spacing: 0.5px;">Live V4.20</span>
   </div>
 
   <button class="user-pill" id="userPill" title="Switch player">
@@ -29637,26 +29637,36 @@ var SPELL_BANKS = {
   }
   window.cloudGuestName = guestName;
   var guestSyncIv = null;
+  function guestPush(force) {
+    try {
+      if (!cl.user || !cl.user.isAnonymous || !db) return;
+      if (!force && (document.hidden || !cl.dirty)) return;
+      if (force && !cl.dirty) return;
+      var u = (typeof currentUser === 'function') ? currentUser() : null;
+      if (!u) return;
+      cl.dirty = false;
+      db.collection('users').doc(cl.user.uid).set({
+        anon: true,
+        username: guestName(),
+        usernameLower: guestName().toLowerCase(),
+        familyCode: '',
+        updatedAt: Date.now(),
+        updatedAtIso: nowIso(),
+        state: prunedState(u)
+      }).catch(function () { cl.dirty = true; });
+    } catch (e) {}
+  }
   function startGuestSync() {
     if (guestSyncIv) return;
-    guestSyncIv = setInterval(function () {
-      try {
-        if (!cl.user || !cl.user.isAnonymous || !db || document.hidden) return;
-        if (!cl.dirty) return;
-        var u = (typeof currentUser === 'function') ? currentUser() : null;
-        if (!u) return;
-        cl.dirty = false;
-        db.collection('users').doc(cl.user.uid).set({
-          anon: true,
-          username: guestName(),
-          usernameLower: guestName().toLowerCase(),
-          familyCode: '',
-          updatedAt: Date.now(),
-          updatedAtIso: nowIso(),
-          state: prunedState(u)
-        }).catch(function () { cl.dirty = true; });
-      } catch (e) {}
-    }, 90000);
+    /* V4.20: first push after ~20s so even a quick look registers on the
+       dashboard, then every 90s; also push when the tab hides/closes so
+       short visits aren't lost. */
+    setTimeout(function () { guestPush(false); }, 20000);
+    guestSyncIv = setInterval(function () { guestPush(false); }, 90000);
+    document.addEventListener('visibilitychange', function () {
+      if (document.hidden) guestPush(true);
+    });
+    window.addEventListener('pagehide', function () { guestPush(true); });
   }
   if (auth) {
     auth.onAuthStateChanged(function (u) {

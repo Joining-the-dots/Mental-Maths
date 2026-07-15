@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover" />
-<title>Conway Family Learning Lab — Live V4.17</title>
+<title>Conway Family Learning Lab — Live V4.18</title>
 
 <!-- PWA -->
 <link rel="manifest" href="manifest.json">
@@ -2916,7 +2916,7 @@ function slWakeRelease() {
   <div class="brand">
     <span class="logo">🧪</span>
     Conway Family Learning Lab
-    <span style="font-family: 'Fredoka', sans-serif; font-size: 13px; font-weight: 600; color: var(--ink-soft); -webkit-text-fill-color: var(--ink-soft); background: var(--neutral); padding: 2px 8px; border-radius: 999px; margin-left: 6px; letter-spacing: 0.5px;">Live V4.17</span>
+    <span style="font-family: 'Fredoka', sans-serif; font-size: 13px; font-weight: 600; color: var(--ink-soft); -webkit-text-fill-color: var(--ink-soft); background: var(--neutral); padding: 2px 8px; border-radius: 999px; margin-left: 6px; letter-spacing: 0.5px;">Live V4.18</span>
   </div>
 
   <button class="user-pill" id="userPill" title="Switch player">
@@ -4677,6 +4677,24 @@ function migrateUser(u) {
         });
         if (typeof bootstrap12 === 'function') bootstrap12(u);   // restore the ×1/×2 gift
         u.fix16_20260712 = true;
+      }
+    } catch (e) {}
+  }
+  /* One-time fix (15 Jul 2026): Joshua's balance showed 220 after having
+     2,970 — restore it. Applies once, to his cloud-bound record only, and
+     keeps an audit of what it found. */
+  if (!u.pointsRestore20260715) {
+    try {
+      var _cs2 = window.cloudState;
+      if (_cs2 && _cs2.doc && _cs2.doc.usernameLower === 'joshua' &&
+          _cs2.doc.familyCode === 'LION78' && _cs2.boundName === u.name &&
+          typeof u.points === 'number' && u.points < 2970) {
+        u.pointsRestore20260715 = {
+          before: u.points,
+          redeemedAtRestore: (u.shop && Array.isArray(u.shop.redeemed)) ? u.shop.redeemed.length : 0,
+          at: new Date().toISOString()
+        };
+        u.points = 2970;
       }
     } catch (e) {}
   }
@@ -15755,7 +15773,7 @@ function pbRandom() {
    treats take a couple of good sessions and the £129 epics are the long
    game. Items with a verified product photo carry img; the rest show
    their emoji. */
-const SHOP_CATALOG_VERSION = 8;
+const SHOP_CATALOG_VERSION = 9;
 const SHOP_CATS = {"lego": "🧱 LEGO", "games": "🎲 Games", "plush": "🧸 Plush", "cards": "🎴 Cards & collect", "action": "🦸 Action & play", "racing": "🏁 Slot racing", "popmart": "🎁 Pop Mart", "craft": "🎨 Craft", "science": "🔬 Science", "sports": "⚽ Sports & outdoor", "tech": "📱 Tech", "pocket": "🍬 Pocket money"};
 const SHOP_DEFAULT_ITEMS = [
   {"id": "sv3_000", "icon": "🖐️", "name": "Sticky Hands Party Toys 12 Pack", "cost": 750, "price": "£2.99", "cat": "pocket", "url": "https://www.amazon.co.uk/s?k=sticky+hands+party+bag+toys"},
@@ -16056,7 +16074,7 @@ const SHOP_DEFAULT_ITEMS = [
   {"id": "sv3_295", "icon": "🛴", "name": "Micro Maxi Deluxe LED Scooter", "cost": 28100, "price": "£124.95", "cat": "sports", "url": "https://www.amazon.co.uk/dp/B079SGB8VY", "img": "https://images-na.ssl-images-amazon.com/images/P/B079SGB8VY.01._SL300_.jpg"},
   {"id": "sv3_296", "icon": "🚛", "name": "LEGO Technic Heavy-Duty Tow Truck 42128", "cost": 28100, "price": "£124.99", "cat": "lego", "url": "https://www.amazon.co.uk/dp/B08WWPQJTN", "img": "https://images-na.ssl-images-amazon.com/images/P/B08WWPQJTN.01._SL300_.jpg"},
   {"id": "sv3_297", "icon": "🏎️", "name": "LEGO Technic Ferrari Daytona SP3 42143", "cost": 29250, "price": "£129.99", "cat": "lego", "url": "https://www.amazon.co.uk/dp/B09QFSCWD9", "img": "https://images-na.ssl-images-amazon.com/images/P/B09QFSCWD9.01._SL300_.jpg"},
-  {"id": "sv3_298", "icon": "🔥", "name": "Amazon Fire HD 8 Kids Tablet 32GB", "cost": 29250, "price": "£129.99", "cat": "tech", "url": "https://www.amazon.co.uk/s?k=fire+hd+8+kids+tablet"},,
+  {"id": "sv3_298", "icon": "🔥", "name": "Amazon Fire HD 8 Kids Tablet 32GB", "cost": 29250, "price": "£129.99", "cat": "tech", "url": "https://www.amazon.co.uk/s?k=fire+hd+8+kids+tablet"},
   {"id": "sv3_299", "icon": "🏎️", "name": "Scalextric Let's Play! Micro Race Set (Ages 3+)", "cost": 6750, "price": "£29.99", "cat": "racing", "url": "https://www.amazon.co.uk/dp/B0F1G6RW7B", "img": "https://m.media-amazon.com/images/I/71pot62DKyL._AC_UL320_.jpg"},
   {"id": "sv3_300", "icon": "🏎️", "name": "My First Scalextric Let's Play! Race Track Set", "cost": 9000, "price": "£39.97", "cat": "racing", "url": "https://www.amazon.co.uk/dp/B0FMYLXD28", "img": "https://m.media-amazon.com/images/I/81p+M0mMctL._AC_UL320_.jpg"},
   {"id": "sv3_301", "icon": "🦇", "name": "Micro Scalextric Batman vs Joker Race Set", "cost": 9650, "price": "£42.88", "cat": "racing", "url": "https://www.amazon.co.uk/dp/B084CJ412J", "img": "https://m.media-amazon.com/images/I/71s9rHnaGhL._AC_UL320_.jpg"},
@@ -16144,12 +16162,15 @@ function shopGetItems() {
     saveState();
   } else if ((u.shop.catalogVersion || 1) < SHOP_CATALOG_VERSION) {
     /* V48 migration: swap old seed catalogues for the current one, but keep
-       anything the family added themselves. */
-    const custom = u.shop.items.filter(i => !/^s[1-8]$/.test(String(i.id)) && !/^sc\d\d$/.test(String(i.id)) && !/^sv3_/.test(String(i.id)));
+       anything the family added themselves. (filter(Boolean): a null entry
+       from the V4.17 seed must not crash this.) */
+    const custom = u.shop.items.filter(Boolean).filter(i => !/^s[1-8]$/.test(String(i.id)) && !/^sc\d\d$/.test(String(i.id)) && !/^sv3_/.test(String(i.id)));
     u.shop.items = SHOP_DEFAULT_ITEMS.map(i => Object.assign({}, i)).concat(custom);
     u.shop.catalogVersion = SHOP_CATALOG_VERSION;
     saveState();
   }
+  /* never hand a null item to the renderer */
+  if (u.shop.items.some(i => !i)) u.shop.items = u.shop.items.filter(Boolean);
   return u.shop.items;
 }
 var shopFilterCat = 'all';
@@ -16191,6 +16212,9 @@ function shopRender() {
   grid.innerHTML = '';
   const filterHost = document.getElementById('shopFilters');
   if (filterHost) { filterHost.innerHTML = ''; shopRenderFilters(filterHost, u); }
+  /* a stale/unknown category (e.g. from an old cached build) must never
+     blank the shop — fall back to All */
+  if (shopFilterCat !== 'all' && !SHOP_CATS[shopFilterCat]) shopFilterCat = 'all';
   if (shopFilterCat !== 'all') items = items.filter(i => (i.cat || 'custom') === shopFilterCat);
   if (shopAfford) items = items.filter(i => (u.points || 0) >= i.cost);
   const countEl = document.getElementById('shopCount');

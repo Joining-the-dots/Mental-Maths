@@ -299,6 +299,7 @@ var APP_LABELS = { maths:'🔢 Maths', spell:'🪄 Spelling', flags:'🏳️ Fla
 
   function renderCloudHome() {
     watchPresence();
+    autoMergeGuests();
     if (!cloudRefreshIv) cloudRefreshIv = setInterval(refreshCloudDocs, 60000);
     var host = document.getElementById('content');
     var byFam = {};
@@ -378,12 +379,17 @@ var APP_LABELS = { maths:'🔢 Maths', spell:'🪄 Spelling', flags:'🏳️ Fla
         var ns = nd.state || {}, gs = d.state || {};
         var mk = ns.guestMergeAt;
         var merged = !!(mk && mk.from === d._uid && (mk.guestAt || 0) >= (d.updatedAt || 0));
+        /* the MARKER is the only truth for "recovered" — points/seconds
+           deltas can close while unique progress (spelling mastery days,
+           purchase history, grid cells) is still stranded in the copy */
+        var mergeable = !merged;
+        /* removal is only safe once the child's game has ADOPTED the
+           merge: a later write that kept the marker proves their device
+           loaded and re-pushed the merged account */
+        var adopted = merged && (nd.updatedAt || 0) > ((mk && mk.at) || 0) + 5000;
         var extraPts = Math.max(0, (gs.points || 0) - (ns.points || 0));
         var extraSecs = Math.max(0, totalSecs(gs) - totalSecs(ns));
-        var mergeable = !merged && (extraPts > 0 || extraSecs > 60);
-        var fresher = (d.updatedAt || 0) >= (nd.updatedAt || 1);
-        if (!merged && !mergeable && !fresher) return false;   /* superseded, nothing to recover */
-        guestInfo[d._uid] = { named: nd, merged: merged, mergeable: mergeable, extraPts: extraPts, extraSecs: extraSecs };
+        guestInfo[d._uid] = { named: nd, merged: merged, mergeable: mergeable, adopted: adopted, extraPts: extraPts, extraSecs: extraSecs };
         return true;
       });
       if (realGuests.length || hiddenGuests) {
@@ -405,11 +411,13 @@ var APP_LABELS = { maths:'🔢 Maths', spell:'🪄 Spelling', flags:'🏳️ Fla
             var bits = [];
             if (gi.extraPts) bits.push('<b>' + gi.extraPts + ' ⭐</b>');
             if (gi.extraSecs > 60) bits.push('<b>' + fmtSecs(gi.extraSecs) + '</b> of play');
-            h += '<div class="meta" style="margin-top:6px;">This guest copy holds ' + bits.join(' and ') +
+            h += '<div class="meta" style="margin-top:6px;">This guest copy holds ' + (bits.length ? bits.join(' and ') : 'earlier play') +
               ' that ' + esc(gi.named.username) + '’s account is missing.</div>' +
               '<button class="btn-act" data-merge="' + esc(d._uid) + '" style="margin-top:6px;">🩹 Merge into ' + esc(gi.named.username) + '’s account</button>';
-          } else if (gi && gi.merged) {
+          } else if (gi && gi.merged && gi.adopted) {
             h += '<button class="btn-ghost" data-unguest="' + esc(d._uid) + '" style="margin-top:6px;">🗑 Remove this guest copy</button>';
+          } else if (gi && gi.merged) {
+            h += '<div class="meta" style="margin-top:6px;">✓ merged — keeping this copy until their game has loaded the merged account.</div>';
           }
           h += '</div>';
         });
@@ -556,10 +564,36 @@ var APP_LABELS = { maths:'🔢 Maths', spell:'🪄 Spelling', flags:'🏳️ Fla
       });
       m.shop.redeemed.sort(function (a, b) { return (a.date || '') < (b.date || '') ? -1 : 1; });
     }
+    /* one-shot event keys (spelling rushes): never let a stale mid-window
+       copy overwrite a finished one — that would replay the payout */
+    for (var rk in n) {
+      if (/^spellRush/.test(rk) && m[rk] && n[rk] && typeof m[rk] === 'object' && typeof n[rk] === 'object') {
+        if ((n[rk].done && !m[rk].done) ||
+            (!n[rk].done && !m[rk].done && (n[rk].startedAt || 0) > (m[rk].startedAt || 0))) m[rk] = n[rk];
+      }
+    }
     /* one-off fix flags and anything else only the account has — carry it
        over so those fixes don't run a second time */
     for (var key in n) { if (!(key in m)) m[key] = n[key]; }
     return m;
+  }
+
+  function mergeGuestJob(g, nd) {
+    var merged = mergeGuestIntoNamed(nd.state || {}, g.state || {});
+    var now = Date.now();
+    merged.guestMergeAt = { at: now, from: g._uid, guestAt: g.updatedAt || 0 };
+    var body = {};
+    for (var k in nd) body[k] = nd[k];
+    body.state = merged;
+    body.updatedAt = now;
+    body.updatedAtIso = new Date(now).toISOString();
+    return fdb.collection('users').doc(nd._uid).set(body).then(function () {
+      /* only reflect the merge locally once it REALLY saved — a failed
+         write must never paint "✓ merged" or arm the remove button */
+      nd.state = merged;
+      nd.updatedAt = body.updatedAt;
+      nd.updatedAtIso = body.updatedAtIso;
+    });
   }
 
   function doGuestMerge(guestUid) {
@@ -568,15 +602,47 @@ var APP_LABELS = { maths:'🔢 Maths', spell:'🪄 Spelling', flags:'🏳️ Fla
       return !x.anon && (x.usernameLower || '') === (g.usernameLower || '').toLowerCase();
     });
     if (!g || !nd) { renderCloudHome(); return; }
-    var merged = mergeGuestIntoNamed(nd.state || {}, g.state || {});
-    merged.guestMergeAt = { at: Date.now(), from: guestUid, guestAt: g.updatedAt || 0 };
-    nd.state = merged;
-    nd.updatedAt = Date.now();
-    nd.updatedAtIso = new Date().toISOString();
-    fdb.collection('users').doc(nd._uid).set(nd).then(renderCloudHome).catch(function () {
+    mergeGuestJob(g, nd).then(renderCloudHome).catch(function () {
       alert('Could not save the merge — check the connection and try again.');
       renderCloudHome();
     });
+  }
+
+  /* V4.26: run the merge WITHOUT waiting for a click — as soon as the
+     dashboard loads with an admin login, any guest copy holding progress
+     its named account is missing gets folded in automatically. Idempotent,
+     so a device pushing over it mid-game just means it re-runs next load. */
+  var autoMergeDone = false;
+  function autoMergeGuests() {
+    if (autoMergeDone || !cloud.isAdmin) return;
+    autoMergeDone = true;
+    var namedBy = {};
+    cloud.docs.forEach(function (d) { if (!d.anon && d.usernameLower) namedBy[d.usernameLower] = d; });
+    var jobs = [];
+    cloud.docs.forEach(function (d) {
+      if (!d.anon) return;
+      if (totalSecs(d.state || {}) < 300) return;   /* passers-by — nothing worth folding in */
+      var nd = namedBy[(d.usernameLower || '').toLowerCase()];
+      if (!nd) return;
+      var mk = (nd.state || {}).guestMergeAt;
+      if (mk && mk.from === d._uid && (mk.guestAt || 0) >= (d.updatedAt || 0)) return;   /* already merged */
+      /* no points/seconds gate here: the child out-earning the stale fork
+         must not strand the copy's unique progress (mastery days, buys) */
+      jobs.push({ g: d, nd: nd });
+    });
+    if (!jobs.length) return;
+    Promise.all(jobs.map(function (j) { return mergeGuestJob(j.g, j.nd); })).then(function () {
+      mergeBanner(jobs.map(function (j) { return j.nd.username; }));
+      renderCloudHome();
+    }).catch(function () { autoMergeDone = false; });   /* retry on a later render */
+  }
+
+  function mergeBanner(names) {
+    var b = document.createElement('div');
+    b.style.cssText = 'position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:10005;background:#1f8a4c;color:#fff;font-weight:700;padding:10px 18px;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.3);max-width:92vw;';
+    b.textContent = '🩹 Recovered signed-out progress into ' + names.join(' & ') + '’s account' + (names.length > 1 ? 's' : '') + ' automatically.';
+    document.body.appendChild(b);
+    setTimeout(function () { try { b.remove(); } catch (e) {} }, 12000);
   }
 
   function removeGuestCopy(guestUid) {

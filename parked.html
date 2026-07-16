@@ -30749,6 +30749,48 @@ var SPELL_BANKS = {
   }, 1000);
 })();
 </script>
+
+<script>
+/* One-time note for Joshua (17 Jul 2026): Dad testing the message channel.
+   Shows once on his next load while signed in; OK stamps the flag onto his
+   synced profile so it never comes back. */
+(function () {
+  'use strict';
+  var KEY = 'noteTesting20260717';
+  function eligible() {
+    try {
+      var cs = window.cloudState;
+      if (!cs || !cs.doc || cs.doc.usernameLower !== 'joshua' || cs.doc.familyCode !== 'LION78') return null;
+      var u = (typeof currentUser === 'function') ? currentUser() : null;
+      if (!u || cs.boundName !== u.name || u[KEY]) return null;
+      return u;
+    } catch (e) { return null; }
+  }
+  var shown = false;
+  var iv = setInterval(function () {
+    if (shown) return;
+    var u = eligible();
+    if (!u) return;
+    shown = true;
+    clearInterval(iv);
+    var d = document.createElement('div');
+    d.style.cssText = 'position:fixed;inset:0;z-index:10002;background:rgba(30,25,60,0.6);display:flex;align-items:center;justify-content:center;padding:16px;';
+    d.innerHTML = '<div style="background:#fff;border-radius:18px;box-shadow:0 18px 60px rgba(0,0,0,0.35);max-width:430px;width:100%;text-align:center;padding:26px 22px;">' +
+      '<div style="font-size:60px;">✉️</div>' +
+      '<h2 style="margin:6px 0 2px;font-family:\'Baloo 2\', sans-serif;">Message from Dad</h2>' +
+      '<div style="font-weight:700;line-height:1.5;font-size:18px;">Testing</div>' +
+      '<button class="btn btn-primary" style="margin-top:14px;" type="button">OK 👍</button></div>';
+    document.body.appendChild(d);
+    d.querySelector('button').addEventListener('click', function () {
+      try { d.remove(); } catch (e) {}
+      try {
+        u[KEY] = { seenAt: new Date().toISOString() };
+        if (typeof saveState === 'function') saveState();
+      } catch (e) {}
+    });
+  }, 1500);
+})();
+</script>
 <style>
   @keyframes slRush3Pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.07); } }
 </style>

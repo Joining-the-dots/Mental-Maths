@@ -365,27 +365,53 @@ var APP_LABELS = { maths:'🔢 Maths', spell:'🪄 Spelling', flags:'🏳️ Fla
       var hiddenGuests = guests.length - realGuests.length;
       /* a guest whose name matches a real account is probably that child
          playing signed out — flag it so it isn't read as a new visitor.
-         Once the real account has synced MORE RECENTLY, the guest copy is
-         superseded — drop it entirely. */
-      var namedLower = {};
-      cloud.docs.forEach(function (d) { if (!d.anon && d.usernameLower) namedLower[d.usernameLower] = d.updatedAt || 1; });
+         V4.25: if the guest copy holds progress the account is missing
+         (points or play time), NEVER hide it — offer a one-click merge
+         instead. Once merged, offer clean-up. Only a guest copy with
+         nothing left to recover is dropped as superseded. */
+      var namedBy = {};
+      cloud.docs.forEach(function (d) { if (!d.anon && d.usernameLower) namedBy[d.usernameLower] = d; });
+      var guestInfo = {};   /* _uid -> { named, merged, mergeable, extraPts, extraSecs } */
       realGuests = realGuests.filter(function (d) {
-        var namedAt = namedLower[(d.usernameLower || '').toLowerCase()];
-        return !(namedAt && namedAt > (d.updatedAt || 0));
+        var nd = namedBy[(d.usernameLower || '').toLowerCase()];
+        if (!nd) return true;
+        var ns = nd.state || {}, gs = d.state || {};
+        var mk = ns.guestMergeAt;
+        var merged = !!(mk && mk.from === d._uid && (mk.guestAt || 0) >= (d.updatedAt || 0));
+        var extraPts = Math.max(0, (gs.points || 0) - (ns.points || 0));
+        var extraSecs = Math.max(0, totalSecs(gs) - totalSecs(ns));
+        var mergeable = !merged && (extraPts > 0 || extraSecs > 60);
+        var fresher = (d.updatedAt || 0) >= (nd.updatedAt || 1);
+        if (!merged && !mergeable && !fresher) return false;   /* superseded, nothing to recover */
+        guestInfo[d._uid] = { named: nd, merged: merged, mergeable: mergeable, extraPts: extraPts, extraSecs: extraSecs };
+        return true;
       });
       if (realGuests.length || hiddenGuests) {
         h += '<h2>👤 Guests — playing without an account</h2><div class="users">';
         realGuests.forEach(function (d) {
           var u = d.state || {};
-          var pill = namedLower[(d.usernameLower || '').toLowerCase()]
-            ? '<span class="pill warnpill">⚠ signed out of their account?</span>'
+          var gi = guestInfo[d._uid];
+          var pill = gi
+            ? (gi.merged ? '<span class="pill">✓ merged into ' + esc(gi.named.username) + '</span>'
+                         : '<span class="pill warnpill">⚠ signed out of their account?</span>')
             : '<span class="pill">guest</span>';
           h += '<div class="ucard" data-uid="' + esc(d._uid) + '" style="border-top-color:#b9c0cc;">' +
             '<span class="av">' + esc(u.avatar || '⚪') + '</span>' +
             '<div class="nm">' + esc(d.username) + ' ' + pill + '</div>' +
             '<div class="meta">⏱️ ' + fmtSecs(totalSecs(u)) + ' active total<br>' +
             '⭐ ' + (u.points || 0) + ' points<br>' +
-            '📅 last synced ' + fmtDate(d.updatedAtIso) + '</div></div>';
+            '📅 last synced ' + fmtDate(d.updatedAtIso) + '</div>';
+          if (gi && gi.mergeable) {
+            var bits = [];
+            if (gi.extraPts) bits.push('<b>' + gi.extraPts + ' ⭐</b>');
+            if (gi.extraSecs > 60) bits.push('<b>' + fmtSecs(gi.extraSecs) + '</b> of play');
+            h += '<div class="meta" style="margin-top:6px;">This guest copy holds ' + bits.join(' and ') +
+              ' that ' + esc(gi.named.username) + '’s account is missing.</div>' +
+              '<button class="btn-act" data-merge="' + esc(d._uid) + '" style="margin-top:6px;">🩹 Merge into ' + esc(gi.named.username) + '’s account</button>';
+          } else if (gi && gi.merged) {
+            h += '<button class="btn-ghost" data-unguest="' + esc(d._uid) + '" style="margin-top:6px;">🗑 Remove this guest copy</button>';
+          }
+          h += '</div>';
         });
         h += '</div>';
         if (hiddenGuests) h += '<p class="muted" style="margin-top:6px;">…plus ' + hiddenGuests + ' guest visit' + (hiddenGuests > 1 ? 's' : '') + ' under 5 minutes, hidden.</p>';
@@ -430,6 +456,135 @@ var APP_LABELS = { maths:'🔢 Maths', spell:'🪄 Spelling', flags:'🏳️ Fla
         if (d) renderCloudUser(d);
       });
     });
+    host.querySelectorAll('[data-merge]').forEach(function (b) {
+      b.addEventListener('click', function (ev) {
+        ev.stopPropagation();
+        b.disabled = true; b.textContent = 'Merging…';
+        doGuestMerge(b.dataset.merge);
+      });
+    });
+    host.querySelectorAll('[data-unguest]').forEach(function (b) {
+      b.addEventListener('click', function (ev) {
+        ev.stopPropagation();
+        removeGuestCopy(b.dataset.unguest);
+      });
+    });
+  }
+
+  /* ---------- guest → account merge (V4.25) ----------
+     A child who plays signed out leaves their progress in an anonymous
+     guest doc. This folds it into the real account without losing anything
+     earned on either side: counters take the larger value, day-lists union,
+     and whatever only one side has is kept. Idempotent — safe to re-run
+     (e.g. if the child's device pushed over the first merge mid-game). */
+  function mergeGuestIntoNamed(n, g) {
+    var m = JSON.parse(JSON.stringify(g));   /* guest copy is the fresher fork — start from it */
+    m.name = n.name || m.name;
+    m.points = Math.max(n.points || 0, m.points || 0);
+    m.pointsEarned = Math.max(n.pointsEarned || 0, m.pointsEarned || 0);
+    var maxMap = function (from, into) {
+      into = into || {};
+      for (var k in (from || {})) into[k] = Math.max(from[k] || 0, into[k] || 0);
+      return into;
+    };
+    /* grid cells — field-wise best of both */
+    m.cells = m.cells || {};
+    var nc = n.cells || {};
+    for (var k in nc) {
+      var a = nc[k], b = m.cells[k];
+      if (!b) { m.cells[k] = a; continue; }
+      b.attempts = Math.max(a.attempts || 0, b.attempts || 0);
+      b.correct = Math.max(a.correct || 0, b.correct || 0);
+      b.streak = Math.max(a.streak || 0, b.streak || 0);
+      if (a.bestTime != null && (b.bestTime == null || a.bestTime < b.bestTime)) b.bestTime = a.bestTime;
+      if ((a.lastAt || 0) > (b.lastAt || 0)) b.lastAt = a.lastAt;
+      if ((a.lastSeen || 0) > (b.lastSeen || 0)) b.lastSeen = a.lastSeen;
+    }
+    if (n.stats) {
+      m.stats = m.stats || {};
+      ['totalAttempts', 'totalCorrect', 'currentStreak', 'bestStreak'].forEach(function (f) {
+        m.stats[f] = Math.max(n.stats[f] || 0, m.stats[f] || 0);
+      });
+    }
+    /* screen-time — per-day larger value, never summed (same play would count twice) */
+    m.usage = m.usage || {};
+    var nu = n.usage || {};
+    m.usage.days = maxMap(nu.days, m.usage.days);
+    m.usage.apps = maxMap(nu.apps, m.usage.apps);
+    m.usage.appDays = m.usage.appDays || {};
+    for (var d3 in (nu.appDays || {})) m.usage.appDays[d3] = maxMap(nu.appDays[d3], m.usage.appDays[d3]);
+    /* spelling — counts max, mastery-day lists union, keep the longer attempt log */
+    if (n.spell) {
+      m.spell = m.spell || {};
+      var np = n.spell;
+      m.spell.right = maxMap(np.right, m.spell.right);
+      m.spell.wrong = maxMap(np.wrong, m.spell.wrong);
+      m.spell.rightDays = m.spell.rightDays || {};
+      for (var w in (np.rightDays || {})) {
+        var seen = {};
+        (m.spell.rightDays[w] || []).concat(np.rightDays[w] || []).forEach(function (x) { seen[x] = 1; });
+        m.spell.rightDays[w] = Object.keys(seen).sort();
+      }
+      m.spell.attempts = m.spell.attempts || {};
+      for (var w2 in (np.attempts || {})) {
+        if (!m.spell.attempts[w2] || m.spell.attempts[w2].length < np.attempts[w2].length) m.spell.attempts[w2] = np.attempts[w2];
+      }
+      m.spell.masteredLegacy = m.spell.masteredLegacy || {};
+      for (var w3 in (np.masteredLegacy || {})) m.spell.masteredLegacy[w3] = np.masteredLegacy[w3];
+    }
+    /* daily maps — keep both sides' days */
+    if (n.daily) {
+      m.daily = m.daily || {};
+      for (var dk in n.daily) if (!(dk in m.daily)) m.daily[dk] = n.daily[dk];
+    }
+    /* purchases: the guest list is the base; re-apply anything done on the
+       account side (a cancel rename, a "done" tick) and keep account-only buys */
+    if (n.shop && Array.isArray(n.shop.redeemed)) {
+      m.shop = m.shop || {};
+      m.shop.redeemed = m.shop.redeemed || [];
+      n.shop.redeemed.forEach(function (r) {
+        var hit = null;
+        for (var i = 0; i < m.shop.redeemed.length; i++) {
+          if (m.shop.redeemed[i].date === r.date) { hit = m.shop.redeemed[i]; break; }
+        }
+        if (hit) {
+          if (r.name !== hit.name) hit.name = r.name;     /* '↩️ Cancelled: …' */
+          if (r.actioned) { hit.actioned = true; if (r.actionedAt) hit.actionedAt = r.actionedAt; }
+        } else {
+          m.shop.redeemed.push(r);
+        }
+      });
+      m.shop.redeemed.sort(function (a, b) { return (a.date || '') < (b.date || '') ? -1 : 1; });
+    }
+    /* one-off fix flags and anything else only the account has — carry it
+       over so those fixes don't run a second time */
+    for (var key in n) { if (!(key in m)) m[key] = n[key]; }
+    return m;
+  }
+
+  function doGuestMerge(guestUid) {
+    var g = cloud.docs.find(function (x) { return x._uid === guestUid; });
+    var nd = g && cloud.docs.find(function (x) {
+      return !x.anon && (x.usernameLower || '') === (g.usernameLower || '').toLowerCase();
+    });
+    if (!g || !nd) { renderCloudHome(); return; }
+    var merged = mergeGuestIntoNamed(nd.state || {}, g.state || {});
+    merged.guestMergeAt = { at: Date.now(), from: guestUid, guestAt: g.updatedAt || 0 };
+    nd.state = merged;
+    nd.updatedAt = Date.now();
+    nd.updatedAtIso = new Date().toISOString();
+    fdb.collection('users').doc(nd._uid).set(nd).then(renderCloudHome).catch(function () {
+      alert('Could not save the merge — check the connection and try again.');
+      renderCloudHome();
+    });
+  }
+
+  function removeGuestCopy(guestUid) {
+    if (!confirm('Remove this guest copy? Its progress has already been merged into the account.')) return;
+    fdb.collection('users').doc(guestUid).delete().then(function () {
+      cloud.docs = cloud.docs.filter(function (x) { return x._uid !== guestUid; });
+      renderCloudHome();
+    }).catch(function () { alert('Could not remove it — check the connection and try again.'); });
   }
 
   function renderCloudUser(d) {

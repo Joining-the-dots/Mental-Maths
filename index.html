@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover" />
-<title>Conway Family Learning Lab — Live V4.24</title>
+<title>Conway Family Learning Lab — Live V4.25</title>
 
 <!-- PWA -->
 <link rel="manifest" href="manifest.json">
@@ -2916,7 +2916,7 @@ function slWakeRelease() {
   <div class="brand">
     <span class="logo">🧪</span>
     Conway Family Learning Lab
-    <span style="font-family: 'Fredoka', sans-serif; font-size: 13px; font-weight: 600; color: var(--ink-soft); -webkit-text-fill-color: var(--ink-soft); background: var(--neutral); padding: 2px 8px; border-radius: 999px; margin-left: 6px; letter-spacing: 0.5px;">Live V4.24</span>
+    <span style="font-family: 'Fredoka', sans-serif; font-size: 13px; font-weight: 600; color: var(--ink-soft); -webkit-text-fill-color: var(--ink-soft); background: var(--neutral); padding: 2px 8px; border-radius: 999px; margin-left: 6px; letter-spacing: 0.5px;">Live V4.25</span>
   </div>
 
   <button class="user-pill" id="userPill" title="Switch player">
@@ -29609,7 +29609,12 @@ var SPELL_BANKS = {
       var localStamp = local && local._localUpdatedAt ? local._localUpdatedAt : 0;
       var localSynced = local && local._cloudSyncedAt ? local._cloudSyncedAt : 0;
       cl.boundName = name;
-      if (local && localStamp > (data.updatedAt || 0) && localStamp > localSynced) {
+      /* V4.25: a "merge guest progress" done from the Control Centre must
+         win over this device's unmerged copy, even if the device played
+         more recently — otherwise the device would push the merge away. */
+      var cMergeAt = (data.state && data.state.guestMergeAt && data.state.guestMergeAt.at) || 0;
+      var lMergeAt = (local && local.guestMergeAt && local.guestMergeAt.at) || 0;
+      if (local && localStamp > (data.updatedAt || 0) && localStamp > localSynced && cMergeAt <= lMergeAt) {
         /* this device played offline more recently than the cloud copy — push ours */
         state.activeUser = name;
         pushNow('local-newer');
@@ -29728,9 +29733,14 @@ var SPELL_BANKS = {
       var rawSave = saveState;
       var wrapped = function () {
         try {
+          /* V4.25: stamp the ACTIVE player on every save — even signed out
+             or offline. Without this, guest-era play carried no timestamp,
+             so the next login thought the old cloud copy was newer and
+             silently replaced everything played while signed out. */
+          var au = state.users[state.activeUser];
+          if (au) au._localUpdatedAt = Date.now();
           var u = boundUser();
           if (u && state.activeUser === cl.boundName) {
-            u._localUpdatedAt = Date.now();
             cl.dirty = true;
           } else if (cl.user && cl.user.isAnonymous) {
             cl.dirty = true;   /* guest play still reports usage */

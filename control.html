@@ -364,9 +364,15 @@ var APP_LABELS = { maths:'🔢 Maths', spell:'🪄 Spelling', flags:'🏳️ Fla
       var realGuests = guests.filter(function (d) { return totalSecs(d.state || {}) >= 300; });
       var hiddenGuests = guests.length - realGuests.length;
       /* a guest whose name matches a real account is probably that child
-         playing signed out — flag it so it isn't read as a new visitor */
+         playing signed out — flag it so it isn't read as a new visitor.
+         Once the real account has synced MORE RECENTLY, the guest copy is
+         superseded — drop it entirely. */
       var namedLower = {};
-      cloud.docs.forEach(function (d) { if (!d.anon && d.usernameLower) namedLower[d.usernameLower] = 1; });
+      cloud.docs.forEach(function (d) { if (!d.anon && d.usernameLower) namedLower[d.usernameLower] = d.updatedAt || 1; });
+      realGuests = realGuests.filter(function (d) {
+        var namedAt = namedLower[(d.usernameLower || '').toLowerCase()];
+        return !(namedAt && namedAt > (d.updatedAt || 0));
+      });
       if (realGuests.length || hiddenGuests) {
         h += '<h2>👤 Guests — playing without an account</h2><div class="users">';
         realGuests.forEach(function (d) {

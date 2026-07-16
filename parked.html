@@ -29799,9 +29799,17 @@ var SPELL_BANKS = {
         startGuestSync();
         renderBadge();
         /* V4.21: this device used to be logged in — if it lands anonymous,
-           the player probably got signed out without noticing */
+           the player probably got signed out without noticing.
+           V4.24: devices signed out BEFORE the flag existed are detected
+           by the sync stamps a named login leaves in the local save. */
         try {
-          if (localStorage.getItem('slHadLogin') && !window._slSignedOutToastShown) {
+          var slHadNamed = localStorage.getItem('slHadLogin');
+          if (!slHadNamed) {
+            for (var un in (state && state.users) || {}) {
+              if (state.users[un] && state.users[un]._cloudSyncedAt) { slHadNamed = '1'; break; }
+            }
+          }
+          if (slHadNamed && !window._slSignedOutToastShown) {
             window._slSignedOutToastShown = true;
             setTimeout(function () {
               if (cl.doc) return;   /* a named login arrived after all */

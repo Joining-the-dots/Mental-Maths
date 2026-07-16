@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover" />
-<title>Conway Family Learning Lab — Live V4.27</title>
+<title>Conway Family Learning Lab — Live V4.28</title>
 
 <!-- PWA -->
 <link rel="manifest" href="manifest.json">
@@ -2916,7 +2916,7 @@ function slWakeRelease() {
   <div class="brand">
     <span class="logo">🧪</span>
     Conway Family Learning Lab
-    <span style="font-family: 'Fredoka', sans-serif; font-size: 13px; font-weight: 600; color: var(--ink-soft); -webkit-text-fill-color: var(--ink-soft); background: var(--neutral); padding: 2px 8px; border-radius: 999px; margin-left: 6px; letter-spacing: 0.5px;">Live V4.27</span>
+    <span style="font-family: 'Fredoka', sans-serif; font-size: 13px; font-weight: 600; color: var(--ink-soft); -webkit-text-fill-color: var(--ink-soft); background: var(--neutral); padding: 2px 8px; border-radius: 999px; margin-left: 6px; letter-spacing: 0.5px;">Live V4.28</span>
   </div>
 
   <button class="user-pill" id="userPill" title="Switch player">
@@ -30779,6 +30779,7 @@ var SPELL_BANKS = {
     clearInterval(iv);
     var d = document.createElement('div');
     d.style.cssText = 'position:fixed;inset:0;z-index:10002;background:rgba(30,25,60,0.6);display:flex;align-items:center;justify-content:center;padding:16px;';
+    d.setAttribute('data-sl-modal', '1');   /* other one-off popups wait for this one */
     d.innerHTML = '<div style="background:#fff;border-radius:18px;box-shadow:0 18px 60px rgba(0,0,0,0.35);max-width:430px;width:100%;text-align:center;padding:26px 22px;">' +
       '<div style="font-size:60px;">✉️</div>' +
       '<h2 style="margin:6px 0 2px;font-family:\'Baloo 2\', sans-serif;">Message from Dad</h2>' +
@@ -30792,6 +30793,97 @@ var SPELL_BANKS = {
         if (typeof saveState === 'function') saveState();
       } catch (e) {}
     });
+  }, 1500);
+})();
+</script>
+
+<script>
+/* Trick-unlock bonus (17 Jul 2026, dad's request): announce on their next
+   load, then +20 ⭐ for EACH of the next two maths tricks Joshua or Mia
+   unlocks — the times-table ladder and the topic ladders both count
+   (every first-time unlock celebrates via slTrickParty, so that is the
+   hook). Pressing OK on the announcement arms the bonus; the counter and
+   earnings ride their synced profile. */
+(function () {
+  'use strict';
+  var KEY = 'trickBonus20260717';
+  /* captured before any awardPoints wrappers so the bonus never enters a
+     spelling-rush tally */
+  var rawAward = (typeof awardPoints === 'function') ? awardPoints : null;
+  function eligible() {
+    try {
+      var cs = window.cloudState;
+      if (!cs || !cs.doc || ['joshua', 'mia'].indexOf(cs.doc.usernameLower) < 0 || cs.doc.familyCode !== 'LION78') return null;
+      var u = (typeof currentUser === 'function') ? currentUser() : null;
+      if (!u || cs.boundName !== u.name) return null;
+      return u;
+    } catch (e) { return null; }
+  }
+  function centrePopup(html) {
+    var d = document.createElement('div');
+    d.style.cssText = 'position:fixed;inset:0;z-index:10002;background:rgba(30,25,60,0.6);display:flex;align-items:center;justify-content:center;padding:16px;';
+    d.setAttribute('data-sl-modal', '1');
+    d.innerHTML = '<div style="background:#fff;border-radius:18px;box-shadow:0 18px 60px rgba(0,0,0,0.35);max-width:430px;width:100%;text-align:center;padding:26px 22px;">' + html + '</div>';
+    document.body.appendChild(d);
+    return d;
+  }
+  var announcedFor = {};
+  function announce(u) {
+    announcedFor[u.name] = true;
+    var d = centrePopup(
+      '<div style="font-size:60px;">🎁</div>' +
+      '<h2 style="margin:6px 0 2px;font-family:\'Baloo 2\', sans-serif;">BONUS TIME!</h2>' +
+      '<div style="font-weight:700;line-height:1.5;"><b>20 bonus points</b> for <b>each</b> of the next <b>TWO</b> maths tricks you unlock on the trick ladders!</div>' +
+      '<button class="btn btn-primary" style="margin-top:14px;" type="button">Let’s go! 🚀</button>');
+    d.querySelector('button').addEventListener('click', function () {
+      try { d.remove(); } catch (e) {}
+      var u2 = eligible();
+      if (u2 && u2.name === u.name && !u2[KEY]) {
+        u2[KEY] = { offered: new Date().toISOString(), left: 2, earned: 0 };
+        try { if (typeof saveState === 'function') saveState(); } catch (e) {}
+      }
+    });
+  }
+  function ensureHook() {
+    if (typeof window.slTrickParty !== 'function' || window.slTrickParty._trickBonusWrapped) return;
+    var orig = window.slTrickParty;
+    var wrapped = function () {
+      try {
+        var u = eligible();
+        var st = u && u[KEY];
+        if (u && st && st.left > 0) {
+          st.left -= 1;
+          st.earned = (st.earned || 0) + 20;
+          st.last = new Date().toISOString();
+          if (rawAward) { try { rawAward(20); } catch (e) {} }
+          try { if (typeof saveState === 'function') saveState(); } catch (e) {}
+          var leftNow = st.left;
+          /* let the TRICK LEARNED party land first, then the extra treat */
+          setTimeout(function () {
+            var d = centrePopup(
+              '<div style="font-size:60px;">🎁</div>' +
+              '<h2 style="margin:6px 0 2px;font-family:\'Baloo 2\', sans-serif;">EXTRA BONUS!</h2>' +
+              '<div style="margin:8px 0 2px;font-size:26px;font-weight:800;color:#ff9f43;">+20 ⭐</div>' +
+              '<div style="font-weight:700;line-height:1.5;">for unlocking that trick!</div>' +
+              (leftNow > 0
+                ? '<div style="margin-top:8px;font-weight:700;">Unlock one more trick for another <b>+20 ⭐</b>!</div>'
+                : '<div style="margin-top:8px;font-weight:700;">That’s both bonuses earned — brilliant!</div>') +
+              '<button class="btn btn-primary" style="margin-top:14px;" type="button">Yes! 🎉</button>');
+            d.querySelector('button').addEventListener('click', function () { try { d.remove(); } catch (e) {} });
+          }, 1600);
+        }
+      } catch (e) {}
+      return orig.apply(this, arguments);
+    };
+    wrapped._trickBonusWrapped = true;
+    window.slTrickParty = wrapped;
+  }
+  setInterval(function () {
+    ensureHook();
+    var u = eligible();
+    if (!u || u[KEY] || announcedFor[u.name]) return;
+    if (document.querySelector('[data-sl-modal]')) return;   /* one popup at a time */
+    announce(u);
   }, 1500);
 })();
 </script>

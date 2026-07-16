@@ -30496,13 +30496,13 @@ var SPELL_BANKS = {
 })();
 </script>
 <script>
-/* One-day event (13 Jul 2026): 10-minute DOUBLE POINTS on the Spelling
-   tab for Joshua and Mia. Notice on load -> OK starts a corner countdown
-   -> spelling points earned in the window are tallied -> paid AGAIN at
-   the end with a congratulations popup. Survives reloads mid-window. */
+/* Rush 2 (set 15 Jul 2026): 5-minute DOUBLE POINTS on the Spelling tab
+   for Joshua and Mia, offered on their NEXT load (no date gate, once
+   each). OK starts a corner countdown; spelling points earned in the
+   window are paid AGAIN at the end. Survives reloads mid-window. */
 (function () {
   'use strict';
-  var RUSH = { key: 'spellRush20260714', date: '2026-07-14', mins: 10, users: ['joshua', 'mia'], family: 'LION78' };
+  var RUSH = { key: 'spellRush2_20260715', mins: 5, users: ['joshua', 'mia'], family: 'LION78' };
   function todayKey() {
     var d = new Date();
     return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
@@ -30559,7 +30559,7 @@ var SPELL_BANKS = {
     var d = centrePopup(
       '<div style="font-size:60px;">⚡</div>' +
       '<h2 style="margin:6px 0 2px;font-family:\'Baloo 2\', sans-serif;">DOUBLE POINTS!</h2>' +
-      '<div style="font-weight:700;line-height:1.5;">For the next TEN MINUTES, any points you earn on the <b>🪄 Spelling tab</b> will be <b>DOUBLED</b> at the end of the ten minutes.</div>' +
+      '<div style="font-weight:700;line-height:1.5;">For the next FIVE MINUTES, any points you earn on the <b>🪄 Spelling tab</b> will be <b>DOUBLED</b> at the end of the five minutes.</div>' +
       '<button class="btn btn-primary" style="margin-top:14px;" type="button">OK — start the clock! ⏱️</button>');
     d.querySelector('button').addEventListener('click', function () {
       try { d.remove(); } catch (e) {}
@@ -30582,9 +30582,9 @@ var SPELL_BANKS = {
       '<div style="font-size:60px;">🎉</div>' +
       '<h2 style="margin:6px 0 2px;font-family:\'Baloo 2\', sans-serif;">CONGRATULATIONS!</h2>' +
       (st.bonus > 0
-        ? '<div style="font-weight:700;">Your ten minutes are up — you earned <b>' + st.bonus + ' ⭐</b> spelling, so you get</div>' +
+        ? '<div style="font-weight:700;">Your five minutes are up — you earned <b>' + st.bonus + ' ⭐</b> spelling, so you get</div>' +
           '<div style="margin:10px 0 4px;font-size:28px;font-weight:800;color:#ff9f43;">+' + st.bonus + ' ⭐ BONUS</div>'
-        : '<div style="font-weight:700;">The ten minutes are up — no spelling points this time, so no bonus. Next time!</div>') +
+        : '<div style="font-weight:700;">The five minutes are up — no spelling points this time, so no bonus. Next time!</div>') +
       '<button class="btn btn-primary" style="margin-top:12px;" type="button">Brilliant!</button>');
     d.querySelector('button').addEventListener('click', function () { try { d.remove(); } catch (e) {} });
   }
@@ -30594,7 +30594,8 @@ var SPELL_BANKS = {
     if (!u) { dropChip(); return; }
     var st = u[RUSH.key];
     if (!st) {
-      if (todayKey() === RUSH.date && !offered) offer(u);
+      /* no date gate — fires on their next load, once each */
+      if (!offered) offer(u);
       return;
     }
     if (st.done) { dropChip(); return; }

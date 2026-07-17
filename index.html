@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover" />
-<title>Conway Family Learning Lab — Live V4.28</title>
+<title>Conway Family Learning Lab — Live V4.29</title>
 
 <!-- PWA -->
 <link rel="manifest" href="manifest.json">
@@ -2916,7 +2916,7 @@ function slWakeRelease() {
   <div class="brand">
     <span class="logo">🧪</span>
     Conway Family Learning Lab
-    <span style="font-family: 'Fredoka', sans-serif; font-size: 13px; font-weight: 600; color: var(--ink-soft); -webkit-text-fill-color: var(--ink-soft); background: var(--neutral); padding: 2px 8px; border-radius: 999px; margin-left: 6px; letter-spacing: 0.5px;">Live V4.28</span>
+    <span style="font-family: 'Fredoka', sans-serif; font-size: 13px; font-weight: 600; color: var(--ink-soft); -webkit-text-fill-color: var(--ink-soft); background: var(--neutral); padding: 2px 8px; border-radius: 999px; margin-left: 6px; letter-spacing: 0.5px;">Live V4.29</span>
   </div>
 
   <button class="user-pill" id="userPill" title="Switch player">
@@ -6060,6 +6060,24 @@ function lpNextQuestion() {
   if (!lp) return;
   const p = lp.samples[(Math.random() * lp.samples.length) | 0];
   lp.a = p[0]; lp.b = p[1]; lp.answered = false;
+  /* V4.29: advance IN PLACE when the panel is already up. Rebuilding it
+     for every question destroyed the answer box mid-flow — on tablets
+     that closes the keyboard and jumps the page, so each question needed
+     a fresh tap on the box (Joshua's "goes out of the questions"). */
+  const q = document.querySelector('#tmPickerGrid .lp-q');
+  const inp = document.getElementById('lpInput');
+  if (q && inp) {
+    q.textContent = lp.a + ' × ' + lp.b;
+    const prog = document.querySelector('#tmPickerGrid .lp-prog');
+    if (prog) prog.textContent = lp.correct + ' / 10 correct';
+    const fb = document.getElementById('lpFb');
+    if (fb) { fb.className = 'lp-fb'; fb.innerHTML = ''; }
+    inp.value = '';
+    /* next tick — the browser's own post-click focus handling would
+       otherwise land after this and undo it */
+    setTimeout(function () { try { inp.focus(); } catch (e) {} }, 0);
+    return;
+  }
   lpRender();
 }
 function lpRender() {
@@ -6080,7 +6098,11 @@ function lpRender() {
     '<button class="learn-back" id="lpQuit" type="button">‹ Back to trick</button>';
   grid.appendChild(panel);
   const inp = document.getElementById('lpInput');
-  document.getElementById('lpCheck').addEventListener('click', lpCheck);
+  const chk = document.getElementById('lpCheck');
+  chk.addEventListener('click', lpCheck);
+  /* keep focus in the answer box — a button tap must not close the
+     on-screen keyboard */
+  chk.addEventListener('mousedown', function (e) { e.preventDefault(); });
   inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') lpCheck(); });
   document.getElementById('lpQuit').addEventListener('click', function () {
     lp = null; openLearnTrick(learnOpenId);
@@ -6169,7 +6191,9 @@ function lpCheck() {
       '<div class="lp-ex">' +
       (ex && ex.steps ? ex.steps.map(function (s) { return '<div>' + s + '</div>'; }).join('') : '') +
       '</div><button class="btn btn-ghost" id="lpNextBtn" type="button" style="margin-top:8px;">Next ›</button>';
-    document.getElementById('lpNextBtn').addEventListener('click', lpNextQuestion);
+    const nb = document.getElementById('lpNextBtn');
+    nb.addEventListener('click', lpNextQuestion);
+    nb.addEventListener('mousedown', function (e) { e.preventDefault(); });
   }
 }
 
@@ -23695,6 +23719,20 @@ tcGameOverlay.addEventListener('click', (e) => { if (e.target === tcGameOverlay)
     if (!ap) return;
     ap.q = tById(ap.op, ap.id).gen();
     ap.answered = false;
+    /* V4.29: advance in place — same keyboard-preserving fix as the
+       times-table ladder */
+    const q = document.querySelector('#atBody .lp-q');
+    const inp = document.getElementById('apInput');
+    if (q && inp) {
+      q.innerHTML = ap.q.text;
+      const prog = document.querySelector('#atBody .lp-prog');
+      if (prog) prog.textContent = ap.correct + ' / 10 correct';
+      const fb = document.getElementById('apFb');
+      if (fb) { fb.className = 'lp-fb'; fb.innerHTML = ''; }
+      inp.value = '';
+      setTimeout(function () { try { inp.focus(); } catch (e) {} }, 0);
+      return;
+    }
     apRender();
   }
   function apRender() {
@@ -23710,7 +23748,9 @@ tcGameOverlay.addEventListener('click', (e) => { if (e.target === tcGameOverlay)
       '<div class="lp-fb" id="apFb"></div>' +
       '<button class="learn-back" id="apQuit" type="button">‹ Back to trick</button>';
     const inp = document.getElementById('apInput');
-    document.getElementById('apCheck').addEventListener('click', apCheck);
+    const chk = document.getElementById('apCheck');
+    chk.addEventListener('click', apCheck);
+    chk.addEventListener('mousedown', function (e) { e.preventDefault(); });
     inp.addEventListener('keydown', function (e) { if (e.key==='Enter') apCheck(); });
     document.getElementById('apQuit').addEventListener('click', function () { const op=ap.op, id=ap.id; ap=null; openTrick(op, id); });
     setTimeout(function () { try { inp.focus(); } catch(e){} }, 40);
@@ -23763,7 +23803,9 @@ tcGameOverlay.addEventListener('click', (e) => { if (e.target === tcGameOverlay)
       fb.className = 'lp-fb no';
       fb.innerHTML = '✗ The answer is ' + ap.q.answer + '.' +
         '<button class="btn btn-ghost" id="apNextBtn" type="button" style="margin-top:8px;">Next ›</button>';
-      document.getElementById('apNextBtn').addEventListener('click', apNext);
+      const nb = document.getElementById('apNextBtn');
+      nb.addEventListener('click', apNext);
+      nb.addEventListener('mousedown', function (e) { e.preventDefault(); });
     }
   }
 

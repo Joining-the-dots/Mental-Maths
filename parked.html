@@ -4756,6 +4756,32 @@ function migrateUser(u) {
       }
     } catch (e) {}
   }
+  /* One-time (17 Jul 2026): refund Joshua's accidental Waddingtons No.1
+     Playing Cards — points go back and the record is cancelled off the
+     parent's waiting list. */
+  if (!u.refundCards20260717) {
+    try {
+      var _cs5 = window.cloudState;
+      if (_cs5 && _cs5.doc && _cs5.doc.usernameLower === 'joshua' &&
+          _cs5.doc.familyCode === 'LION78' && _cs5.boundName === u.name &&
+          u.shop && Array.isArray(u.shop.redeemed)) {
+        var _cd = null;
+        u.shop.redeemed.forEach(function (r) {
+          if (r && !r.cancelled && /waddington/i.test(String(r.name || ''))) {
+            if (!_cd || String(r.date || '') > String(_cd.date || '')) _cd = r;
+          }
+        });
+        if (_cd) {
+          _cd.cancelled = true;
+          _cd.actioned = true;
+          _cd.actionedAt = new Date().toISOString();
+          if (String(_cd.name).indexOf('↩️') !== 0) _cd.name = '↩️ Cancelled: ' + _cd.name;
+          u.points = (u.points || 0) + (_cd.cost || 0);
+          u.refundCards20260717 = { cancelled: _cd.name, refunded: _cd.cost || 0, at: new Date().toISOString() };
+        }
+      }
+    } catch (e) {}
+  }
   if (!u.tricks)     u.tricks = {};
   if (!u.trickMastery) u.trickMastery = {};
   if (!u.lightning)  u.lightning = { best: 0, lastPlayed: null };

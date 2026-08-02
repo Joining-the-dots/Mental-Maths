@@ -3157,7 +3157,12 @@ function slWakeRelease() {
     <div id="qFeedback"></div>
     <div class="modal-actions">
       <button class="btn btn-ghost" id="qClose">‹ Back to times table board</button>
-      <button class="btn btn-primary" id="qNext" style="display:none;">🎲 Random multiplication</button>
+      <div id="qNext" style="display:none;">
+        <button class="btn btn-primary" type="button" data-qmax="20" title="A random question up to 20 × 20">🎲 Next starter</button>
+        <button class="btn btn-primary" type="button" data-qmax="30" title="A random question up to 30 × 30">⚡ Next pro</button>
+        <button class="btn btn-primary" type="button" data-qmax="50" title="A random question up to 50 × 50">🔥 Next master</button>
+        <button class="btn btn-primary" type="button" data-qmax="99" title="A random question — anything goes">🌟 Next guru</button>
+      </div>
     </div>
   </div>
 </div>
@@ -3828,6 +3833,9 @@ function slWakeRelease() {
     text-align: center; padding: 22px 16px; border-radius: 16px; margin-top: 14px;
   }
   .myst-result.win { background: linear-gradient(135deg, #eafaf0, #d6f5e3); }
+  .myst-result.lose { background: linear-gradient(135deg, #fdeeee, #fadbd8); }
+  .myst-result.lose h3 { color: #c0392b; }
+  .myst-card.failed { opacity: 0.82; }
   .myst-result .myst-result-emoji { font-size: 54px; }
   .myst-result h3 { font-family: 'Baloo 2', sans-serif; font-size: 22px; margin: 6px 0 4px; color: #1e9e54; }
   .myst-result p { font-size: 14px; color: var(--ink); margin: 0 0 4px; }
@@ -7890,10 +7898,17 @@ qClose.addEventListener('click', closeQuiz);
 quizOverlay.addEventListener('click', (e) => {
   if (e.target === quizOverlay) closeQuiz();
 });
-qNext.addEventListener('click', () => {
-  const [r, c] = pickNext();
-  openQuiz(r, c);
-  scrollToCell(r, c);
+/* V4.31: tiered random questions — starter ≤20×20, pro ≤30×30,
+   master ≤50×50, guru anything. These roam BEYOND the visible board;
+   openQuiz/scrollToCell already cope with cells the grid doesn't show. */
+qNext.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-qmax]');
+  if (!btn) return;
+  const mx = parseInt(btn.dataset.qmax, 10);
+  const a = 2 + Math.floor(Math.random() * (mx - 1));
+  const b = 2 + Math.floor(Math.random() * (mx - 1));
+  openQuiz(a, b);
+  scrollToCell(a, b);
 });
 
 
@@ -17919,10 +17934,23 @@ tcGameOverlay.addEventListener('click', (e) => { if (e.target === tcGameOverlay)
     const boys = shuffle(rng, BOY_NAMES);
     const girls = shuffle(rng, GIRL_NAMES);
     let bi = 0, gi = 0;
+    /* V4.31: the face must MATCH the hair chip — no more blonde suspects
+       wearing dark-haired faces. Child emoji have no hair variants, so
+       hair-clue cases use the hair-styled person emoji; cases without a
+       hair clue keep the kid faces. (One rng pick per suspect either way,
+       so existing cases' logic and clues are untouched.) */
+    const HAIR_FACES = {
+      boy:  { blonde: ['👱🏻‍♂️','👱🏼‍♂️','👱🏽‍♂️'], ginger: ['👨🏻‍🦰','👨🏼‍🦰','👨🏽‍🦰'],
+              black: ['👨🏻‍🦱','👨🏽‍🦱','👨🏿‍🦱'], brown: ['👦','👦🏻','👦🏽'] },
+      girl: { blonde: ['👱🏻‍♀️','👱🏼‍♀️','👱🏽‍♀️'], ginger: ['👩🏻‍🦰','👩🏼‍🦰','👩🏽‍🦰'],
+              black: ['👩🏻‍🦱','👩🏽‍🦱','👩🏿‍🦱'], brown: ['👧','👧🏻','👧🏽'] }
+    };
     const suspects = cast.map((attrs, idx) => {
       const isBoy = attrs.gender === 'boy';
       const name = isBoy ? boys[bi++] : girls[gi++];
-      const face = isBoy ? pick(rng, BOY_FACES) : pick(rng, GIRL_FACES);
+      const hairPool = attrs.hair && HAIR_FACES[isBoy ? 'boy' : 'girl'][attrs.hair];
+      const face = hairPool ? pick(rng, hairPool)
+                            : (isBoy ? pick(rng, BOY_FACES) : pick(rng, GIRL_FACES));
       return { name: name, face: face, attrs: attrs, isCulprit: idx === 0 };
     });
     const culpritSuspect = suspects[0];
@@ -18367,6 +18395,20 @@ tcGameOverlay.addEventListener('click', (e) => { if (e.target === tcGameOverlay)
     const u = mysteryUser();
     return (u && u.mysteries && u.mysteries.solved) || {};
   }
+  function failedMap() {
+    const u = mysteryUser();
+    return (u && u.mysteries && u.mysteries.failed) || {};
+  }
+  function markFailed(id) {
+    try {
+      const u = ensureUser();
+      if (typeof migrateUser === 'function') migrateUser(u);
+      if (!u.mysteries || typeof u.mysteries !== 'object') u.mysteries = {};
+      if (!u.mysteries.failed) u.mysteries.failed = {};
+      u.mysteries.failed[id] = true;
+      if (typeof saveState === 'function') saveState();
+    } catch (e) {}
+  }
   function markSolved(id) {
     try {
       const u = ensureUser();
@@ -18406,7 +18448,10 @@ tcGameOverlay.addEventListener('click', (e) => { if (e.target === tcGameOverlay)
     card.addEventListener('click', function () {
       if (m.phase === 'done') return;
       if (m.phase === 'accuse' && !m.eliminated[s.name]) {
-        if (confirm('Accuse ' + s.name + ' ' + s.face + ' of the crime?')) makeAccusation(s, m);
+        /* V4.31: two-tap accuse (arm, then commit) — the in-game warning
+           replaces the old confirm() dialog now that a wrong accusation
+           loses the case */
+        makeAccusation(s, m);
         return;
       }
       m.eliminated[s.name] = !m.eliminated[s.name];
@@ -18543,7 +18588,7 @@ tcGameOverlay.addEventListener('click', (e) => { if (e.target === tcGameOverlay)
     });
     const acc = el('div','myst-accuse');
     acc.appendChild(el('h3', null, '🎯 Time to accuse!'));
-    acc.appendChild(el('p', null, 'Every clue is cracked. Finish your crossing-off — exactly ONE suspect should fit ALL the clues. Tap them to accuse! (You can still tap crossed-off suspects to bring them back.)'));
+    acc.appendChild(el('p', null, 'Every clue is cracked. Finish your crossing-off — exactly ONE suspect should fit ALL the clues. ⚠️ You get ONE accusation: get it wrong and the culprit escapes with the case! Tap a suspect once to pick them, and tap them again to accuse.'));
     const accFb = el('div','myst-track-fb','');
     accFb.style.marginTop = '6px';
     acc.appendChild(accFb);
@@ -18554,7 +18599,9 @@ tcGameOverlay.addEventListener('click', (e) => { if (e.target === tcGameOverlay)
   }
 
   function awardCasePoints(m) {
-    const already = !!solvedMap()[m.def.id];
+    /* a case that was ever failed pays nothing — no losing it, then
+       replaying with the answer known */
+    const already = !!solvedMap()[m.def.id] || !!failedMap()[m.def.id];
     if (already) { m.pointsAwarded = 0; return; }
     const pts = 10 + m.def.tier * 6;
     m.pointsAwarded = pts;
@@ -18563,15 +18610,34 @@ tcGameOverlay.addEventListener('click', (e) => { if (e.target === tcGameOverlay)
 
   function makeAccusation(s, m) {
     if (m.phase !== 'accuse') return;
-    if (!s.isCulprit) {
-      /* wrong accusation — gentle bounce, stay in the game */
-      const card = m.dom.suspectEls[s.name];
-      if (card) { card.classList.remove('shake'); void card.offsetWidth; card.classList.add('shake'); }
-      try { playSfx('wrong'); } catch (e) {}
+    /* V4.31: one accusation is all a detective gets. First tap arms it,
+       a second tap on the SAME suspect commits — so a stray tap can't
+       throw the case away. A wrong accusation LOSES the case: the culprit
+       is revealed and it never pays points (replayable for fun). */
+    if (m.pendingAccuse !== s.name) {
+      m.pendingAccuse = s.name;
       if (m.dom.accFb) {
-        m.dom.accFb.textContent = '❌ Not ' + s.name + '! Check each clue against their chips — someone else fits ALL of them. (Psst: try “Am I on track?”)';
-        m.dom.accFb.style.color = '#c0392b';
+        m.dom.accFb.textContent = '⚠️ Accuse ' + s.name + '? You get ONE accusation — get it wrong and the culprit escapes! Tap ' + s.name + ' again to accuse, or check the clues once more.';
+        m.dom.accFb.style.color = '#b9701a';
       }
+      return;
+    }
+    if (!s.isCulprit) {
+      m.phase = 'done';
+      const wasFresh = !solvedMap()[m.def.id] && !failedMap()[m.def.id];
+      if (wasFresh) markFailed(m.def.id);
+      m.suspects.forEach(x => {
+        const card = m.dom.suspectEls[x.name];
+        if (!card) return;
+        card.classList.remove('accusable');
+        if (x.isCulprit) card.classList.add('culprit');
+        if (x.name === s.name) { card.classList.remove('shake'); void card.offsetWidth; card.classList.add('shake'); }
+      });
+      try { playSfx('wrong'); } catch (e) {}
+      if (m.dom.accFb) m.dom.accFb.textContent = '';
+      m.dom.tail.innerHTML = '';
+      m.dom.tail.appendChild(failBlock(m, s));
+      try { m.dom.tail.scrollIntoView({ behavior:'smooth', block:'nearest' }); } catch (e) {}
       return;
     }
     m.phase = 'done';
@@ -18599,7 +18665,25 @@ tcGameOverlay.addEventListener('click', (e) => { if (e.target === tcGameOverlay)
     r.appendChild(p);
     r.appendChild(el('div','myst-points', m.pointsAwarded > 0
       ? '⭐ +' + m.pointsAwarded + ' points earned!'
-      : '⭐ Already cracked before — replayed for fun!'));
+      : '⭐ This case was already closed once — replayed for fun!'));
+    const back = el('button','btn btn-primary','🔍 Back to all cases');
+    back.type = 'button';
+    back.style.marginTop = '12px';
+    back.addEventListener('click', closeMystery);
+    r.appendChild(back);
+    return r;
+  }
+
+  function failBlock(m, accused) {
+    const culprit = m.suspects.find(x => x.isCulprit);
+    const r = el('div','myst-result lose');
+    r.appendChild(el('div','myst-result-emoji','😮'));
+    r.appendChild(el('h3', null, 'The culprit got away!'));
+    const p = el('p', null);
+    p.innerHTML = 'It wasn’t <b>' + accused.name + '</b> — it was <b>' + culprit.name + '</b> ' +
+      culprit.face + ' all along. One accusation is all a detective gets, so check every clue before pointing the finger.';
+    r.appendChild(p);
+    r.appendChild(el('div','myst-points','⭐ No points for this case — the trail has gone cold.'));
     const back = el('button','btn btn-primary','🔍 Back to all cases');
     back.type = 'button';
     back.style.marginTop = '12px';
@@ -18633,10 +18717,15 @@ tcGameOverlay.addEventListener('click', (e) => { if (e.target === tcGameOverlay)
   }
 
   /* ---------- case list view ---------- */
-  function mysteryCard(def, isSolved) {
-    const card = el('button','myst-card' + (isSolved ? ' solved' : ''));
+  function mysteryCard(def, isSolved, isFailed) {
+    const card = el('button','myst-card' + (isSolved ? ' solved' : '') + (isFailed && !isSolved ? ' failed' : ''));
     card.type = 'button';
     if (isSolved) card.appendChild(el('div','myst-stamp','SOLVED'));
+    else if (isFailed) {
+      const st = el('div','myst-stamp','GOT AWAY');
+      st.style.background = '#c0392b';
+      card.appendChild(st);
+    }
     const top = el('div','myst-card-top');
     top.appendChild(el('div','myst-card-num','CASE ' + def.id.replace('m','#')));
     const diff = el('div','myst-diff', diffStars(def.tier) + ' ' + DIFF_LABELS[def.tier-1]);
@@ -18646,7 +18735,8 @@ tcGameOverlay.addEventListener('click', (e) => { if (e.target === tcGameOverlay)
     card.appendChild(top);
     card.appendChild(el('div','myst-card-emoji', def.emoji));
     card.appendChild(el('div','myst-card-title', def.title));
-    card.appendChild(el('div','myst-card-status', isSolved ? '✅ Solved' : 'Tap to investigate'));
+    card.appendChild(el('div','myst-card-status',
+      isSolved ? '✅ Solved' : (isFailed ? '❌ Culprit got away — replay for fun' : 'Tap to investigate')));
     card.addEventListener('click', function () { openMystery(def.id); });
     return card;
   }
@@ -18655,6 +18745,7 @@ tcGameOverlay.addEventListener('click', (e) => { if (e.target === tcGameOverlay)
     const view = document.getElementById('mysteriesView');
     if (!view) return;
     const solved = solvedMap();
+    const failed = failedMap();
     const total = MYSTERY_DEFS.length;
     const done = MYSTERY_DEFS.filter(d => solved[d.id]).length;
     view.innerHTML = '';
@@ -18683,7 +18774,7 @@ tcGameOverlay.addEventListener('click', (e) => { if (e.target === tcGameOverlay)
       head.appendChild(el('div','myst-tier-count', '· ' + DIFF_LABELS[tier-1] + ' · ' + tdone + '/' + defs.length + ' solved'));
       sec.appendChild(head);
       const grid = el('div','myst-grid');
-      defs.forEach(d => grid.appendChild(mysteryCard(d, !!solved[d.id])));
+      defs.forEach(d => grid.appendChild(mysteryCard(d, !!solved[d.id], !!failed[d.id])));
       sec.appendChild(grid);
       view.appendChild(sec);
     }
@@ -27928,7 +28019,8 @@ var OP_BANK = [
     <div class="sp-tiles" id="spTiles" style="display:none;"></div>
     <div class="sp-slot-row" id="spSlots" style="display:none;"></div>
     <input class="sp-input" id="spInput" autocomplete="off" autocapitalize="off" spellcheck="false"
-      placeholder="type the spell…" />
+      placeholder="type the spell…" style="display:none;" />
+    <div class="sp-boxrow" id="spBoxes" style="display:none;"></div>
     <div class="sp-diff" id="spDiff"></div>
     <div class="sp-feedback" id="spFeedback"></div>
     <div class="modal-actions">
@@ -28593,6 +28685,61 @@ var SPELL_BANKS = {
   var oNext = document.getElementById('spNext');
   var oClear = document.getElementById('spClear');
 
+  /* V4.31: fifteen one-letter boxes replace the free-text input — phone
+     keyboards were showing the word in their prediction bar as the kids
+     typed. One letter per box, fixed 15 so the word length isn't given
+     away, no autocorrect anywhere. */
+  var BOXN = 15;
+  var oBoxes = document.getElementById('spBoxes');
+  (function buildBoxes() {
+    for (var i = 0; i < BOXN; i++) {
+      var b = document.createElement('input');
+      b.type = 'text';
+      b.maxLength = 1;
+      b.className = 'sp-box';
+      b.autocomplete = 'off';
+      b.spellcheck = false;
+      b.setAttribute('autocorrect', 'off');
+      b.setAttribute('autocapitalize', 'off');
+      b.dataset.i = i;
+      oBoxes.appendChild(b);
+    }
+    oBoxes.addEventListener('input', function (e) {
+      var b = e.target;
+      if (!b.dataset || b.dataset.i == null) return;
+      var v = (b.value || '').toLowerCase().replace(/[^a-z'’-]/g, '');
+      b.value = v.slice(0, 1);
+      if (b.value) {
+        var nx = oBoxes.children[+b.dataset.i + 1];
+        if (nx) { try { nx.focus(); } catch (e2) {} }
+      }
+    });
+    oBoxes.addEventListener('keydown', function (e) {
+      var b = e.target;
+      if (!b.dataset || b.dataset.i == null) return;
+      var i = +b.dataset.i;
+      if (e.key === 'Enter') { e.preventDefault(); checkAnswer(); return; }
+      if (e.key === 'Backspace' && !b.value && i > 0) {
+        e.preventDefault();
+        var pv = oBoxes.children[i - 1];
+        pv.value = '';
+        try { pv.focus(); } catch (e2) {}
+        return;
+      }
+      if (e.key === 'ArrowLeft' && i > 0) { e.preventDefault(); try { oBoxes.children[i - 1].focus(); } catch (e2) {} }
+      if (e.key === 'ArrowRight' && i < BOXN - 1) { e.preventDefault(); try { oBoxes.children[i + 1].focus(); } catch (e2) {} }
+    });
+  })();
+  function boxEls() { return [].slice.call(oBoxes.children); }
+  function boxesValue() {
+    return boxEls().map(function (b) { return b.value || ''; }).join('').toLowerCase().trim();
+  }
+  function boxesReset(focus) {
+    boxEls().forEach(function (b) { b.value = ''; b.disabled = false; });
+    if (focus) setTimeout(function () { try { oBoxes.children[0].focus(); } catch (e) {} }, 40);
+  }
+  function boxesDisable(dis) { boxEls().forEach(function (b) { b.disabled = dis; }); }
+
   function cur() { return game && game.words[game.idx]; }
 
   function askWord() {
@@ -28605,7 +28752,9 @@ var SPELL_BANKS = {
     document.getElementById('spSentence').textContent = '';
     document.getElementById('spDiff').innerHTML = '';
     document.getElementById('spFeedback').innerHTML = '';
-    oIn.value = ''; oIn.style.display = ''; oIn.disabled = false;
+    oIn.value = ''; oIn.style.display = 'none'; oIn.disabled = false;
+    oBoxes.style.display = '';
+    boxesReset(false);
     oCast.style.display = ''; oCast.disabled = false;
     oNext.style.display = 'none';
     document.getElementById('spPeek').style.display = '';
@@ -28616,6 +28765,7 @@ var SPELL_BANKS = {
     if (g.mode === 'potion') {
       buildTiles(w);
       oIn.style.display = 'none';
+      oBoxes.style.display = 'none';
       oClear.style.display = '';
       document.getElementById('spTiles').style.display = '';
       document.getElementById('spSlots').style.display = '';
@@ -28624,7 +28774,7 @@ var SPELL_BANKS = {
       oClear.style.display = 'none';
       document.getElementById('spTiles').style.display = 'none';
       document.getElementById('spSlots').style.display = 'none';
-      setTimeout(function () { try { oIn.focus(); } catch (e) {} }, 60);
+      setTimeout(function () { try { oBoxes.children[0].focus(); } catch (e) {} }, 60);
     }
     sayWord(w);
   }
@@ -28704,7 +28854,7 @@ var SPELL_BANKS = {
     if (!g || g.done) return;
     var guess = g.mode === 'potion'
       ? tilesPicked.map(function (t) { return t.ch; }).join('')
-      : (oIn.value || '').toLowerCase().trim();
+      : boxesValue();
     if (!guess) { sayWord(w); return; }
     var right = guess === w.word.toLowerCase();
     var sp = spU();
@@ -28723,7 +28873,7 @@ var SPELL_BANKS = {
         document.getElementById('spDiff').innerHTML = letterDiff(guess, w.word);
         document.getElementById('spFeedback').innerHTML =
           '<span style="color:#c0392b;">Copy it exactly as shown ⬆️</span>';
-        oIn.value = '';
+        boxesReset(true);
       }
       return;
     }
@@ -28783,7 +28933,7 @@ var SPELL_BANKS = {
         document.getElementById('spFeedback').innerHTML =
           '<span style="color:#c0392b;">💨 Fizzle! Listen again — green letters are right.</span>';
         spellOut(w);
-        oIn.value = ''; setTimeout(function () { try { oIn.focus(); } catch (e) {} }, 40);
+        boxesReset(true);
       } else {
         /* second miss (or potion miss): teach it, then copy once */
         document.getElementById('spWordBig').innerHTML = highlightWord(w);
@@ -28798,7 +28948,7 @@ var SPELL_BANKS = {
           document.getElementById('spFeedback').innerHTML =
             '<span style="color:#c0392b;">💨 Fizzle! Study it above — the yellow bit is the trap. Now type it once to bank it.</span>';
           spellOut(w);
-          oIn.value = ''; setTimeout(function () { try { oIn.focus(); } catch (e) {} }, 40);
+          boxesReset(true);
         }
       }
       save();
@@ -28809,6 +28959,7 @@ var SPELL_BANKS = {
     var g = game;
     oCast.disabled = true;
     oIn.disabled = true;
+    boxesDisable(true);
     if (g.idx + 1 >= g.words.length && g.mode !== 'boss') {
       setTimeout(questEnd, quick ? 900 : 1600);
       return;
@@ -28834,6 +28985,7 @@ var SPELL_BANKS = {
       '<div style="font-family:\'Baloo 2\',sans-serif;font-size:20px;color:#6c5ce7;font-weight:800;">Quest complete!</div>' +
       '<div style="margin-top:4px;">You are ' + esc(rk.name) + ' with ' + m + ' spells mastered. Same time tomorrow, wizard? 🧙</div>';
     oIn.style.display = 'none'; oCast.style.display = 'none';
+    oBoxes.style.display = 'none';
     document.getElementById('spTiles').style.display = 'none';
     document.getElementById('spSlots').style.display = 'none';
     oNext.style.display = '';
@@ -28860,6 +29012,7 @@ var SPELL_BANKS = {
     document.getElementById('spWordBig').innerHTML = won ? '🏆' : '🐉';
     document.getElementById('spDiff').innerHTML = '';
     oIn.style.display = 'none'; oCast.style.display = 'none';
+    oBoxes.style.display = 'none';
     oNext.style.display = '';
     oNext.textContent = 'Done';
     oNext.onclick = closeGame;
@@ -30957,6 +31110,13 @@ var SPELL_BANKS = {
 <style>
   #userOverlay.sl-mandatory #userClose { display: none !important; }
   #userOverlay.sl-mandatory #bootstrap12Btn { display: none !important; }
+  #qNext { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+  .sp-boxrow { display: flex; flex-wrap: wrap; gap: 5px; justify-content: center; margin: 8px 0 4px; }
+  .sp-box { width: 34px; height: 44px; text-align: center; font-family: 'Baloo 2', sans-serif;
+    font-size: 22px; font-weight: 800; border: 2px solid #d5d9e6; border-radius: 8px;
+    background: #fff; text-transform: lowercase; padding: 0; }
+  .sp-box:focus { border-color: #6c5ce7; outline: none; }
+  .sp-box:disabled { background: #f2f3f8; color: #7b8194; }
 </style>
 </body>
 </html>

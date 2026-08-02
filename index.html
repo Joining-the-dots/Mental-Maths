@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover" />
-<title>Conway Family Learning Lab — Live V4.31</title>
+<title>Conway Family Learning Lab — Live V4.32</title>
 
 <!-- PWA -->
 <link rel="manifest" href="manifest.json">
@@ -2916,7 +2916,7 @@ function slWakeRelease() {
   <div class="brand">
     <span class="logo">🧪</span>
     Conway Family Learning Lab
-    <span style="font-family: 'Fredoka', sans-serif; font-size: 13px; font-weight: 600; color: var(--ink-soft); -webkit-text-fill-color: var(--ink-soft); background: var(--neutral); padding: 2px 8px; border-radius: 999px; margin-left: 6px; letter-spacing: 0.5px;">Live V4.31</span>
+    <span style="font-family: 'Fredoka', sans-serif; font-size: 13px; font-weight: 600; color: var(--ink-soft); -webkit-text-fill-color: var(--ink-soft); background: var(--neutral); padding: 2px 8px; border-radius: 999px; margin-left: 6px; letter-spacing: 0.5px;">Live V4.32</span>
   </div>
 
   <button class="user-pill" id="userPill" title="Switch player">
@@ -16376,7 +16376,12 @@ function shopGetItems() {
   }
   /* never hand a null item to the renderer */
   if (u.shop.items.some(i => !i)) u.shop.items = u.shop.items.filter(Boolean);
-  return u.shop.items;
+  /* V4.32: each family's grown-up can hide aisles, add their own prizes
+     and set their own points-per-pound — applied as an overlay so the
+     stored catalogue stays canonical */
+  return (typeof window.slFamilyShopOverlay === 'function')
+    ? window.slFamilyShopOverlay(u.shop.items)
+    : u.shop.items;
 }
 var shopFilterCat = 'all';
 var shopAfford = false;
@@ -16492,7 +16497,10 @@ function shopAddItem() {
   const cost = parseInt(document.getElementById('siCost').value, 10);
   if (!name) { alert('Give the reward a name.'); return; }
   if (!cost || cost < 1) { alert('Set how many points it costs.'); return; }
-  shopGetItems().push({ id: 's' + Date.now(), icon: icon, name: name, cost: cost });
+  /* push onto the STORED catalogue — shopGetItems() may return a family
+     overlay copy that is thrown away after render */
+  shopGetItems();
+  ensureUser().shop.items.push({ id: 's' + Date.now(), icon: icon, name: name, cost: cost });
   saveState();
   document.getElementById('siIcon').value = '';
   document.getElementById('siName').value = '';
@@ -16542,7 +16550,8 @@ function shopAddAmazon() {
   const asinMatch = url.match(/\/(?:dp|gp\/product)\/([A-Z0-9]{10})/i);
   const newItem = { id: 's' + Date.now(), icon: '🛒', name: name, cost: cost, url: url };
   if (asinMatch) newItem.img = 'https://images-na.ssl-images-amazon.com/images/P/' + asinMatch[1].toUpperCase() + '.01._SL300_.jpg';
-  shopGetItems().push(newItem);
+  shopGetItems();
+  ensureUser().shop.items.push(newItem);
   saveState();
   urlEl.value = ''; nameEl.value = ''; costEl.value = '';
   shopRender();
@@ -29667,6 +29676,10 @@ var SPELL_BANKS = {
         <input id="clSuFamCode" maxlength="8" autocapitalize="characters" placeholder="e.g. LION42"></div>
       <div class="cl-field" id="clFamNameField" style="display:none;"><label>Family name</label>
         <input id="clSuFamName" maxlength="24" placeholder="e.g. The Conways"></div>
+      <div class="cl-note" id="clAdultNote" style="display:none;">👨‍👩‍👧 Starting a family makes YOU its
+        grown-up: from the <b>Control Centre</b> (control.html, log in with this account) you can watch
+        progress, run your family's own prize shop, set what points are worth, and launch bonus
+        challenges for your kids. Set a grown-up password on this account via "grown-up options".</div>
       <div class="cl-field"><label>Bring progress from this device?</label>
         <select id="clSuClaim"></select></div>
       <button class="cl-btn" id="clSuGo" type="button" style="width:100%; padding:11px;">Create account</button>
@@ -30141,12 +30154,14 @@ var SPELL_BANKS = {
     document.getElementById('clFamNew').classList.remove('on');
     document.getElementById('clFamCodeField').style.display = '';
     document.getElementById('clFamNameField').style.display = 'none';
+    document.getElementById('clAdultNote').style.display = 'none';
   });
   document.getElementById('clFamNew').addEventListener('click', function () {
     this.classList.add('on');
     document.getElementById('clFamJoin').classList.remove('on');
     document.getElementById('clFamCodeField').style.display = 'none';
     document.getElementById('clFamNameField').style.display = '';
+    document.getElementById('clAdultNote').style.display = '';
   });
 
   function fillClaimOptions() {
@@ -30193,7 +30208,9 @@ var SPELL_BANKS = {
     showMsg('Creating account…', true);
     window.cloudSignup(opts).then(function (fam) {
       showMsg(fam.isNew
-        ? '✅ Account made! Your family code is ' + fam.code + ' — write it down and share it with your family.'
+        ? '✅ Account made! Your family code is ' + fam.code + ' — write it down and share it with your family. ' +
+          'You are this family’s grown-up: open control.html and log in with this account to run your ' +
+          'family’s shop, point value and bonus challenges.'
         : '✅ Account made and joined the family!', true);
       if (!fam.isNew) setTimeout(function () { ov.classList.remove('show'); }, 900);
     }).catch(function (e) { showMsg(friendlyError(e)); });
@@ -30872,6 +30889,17 @@ var SPELL_BANKS = {
 (function () {
   'use strict';
   var RUSH = { key: 'spellRushChip20260716', mins: 5, users: ['joshua', 'mia'], family: 'LION78' };
+  function famSprintLive(u) {
+    /* V4.32: a family-incentive sprint window is live — one 2× at a time */
+    try {
+      var rr = u.incentiveRuns || {};
+      for (var k in rr) {
+        var s = rr[k] && rr[k].sprint;
+        if (rr[k] && !rr[k].done && s && s.startedAt && Date.now() - s.startedAt < 5 * 60000) return true;
+      }
+    } catch (e) {}
+    return false;
+  }
   function eligibleUser() {
     try {
       var cs = window.cloudState;
@@ -30945,6 +30973,7 @@ var SPELL_BANKS = {
         if (!u2 || u2.name !== tapName || (u2[RUSH.key] && u2[RUSH.key].startedAt)) return;
         var r2 = u2.spellRush2_20260715;
         if (r2 && r2.startedAt && !r2.done) return;      /* a Rush 2 window is live — one at a time */
+        if (famSprintLive(u2)) return;
         u2[RUSH.key] = { startedAt: Date.now(), tally: 0 };
         try { if (typeof saveState === 'function') saveState(); } catch (e) {}
         try { if (typeof setActiveApp === 'function') setActiveApp('spell'); } catch (e) {}
@@ -30980,6 +31009,7 @@ var SPELL_BANKS = {
     var r2 = u.spellRush2_20260715;
     if ((!st || !st.startedAt) && r2 && r2.startedAt && !r2.done &&
         Date.now() - r2.startedAt < RUSH.mins * 60000) { dropChip(); return; }   /* a Rush 2 window is live (and its chip is at these coordinates) — hold back */
+    if ((!st || !st.startedAt) && famSprintLive(u)) { dropChip(); return; }
     if (!st || !st.startedAt) { setChip('⚡ 2× spelling sprint — tap to start!', true); return; }
     if (Date.now() - st.startedAt >= RUSH.mins * 60000) { payout(u, st); return; }
     setChip('⚡ 2× spelling · ' + fmt(st.startedAt + RUSH.mins * 60000 - Date.now()) + ' · banked ' + (st.tally || 0) + ' ⭐', false);
@@ -31123,6 +31153,336 @@ var SPELL_BANKS = {
 <style>
   @keyframes slRush3Pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.07); } }
 </style>
+<script>
+/* ================================================================
+   V4.32: Family platform — each family's grown-up (the family owner)
+   runs their own shop and launches incentives from the Control Centre.
+   This module: (1) fetches families/{code} config for the signed-in kid,
+   (2) overlays the shop (hidden aisles, custom prizes, family point
+   rate), (3) runs the incentive engine (sprint chip, 24-hour trick
+   challenge, weekly mystery / spelling-mastery challenges).
+   ================================================================ */
+(function () {
+  'use strict';
+  var rawAward = (typeof awardPoints === 'function') ? awardPoints : null;
+
+  /* ---------- family config ---------- */
+  window.slFamilyCfg = null;
+  var cfgFor = null, lastFetch = 0;
+  window.slFamilyCfgApply = function (data) { window.slFamilyCfg = data || null; };
+  function fetchCfg() {
+    try {
+      var cs = window.cloudState;
+      var code = cs && cs.doc && cs.doc.familyCode;
+      if (!code) {
+        /* signed out — the cached family config must not linger */
+        if (window.slFamilyCfg) { window.slFamilyCfg = null; cfgFor = null; }
+        return;
+      }
+      if (typeof firebase === 'undefined' || !firebase.apps || !firebase.apps.length) return;
+      if (cfgFor === code && Date.now() - lastFetch < 5 * 60000) return;
+      cfgFor = code; lastFetch = Date.now();
+      firebase.firestore().collection('families').doc(code).get().then(function (s) {
+        if (s.exists) window.slFamilyCfgApply(s.data());
+      }).catch(function () {});
+    } catch (e) {}
+  }
+
+  /* ---------- shop overlay ---------- */
+  window.slFamilyShopOverlay = function (items) {
+    try {
+      /* only for the cloud-bound kid's own profile — a sibling playing a
+         different local profile on this device keeps the standard shop */
+      var cs = window.cloudState;
+      var u0 = (typeof currentUser === 'function') ? currentUser() : null;
+      if (!cs || !cs.doc || !cs.doc.familyCode || !u0 || cs.boundName !== u0.name) return items;
+      var cfg = window.slFamilyCfg && window.slFamilyCfg.shop;
+      if (!cfg) return items;
+      var rate = (typeof cfg.rate === 'number' && cfg.rate >= 10 && cfg.rate <= 5000) ? cfg.rate : 225;
+      var floor = Math.max(50, Math.round(750 * rate / 225 / 50) * 50);
+      var reprice = function (it) {
+        var mp = /£\s*([\d.]+)/.exec(String(it.price || ''));
+        var c = Object.assign({}, it);
+        if (mp) c.cost = Math.max(floor, Math.round(parseFloat(mp[1]) * rate / 50) * 50);
+        else if (!c.cost) c.cost = floor;
+        return c;
+      };
+      var off = {};
+      (cfg.offCats || []).forEach(function (c) { off[c] = 1; });
+      var out = items.filter(Boolean).filter(function (i) { return !off[i.cat]; });
+      if (rate !== 225) out = out.map(reprice);   /* standard costs are baked at 225/£ */
+      (cfg.custom || []).forEach(function (ci) {
+        if (!ci || !ci.name) return;
+        out.push(reprice(Object.assign({ cat: 'family', icon: '🎁' }, ci)));
+      });
+      if ((cfg.custom || []).length && typeof SHOP_CATS === 'object' && !SHOP_CATS.family) {
+        SHOP_CATS.family = '🏠 Our own';
+      }
+      return out;
+    } catch (e) { return items; }
+  };
+
+  /* ---------- incentive engine ---------- */
+  function eligible() {
+    try {
+      var cs = window.cloudState;
+      if (!cs || !cs.doc || !cs.doc.familyCode) return null;
+      var u = (typeof currentUser === 'function') ? currentUser() : null;
+      if (!u || cs.boundName !== u.name) return null;
+      return { u: u, low: cs.doc.usernameLower, family: cs.doc.familyCode };
+    } catch (e) { return null; }
+  }
+  function runsOf(u) {
+    if (!u.incentiveRuns || typeof u.incentiveRuns !== 'object') u.incentiveRuns = {};
+    return u.incentiveRuns;
+  }
+  function solvedCount(u) {
+    try { return Object.keys((u.mysteries && u.mysteries.solved) || {}).length; } catch (e) { return 0; }
+  }
+  function masteredCountOf(u) {
+    try {
+      var sp = u.spell || {}, seen = {}, n = 0;
+      for (var w in (sp.masteredLegacy || {})) { if (sp.masteredLegacy[w]) { seen[w] = 1; n++; } }
+      for (var w2 in (sp.rightDays || {})) { if (!seen[w2] && (sp.rightDays[w2] || []).length >= 3) n++; }
+      return n;
+    } catch (e) { return 0; }
+  }
+  function trickDone(u, p) {
+    try {
+      if (p.ladder === 'tt') return !!(u.learn && u.learn[p.trickId] && u.learn[p.trickId].done);
+      return !!(u.mathLearn && u.mathLearn[p.ladder] && u.mathLearn[p.ladder][p.trickId] &&
+                u.mathLearn[p.ladder][p.trickId].done);
+    } catch (e) { return false; }
+  }
+  function centrePopup(html) {
+    var d = document.createElement('div');
+    d.style.cssText = 'position:fixed;inset:0;z-index:10002;background:rgba(30,25,60,0.6);display:flex;align-items:center;justify-content:center;padding:16px;';
+    d.setAttribute('data-sl-modal', '1');
+    d.innerHTML = '<div style="background:#fff;border-radius:18px;box-shadow:0 18px 60px rgba(0,0,0,0.35);max-width:430px;width:100%;text-align:center;padding:26px 22px;">' + html + '</div>';
+    document.body.appendChild(d);
+    return d;
+  }
+  function esc2(x) { return String(x == null ? '' : x).replace(/&/g, '&amp;').replace(/</g, '&lt;'); }
+
+  function announceCopy(inc) {
+    var p = inc.params || {};
+    if (inc.kind === 'sprint') return {
+      emoji: '⚡', title: 'SPRINT TIME!',
+      body: 'Your grown-up set a challenge: <b>5 minutes of DOUBLE POINTS</b> on the <b>🪄 Spelling tab</b>! A chip is waiting in the corner — tap it when you’re ready to go.'
+    };
+    if (inc.kind === 'trick24') return {
+      emoji: '🎓', title: 'TRICK CHALLENGE!',
+      body: 'Learn the trick <b>' + esc2(p.trickName || 'on your ladder') + '</b> within <b>24 hours</b> and earn <b>+' + (p.pts || 20) + ' ⭐</b>! Find it on the trick ladder.'
+    };
+    if (inc.kind === 'mysteries') return {
+      emoji: '🔍', title: 'DETECTIVE CHALLENGE!',
+      body: 'Solve <b>' + (p.n || 3) + ' new mysteries</b> in the next <b>7 days</b> for <b>+' + (p.pts || 30) + ' ⭐</b>!'
+    };
+    if (inc.kind === 'mastery') return {
+      emoji: '🏅', title: 'SPELLING CHALLENGE!',
+      body: 'Master <b>' + (p.n || 5) + ' new spellings</b> in the next <b>7 days</b> for <b>+' + (p.pts || 25) + ' ⭐</b>! (Mastered = right on 3 different days.)'
+    };
+    return null;
+  }
+  var WINDOW_MS = { trick24: 24 * 3600 * 1000, mysteries: 7 * 24 * 3600 * 1000, mastery: 7 * 24 * 3600 * 1000 };
+
+  function announce(inc, u) {
+    var c = announceCopy(inc);
+    if (!c) return;
+    var d = centrePopup(
+      '<div style="font-size:60px;">' + c.emoji + '</div>' +
+      '<h2 style="margin:6px 0 2px;font-family:\'Baloo 2\', sans-serif;">' + c.title + '</h2>' +
+      '<div style="font-weight:700;line-height:1.5;">' + c.body + '</div>' +
+      '<button class="btn btn-primary" style="margin-top:14px;" type="button">Challenge accepted! 💪</button>');
+    d.querySelector('button').addEventListener('click', function () {
+      try { d.remove(); } catch (e) {}
+      var e2 = eligible();
+      if (!e2 || e2.u !== u) return;
+      var runs = runsOf(u);
+      if (runs[inc.id]) return;
+      var now = Date.now();
+      runs[inc.id] = {
+        seenAt: now,
+        deadline: WINDOW_MS[inc.kind] ? now + WINDOW_MS[inc.kind] : null,
+        base: {
+          solved: solvedCount(u), mastered: masteredCountOf(u),
+          /* a trick learned BEFORE the challenge never pays — bonus is for new work */
+          trickAlreadyDone: inc.kind === 'trick24' ? trickDone(u, inc.params || {}) : false
+        },
+        kind: inc.kind, params: inc.params || {}
+      };
+      try { if (typeof saveState === 'function') saveState(); } catch (e) {}
+    });
+  }
+
+  function payAward(u, run, pts, what) {
+    run.done = true;
+    run.awarded = pts;
+    run.awardedAt = new Date().toISOString();
+    if (rawAward) { try { rawAward(pts); } catch (e) {} }
+    try { if (typeof saveState === 'function') saveState(); } catch (e) {}
+    try { playSfx('fanfare'); } catch (e) {}
+    try { popConfetti(); setTimeout(popConfetti, 400); } catch (e) {}
+    var d = centrePopup(
+      '<div style="font-size:60px;">🏆</div>' +
+      '<h2 style="margin:6px 0 2px;font-family:\'Baloo 2\', sans-serif;">CHALLENGE COMPLETE!</h2>' +
+      '<div style="font-weight:700;line-height:1.5;">' + what + '</div>' +
+      '<div style="margin:10px 0 4px;font-size:28px;font-weight:800;color:#ff9f43;">+' + pts + ' ⭐</div>' +
+      '<button class="btn btn-primary" style="margin-top:12px;" type="button">Amazing! 🎉</button>');
+    d.querySelector('button').addEventListener('click', function () { try { d.remove(); } catch (e) {} });
+  }
+
+  /* ---------- sprint chip (per armed sprint incentive) ---------- */
+  var chip = null;
+  function dropChip() { if (chip) { try { chip.remove(); } catch (e) {} chip = null; } }
+  function setChip(text, pulse) {
+    if (!chip) {
+      chip = document.createElement('div');
+      chip.style.cssText = 'position:fixed;bottom:64px;right:14px;z-index:9600;background:linear-gradient(135deg,#0984e3,#00cec9);color:#fff;font-weight:800;font-size:14px;padding:9px 14px;border-radius:999px;box-shadow:0 6px 20px rgba(0,0,0,0.3);cursor:pointer;user-select:none;-webkit-user-select:none;';
+      chip.addEventListener('click', onChipTap);
+      document.body.appendChild(chip);
+    }
+    chip.textContent = text;
+    chip.style.animation = pulse ? 'slRush3Pulse 1.6s ease-in-out infinite' : '';
+  }
+  var activeSprintId = null;
+  function fmtT(ms) {
+    var t = Math.max(0, Math.ceil(ms / 1000));
+    return Math.floor(t / 60) + ':' + ('0' + (t % 60)).slice(-2);
+  }
+  function rush3Live(u) {
+    try {
+      var r3 = u.spellRushChip20260716;
+      return !!(r3 && r3.startedAt && !r3.done && Date.now() - r3.startedAt < 5 * 60000);
+    } catch (e) { return false; }
+  }
+  function onChipTap() {
+    var e2 = eligible();
+    if (!e2 || !activeSprintId) return;
+    if (rush3Live(e2.u)) return;   /* one 2× window at a time */
+    var run = runsOf(e2.u)[activeSprintId];
+    if (!run || run.done || (run.sprint && run.sprint.startedAt)) return;
+    if (document.getElementById('slIncSprintPop')) return;
+    var d = centrePopup(
+      '<div style="font-size:60px;">⚡</div>' +
+      '<h2 style="margin:6px 0 2px;font-family:\'Baloo 2\', sans-serif;">DOUBLE POINTS SPRINT!</h2>' +
+      '<div style="font-weight:700;line-height:1.5;">From Start, any points you earn on the <b>🪄 Spelling tab</b> for <b>FIVE MINUTES</b> are <b>DOUBLED</b> at the end.</div>' +
+      '<button class="btn btn-primary" data-go="1" style="margin-top:14px;" type="button">🚀 Start my 5 minutes!</button>' +
+      '<div><button class="btn" data-go="0" style="margin-top:8px;" type="button">Maybe later</button></div>');
+    d.id = 'slIncSprintPop';
+    var runName = e2.u.name;
+    d.querySelectorAll('button').forEach(function (b) {
+      b.addEventListener('click', function () {
+        try { d.remove(); } catch (e) {}
+        if (b.dataset.go !== '1') return;
+        var e3 = eligible();
+        if (!e3 || e3.u.name !== runName || rush3Live(e3.u)) return;
+        var r2 = runsOf(e3.u)[activeSprintId];
+        if (!r2 || r2.done || (r2.sprint && r2.sprint.startedAt)) return;
+        r2.sprint = { startedAt: Date.now(), tally: 0 };
+        try { if (typeof saveState === 'function') saveState(); } catch (e) {}
+        try { if (typeof setActiveApp === 'function') setActiveApp('spell'); } catch (e) {}
+      });
+    });
+  }
+  /* tally spelling points during a live family sprint */
+  var wrapped = false;
+  function ensureWrap() {
+    if (wrapped || typeof window.awardPoints !== 'function') return;
+    wrapped = true;
+    var base = window.awardPoints;
+    window.awardPoints = function (n) {
+      try {
+        var e2 = eligible();
+        if (e2 && activeSprintId && n > 0 &&
+            typeof getActiveApp === 'function' && getActiveApp() === 'spell') {
+          var run = runsOf(e2.u)[activeSprintId];
+          var s = run && run.sprint;
+          if (run && !run.done && s && s.startedAt && Date.now() - s.startedAt < 5 * 60000) {
+            s.tally = (s.tally || 0) + n;
+          }
+        }
+      } catch (e) {}
+      return base.apply(this, arguments);
+    };
+  }
+
+  /* ---------- the poll ---------- */
+  setInterval(function () {
+    ensureWrap();
+    fetchCfg();
+    var e2 = eligible();
+    if (!e2) { dropChip(); activeSprintId = null; return; }
+    var incs = (window.slFamilyCfg && window.slFamilyCfg.incentives) || [];
+    var u = e2.u, runs = runsOf(u);
+    /* exactly ONE sprint drives the chip and the tally: a RUNNING sprint
+       always beats an armed-but-unstarted one, and ties go to the first
+       in the list — two launched sprints can never fight over the chip */
+    var pick = null;
+    for (var i = 0; i < incs.length; i++) {
+      var inc = incs[i];
+      if (!inc || !inc.id || !inc.kind) continue;
+      if (inc.target && inc.target !== '*' && inc.target !== e2.low) continue;
+      var run = runs[inc.id];
+      if (!run) {
+        /* not yet accepted — announce (one popup at a time) */
+        if (!document.querySelector('[data-sl-modal]')) announce(inc, u);
+        continue;
+      }
+      if (run.done) continue;
+      if (run.deadline && Date.now() > run.deadline) {
+        run.done = true; run.missed = true;
+        try { if (typeof saveState === 'function') saveState(); } catch (e) {}
+        continue;
+      }
+      if (inc.kind === 'sprint') {
+        var live = run.sprint && run.sprint.startedAt;
+        var pickLive = pick && pick.run.sprint && pick.run.sprint.startedAt;
+        if (!pick || (live && !pickLive)) pick = { inc: inc, run: run };
+      } else if (inc.kind === 'trick24') {
+        if (run.base && run.base.trickAlreadyDone) {
+          /* trick was learned before the challenge — nothing to earn */
+          run.done = true; run.preDone = true;
+          try { if (typeof saveState === 'function') saveState(); } catch (e) {}
+        } else if (trickDone(u, run.params || {})) {
+          payAward(u, run, (run.params && run.params.pts) || 20,
+            'You learned <b>' + esc2((run.params && run.params.trickName) || 'the trick') + '</b> inside 24 hours!');
+        }
+      } else if (inc.kind === 'mysteries') {
+        var need = (run.params && run.params.n) || 3;
+        if (solvedCount(u) - (run.base.solved || 0) >= need) {
+          payAward(u, run, (run.params && run.params.pts) || 30, 'You solved ' + need + ' new mysteries inside the week!');
+        }
+      } else if (inc.kind === 'mastery') {
+        var need2 = (run.params && run.params.n) || 5;
+        if (masteredCountOf(u) - (run.base.mastered || 0) >= need2) {
+          payAward(u, run, (run.params && run.params.pts) || 25, 'You mastered ' + need2 + ' new spellings inside the week!');
+        }
+      }
+    }
+    if (!pick) { dropChip(); activeSprintId = null; return; }
+    activeSprintId = pick.inc.id;
+    var s = pick.run.sprint;
+    if (!s || !s.startedAt) {
+      /* hold back while a personal rush window is live — one 2× at a time */
+      if (rush3Live(u)) { dropChip(); return; }
+      setChip('⚡ 2× spelling sprint — tap to start!', true);
+    } else if (Date.now() - s.startedAt >= 5 * 60000) {
+      var bonus = s.tally || 0;
+      dropChip(); activeSprintId = null;
+      if (bonus > 0) payAward(u, pick.run, bonus, 'Your five minutes are up — you earned ' + bonus + ' ⭐ spelling, doubled!');
+      else {
+        pick.run.done = true;
+        try { if (typeof saveState === 'function') saveState(); } catch (e) {}
+        var d0 = centrePopup('<div style="font-size:56px;">⏱️</div><h2 style="font-family:\'Baloo 2\', sans-serif;">Time’s up!</h2><div style="font-weight:700;">No spelling points this round — no bonus. Next time!</div><button class="btn btn-primary" style="margin-top:12px;" type="button">OK</button>');
+        d0.querySelector('button').addEventListener('click', function () { try { d0.remove(); } catch (e) {} });
+      }
+    } else {
+      setChip('⚡ 2× spelling · ' + fmtT(s.startedAt + 5 * 60000 - Date.now()) + ' · banked ' + (s.tally || 0) + ' ⭐', false);
+    }
+  }, 2000);
+})();
+</script>
 <style>
   #userOverlay.sl-mandatory #userClose { display: none !important; }
   #userOverlay.sl-mandatory #bootstrap12Btn { display: none !important; }

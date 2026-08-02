@@ -21,9 +21,13 @@ service cloud.firestore {
 
     // Families: anyone signed in may read (needed to check a code exists
     // when joining); only the creator may create their own family.
+    // V4.32: the family's grown-up manages their own family's shop, point
+    // rate and incentives — but can never hand the family to someone else.
     match /families/{code} {
       allow read: if signedIn();
       allow create: if signedIn() && request.resource.data.ownerUid == request.auth.uid;
+      allow update: if signedIn() && resource.data.ownerUid == request.auth.uid
+                    && request.resource.data.ownerUid == resource.data.ownerUid;
       allow update, delete: if isAdmin();
     }
 
@@ -46,6 +50,8 @@ service cloud.firestore {
       allow read: if signedIn();
       allow create: if signedIn() && request.resource.data.hostUid == request.auth.uid;
       allow update, delete: if signedIn() && resource.data.hostUid == request.auth.uid;
+      // V4.32: admins clear families' shop requests off this channel.
+      allow update, delete: if isAdmin();
     }
   }
 }

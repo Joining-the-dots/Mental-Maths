@@ -300,6 +300,7 @@ var APP_LABELS = { maths:'🔢 Maths', spell:'🪄 Spelling', flags:'🏳️ Fla
   function renderCloudHome() {
     watchPresence();
     autoMergeGuests();
+    fetchShopRequests();
     if (!cloudRefreshIv) cloudRefreshIv = setInterval(refreshCloudDocs, 60000);
     var host = document.getElementById('content');
     var byFam = {};
@@ -346,6 +347,7 @@ var APP_LABELS = { maths:'🔢 Maths', spell:'🪄 Spelling', flags:'🏳️ Fla
     });
     h += '</div>';
 
+    var ownedCodes = [];
     Object.keys(byFam).sort().forEach(function (code) {
       var fam = cloud.families[code] || {};
       h += '<h2>👨‍👩‍👧 ' + esc(fam.name || 'Family') + ' <span class="pill">code ' + esc(code) + '</span></h2><div class="users">';
@@ -359,7 +361,22 @@ var APP_LABELS = { maths:'🔢 Maths', spell:'🪄 Spelling', flags:'🏳️ Fla
           '📅 last synced ' + fmtDate(d.updatedAtIso) + '</div></div>';
       });
       h += '</div>';
+      /* V4.32: the family's grown-up gets shop + challenge tools */
+      if (ownsThisFamily(code)) {
+        ownedCodes.push(code);
+        h += renderFamilyTools(code, fam, byFam[code].filter(function (d) { return !d.anon; }));
+      }
     });
+    if (cloud.isAdmin && cloud.shopRequests && cloud.shopRequests.length) {
+      h += '<h2>🛒 Shop requests from families<span class="pill warnpill">' + cloud.shopRequests.length + '</span></h2><div class="card" id="shopReqs">';
+      cloud.shopRequests.forEach(function (r, k) {
+        h += '<div class="buyrow" data-k="' + k + '"><div class="who">' + esc(r.host || '?') + ' <span class="muted">(' + esc(r.family || '?') + ')</span></div>' +
+          '<div class="what">' + esc(r.text || '') + '</div>' +
+          '<div class="when">' + fmtDate(new Date(r.at || 0).toISOString()) + '</div>' +
+          '<button class="btn-act" data-reqdone="' + esc(r._id) + '">✓ Done</button></div>';
+      });
+      h += '</div>';
+    }
     if (cloud.isAdmin && guests.length) {
       /* passers-by under 5 minutes of play are noise — hide them */
       var realGuests = guests.filter(function (d) { return totalSecs(d.state || {}) >= 300; });
@@ -477,6 +494,16 @@ var APP_LABELS = { maths:'🔢 Maths', spell:'🪄 Spelling', flags:'🏳️ Fla
         removeGuestCopy(b.dataset.unguest);
       });
     });
+    wireFamilyTools(host);
+    ownedCodes.forEach(function (code) { updateTrickSelect(host, code); });
+    host.querySelectorAll('[data-reqdone]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        fdb.collection('challenges').doc(b.dataset.reqdone).delete().then(function () {
+          cloud.shopRequests = (cloud.shopRequests || []).filter(function (r) { return r._id !== b.dataset.reqdone; });
+          renderCloudHome();
+        }).catch(function () { alert('Could not clear it — the updated firestore.rules may not be pasted yet.'); });
+      });
+    });
   }
 
   /* ---------- guest → account merge (V4.25) ----------
@@ -572,6 +599,15 @@ var APP_LABELS = { maths:'🔢 Maths', spell:'🪄 Spelling', flags:'🏳️ Fla
             (!n[rk].done && !m[rk].done && (n[rk].startedAt || 0) > (m[rk].startedAt || 0))) m[rk] = n[rk];
       }
     }
+    /* family-incentive runs: same rule — a done/awarded run on the account
+       side must never be regressed by a stale guest copy (award replay) */
+    if (n.incentiveRuns && typeof n.incentiveRuns === 'object') {
+      m.incentiveRuns = m.incentiveRuns || {};
+      for (var ik in n.incentiveRuns) {
+        var nr = n.incentiveRuns[ik], mr = m.incentiveRuns[ik];
+        if (!mr || (nr && nr.done && !mr.done)) m.incentiveRuns[ik] = nr;
+      }
+    }
     /* one-off fix flags and anything else only the account has — carry it
        over so those fixes don't run a second time */
     for (var key in n) { if (!(key in m)) m[key] = n[key]; }
@@ -655,6 +691,220 @@ var APP_LABELS = { maths:'🔢 Maths', spell:'🪄 Spelling', flags:'🏳️ Fla
 
   function renderCloudUser(d) {
     renderUserFrom(d.state || {}, d.username, renderCloudHome, d);
+  }
+
+  /* ---------- family grown-up tools (V4.32) ----------
+     The family owner runs their own shop (aisles, own prizes, point
+     rate) and launches bonus challenges. Config lives on the family
+     doc; the game reads it for every signed-in kid. */
+  /* hoisted to script scope (V4.32): the challenge launcher needs it too */
+  var TRICK_DEX = {"tt": [{"id": "four", "name": "Double, double", "emoji": "✖️"}, {"id": "five", "name": "Times ten, then halve", "emoji": "✋"}, {"id": "six", "name": "Times five, plus one more lot", "emoji": "6️⃣"}, {"id": "seven_split", "name": "Times five, plus times two", "emoji": "7️⃣"}, {"id": "eight", "name": "Double three times", "emoji": "🎱"}, {"id": "nine_finger", "name": "Nine fingers", "emoji": "🖐️"}, {"id": "nine", "name": "Times ten, minus one lot", "emoji": "9️⃣"}, {"id": "ten", "name": "Times ten", "emoji": "🔟"}, {"id": "eleven_split", "name": "Times eleven (single digit)", "emoji": "✂️"}, {"id": "eleven_carry", "name": "Times eleven (two digits, with carry)", "emoji": "📤"}, {"id": "twelve", "name": "Times ten plus times two", "emoji": "🥚"}, {"id": "twentyfive", "name": "Times hundred, divided by four", "emoji": "🍀"}, {"id": "fifty", "name": "Times hundred, halved", "emoji": "⚖️"}, {"id": "ninetynine", "name": "Times hundred, minus one lot", "emoji": "🎯"}, {"id": "hundred", "name": "Times hundred", "emoji": "💯"}, {"id": "round_adjust", "name": "Round to a tidy number, then adjust", "emoji": "🔄"}, {"id": "split_place", "name": "Split by place value", "emoji": "📦"}, {"id": "square_five", "name": "Squaring a number ending in 5", "emoji": "🟦"}, {"id": "square_ten", "name": "Squaring a round ten", "emoji": "🟡"}, {"id": "square_close", "name": "Square via the next round number", "emoji": "🪞"}, {"id": "both_five", "name": "Both numbers end in 5", "emoji": "🎣"}, {"id": "teens", "name": "Teens × Teens (11 – 19)", "emoji": "🦸"}, {"id": "same_tens", "name": "Same tens digit", "emoji": "🪩"}, {"id": "same_tens_ones10", "name": "Same tens, ones add to 10", "emoji": "👯"}, {"id": "tens10_same_ones", "name": "Tens add to 10, same ones", "emoji": "⚔️"}, {"id": "nikhilam", "name": "Close to 100", "emoji": "🧙"}, {"id": "nikhilam_ten", "name": "Close to 10", "emoji": "🪄"}, {"id": "diff_squares", "name": "Square the middle, minus the gap²", "emoji": "🪞"}, {"id": "anchor_step", "name": "One step from a square", "emoji": "⚓"}, {"id": "halve_double", "name": "Halve and double", "emoji": "⚖️"}, {"id": "factor_regroup", "name": "Regroup the factors", "emoji": "🧱"}, {"id": "finger_six_ten", "name": "Two-hand finger trick (6 – 10)", "emoji": "🤲"}], "add": [{"id": "leftright", "name": "Left to Right", "emoji": "➡️"}, {"id": "bonds", "name": "Number Bonds", "emoji": "🔟"}, {"id": "bigger", "name": "Bigger Number First", "emoji": "🔢"}, {"id": "counton", "name": "Count On", "emoji": "👆"}, {"id": "doubles", "name": "Doubles", "emoji": "👯"}, {"id": "neardoubles", "name": "Near Doubles", "emoji": "✨"}, {"id": "maketen", "name": "Make Ten", "emoji": "🎯"}, {"id": "spottens", "name": "Spot the Tens", "emoji": "🔍"}, {"id": "roundadjust", "name": "Round and Adjust", "emoji": "🔄"}, {"id": "givetake", "name": "Give and Take", "emoji": "🤝"}, {"id": "add9", "name": "Add 9 and 99", "emoji": "9️⃣"}], "sub": [{"id": "takeaway", "name": "Take Away in Parts", "emoji": "➖"}, {"id": "countback", "name": "Count Back", "emoji": "👇"}, {"id": "countup", "name": "Count Up", "emoji": "🪜"}, {"id": "bridgedown", "name": "Bridge Down", "emoji": "🌉"}, {"id": "thinkadd", "name": "Think Addition", "emoji": "🔄"}, {"id": "roundadjust", "name": "Round and Adjust", "emoji": "⤴️"}, {"id": "samediff", "name": "Same Difference", "emoji": "⚖️"}, {"id": "subfrom100", "name": "Subtract from 100", "emoji": "💯"}, {"id": "sub9", "name": "Subtract 9 and 99", "emoji": "9️⃣"}], "div": [{"id": "inverse", "name": "Times Tables Backwards", "emoji": "↩️"}, {"id": "div10", "name": "÷ 10, 100, 1000", "emoji": "🔟"}, {"id": "rule2510", "name": "The 2, 5, 10 Test", "emoji": "👀"}, {"id": "rule39", "name": "Digit Sum for 3 and 9", "emoji": "➕"}, {"id": "div4", "name": "÷ 4 = Halve Twice", "emoji": "✂️"}, {"id": "div8", "name": "÷ 8 = Halve Three Times", "emoji": "✂️✂️"}, {"id": "div5", "name": "÷ 5 = Double then ÷ 10", "emoji": "⚡"}, {"id": "rule48", "name": "Last Two for 4, Last Three for 8", "emoji": "🔎"}, {"id": "simplify", "name": "Halve Both First", "emoji": "⚖️"}, {"id": "chunk", "name": "Split the Dividend", "emoji": "🧩"}, {"id": "leftright", "name": "Front-End First", "emoji": "➡️"}, {"id": "partial", "name": "Subtract Friendly Chunks", "emoji": "🪜"}, {"id": "estimate", "name": "Round to Estimate", "emoji": "≈"}, {"id": "rule11", "name": "The 11 Test", "emoji": "1️⃣1️⃣"}, {"id": "rule7", "name": "The 7 Trick", "emoji": "7️⃣"}], "frac": [{"id": "samebottom", "name": "Same Bottom → Add the Tops", "emoji": "➕"}, {"id": "memorise", "name": "Magic Fraction Facts", "emoji": "✨"}, {"id": "fracof", "name": "Fraction of a Number", "emoji": "🔪"}, {"id": "simplifyfrac", "name": "Simplify by Halving", "emoji": "⚖️"}, {"id": "slashzeros", "name": "Slash the Zeros", "emoji": "/0"}, {"id": "benchmark", "name": "Compare to One Half", "emoji": "½"}, {"id": "crossmult", "name": "Cross-Multiply to Compare", "emoji": "❌"}, {"id": "cancelmul", "name": "Cancel Before Multiplying", "emoji": "❎"}, {"id": "kcf", "name": "Keep, Change, Flip", "emoji": "🔄"}, {"id": "butterfly", "name": "Butterfly Method", "emoji": "🦋"}, {"id": "commondenom", "name": "Spot the Easy Common Bottom", "emoji": "👀"}, {"id": "fractopct", "name": "Fraction → Percent", "emoji": "％"}], "pct": [{"id": "find10", "name": "10% — Shift the Decimal", "emoji": "🔟"}, {"id": "find1", "name": "1% — Shift TWICE", "emoji": "1️⃣"}, {"id": "pctfrac", "name": "% ↔ Fraction Magic", "emoji": "🔮"}, {"id": "build", "name": "Build from 10, 5 and 1", "emoji": "🧱"}, {"id": "halfdouble", "name": "Halve and Double", "emoji": "🔁"}, {"id": "swap", "name": "Swap the Numbers", "emoji": "🔀"}, {"id": "isofov", "name": "\"Is over Of\"", "emoji": "➗"}, {"id": "multiplier", "name": "Multiplier Method (+% or −%)", "emoji": "×"}, {"id": "chain", "name": "Chain Two %s with Multipliers", "emoji": "⛓️"}, {"id": "reverse", "name": "Reverse Percentages", "emoji": "⏪"}, {"id": "tips", "name": "Tip Combos", "emoji": "🍽️"}, {"id": "fracpct", "name": "Use a Fraction for Tidy %s", "emoji": "🍰"}]};
+  var SHOP_CAT_LABELS = { lego: '🧱 LEGO', games: '🎲 Games', plush: '🧸 Plush', cards: '🎴 Cards & collect',
+    action: '🦸 Action & play', racing: '🏁 Slot racing', popmart: '🎁 Pop Mart', craft: '🎨 Craft',
+    science: '🔬 Science', sports: '⚽ Sports & outdoor', tech: '📱 Tech', pocket: '🍬 Pocket money' };
+  var INC_KINDS = [
+    ['sprint',    '⚡ 5-minute 2× spelling sprint (a chip they start when ready)'],
+    ['trick24',   '🎓 Learn a chosen maths trick within 24 hours (+20 ⭐)'],
+    ['mysteries', '🔍 Solve 3 new mysteries within 7 days (+30 ⭐)'],
+    ['mastery',   '🏅 Master 5 new spellings within 7 days (+25 ⭐)']
+  ];
+  function ownsThisFamily(code) {
+    var fam = cloud.families[code];
+    return !!(fam && auth.currentUser && fam.ownerUid === auth.currentUser.uid);
+  }
+  function saveFamily(code, patch, done) {
+    fdb.collection('families').doc(code).set(patch, { merge: true }).then(function () {
+      var fam = cloud.families[code] = cloud.families[code] || {};
+      Object.keys(patch).forEach(function (k) {
+        if (k === 'shop') fam.shop = Object.assign({}, fam.shop || {}, patch.shop);
+        else fam[k] = patch[k];
+      });
+      if (done) done();
+      renderCloudHome();
+    }).catch(function (e) {
+      alert((e && String(e.code).indexOf('permission') >= 0)
+        ? 'Saving needs the updated security rules — the firestore.rules file must be pasted into the Firebase console first.'
+        : 'Could not save — check the connection and try again.');
+    });
+  }
+  function renderFamilyTools(code, fam, kids) {
+    var shop = fam.shop || {};
+    var rate = (typeof shop.rate === 'number') ? shop.rate : 225;
+    var offCats = shop.offCats || [];
+    var custom = shop.custom || [];
+    var incs = fam.incentives || [];
+    var h = '<h2>🛍 Family shop <span class="pill">code ' + esc(code) + '</span></h2><div class="card">';
+    h += '<div>⭐ £1 of real price = <input type="number" min="10" max="5000" id="fsRate_' + esc(code) + '" value="' + rate +
+      '" style="width:80px;font-family:inherit;font-weight:800;padding:4px 6px;"> points ' +
+      '<button class="btn-act" data-fsrate="' + esc(code) + '">Save rate</button>' +
+      '<div class="muted" style="margin-top:2px;">Changes every price in your family’s shop (standard is 225).</div></div>';
+    h += '<div style="margin-top:10px;"><b>Aisles</b> — untick to hide a whole aisle from your kids:<div style="display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:4px;">';
+    Object.keys(SHOP_CAT_LABELS).forEach(function (c) {
+      h += '<label style="font-size:13px;font-weight:700;"><input type="checkbox" data-fscat="' + esc(code) + '" value="' + c + '"' +
+        (offCats.indexOf(c) < 0 ? ' checked' : '') + '> ' + SHOP_CAT_LABELS[c] + '</label>';
+    });
+    h += '</div><button class="btn-act" data-fscats="' + esc(code) + '" style="margin-top:6px;">Save aisles</button></div>';
+    h += '<div style="margin-top:10px;"><b>Your own prizes</b> — kids see them in a 🏠 Our own aisle:';
+    if (!custom.length) h += '<div class="muted">None yet.</div>';
+    custom.forEach(function (ci, i) {
+      h += '<div style="margin-top:3px;">' + esc(ci.icon || '🎁') + ' ' + esc(ci.name) + ' <span class="muted">· ' + esc(ci.price || '') + '</span> ' +
+        '<button class="btn-ghost" data-fsdel="' + esc(code) + '" data-i="' + i + '">✕</button></div>';
+    });
+    h += '<div><button class="btn-ghost" data-fsadd="' + esc(code) + '" style="margin-top:6px;">➕ Add your own prize</button> ' +
+      '<button class="btn-ghost" data-fsreq="' + esc(code) + '" style="margin-top:6px;">📨 Ask James to add something to the standard shop</button></div></div>';
+    h += '</div>';
+    h += '<h2>🎯 Bonus challenges <span class="pill">code ' + esc(code) + '</span></h2><div class="card">';
+    h += '<div><select id="incKind_' + esc(code) + '" style="font-family:inherit;font-weight:700;padding:5px;max-width:100%;">';
+    INC_KINDS.forEach(function (k) { h += '<option value="' + k[0] + '">' + k[1] + '</option>'; });
+    h += '</select> for <select id="incKid_' + esc(code) + '" style="font-family:inherit;font-weight:700;padding:5px;">';
+    h += '<option value="*">Everyone</option>';
+    kids.forEach(function (d) { h += '<option value="' + esc(d.usernameLower) + '">' + esc(d.username) + '</option>'; });
+    h += '</select> <select id="incTrick_' + esc(code) + '" style="display:none;font-family:inherit;font-weight:700;padding:5px;max-width:100%;"></select> ' +
+      '<button class="btn-act" data-inclaunch="' + esc(code) + '">🚀 Launch</button>' +
+      '<div class="muted" style="margin-top:2px;">They get a popup next time they play; rewards pay out automatically.</div></div>';
+    if (incs.length) {
+      h += '<div style="margin-top:8px;"><b>Active</b>:';
+      incs.forEach(function (inc, i) {
+        var kindLabel = (INC_KINDS.filter(function (k) { return k[0] === inc.kind; })[0] || ['', inc.kind])[1];
+        var extra = inc.kind === 'trick24' && inc.params && inc.params.trickName ? ' · ' + esc(inc.params.trickName) : '';
+        h += '<div style="margin-top:3px;font-size:13px;">' + kindLabel.split(' (')[0] + extra +
+          ' → <b>' + esc(inc.target === '*' ? 'everyone' : inc.target) + '</b> <span class="muted">· ' + fmtDate(new Date(inc.at).toISOString()) + '</span> ' +
+          '<button class="btn-ghost" data-incdel="' + esc(code) + '" data-i="' + i + '">✕</button></div>';
+      });
+      h += '</div>';
+    }
+    h += '</div>';
+    return h;
+  }
+  function wireFamilyTools(host) {
+    host.querySelectorAll('[data-fsrate]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var code = b.dataset.fsrate;
+        var v = parseInt(document.getElementById('fsRate_' + code).value, 10);
+        if (!(v >= 10 && v <= 5000)) { alert('Pick a rate between 10 and 5000 points per £.'); return; }
+        saveFamily(code, { shop: { rate: v } });
+      });
+    });
+    host.querySelectorAll('[data-fscats]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var code = b.dataset.fscats;
+        var off = [];
+        host.querySelectorAll('[data-fscat="' + code + '"]').forEach(function (cb) { if (!cb.checked) off.push(cb.value); });
+        if (off.length === Object.keys(SHOP_CAT_LABELS).length) { alert('That would hide the whole shop — leave at least one aisle on.'); return; }
+        saveFamily(code, { shop: { offCats: off } });
+      });
+    });
+    host.querySelectorAll('[data-fsadd]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var code = b.dataset.fsadd;
+        var name = prompt('Prize name (e.g. "Cinema trip with Dad"):'); if (!name || !name.trim()) return;
+        var price = prompt('Real-world value in pounds (just a number, e.g. 12.50):');
+        if (price === null) return;   /* Cancel aborts — nothing is added */
+        var pv = parseFloat(price); if (!(pv > 0 && pv < 1000)) { alert('Enter a price between £0 and £1000.'); return; }
+        var icon = prompt('Emoji for it (optional):', '🎁');
+        if (icon === null) return;    /* Cancel aborts */
+        icon = icon || '🎁';
+        var fam = cloud.families[code] || {};
+        var list = ((fam.shop || {}).custom || []).slice();
+        list.push({ id: 'fam_' + Date.now().toString(36), name: name.trim().slice(0, 60), price: '£' + pv.toFixed(2), icon: icon.trim().slice(0, 4) || '🎁', cat: 'family' });
+        saveFamily(code, { shop: { custom: list } });
+      });
+    });
+    host.querySelectorAll('[data-fsdel]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var code = b.dataset.fsdel, i = parseInt(b.dataset.i, 10);
+        var fam = cloud.families[code] || {};
+        var list = ((fam.shop || {}).custom || []).slice();
+        list.splice(i, 1);
+        saveFamily(code, { shop: { custom: list } });
+      });
+    });
+    host.querySelectorAll('[data-fsreq]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var code = b.dataset.fsreq;
+        var text = prompt('What should James add to the standard shop? (item name, rough price, a link if you have one)');
+        if (!text || !text.trim()) return;
+        fdb.collection('challenges').add({
+          kind: 'shopRequest', hostUid: auth.currentUser.uid,
+          host: (cloud.families[code] || {}).ownerUsername || 'a family grown-up',
+          family: code, text: text.trim().slice(0, 400), at: Date.now(), status: 'req'
+        }).then(function () { alert('Sent! James will see it in his Control Centre.'); })
+          .catch(function () { alert('Could not send — check the connection and try again.'); });
+      });
+    });
+    host.querySelectorAll('[id^="incKind_"], [id^="incKid_"]').forEach(function (sel) {
+      sel.addEventListener('change', function () {
+        var code = sel.id.split('_').slice(1).join('_');
+        updateTrickSelect(host, code);
+      });
+    });
+    host.querySelectorAll('[data-inclaunch]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var code = b.dataset.inclaunch;
+        var kind = document.getElementById('incKind_' + code).value;
+        var target = document.getElementById('incKid_' + code).value;
+        var params = {};
+        if (kind === 'trick24') {
+          if (target === '*') { alert('The trick challenge needs ONE child picked (their un-learned tricks differ).'); return; }
+          var ts = document.getElementById('incTrick_' + code);
+          if (!ts.value) { alert('Pick which trick they should learn.'); return; }
+          var parts = ts.value.split('::');
+          params = { ladder: parts[0], trickId: parts[1], trickName: ts.options[ts.selectedIndex].textContent, pts: 20 };
+        }
+        if (kind === 'mysteries') params = { n: 3, pts: 30 };
+        if (kind === 'mastery') params = { n: 5, pts: 25 };
+        var fam = cloud.families[code] || {};
+        var list = (fam.incentives || []).slice();
+        list.push({ id: 'inc_' + Date.now().toString(36), kind: kind, target: target, params: params, at: Date.now() });
+        saveFamily(code, { incentives: list });
+      });
+    });
+    host.querySelectorAll('[data-incdel]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var code = b.dataset.incdel, i = parseInt(b.dataset.i, 10);
+        var fam = cloud.families[code] || {};
+        var list = (fam.incentives || []).slice();
+        list.splice(i, 1);
+        saveFamily(code, { incentives: list });
+      });
+    });
+  }
+  function updateTrickSelect(host, code) {
+    var kindSel = document.getElementById('incKind_' + code);
+    var kidSel = document.getElementById('incKid_' + code);
+    var trickSel = document.getElementById('incTrick_' + code);
+    if (!kindSel || !trickSel) return;
+    if (kindSel.value !== 'trick24') { trickSel.style.display = 'none'; return; }
+    trickSel.style.display = '';
+    trickSel.innerHTML = '<option value="">— pick the trick —</option>';
+    var kid = cloud.docs.filter(function (d) { return !d.anon && d.usernameLower === kidSel.value && d.familyCode === code; })[0];
+    var st = (kid && kid.state) || {};
+    var stores = { tt: st.learn || {} };
+    var ml = st.mathLearn || {};
+    ['add', 'sub', 'div', 'frac', 'pct'].forEach(function (op) { stores[op] = ml[op] || {}; });
+    Object.keys(TRICK_DEX).forEach(function (ladder) {
+      (TRICK_DEX[ladder] || []).forEach(function (t) {
+        var rec = stores[ladder] ? stores[ladder][t.id] : null;
+        if (rec && rec.done) return;   /* already learned — no bonus for old news */
+        var o = document.createElement('option');
+        o.value = ladder + '::' + t.id;
+        o.textContent = (t.emoji ? t.emoji + ' ' : '') + t.name;
+        trickSel.appendChild(o);
+      });
+    });
+  }
+
+  /* admin inbox: families' shop requests — refreshed at most once a
+     minute so requests sent while the dashboard sits open still appear */
+  var reqFetchedAt = 0;
+  function fetchShopRequests() {
+    if (!cloud.isAdmin || !fdb || Date.now() - reqFetchedAt < 55000) return;
+    reqFetchedAt = Date.now();
+    fdb.collection('challenges').where('kind', '==', 'shopRequest').get().then(function (qs) {
+      var had = (cloud.shopRequests || []).length;
+      cloud.shopRequests = qs.docs.map(function (d) { var x = d.data(); x._id = d.id; return x; });
+      if (cloud.shopRequests.length !== had) renderCloudHome();
+    }).catch(function () {});
   }
 
   /* ---------- gate ---------- */
@@ -797,7 +1047,6 @@ var APP_LABELS = { maths:'🔢 Maths', spell:'🪄 Spelling', flags:'🏳️ Fla
       }).join('') || '<div class="empty">No tracked activity yet (tracking starts with this update).</div>';
 
     /* mental maths tricks — every ladder, with done chips + next-up */
-    var TRICK_DEX = {"tt": [{"id": "four", "name": "Double, double", "emoji": "✖️"}, {"id": "five", "name": "Times ten, then halve", "emoji": "✋"}, {"id": "six", "name": "Times five, plus one more lot", "emoji": "6️⃣"}, {"id": "seven_split", "name": "Times five, plus times two", "emoji": "7️⃣"}, {"id": "eight", "name": "Double three times", "emoji": "🎱"}, {"id": "nine_finger", "name": "Nine fingers", "emoji": "🖐️"}, {"id": "nine", "name": "Times ten, minus one lot", "emoji": "9️⃣"}, {"id": "ten", "name": "Times ten", "emoji": "🔟"}, {"id": "eleven_split", "name": "Times eleven (single digit)", "emoji": "✂️"}, {"id": "eleven_carry", "name": "Times eleven (two digits, with carry)", "emoji": "📤"}, {"id": "twelve", "name": "Times ten plus times two", "emoji": "🥚"}, {"id": "twentyfive", "name": "Times hundred, divided by four", "emoji": "🍀"}, {"id": "fifty", "name": "Times hundred, halved", "emoji": "⚖️"}, {"id": "ninetynine", "name": "Times hundred, minus one lot", "emoji": "🎯"}, {"id": "hundred", "name": "Times hundred", "emoji": "💯"}, {"id": "round_adjust", "name": "Round to a tidy number, then adjust", "emoji": "🔄"}, {"id": "split_place", "name": "Split by place value", "emoji": "📦"}, {"id": "square_five", "name": "Squaring a number ending in 5", "emoji": "🟦"}, {"id": "square_ten", "name": "Squaring a round ten", "emoji": "🟡"}, {"id": "square_close", "name": "Square via the next round number", "emoji": "🪞"}, {"id": "both_five", "name": "Both numbers end in 5", "emoji": "🎣"}, {"id": "teens", "name": "Teens × Teens (11 – 19)", "emoji": "🦸"}, {"id": "same_tens", "name": "Same tens digit", "emoji": "🪩"}, {"id": "same_tens_ones10", "name": "Same tens, ones add to 10", "emoji": "👯"}, {"id": "tens10_same_ones", "name": "Tens add to 10, same ones", "emoji": "⚔️"}, {"id": "nikhilam", "name": "Close to 100", "emoji": "🧙"}, {"id": "nikhilam_ten", "name": "Close to 10", "emoji": "🪄"}, {"id": "diff_squares", "name": "Square the middle, minus the gap²", "emoji": "🪞"}, {"id": "anchor_step", "name": "One step from a square", "emoji": "⚓"}, {"id": "halve_double", "name": "Halve and double", "emoji": "⚖️"}, {"id": "factor_regroup", "name": "Regroup the factors", "emoji": "🧱"}, {"id": "finger_six_ten", "name": "Two-hand finger trick (6 – 10)", "emoji": "🤲"}], "add": [{"id": "leftright", "name": "Left to Right", "emoji": "➡️"}, {"id": "bonds", "name": "Number Bonds", "emoji": "🔟"}, {"id": "bigger", "name": "Bigger Number First", "emoji": "🔢"}, {"id": "counton", "name": "Count On", "emoji": "👆"}, {"id": "doubles", "name": "Doubles", "emoji": "👯"}, {"id": "neardoubles", "name": "Near Doubles", "emoji": "✨"}, {"id": "maketen", "name": "Make Ten", "emoji": "🎯"}, {"id": "spottens", "name": "Spot the Tens", "emoji": "🔍"}, {"id": "roundadjust", "name": "Round and Adjust", "emoji": "🔄"}, {"id": "givetake", "name": "Give and Take", "emoji": "🤝"}, {"id": "add9", "name": "Add 9 and 99", "emoji": "9️⃣"}], "sub": [{"id": "takeaway", "name": "Take Away in Parts", "emoji": "➖"}, {"id": "countback", "name": "Count Back", "emoji": "👇"}, {"id": "countup", "name": "Count Up", "emoji": "🪜"}, {"id": "bridgedown", "name": "Bridge Down", "emoji": "🌉"}, {"id": "thinkadd", "name": "Think Addition", "emoji": "🔄"}, {"id": "roundadjust", "name": "Round and Adjust", "emoji": "⤴️"}, {"id": "samediff", "name": "Same Difference", "emoji": "⚖️"}, {"id": "subfrom100", "name": "Subtract from 100", "emoji": "💯"}, {"id": "sub9", "name": "Subtract 9 and 99", "emoji": "9️⃣"}], "div": [{"id": "inverse", "name": "Times Tables Backwards", "emoji": "↩️"}, {"id": "div10", "name": "÷ 10, 100, 1000", "emoji": "🔟"}, {"id": "rule2510", "name": "The 2, 5, 10 Test", "emoji": "👀"}, {"id": "rule39", "name": "Digit Sum for 3 and 9", "emoji": "➕"}, {"id": "div4", "name": "÷ 4 = Halve Twice", "emoji": "✂️"}, {"id": "div8", "name": "÷ 8 = Halve Three Times", "emoji": "✂️✂️"}, {"id": "div5", "name": "÷ 5 = Double then ÷ 10", "emoji": "⚡"}, {"id": "rule48", "name": "Last Two for 4, Last Three for 8", "emoji": "🔎"}, {"id": "simplify", "name": "Halve Both First", "emoji": "⚖️"}, {"id": "chunk", "name": "Split the Dividend", "emoji": "🧩"}, {"id": "leftright", "name": "Front-End First", "emoji": "➡️"}, {"id": "partial", "name": "Subtract Friendly Chunks", "emoji": "🪜"}, {"id": "estimate", "name": "Round to Estimate", "emoji": "≈"}, {"id": "rule11", "name": "The 11 Test", "emoji": "1️⃣1️⃣"}, {"id": "rule7", "name": "The 7 Trick", "emoji": "7️⃣"}], "frac": [{"id": "samebottom", "name": "Same Bottom → Add the Tops", "emoji": "➕"}, {"id": "memorise", "name": "Magic Fraction Facts", "emoji": "✨"}, {"id": "fracof", "name": "Fraction of a Number", "emoji": "🔪"}, {"id": "simplifyfrac", "name": "Simplify by Halving", "emoji": "⚖️"}, {"id": "slashzeros", "name": "Slash the Zeros", "emoji": "/0"}, {"id": "benchmark", "name": "Compare to One Half", "emoji": "½"}, {"id": "crossmult", "name": "Cross-Multiply to Compare", "emoji": "❌"}, {"id": "cancelmul", "name": "Cancel Before Multiplying", "emoji": "❎"}, {"id": "kcf", "name": "Keep, Change, Flip", "emoji": "🔄"}, {"id": "butterfly", "name": "Butterfly Method", "emoji": "🦋"}, {"id": "commondenom", "name": "Spot the Easy Common Bottom", "emoji": "👀"}, {"id": "fractopct", "name": "Fraction → Percent", "emoji": "％"}], "pct": [{"id": "find10", "name": "10% — Shift the Decimal", "emoji": "🔟"}, {"id": "find1", "name": "1% — Shift TWICE", "emoji": "1️⃣"}, {"id": "pctfrac", "name": "% ↔ Fraction Magic", "emoji": "🔮"}, {"id": "build", "name": "Build from 10, 5 and 1", "emoji": "🧱"}, {"id": "halfdouble", "name": "Halve and Double", "emoji": "🔁"}, {"id": "swap", "name": "Swap the Numbers", "emoji": "🔀"}, {"id": "isofov", "name": "\"Is over Of\"", "emoji": "➗"}, {"id": "multiplier", "name": "Multiplier Method (+% or −%)", "emoji": "×"}, {"id": "chain", "name": "Chain Two %s with Multipliers", "emoji": "⛓️"}, {"id": "reverse", "name": "Reverse Percentages", "emoji": "⏪"}, {"id": "tips", "name": "Tip Combos", "emoji": "🍽️"}, {"id": "fracpct", "name": "Use a Fraction for Tidy %s", "emoji": "🍰"}]};
     function trickRows(uu) {
       var sections = [['tt', '✖️ Times tables'], ['add', '➕ Addition'], ['sub', '➖ Subtraction'],
                       ['div', '➗ Division'], ['frac', '🍕 Fractions'], ['pct', '💯 Percentages']];

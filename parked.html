@@ -24611,15 +24611,67 @@ tcGameOverlay.addEventListener('click', (e) => { if (e.target === tcGameOverlay)
   .op-explain { background:#f3f7fb; border-left:4px solid #3aa7e0; border-radius:8px;
     padding:8px 12px; margin-top:10px; font-size:13.5px; text-align:left; }
   .op-spectate { text-align:center; font-weight:800; color:#c0392b; font-size:14px; min-height:20px; }
+  /* V4.33: game-show stage look + tension effects */
+  .op-stage { background:linear-gradient(160deg,#140b33,#2a1660 55%,#0d0a2a) !important; color:#fff; }
+  .op-stage h2 { color:#fff; }
+  .op-stage .sub, .op-stage p.sub { color:#c9c0ee; }
+  .op-stage .op-q { color:#fff; font-size:26px; text-shadow:0 2px 14px rgba(168,111,240,0.45); }
+  .op-stage .ft-option { background:#241456; border:2px solid #5a3fd0; color:#fff; font-size:16.5px;
+    font-weight:800; border-radius:14px; padding:13px 16px; transition:transform .12s, box-shadow .12s; }
+  .op-stage .ft-option:hover:not(:disabled) { transform:scale(1.03); box-shadow:0 0 18px rgba(138,86,255,0.55); }
+  .op-stage .ft-option.correct { background:#1e9e54; border-color:#2ecc71; box-shadow:0 0 22px rgba(46,204,113,0.7); }
+  .op-stage .ft-option.wrong { background:#8e2b2b; border-color:#e74c3c; }
+  .op-stage .ft-option.sel { border-color:#ffd23f; box-shadow:0 0 14px rgba(255,210,63,0.6); }
+  .op-stage .op-explain { background:rgba(255,255,255,0.08); border-left-color:#a86ff0; color:#e8e3ff; }
+  .op-stage .op-rung { background:rgba(255,255,255,0.12); color:#cfc7f2; }
+  .op-stage .op-rung.done { background:#2ecc71; color:#fff; }
+  .op-stage .op-rung.now { background:#ffd23f; color:#4a3200; box-shadow:0 0 12px rgba(255,210,63,0.8); }
+  .op-stage .op-rung.dead { background:#e74c3c; color:#fff; }
+  .op-stage .op-life { background:rgba(255,255,255,0.06); border-color:#a86ff0; color:#dcd2ff; }
+  .op-stage .op-life:disabled { border-color:#4a4468; color:#6b6590; }
+  .op-stage .fc-pick-status .me, .op-stage .fc-pick-status .them { color:#dcd2ff; }
+  .op-timerwrap { position:relative; margin:2px 0 10px; }
+  .op-timerwrap .op-timerbar { height:16px; margin:0; }
+  .op-timernum { position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    font-family:'Baloo 2',sans-serif; font-weight:800; font-size:12.5px; color:#fff;
+    text-shadow:0 1px 3px rgba(0,0,0,0.6); pointer-events:none; }
+  @keyframes opBarPulse { 0%,100% { filter:brightness(1); } 50% { filter:brightness(1.8); } }
+  .op-timerbar.low { animation: opBarPulse 0.5s infinite; }
+  @keyframes opUrgent { 0%,100% { transform:scale(1); } 50% { transform:scale(1.12); } }
+  .op-life.urgent { animation: opUrgent 0.7s infinite; border-width:3px; font-size:14.5px;
+    background:#ffd23f !important; color:#4a3200 !important; border-color:#ffb200 !important;
+    box-shadow:0 0 18px rgba(255,210,63,0.8); }
+  @keyframes opChipPop { 0% { transform:scale(1); } 40% { transform:scale(1.35) rotate(-3deg); } 100% { transform:scale(1); } }
+  .op-life.used-pop { animation: opChipPop 0.6s; }
+  #opIntroSplash { position:fixed; inset:0; z-index:10012; display:none; align-items:center; justify-content:center;
+    flex-direction:column; background:radial-gradient(ellipse at center,#31197a 0%,#140b33 70%);
+    padding:30px; text-align:center; cursor:pointer; }
+  #opIntroSplash.show { display:flex; animation: opSplashIn 0.45s ease-out; }
+  #opIntroSplash.fade { animation: opSplashOut 0.5s ease-in forwards; }
+  @keyframes opSplashIn { from { opacity:0; } to { opacity:1; } }
+  @keyframes opSplashOut { from { opacity:1; } to { opacity:0; } }
+  .op-intro-stage { font-family:'Baloo 2',sans-serif; font-size:22px; font-weight:800; color:#ffd23f;
+    letter-spacing:2px; text-transform:uppercase; margin-bottom:18px; animation: opUrgent 1.2s infinite; }
+  .op-intro-q { font-family:'Baloo 2',sans-serif; font-size:34px; font-weight:800; color:#fff; line-height:1.35;
+    max-width:820px; white-space:pre-wrap; text-shadow:0 4px 30px rgba(168,111,240,0.8); animation: opQZoom 2.6s ease-out; }
+  @keyframes opQZoom { from { transform:scale(0.82); } to { transform:scale(1); } }
+  .op-intro-hint { margin-top:26px; font-size:13px; color:#a99ee0; font-weight:700; }
+  .op-flash { position:fixed; inset:0; z-index:10013; display:flex; align-items:center; justify-content:center;
+    pointer-events:none; }
+  .op-flash > div { font-family:'Baloo 2',sans-serif; font-size:54px; font-weight:800; color:#fff;
+    text-align:center; text-shadow:0 6px 40px rgba(0,0,0,0.55); animation: opFlashAnim 1.15s ease-out forwards; }
+  @keyframes opFlashAnim { 0% { transform:scale(0.3); opacity:0; } 18% { transform:scale(1.25); opacity:1; }
+    60% { transform:scale(1); opacity:1; } 100% { transform:scale(1); opacity:0; } }
 </style>
 
 <div class="overlay" id="opSoloOverlay">
-  <div class="modal modal-wide" role="dialog" aria-modal="true">
+  <div class="modal modal-wide op-stage" role="dialog" aria-modal="true">
     <h2 style="margin-bottom:4px;">🏆 The 1% Challenge</h2>
     <div class="op-ladder" id="opLadder"></div>
     <div class="op-stagechip" id="opStageChip"></div>
     <div class="op-q" id="opQ"></div>
-    <div class="op-timerbar" id="opTimerBar"><div style="width:100%"></div></div>
+    <div class="op-timerwrap"><div class="op-timerbar" id="opTimerBar"><div style="width:100%"></div></div>
+      <div class="op-timernum" id="opTimerNum"></div></div>
     <div class="op-lifelines">
       <button class="op-life" id="opPass" type="button">⏭️ Pass this one (1 left)</button>
       <button class="op-life" id="opTime" type="button">⏱️ +50% time (1 left)</button>
@@ -24672,8 +24724,14 @@ tcGameOverlay.addEventListener('click', (e) => { if (e.target === tcGameOverlay)
   </div>
 </div>
 
+<div id="opIntroSplash">
+  <div class="op-intro-stage" id="opIntroStage"></div>
+  <div class="op-intro-q" id="opIntroQ"></div>
+  <div class="op-intro-hint">tap to start the clock ⏱️</div>
+</div>
+
 <div class="overlay" id="op2GameOverlay">
-  <div class="modal modal-wide" role="dialog" aria-modal="true">
+  <div class="modal modal-wide op-stage" role="dialog" aria-modal="true">
     <h2 style="margin-bottom:4px;">🤝 1% Challenge</h2>
     <div class="ft-progress" id="op2Progress">Question 1 of 15</div>
     <div class="fc-scoreboard">
@@ -24688,10 +24746,11 @@ tcGameOverlay.addEventListener('click', (e) => { if (e.target === tcGameOverlay)
       </div>
     </div>
     <div class="op-spectate" id="op2Spectate"></div>
-    <div style="text-align:center;font-size:14px;letter-spacing:3px;margin:12px 0 8px;color:#7c8696;font-weight:700;" id="op2Lives"></div>
+    <div style="text-align:center;font-size:14px;letter-spacing:3px;margin:12px 0 8px;color:#cfc7f2;font-weight:700;" id="op2Lives"></div>
     <div class="op-stagechip" id="op2StageChip" style="margin:0 0 14px;"></div>
     <div class="op-q" id="op2Q"></div>
-    <div class="op-timerbar" id="op2TimerBar"><div style="width:100%"></div></div>
+    <div class="op-timerwrap"><div class="op-timerbar" id="op2TimerBar"><div style="width:100%"></div></div>
+      <div class="op-timernum" id="op2TimerNum"></div></div>
     <div class="op-lifelines">
       <button class="op-life" id="op2Pass" type="button">⏭️ Pass this one (1 left)</button>
       <button class="op-life" id="op2Time" type="button">⏱️ +50% time (1 left)</button>
@@ -27070,12 +27129,123 @@ var OP_BANK = [
 
   var STAGES = [90,80,70,60,50,45,40,35,30,25,20,15,10,5,1];
   var STAGE_PTS = { 90:2, 80:2, 70:3, 60:3, 50:4, 45:4, 40:5, 35:5, 30:6, 25:6, 20:8, 15:8, 10:10, 5:12, 1:15 };
-  var Q_SECS = 60, TIME_BOOST = 30;   /* a full minute per question — kids need thinking room */
+  var Q_SECS = 40, TIME_BOOST = 20;   /* V4.33: 40s — a minute dragged; +50% lifeline scales with it */
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
   function sfx(k) { try { if (typeof playSfx === 'function') playSfx(k); } catch (e) {} }
+
+  /* ---------- V4.33 show-business: tension audio, intro splash, flashes ---------- */
+  function opMuted() { try { return !!ensureUser().muted; } catch (e) { return false; } }
+  function opCtx() {
+    try {
+      if (document.hidden) return null;   /* no ticking from a backgrounded tab */
+      if (opMuted() || typeof getAudioCtx !== 'function') return null;
+      var ctx = getAudioCtx();
+      if (ctx && ctx.state === 'suspended') { try { ctx.resume(); } catch (e) {} }
+      return ctx;
+    } catch (e) { return null; }
+  }
+  /* countdown ticks: calm heartbeat → faster and louder as time drains */
+  function opTickSound(urgency) {
+    var ctx = opCtx(); if (!ctx) return;
+    try {
+      var t = ctx.currentTime;
+      var f = urgency === 2 ? 1150 : (urgency === 1 ? 850 : 620);
+      var v = urgency === 2 ? 0.2 : (urgency === 1 ? 0.11 : 0.05);
+      _beep(ctx, f, t, 45, { wave: 'square', vol: v });
+      if (urgency === 2) _beep(ctx, f * 0.75, t + 0.09, 40, { wave: 'square', vol: v * 0.8 });
+    } catch (e) {}
+  }
+  function opBeat(g, left) {
+    var interval = left > 20000 ? 2000 : (left > 10000 ? 1000 : 500);
+    var now = Date.now();
+    if (!g._beatAt || now - g._beatAt >= interval) {
+      g._beatAt = now;
+      opTickSound(left > 20000 ? 0 : (left > 10000 ? 1 : 2));
+    }
+  }
+  /* dramatic sting when the big question lands */
+  function opSting() {
+    var ctx = opCtx(); if (!ctx) return;
+    try {
+      var t = ctx.currentTime;
+      _slide(ctx, 160, 420, t, 420, { wave: 'sawtooth', vol: 0.1 });
+      _beep(ctx, 523.25, t + 0.4, 160, { wave: 'triangle', vol: 0.18 });
+      _beep(ctx, 783.99, t + 0.55, 260, { wave: 'triangle', vol: 0.2 });
+    } catch (e) {}
+  }
+  /* exciting chip noise — rising arpeggio sparkle */
+  function opChipSfx() {
+    var ctx = opCtx(); if (!ctx) return;
+    try {
+      var t = ctx.currentTime;
+      [659.25, 880, 1108.7, 1318.5].forEach(function (f, i) {
+        _beep(ctx, f, t + i * 0.07, 110, { wave: 'triangle', vol: 0.2 });
+      });
+      _beep(ctx, 1760, t + 0.32, 220, { wave: 'sine', vol: 0.16 });
+    } catch (e) {}
+  }
+  function opChipPop(btn) {
+    if (!btn) return;
+    btn.classList.remove('used-pop'); void btn.offsetWidth; btn.classList.add('used-pop');
+  }
+  function opFlash(txt, color) {
+    var d = document.createElement('div');
+    d.className = 'op-flash';
+    var inner = document.createElement('div');
+    inner.textContent = txt;
+    if (color) inner.style.color = color;
+    d.appendChild(inner);
+    document.body.appendChild(d);
+    setTimeout(function () { try { d.remove(); } catch (e) {} }, 1250);
+  }
+  function opUrgentBtns(prefix, on) {
+    ['Pass', 'Time'].forEach(function (k) {
+      var b = document.getElementById(prefix + k);
+      if (b) b.classList.toggle('urgent', !!on && !b.disabled);
+    });
+  }
+  function opTimerNum(id, left) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    var s = Math.max(0, Math.ceil(left / 1000));
+    el.textContent = left == null ? '' : (Math.floor(s / 60) + ':' + ('0' + (s % 60)).slice(-2));
+  }
+  /* the question alone, huge, centre stage — then the clock starts */
+  var opIntroCb = null, opIntroTm = null;
+  function opIntroDone() {
+    var sp = document.getElementById('opIntroSplash');
+    if (opIntroTm) { clearTimeout(opIntroTm); opIntroTm = null; }
+    if (!sp.classList.contains('show')) return;
+    sp.classList.remove('show'); sp.classList.remove('fade');
+    var cb = opIntroCb; opIntroCb = null;
+    if (cb) { try { cb(); } catch (e) {} }
+  }
+  function opShowIntro(stageTxt, qTxt, done) {
+    var sp = document.getElementById('opIntroSplash');
+    document.getElementById('opIntroStage').textContent = stageTxt;
+    document.getElementById('opIntroQ').textContent = qTxt;
+    opIntroCb = done;
+    sp.classList.remove('fade');
+    sp.classList.add('show');
+    opSting();
+    if (opIntroTm) clearTimeout(opIntroTm);
+    opIntroTm = setTimeout(function () {
+      sp.classList.add('fade');
+      opIntroTm = setTimeout(opIntroDone, 480);
+    }, 2400);
+  }
+  document.getElementById('opIntroSplash').addEventListener('click', opIntroDone);
+
+  /* QA: gated debug handle (same rule as _mystDebug — inert unless
+     localStorage.slQaMode === '1') */
+  window._opDebug = function () {
+    try { if (localStorage.getItem('slQaMode') !== '1') return null; } catch (e) { return null; }
+    return { solo: function () { return solo; }, p2: function () { return p2G; } };
+  };
+
   function qKey(q) {
     var s = q.q, h = 5381;
     for (var i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
@@ -27165,9 +27335,10 @@ var OP_BANK = [
         '<div class="op-stat"><b>' + o.clubWins + '</b><span>times in the 1% Club</span></div>' +
         '<div class="op-stat"><b>' + o.correct + '</b><span>questions cracked</span></div>' +
       '</div>' +
-      '<div class="op-how"><b>How it works:</b> a full minute per question, and one wrong answer knocks you out — ' +
-      'exactly like the show. You get two lifelines per game: <b>⏭️ one Pass</b> (skip a question and stay in) and ' +
-      '<b>⏱️ one +50% time</b>. Harder questions earn more ⭐ points for the Shop. Survive all 15 and you join the 1% Club! 🎉</div>';
+      '<div class="op-how"><b>How it works:</b> 40 seconds on the clock, and a wrong answer knocks you out — ' +
+      'exactly like the show. You get two lifelines per game: <b>🛟 one Pass</b> (skip a question — or it plays ' +
+      'ITSELF to save your first wrong answer) and <b>⏱️ one +20 seconds</b>. Harder questions earn more ⭐ points ' +
+      'for the Shop. Survive all 15 — and crack that final 1% question — to join the 1% Club! 🎉</div>';
     document.getElementById('opPlaySolo').addEventListener('click', soloStart);
     document.getElementById('opPlayVs').addEventListener('click', function () {
       if (typeof Peer === 'undefined') {
@@ -27188,6 +27359,7 @@ var OP_BANK = [
     if (typeof saveState === 'function') saveState();
     solo = { idx: 0, done: false, dead: false, q: null, deadline: 0, answered: false,
              passUsed: false, timeUsed: false, timeUsedThisQ: false, usedQs: [], passedIdx: {} };
+    window.slGameBusy = true;   /* one-off parent popups hold back mid-round */
     updateLifelineBtns('op', solo);
     soloO.classList.add('show');
     soloAsk();
@@ -27197,6 +27369,9 @@ var OP_BANK = [
   function soloClose() {
     if (soloIv) { clearInterval(soloIv); soloIv = null; }
     solo = null;
+    window.slGameBusy = false;
+    opIntroCb = null;
+    try { document.getElementById('opIntroSplash').classList.remove('show', 'fade'); } catch (e) {}
     soloO.classList.remove('show');
     window.onepctRender();
   }
@@ -27206,10 +27381,12 @@ var OP_BANK = [
 
   function updateLifelineBtns(prefix, g) {
     var p = document.getElementById(prefix + 'Pass'), t = document.getElementById(prefix + 'Time');
-    p.textContent = '⏭️ Pass this one (' + (g.passUsed ? '0' : '1') + ' left)';
-    t.textContent = '⏱️ +50% time (' + (g.timeUsed ? '0' : '1') + ' left)';
+    p.textContent = g.passUsed ? '🛟 Pass — used' : '🛟 Pass (auto-saves a wrong answer)';
+    t.textContent = '⏱️ +' + TIME_BOOST + 's (' + (g.timeUsed ? '0' : '1') + ' left)';
     p.disabled = g.passUsed;
     t.disabled = g.timeUsed || g.timeUsedThisQ;
+    if (p.disabled) p.classList.remove('urgent');
+    if (t.disabled) t.classList.remove('urgent');
   }
 
   function soloLadder() {
@@ -27246,14 +27423,25 @@ var OP_BANK = [
       optsEl.appendChild(b);
     });
     solo.qSecs = Q_SECS;
-    solo.deadline = Date.now() + Q_SECS * 1000;
+    solo.deadline = 0;   /* the clock starts when the intro splash clears */
+    solo._beatAt = 0;
+    opUrgentBtns('op', false);
+    opTimerNum('opTimerNum', Q_SECS * 1000);
+    document.getElementById('opTimerBar').firstElementChild.style.width = '100%';
+    var g0 = solo;
+    opShowIntro('The ' + stage + '% question', solo.q.q, function () {
+      if (solo === g0 && !solo.answered && !solo.done) solo.deadline = Date.now() + Q_SECS * 1000;
+    });
   }
   function soloTick() {
     if (!solo || solo.answered || !solo.deadline) return;
     var left = solo.deadline - Date.now();
     var bar = document.getElementById('opTimerBar');
     bar.firstElementChild.style.width = Math.max(0, (left / (solo.qSecs * 1000)) * 100) + '%';
-    bar.classList.toggle('low', left < 8000);
+    bar.classList.toggle('low', left < 10000);
+    opTimerNum('opTimerNum', left);
+    opBeat(solo, left);
+    opUrgentBtns('op', left < 12000);
     if (left <= 0) soloAnswer(-1, null);
   }
 
@@ -27262,7 +27450,10 @@ var OP_BANK = [
     solo.passUsed = true;
     solo.answered = true;
     solo.passedIdx[solo.idx] = true;
-    sfx('correct');
+    opUrgentBtns('op', false);
+    opChipSfx();
+    opChipPop(this);
+    opFlash('⏭️ PASSED!', '#ff9f43');
     document.getElementById('opFeedback').innerHTML =
       '<span style="color:#ff9f43;font-weight:800;">⏭️ Passed! You stay in — no points this round.</span>' +
       '<div class="op-explain">The answer was: <b>' + esc(solo.q.options[solo.q.answerIdx]) + '</b>. ' + esc(solo.q.explain || '') + '</div>';
@@ -27271,18 +27462,23 @@ var OP_BANK = [
     soloAdvance();
   });
   document.getElementById('opTime').addEventListener('click', function () {
-    if (!solo || solo.answered || solo.timeUsed || solo.done) return;
+    /* !deadline: the intro splash is still up — the clock hasn't started,
+       so the chip must not be consumable yet */
+    if (!solo || solo.answered || solo.timeUsed || solo.done || !solo.deadline) return;
     solo.timeUsed = true;
     solo.timeUsedThisQ = true;
     solo.deadline += TIME_BOOST * 1000;
     solo.qSecs = Q_SECS + TIME_BOOST;
-    sfx('correct');
+    opChipSfx();
+    opChipPop(this);
+    opFlash('⏱️ +' + TIME_BOOST + ' SECONDS!', '#a86ff0');
     updateLifelineBtns('op', solo);
   });
 
   function soloAnswer(idx, btn) {
     if (!solo || solo.answered) return;
     solo.answered = true;
+    opUrgentBtns('op', false);
     var q = solo.q, right = idx === q.answerIdx;
     var optsEl = document.getElementById('opOptions');
     Array.prototype.forEach.call(optsEl.children, function (b, i) {
@@ -27294,20 +27490,36 @@ var OP_BANK = [
     var o = opUser();
     if (right) {
       var pts = STAGE_PTS[q.stage];
-      sfx('correct');
+      sfx('fanfare');
+      opFlash('✅ +' + pts + ' ⭐', '#2ecc71');
+      try { if (typeof popConfetti === 'function') popConfetti(); } catch (e) {}
       try { if (typeof awardPoints === 'function') awardPoints(pts); } catch (e) {}
       o.correct += 1;
       if (solo.idx > o.bestIdx) o.bestIdx = solo.idx;
       if (typeof saveState === 'function') saveState();
-      fb.innerHTML = '<span style="color:#1e9e54;font-weight:800;">✅ Correct! +' + pts + ' ⭐</span>' +
+      fb.innerHTML = '<span style="color:#2ecc71;font-weight:800;">✅ Correct! +' + pts + ' ⭐</span>' +
         '<div class="op-explain">' + esc(q.explain || '') + '</div>';
+      soloAdvance();
+    } else if (!solo.passUsed) {
+      /* V4.33: a wrong answer (or timeout) burns the PASS automatically —
+         one mistake is survivable, the second is not */
+      solo.passUsed = true;
+      solo.passedIdx[solo.idx] = true;
+      opChipSfx();
+      opFlash('🛟 SAVED BY YOUR PASS!', '#ff9f43');
+      fb.innerHTML = '<span style="color:#ff9f43;font-weight:800;">' +
+        (idx < 0 ? '⏰ Out of time — ' : '❌ Wrong — ') +
+        'your PASS was played automatically. You stay in, but that was your only one!</span>' +
+        '<div class="op-explain">The answer was: <b>' + esc(q.options[q.answerIdx]) + '</b>. ' + esc(q.explain || '') + '</div>';
+      updateLifelineBtns('op', solo);
+      soloLadder();
       soloAdvance();
     } else {
       /* OUT — exactly like the show */
       solo.dead = true;
       if (solo.idx > o.bestIdx) { o.bestIdx = solo.idx; if (typeof saveState === 'function') saveState(); }
       sfx('wrong');
-      fb.innerHTML = '<span style="color:#c0392b;font-weight:800;">' +
+      fb.innerHTML = '<span style="color:#e74c3c;font-weight:800;">' +
         (idx < 0 ? '⏰ Out of time — you’re OUT!' : '❌ Wrong — you’re OUT!') + '</span>' +
         '<div class="op-explain">The answer was: <b>' + esc(q.options[q.answerIdx]) + '</b>. ' + esc(q.explain || '') + '</div>';
       soloLadder();
@@ -27315,7 +27527,12 @@ var OP_BANK = [
     }
   }
   function soloAdvance() {
-    if (solo.idx + 1 >= STAGES.length) { soloEnd(true, false); return; }
+    if (solo.idx + 1 >= STAGES.length) {
+      /* V4.33: joining the Club means CRACKING the 1% question — a pass
+         (manual or auto) on the final question survives but doesn't win */
+      soloEnd(!solo.passedIdx[solo.idx], false);
+      return;
+    }
     var nxt = document.getElementById('opSoloNext');
     nxt.style.display = '';
     nxt.textContent = 'Next: the ' + STAGES[solo.idx + 1] + '% question ➜';
@@ -27340,7 +27557,8 @@ var OP_BANK = [
       /* the sign-off matches how far they actually got — no "great run"
          for going out on the first question */
       var soloRunMsg;
-      if (solo.idx === 0)      soloRunMsg = '💀 Out on the very first question — unlucky! Shake it off and go again.';
+      if (!solo.dead && solo.idx >= STAGES.length - 1) soloRunMsg = '🛟 You survived all 15 — but your pass covered the final 1% question. Crack it for real to join the Club!';
+      else if (solo.idx === 0)      soloRunMsg = '💀 Out on the very first question — unlucky! Shake it off and go again.';
       else if (solo.idx < 4)   soloRunMsg = '💀 Knocked out on the ' + STAGES[solo.idx] + '% question. Warm-up over — go again!';
       else if (solo.idx < 9)   soloRunMsg = '💀 Knocked out on the ' + STAGES[solo.idx] + '% question. Solid effort!';
       else if (solo.idx < 13)  soloRunMsg = '💀 Knocked out on the ' + STAGES[solo.idx] + '% question. Great run!';
@@ -27375,6 +27593,9 @@ var OP_BANK = [
     try { if (p2Peer) p2Peer.destroy(); } catch (e) {}
     p2Conn = null; p2Peer = null; p2G = null; p2Role = null;
     if (p2Iv) { clearInterval(p2Iv); p2Iv = null; }
+    window.slGameBusy = false;
+    opIntroCb = null;
+    try { document.getElementById('opIntroSplash').classList.remove('show', 'fade'); } catch (e) {}
     [s2O, h2O, j2O, g2O].forEach(function (o) { o.classList.remove('show'); });
   }
   function p2Name() {
@@ -27494,6 +27715,7 @@ var OP_BANK = [
       myName: myName, theirName: theirName,
       myAnswer: null, theirAnswer: null, locked: false, deadline: 0, qSecs: Q_SECS,
       passUsed: false, timeUsed: false, timeUsedThisQ: false,
+      theirPassLeft: true,   /* V4.33: the host tracks it for auto-pass saves */
       roundLives: 3
     };
   }
@@ -27618,6 +27840,7 @@ var OP_BANK = [
     if (msg.type === 'answer' && p2Role === 'host') {
       if (msg.qIdx !== p2G.qIdx || p2G.locked) return;
       p2G.theirAnswer = { idx: msg.idx };
+      if (typeof msg.passLeft === 'boolean') p2G.theirPassLeft = msg.passLeft;
       document.getElementById('op2ThemPick').textContent = p2G.theirName + ': ' + (msg.idx === -2 ? '⏭️ passed' : '✅ answered');
       p2HostMaybeResolve();
       return;
@@ -27631,6 +27854,8 @@ var OP_BANK = [
       p2G.hostAlive = msg.hostAlive; p2G.guestAlive = msg.guestAlive;
       p2G.hostOutAt = msg.hostOutAt; p2G.guestOutAt = msg.guestOutAt;
       if (typeof msg.roundLives === 'number') p2G.roundLives = msg.roundLives;
+      if (msg.guestAutoPass) { p2G.passUsed = true; updateLifelineBtns('op2', p2G); }
+      p2G._autoPassSelf = !!msg.guestAutoPass;
       p2ShowResult(msg.correctIdx, msg.hostPick, msg.guestPick, msg.lifeSaved);
       return;
     }
@@ -27670,6 +27895,7 @@ var OP_BANK = [
     g2O.classList.add('show');
     document.getElementById('op2MeName').textContent = p2G.myName;
     document.getElementById('op2ThemName').textContent = p2G.theirName;
+    window.slGameBusy = true;
     if (p2Iv) clearInterval(p2Iv);
     p2Iv = setInterval(p2Tick, 200);
   }
@@ -27722,19 +27948,30 @@ var OP_BANK = [
     }
     g.theirAnswer = g.theirAnswer && g.locked ? g.theirAnswer : null;
     g.qSecs = Q_SECS;
-    g.deadline = Date.now() + Q_SECS * 1000;
+    g.deadline = 0;   /* the clock starts when the intro splash clears */
+    g._beatAt = 0;
+    opUrgentBtns('op2', false);
+    opTimerNum('op2TimerNum', Q_SECS * 1000);
+    document.getElementById('op2TimerBar').firstElementChild.style.width = '100%';
+    opShowIntro('Question ' + (g.qIdx + 1) + ' · the ' + q.stage + '% question', q.q, function () {
+      if (p2G === g && !g.locked) g.deadline = Date.now() + Q_SECS * 1000;
+    });
   }
   function p2Tick() {
     if (!p2G || p2G.locked || !p2G.deadline) return;
     var left = p2G.deadline - Date.now();
     var bar = document.getElementById('op2TimerBar');
     bar.firstElementChild.style.width = Math.max(0, (left / (p2G.qSecs * 1000)) * 100) + '%';
-    bar.classList.toggle('low', left < 8000);
+    bar.classList.toggle('low', left < 10000);
+    opTimerNum('op2TimerNum', left);
+    if (!p2G.myAnswer && meAlive()) { opBeat(p2G, left); opUrgentBtns('op2', left < 12000); }
+    else opUrgentBtns('op2', false);
     if (left <= 0 && !p2G.myAnswer && meAlive()) p2MyAnswer(-1, null);
     /* host safety net for a vanished guest — allow for the guest possibly
        running on a +50% time lifeline before force-resolving */
     if (p2Role === 'host' && left <= -(TIME_BOOST + 6) * 1000 && p2G.myAnswer && !p2G.theirAnswer && !p2G.locked) {
-      p2G.theirAnswer = { idx: -1 };
+      /* synthetic: the guest VANISHED — never burn their pass for this */
+      p2G.theirAnswer = { idx: -1, synthetic: true };
       p2HostMaybeResolve();
     }
   }
@@ -27743,27 +27980,34 @@ var OP_BANK = [
     var g = p2G;
     if (!g || g.locked || g.myAnswer || g.passUsed || !meAlive()) return;
     g.passUsed = true;
+    opChipSfx();
+    opChipPop(this);
+    opFlash('⏭️ PASSED!', '#ff9f43');
     p2SubmitAnswer(-2);
     updateLifelineBtns('op2', g);
     document.getElementById('op2MePick').textContent = 'You: ⏭️ passed';
   });
   document.getElementById('op2Time').addEventListener('click', function () {
     var g = p2G;
-    if (!g || g.locked || g.myAnswer || g.timeUsed || !meAlive()) return;
+    if (!g || g.locked || g.myAnswer || g.timeUsed || !meAlive() || !g.deadline) return;
     g.timeUsed = true;
     g.timeUsedThisQ = true;
     g.deadline += TIME_BOOST * 1000;
     g.qSecs = Q_SECS + TIME_BOOST;
-    sfx('correct');
+    opChipSfx();
+    opChipPop(this);
+    opFlash('⏱️ +' + TIME_BOOST + ' SECONDS!', '#a86ff0');
     updateLifelineBtns('op2', g);
   });
 
   function p2SubmitAnswer(idx) {
     var g = p2G;
     g.myAnswer = { idx: idx };
+    opUrgentBtns('op2', false);
     Array.prototype.forEach.call(document.getElementById('op2Options').children, function (b) { b.disabled = true; });
     if (g.role === 'guest') {
-      try { p2Conn.send({ type: 'answer', qIdx: g.qIdx, idx: idx }); } catch (e) {}
+      /* passLeft rides along so the host can auto-play the pass on a wrong answer */
+      try { p2Conn.send({ type: 'answer', qIdx: g.qIdx, idx: idx, passLeft: !g.passUsed }); } catch (e) {}
     } else {
       try { p2Conn.send({ type: 'peeranswered', pass: idx === -2 }); } catch (e) {}
       p2HostMaybeResolve();
@@ -27790,7 +28034,22 @@ var OP_BANK = [
        instead of a double knockout. Passes don't count as wrong. */
     var hostWrong = g.hostAlive && hostPick !== q.answerIdx && hostPick !== -2 && hostPick !== -3;
     var guestWrong = g.guestAlive && guestPick !== q.answerIdx && guestPick !== -2 && guestPick !== -3;
+    /* V4.33 order matters: if BOTH are wrong and team lives remain, the
+       shared life pays first (retry round, both passes kept). Only after
+       that does a lone wrong answer burn that player's own PASS. A
+       synthetic answer (vanished guest, injected by the safety net) never
+       burns the absent player's pass. */
     var lifeSaved = hostWrong && guestWrong && g.roundLives > 0;
+    var hostAutoPass = false, guestAutoPass = false;
+    if (!lifeSaved) {
+      if (hostWrong && !g.passUsed) {
+        g.passUsed = true; hostAutoPass = true; hostWrong = false; hostPick = -2;
+        updateLifelineBtns('op2', g);
+      }
+      if (guestWrong && g.theirPassLeft && !(g.theirAnswer && g.theirAnswer.synthetic)) {
+        g.theirPassLeft = false; guestAutoPass = true; guestWrong = false; guestPick = -2;
+      }
+    }
     if (lifeSaved) {
       g.roundLives -= 1;
     } else {
@@ -27807,7 +28066,9 @@ var OP_BANK = [
       hostScore: g.hostScore, guestScore: g.guestScore,
       hostAlive: g.hostAlive, guestAlive: g.guestAlive,
       hostOutAt: g.hostOutAt, guestOutAt: g.guestOutAt,
-      lifeSaved: lifeSaved, roundLives: g.roundLives });
+      lifeSaved: lifeSaved, roundLives: g.roundLives,
+      hostAutoPass: hostAutoPass, guestAutoPass: guestAutoPass });
+    g._autoPassSelf = hostAutoPass;
     p2ShowResult(q.answerIdx, hostPick, guestPick, lifeSaved);
     setTimeout(function () {
       if (!p2G) return;
@@ -27876,11 +28137,20 @@ var OP_BANK = [
       } else html = '<span style="color:#8a86a3;font-weight:800;">Watching…</span>';
     }
     else if (right) {
-      sfx('correct');
+      sfx('fanfare');
+      opFlash('✅ +' + STAGE_PTS[q.stage] + ' ⭐', '#2ecc71');
+      try { if (typeof popConfetti === 'function') popConfetti(); } catch (e) {}
       try { if (typeof awardPoints === 'function') awardPoints(STAGE_PTS[q.stage]); } catch (e) {}
-      html = '<span style="color:#1e9e54;font-weight:800;">✅ Correct! +' + STAGE_PTS[q.stage] + ' ⭐</span>';
+      html = '<span style="color:#2ecc71;font-weight:800;">✅ Correct! +' + STAGE_PTS[q.stage] + ' ⭐</span>';
     } else if (myPick === -2) {
-      html = '<span style="color:#ff9f43;font-weight:800;">⏭️ Passed — you’re still in!</span>';
+      if (g._autoPassSelf) {
+        opChipSfx();
+        opFlash('🛟 SAVED BY YOUR PASS!', '#ff9f43');
+        html = '<span style="color:#ff9f43;font-weight:800;">🛟 Wrong — but your PASS was played automatically. You stay in… and that was your only one!</span>';
+      } else {
+        html = '<span style="color:#ff9f43;font-weight:800;">⏭️ Passed — you’re still in!</span>';
+      }
+      g._autoPassSelf = false;
     } else {
       sfx('wrong');
       html = '<span style="color:#c0392b;font-weight:800;">' + (myPick < 0 ? '⏰ Out of time' : '❌ Wrong') + ' — YOU’RE OUT!</span>';
@@ -27905,11 +28175,13 @@ var OP_BANK = [
     var draw = meLife === themLife && meScore === themScore;
     sfx(iWin || draw ? 'win' : 'lose');
     if (iWin) {
+      opFlash('🏆 WINNER!', '#ffd23f');
       try {
         if (typeof popConfetti === 'function') { popConfetti(); setTimeout(popConfetti, 400); setTimeout(popConfetti, 900); }
       } catch (e) {}
     }
     document.getElementById('op2Progress').textContent = 'Challenge complete';
+    opUrgentBtns('op2', false);
     document.getElementById('op2Q').textContent = '';
     document.getElementById('op2Options').innerHTML = '';
     document.getElementById('op2StageChip').innerHTML = '';
@@ -31032,6 +31304,7 @@ var SPELL_BANKS = {
   var shown = false;
   var iv = setInterval(function () {
     if (shown) return;
+    if (window.slGameBusy) return;   /* never interrupt a live game round */
     var u = eligible();
     if (!u) return;
     shown = true;
@@ -31141,6 +31414,7 @@ var SPELL_BANKS = {
     ensureHook();
     var u = eligible();
     if (!u || u[KEY] || announcedFor[u.name]) return;
+    if (window.slGameBusy) return;   /* never interrupt a live game round */
     if (document.querySelector('[data-sl-modal]')) return;   /* one popup at a time */
     announce(u);
   }, 1500);
@@ -31421,8 +31695,8 @@ var SPELL_BANKS = {
       if (inc.target && inc.target !== '*' && inc.target !== e2.low) continue;
       var run = runs[inc.id];
       if (!run) {
-        /* not yet accepted — announce (one popup at a time) */
-        if (!document.querySelector('[data-sl-modal]')) announce(inc, u);
+        /* not yet accepted — announce (one popup at a time, never mid-game) */
+        if (!window.slGameBusy && !document.querySelector('[data-sl-modal]')) announce(inc, u);
         continue;
       }
       if (run.done) continue;

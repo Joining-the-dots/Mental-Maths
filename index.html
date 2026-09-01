@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover" />
-<title>Conway Family Learning Lab — Live V4.34</title>
+<title>Conway Family Learning Lab — Live V4.35</title>
 
 <!-- PWA -->
 <link rel="manifest" href="manifest.json">
@@ -2916,7 +2916,7 @@ function slWakeRelease() {
   <div class="brand">
     <span class="logo">🧪</span>
     Conway Family Learning Lab
-    <span style="font-family: 'Fredoka', sans-serif; font-size: 13px; font-weight: 600; color: var(--ink-soft); -webkit-text-fill-color: var(--ink-soft); background: var(--neutral); padding: 2px 8px; border-radius: 999px; margin-left: 6px; letter-spacing: 0.5px;">Live V4.34</span>
+    <span style="font-family: 'Fredoka', sans-serif; font-size: 13px; font-weight: 600; color: var(--ink-soft); -webkit-text-fill-color: var(--ink-soft); background: var(--neutral); padding: 2px 8px; border-radius: 999px; margin-left: 6px; letter-spacing: 0.5px;">Live V4.35</span>
   </div>
 
   <button class="user-pill" id="userPill" title="Switch player">
@@ -31816,6 +31816,315 @@ var SPELL_BANKS = {
   }, 2000);
 })();
 </script>
+<script>
+/* ================================================================
+   V4.35: THE DAILY 30 — thirty minutes a day of DOUBLE POINTS on
+   everything, with a mission board of quests that leads the player
+   through the whole Lab. Offered once a day on login; a countdown
+   chip lives in the corner; every quest tracks itself off the
+   player's real progress counters. This block sits LAST so its
+   awardPoints wrapper is outermost: the doubled value flows through
+   every other tally beneath it.
+   ================================================================ */
+(function () {
+  'use strict';
+  var MINS = 30;
+  function todayKey() {
+    var d = new Date();
+    return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
+  }
+  function cur() {
+    try {
+      var u = (typeof currentUser === 'function') ? currentUser() : null;
+      return (u && u.name) ? u : null;
+    } catch (e) { return null; }
+  }
+  function sfx(k) { try { if (typeof playSfx === 'function') playSfx(k); } catch (e) {} }
+
+  /* ---------- quest counters, read from real progress ---------- */
+  function doneIn(m) { var n = 0; for (var k in (m || {})) { if (m[k] && m[k].done) n++; } return n; }
+  function counts(u) {
+    var ml = u.mathLearn || {};
+    var rw = 0, mp = u.mathPractice || {};
+    for (var k in mp) { if (k.indexOf('rw:') === 0) rw += mp[k] || 0; }
+    return {
+      tt: doneIn(u.learn),
+      add: doneIn(ml.add), sub: doneIn(ml.sub), div: doneIn(ml.div),
+      frac: doneIn(ml.frac), pct: doneIn(ml.pct),
+      spell: (u.spell && u.spell.cast) || 0,
+      flags: Object.keys((u.flags && u.flags.cardsLearned) || {}).length,
+      myst: Object.keys((u.mysteries && u.mysteries.solved) || {}).length,
+      onepct: (u.onepct && u.onepct.plays) || 0,
+      probs: Object.keys((u.problems && u.problems.solved) || {}).length,
+      rw: rw
+    };
+  }
+  var QUESTS = [
+    { id: 'tt',    icon: '✖️', label: 'Learn the next 3 times-table tricks', target: 3,  go: { app: 'maths', mtab: 'tt' } },
+    { id: 'add',   icon: '➕', label: 'Crack 2 addition tricks',             target: 2,  go: { app: 'maths', mtab: 'add' } },
+    { id: 'sub',   icon: '➖', label: 'Crack 2 subtraction tricks',          target: 2,  go: { app: 'maths', mtab: 'sub' } },
+    { id: 'div',   icon: '➗', label: 'Crack 2 division tricks',             target: 2,  go: { app: 'maths', mtab: 'div' } },
+    { id: 'frac',  icon: '🍰', label: 'Crack 2 fraction tricks',             target: 2,  go: { app: 'maths', mtab: 'frac' } },
+    { id: 'pct',   icon: '％', label: 'Crack 2 percentage tricks',           target: 2,  go: { app: 'maths', mtab: 'pct' } },
+    { id: 'spell', icon: '🪄', label: 'Cast 15 spelling words',              target: 15, go: { app: 'spell' } },
+    { id: 'flags', icon: '🏳️', label: 'Learn 5 new flags',                   target: 5,  go: { app: 'flags' } },
+    { id: 'myst',  icon: '🔍', label: 'Solve 1 mystery',                     target: 1,  go: { app: 'mysteries' } },
+    { id: 'onepct',icon: '🏆', label: 'Play 1 round of the 1% Club',         target: 1,  go: { app: 'onepct' } },
+    { id: 'probs', icon: '🧩', label: 'Beat 5 problem-solving questions',    target: 5,  go: { app: 'maths', mtab: 'problems' } },
+    { id: 'rw',    icon: '🌍', label: 'Take on a Real World mission (3 answers)', target: 3, go: { app: 'maths', mtab: 'real' } }
+  ];
+  function questProgress(u, d) {
+    var now = counts(u), out = {};
+    QUESTS.forEach(function (q) {
+      var got = Math.max(0, (now[q.id] || 0) - ((d.base && d.base[q.id]) || 0));
+      out[q.id] = Math.min(q.target, got);
+    });
+    return out;
+  }
+
+  /* ---------- the DOUBLE POINTS wrapper (outermost) ---------- */
+  var base = null;
+  function ensureWrap() {
+    if (base || typeof window.awardPoints !== 'function') return;
+    base = window.awardPoints;
+    window.awardPoints = function (n) {
+      try {
+        var u = cur(), d = u && u.daily30;
+        if (u && d && d.startedAt && !d.done && Date.now() < d.endsAt && n > 0) {
+          d.earned = (d.earned || 0) + n * 2;
+          return base.call(this, n * 2);
+        }
+      } catch (e) {}
+      return base.apply(this, arguments);
+    };
+  }
+
+  /* ---------- UI bits ---------- */
+  function flash(txt, color) {
+    var d = document.createElement('div');
+    d.className = 'op-flash';
+    var inner = document.createElement('div');
+    inner.textContent = txt;
+    if (color) inner.style.color = color;
+    d.appendChild(inner);
+    document.body.appendChild(d);
+    setTimeout(function () { try { d.remove(); } catch (e) {} }, 1250);
+  }
+  var chip = null;
+  function dropChip() { if (chip) { try { chip.remove(); } catch (e) {} chip = null; } }
+  function setChip(text, mode) {
+    if (!chip) {
+      chip = document.createElement('div');
+      chip.className = 'd30-chip';
+      chip.addEventListener('click', function () {
+        var u = cur();
+        if (!u) return;
+        var d = u.daily30;
+        if (d && d.startedAt && !d.done && Date.now() < d.endsAt) openBoard();
+        else offer(true);
+      });
+      document.body.appendChild(chip);
+    }
+    chip.textContent = text;
+    chip.classList.toggle('idle', mode === 'idle');
+  }
+  function fmt(ms) {
+    var t = Math.max(0, Math.ceil(ms / 1000));
+    return Math.floor(t / 60) + ':' + ('0' + (t % 60)).slice(-2);
+  }
+
+  var boardEl = null;
+  function closeBoard() { if (boardEl) { try { boardEl.remove(); } catch (e) {} boardEl = null; } }
+  function openBoard() {
+    var u = cur();
+    if (!u || !u.daily30) return;
+    closeBoard();
+    var d = u.daily30;
+    var prog = questProgress(u, d);
+    var el = document.createElement('div');
+    el.className = 'd30-board';
+    el.setAttribute('data-sl-modal', '1');
+    var rows = '';
+    QUESTS.forEach(function (q) {
+      var got = prog[q.id], doneQ = got >= q.target;
+      var pct = Math.round((got / q.target) * 100);
+      rows += '<div class="d30-quest' + (doneQ ? ' done' : '') + '">' +
+        '<span class="d30-qicon">' + q.icon + '</span>' +
+        '<div class="d30-qmain"><div class="d30-qlabel">' + q.label + '</div>' +
+          '<div class="d30-qbar"><div style="width:' + pct + '%"></div></div></div>' +
+        '<span class="d30-qcount">' + (doneQ ? '✅' : got + '/' + q.target) + '</span>' +
+        (doneQ ? '' : '<button class="d30-go" type="button" data-goapp="' + q.go.app + '" data-gomtab="' + (q.go.mtab || '') + '">Go ▸</button>') +
+        '</div>';
+    });
+    el.innerHTML =
+      '<div class="d30-panel">' +
+        '<div class="d30-head"><span class="d30-title">🚀 YOUR DAILY 30</span>' +
+          '<span class="d30-clock" id="d30BoardClock"></span></div>' +
+        '<div class="d30-sub">Every ⭐ you earn counts <b>TWICE</b> until the clock runs out. ' +
+          'Pick a quest — or play anything you like, it ALL pays double!</div>' +
+        '<div class="d30-quests">' + rows + '</div>' +
+        '<div class="d30-earned">⭐ Earned this mission: <b>' + (d.earned || 0) + '</b> (doubles included)</div>' +
+        '<button class="btn btn-primary d30-close" type="button">Let’s go! 🚀</button>' +
+      '</div>';
+    document.body.appendChild(el);
+    boardEl = el;
+    el.querySelector('.d30-close').addEventListener('click', closeBoard);
+    el.addEventListener('click', function (e) { if (e.target === el) closeBoard(); });
+    el.querySelectorAll('.d30-go').forEach(function (b) {
+      b.addEventListener('click', function () {
+        closeBoard();
+        var app = b.dataset.goapp, mtab = b.dataset.gomtab;
+        try { if (typeof setActiveApp === 'function') setActiveApp(app); } catch (e) {}
+        if (mtab) {
+          setTimeout(function () {
+            try {
+              var t = document.querySelector('.maths-subtab[data-mtab="' + mtab + '"]');
+              if (t) t.click();
+            } catch (e) {}
+          }, 250);
+        }
+      });
+    });
+  }
+
+  var offered = {};
+  function offer(manual) {
+    var u = cur();
+    if (!u) return;
+    if (!manual && offered[u.name]) return;
+    offered[u.name] = true;
+    if (document.getElementById('d30Offer')) return;
+    var el = document.createElement('div');
+    el.className = 'd30-board';
+    el.id = 'd30Offer';
+    el.setAttribute('data-sl-modal', '1');
+    el.innerHTML =
+      '<div class="d30-panel" style="text-align:center;">' +
+        '<div style="font-size:64px;">🚀</div>' +
+        '<div class="d30-title" style="font-size:30px;">THE DAILY 30</div>' +
+        '<div class="d30-sub" style="font-size:15px;">Ready, ' + String(u.name).replace(/&/g,'&amp;').replace(/</g,'&lt;') + '? ' +
+          '<b>30 minutes</b> of <b>DOUBLE POINTS</b> on everything you do — plus a mission board of quests to blast through. ' +
+          'One launch a day… make it count! 🌟</div>' +
+        '<button class="btn btn-primary d30-start" type="button" style="margin-top:14px;padding:13px 26px;font-size:17px;">🚀 LAUNCH MY 30 MINUTES</button>' +
+        '<div><button class="btn d30-later" type="button" style="margin-top:8px;">Maybe later</button></div>' +
+      '</div>';
+    document.body.appendChild(el);
+    el.querySelector('.d30-later').addEventListener('click', function () { try { el.remove(); } catch (e) {} });
+    el.querySelector('.d30-start').addEventListener('click', function () {
+      try { el.remove(); } catch (e) {}
+      var u2 = cur();
+      if (!u2 || u2.name !== u.name) return;
+      var d = u2.daily30;
+      if (d && d.startedAt && !d.done && Date.now() < d.endsAt) return;   /* already running */
+      var now = Date.now();
+      u2.daily30 = { last: todayKey(), startedAt: now, endsAt: now + MINS * 60000,
+                     base: counts(u2), earned: 0, cheered: {} };
+      try { if (typeof saveState === 'function') saveState(); } catch (e) {}
+      sfx('fanfare');
+      try { if (typeof popConfetti === 'function') popConfetti(); } catch (e) {}
+      flash('🚀 DOUBLE POINTS — GO!', '#ffd23f');
+      setTimeout(openBoard, 900);
+    });
+  }
+
+  function finish(u, d) {
+    d.done = true;
+    try { if (typeof saveState === 'function') saveState(); } catch (e) {}
+    dropChip();
+    closeBoard();
+    sfx('win');
+    try { if (typeof popConfetti === 'function') { popConfetti(); setTimeout(popConfetti, 400); } } catch (e) {}
+    var prog = questProgress(u, d);
+    var doneList = QUESTS.filter(function (q) { return prog[q.id] >= q.target; });
+    var el = document.createElement('div');
+    el.className = 'd30-board';
+    el.setAttribute('data-sl-modal', '1');
+    el.innerHTML =
+      '<div class="d30-panel" style="text-align:center;">' +
+        '<div style="font-size:64px;">🏁</div>' +
+        '<div class="d30-title" style="font-size:28px;">DAILY 30 COMPLETE!</div>' +
+        '<div class="d30-sub" style="font-size:15px;">You banked <b style="color:#ffd23f;">' + (d.earned || 0) + ' ⭐</b> — every point doubled!' +
+          (doneList.length
+            ? '<br>Quests smashed: ' + doneList.map(function (q) { return q.icon; }).join(' ') + ' (' + doneList.length + ')'
+            : '<br>No quests finished this time — the board is there to guide you tomorrow!') +
+        '</div>' +
+        '<button class="btn btn-primary" type="button" style="margin-top:14px;">Same time tomorrow! 🚀</button>' +
+      '</div>';
+    document.body.appendChild(el);
+    el.querySelector('button').addEventListener('click', function () { try { el.remove(); } catch (e) {} });
+  }
+
+  /* ---------- the loop ---------- */
+  setInterval(function () {
+    ensureWrap();
+    var u = cur();
+    if (!u) { dropChip(); return; }
+    var d = u.daily30;
+    var active = d && d.startedAt && !d.done && Date.now() < d.endsAt;
+    if (d && d.startedAt && !d.done && Date.now() >= d.endsAt) { finish(u, d); return; }
+    if (active) {
+      setChip('🚀 ' + fmt(d.endsAt - Date.now()) + ' · 2× points', 'run');
+      /* cheer each quest the moment it completes */
+      var prog = questProgress(u, d);
+      d.cheered = d.cheered || {};
+      QUESTS.forEach(function (q) {
+        if (prog[q.id] >= q.target && !d.cheered[q.id]) {
+          d.cheered[q.id] = true;
+          try { if (typeof saveState === 'function') saveState(); } catch (e) {}
+          sfx('unlock');
+          flash('✅ QUEST DONE: ' + q.icon + '  ' + q.label, '#2ecc71');
+        }
+      });
+      /* refresh the live clock on an open board */
+      var bc = document.getElementById('d30BoardClock');
+      if (bc) bc.textContent = '⏱️ ' + fmt(d.endsAt - Date.now());
+      return;
+    }
+    /* not active: offer once per day, or show the idle starter chip */
+    if (d && d.last === todayKey()) { dropChip(); return; }   /* already done today */
+    if (window.slGameBusy || document.hidden) return;
+    if (document.querySelector('[data-sl-modal]')) return;
+    if (document.querySelector('#userOverlay.show')) return;
+    if (!offered[u.name]) { offer(false); return; }
+    setChip('🚀 Start your Daily 30!', 'idle');
+  }, 1000);
+})();
+</script>
+<style>
+  .d30-chip { position: fixed; bottom: 14px; left: 14px; z-index: 9600; cursor: pointer;
+    background: linear-gradient(135deg,#ff5fd2,#a86ff0); color: #fff; font-weight: 800; font-size: 14px;
+    padding: 9px 14px; border-radius: 999px; box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+    user-select: none; -webkit-user-select: none; font-family: 'Baloo 2', sans-serif; }
+  .d30-chip.idle { animation: slRush3Pulse 1.6s ease-in-out infinite; }
+  .d30-board { position: fixed; inset: 0; z-index: 10002; background: rgba(20,11,51,0.72);
+    display: flex; align-items: center; justify-content: center; padding: 16px; }
+  .d30-panel { background: linear-gradient(160deg,#170d3d,#241155 55%,#0d0a2a); color: #fff;
+    border-radius: 20px; box-shadow: 0 18px 60px rgba(0,0,0,0.5); max-width: 560px; width: 100%;
+    padding: 22px 20px; max-height: 88vh; overflow-y: auto; border: 1px solid rgba(168,111,240,0.35); }
+  .d30-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .d30-title { font-family: 'Baloo 2', sans-serif; font-weight: 800; font-size: 24px;
+    background: linear-gradient(90deg,#fff 20%, #ffd23f 40%, #fff 60%); background-size: 200% auto;
+    -webkit-background-clip: text; background-clip: text; color: transparent; animation: opShimmer 3.5s linear infinite; }
+  .d30-clock { font-family: 'Baloo 2', sans-serif; font-weight: 800; font-size: 20px; color: #ffd23f; }
+  .d30-sub { color: #d9d2f7; font-size: 13.5px; line-height: 1.55; margin: 6px 0 12px; }
+  .d30-quests { display: flex; flex-direction: column; gap: 7px; }
+  .d30-quest { display: flex; align-items: center; gap: 10px; background: rgba(255,255,255,0.07);
+    border: 1px solid rgba(255,255,255,0.10); border-radius: 12px; padding: 8px 10px; }
+  .d30-quest.done { opacity: 0.75; border-color: rgba(46,204,113,0.55); }
+  .d30-qicon { font-size: 20px; }
+  .d30-qmain { flex: 1; min-width: 0; }
+  .d30-qlabel { font-size: 13px; font-weight: 800; }
+  .d30-qbar { height: 6px; border-radius: 999px; background: rgba(255,255,255,0.12); overflow: hidden; margin-top: 4px; }
+  .d30-qbar > div { height: 100%; border-radius: 999px; background: linear-gradient(90deg,#ffd23f,#ff9f43); }
+  .d30-quest.done .d30-qbar > div { background: #2ecc71; }
+  .d30-qcount { font-family: 'Baloo 2', sans-serif; font-weight: 800; font-size: 13px; color: #ffd23f; white-space: nowrap; }
+  .d30-go { border: 2px solid #a86ff0; background: rgba(255,255,255,0.06); color: #dcd2ff;
+    border-radius: 999px; font-family: inherit; font-weight: 800; font-size: 12px; padding: 5px 12px; cursor: pointer; }
+  .d30-go:hover { background: #a86ff0; color: #fff; }
+  .d30-earned { margin: 12px 0 4px; font-size: 13.5px; font-weight: 700; color: #d9d2f7; }
+  .d30-earned b { color: #ffd23f; }
+  .d30-close { width: 100%; padding: 12px; margin-top: 6px; }
+</style>
 <style>
   #userOverlay.sl-mandatory #userClose { display: none !important; }
   #userOverlay.sl-mandatory #bootstrap12Btn { display: none !important; }

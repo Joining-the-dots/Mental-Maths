@@ -3043,10 +3043,9 @@ function slWakeRelease() {
       <button class="gm-btn" data-max="50" type="button">Up to 50</button>
       <button class="gm-btn" data-max="100" type="button">Full 100</button>
     </div>
-    <div class="grid-mode-toggle" id="gridModeToggle">
-      <button class="gm-btn on" data-mode="completed" type="button">✅ Completed</button>
-      <button class="gm-btn" data-mode="trick" type="button">🎨 Tricks</button>
-    </div>
+    <!-- V4.39: the Completed/Tricks view toggle is retired — one simple
+         view (Completed). gridMode stays 'completed'; the trick-shading
+         code paths are guarded on the toggle's absence and stay dormant. -->
   </div>
 
   <div class="tt-layout">

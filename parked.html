@@ -32023,31 +32023,115 @@ var SPELL_BANKS = {
     });
   }
 
+  /* ---------- the payout ceremony ---------- */
+  function d30Ctx() {
+    try {
+      if (document.hidden) return null;
+      var u = (typeof ensureUser === 'function') ? ensureUser() : null;
+      if (u && u.muted) return null;
+      if (typeof getAudioCtx !== 'function') return null;
+      var ctx = getAudioCtx();
+      if (ctx && ctx.state === 'suspended') { try { ctx.resume(); } catch (e) {} }
+      return ctx;
+    } catch (e) { return null; }
+  }
+  function clink(prog) {
+    var ctx = d30Ctx(); if (!ctx) return;
+    try {
+      var t = ctx.currentTime, f = 880 + prog * 900;
+      _beep(ctx, f, t, 30, { wave: 'square', vol: 0.09 + prog * 0.06 });
+      _beep(ctx, f * 1.5, t + 0.015, 25, { wave: 'sine', vol: 0.05 });
+    } catch (e) {}
+  }
+  function payChord() {
+    sfx('win');
+    var ctx = d30Ctx(); if (!ctx) return;
+    try {
+      var t = ctx.currentTime;
+      [523.25, 659.25, 783.99, 1046.5].forEach(function (f, i) {
+        _beep(ctx, f, t + 0.3 + i * 0.06, 320, { wave: 'triangle', vol: 0.16 });
+      });
+    } catch (e) {}
+  }
+  function coinRain(host, amount, durMs) {
+    var layer = document.createElement('div');
+    layer.className = 'd30-coinlayer';
+    host.appendChild(layer);
+    var icons = ['🪙', '⭐', '🪙', '💰', '🪙', '✨'];
+    var count = Math.min(90, Math.max(26, Math.round(amount / 3)));
+    for (var i = 0; i < count; i++) {
+      (function (i) {
+        setTimeout(function () {
+          if (!layer.parentNode) return;
+          var c = document.createElement('span');
+          c.className = 'd30-coin';
+          c.textContent = icons[i % icons.length];
+          c.style.left = (3 + Math.random() * 92) + '%';
+          c.style.fontSize = (18 + Math.random() * 20) + 'px';
+          c.style.animationDuration = (1.3 + Math.random() * 1.5) + 's';
+          layer.appendChild(c);
+          setTimeout(function () { try { c.remove(); } catch (e) {} }, 3200);
+        }, Math.random() * durMs);
+      })(i);
+    }
+  }
   function finish(u, d) {
     d.done = true;
     try { if (typeof saveState === 'function') saveState(); } catch (e) {}
     dropChip();
     closeBoard();
-    sfx('win');
-    try { if (typeof popConfetti === 'function') { popConfetti(); setTimeout(popConfetti, 400); } } catch (e) {}
+    var earned = d.earned || 0;
+    var bonus = Math.round(earned / 2);   /* half of the doubled total = the EXTRA */
     var prog = questProgress(u, d);
     var doneList = QUESTS.filter(function (q) { return prog[q.id] >= q.target; });
     var el = document.createElement('div');
     el.className = 'd30-board';
     el.setAttribute('data-sl-modal', '1');
     el.innerHTML =
-      '<div class="d30-panel" style="text-align:center;">' +
-        '<div style="font-size:64px;">🏁</div>' +
-        '<div class="d30-title" style="font-size:28px;">DAILY 30 COMPLETE!</div>' +
-        '<div class="d30-sub" style="font-size:15px;">You banked <b style="color:#ffd23f;">' + (d.earned || 0) + ' ⭐</b> — every point doubled!' +
-          (doneList.length
-            ? '<br>Quests smashed: ' + doneList.map(function (q) { return q.icon; }).join(' ') + ' (' + doneList.length + ')'
-            : '<br>No quests finished this time — the board is there to guide you tomorrow!') +
-        '</div>' +
-        '<button class="btn btn-primary" type="button" style="margin-top:14px;">Same time tomorrow! 🚀</button>' +
+      '<div class="d30-panel d30-fin-stage" style="text-align:center;">' +
+        '<div style="font-size:56px;">🏁</div>' +
+        '<div class="d30-title" style="font-size:28px;">TIME’S UP!</div>' +
+        '<div class="d30-sub" style="font-size:14.5px;margin-bottom:2px;">Counting your <b>DOUBLE POINTS BONUS</b>…</div>' +
+        '<div class="d30-big" id="d30Count">0</div>' +
+        '<div class="d30-sub" id="d30Xtra" style="font-size:15px;min-height:44px;"></div>' +
+        '<button class="btn btn-primary" id="d30FinBtn" type="button" style="margin-top:8px;padding:12px 24px;visibility:hidden;">Same time tomorrow! 🚀</button>' +
       '</div>';
     document.body.appendChild(el);
-    el.querySelector('button').addEventListener('click', function () { try { el.remove(); } catch (e) {} });
+    var panel = el.querySelector('.d30-fin-stage');
+    var numEl = el.querySelector('#d30Count');
+    var xtraEl = el.querySelector('#d30Xtra');
+    var btn = el.querySelector('#d30FinBtn');
+    btn.addEventListener('click', function () { try { el.remove(); } catch (e) {} });
+    var DUR = 3200, t0 = Date.now(), lastClink = 0, finished = false;
+    function endState() {
+      if (finished) return;
+      finished = true;
+      numEl.textContent = '+' + bonus + ' ⭐';
+      numEl.classList.add('pop');
+      xtraEl.innerHTML = bonus > 0
+        ? '<b>' + bonus + ' EXTRA</b> ⭐ from double points — <b style="color:#ffd23f;">' + earned + ' ⭐</b> banked in total! 🎉' +
+          (doneList.length ? '<br>Quests smashed: ' + doneList.map(function (q) { return q.icon; }).join(' ') + ' (' + doneList.length + ')' : '')
+        : 'No points this time — tomorrow’s 30 minutes are waiting for you! 🚀';
+      btn.style.visibility = '';
+      if (bonus > 0) {
+        payChord();
+        try { if (typeof popConfetti === 'function') { popConfetti(); setTimeout(popConfetti, 400); } } catch (e) {}
+      }
+    }
+    if (bonus > 0) {
+      coinRain(panel, bonus, DUR);
+      var iv = setInterval(function () {
+        if (finished || !el.parentNode) { clearInterval(iv); return; }
+        var p = Math.min(1, (Date.now() - t0) / DUR);
+        var eased = 1 - Math.pow(1 - p, 3);   /* fast start, slow landing */
+        numEl.textContent = '+' + Math.round(eased * bonus) + ' ⭐';
+        if (Date.now() - lastClink > 90) { lastClink = Date.now(); clink(p); }
+        if (p >= 1) { clearInterval(iv); endState(); }
+      }, 40);
+      el.addEventListener('click', function (e) { if (e.target === el || e.target === panel) endState(); });
+    } else {
+      endState();
+    }
   }
 
   /* ---------- the loop ---------- */
@@ -32120,6 +32204,15 @@ var SPELL_BANKS = {
   .d30-earned { margin: 12px 0 4px; font-size: 13.5px; font-weight: 700; color: #d9d2f7; }
   .d30-earned b { color: #ffd23f; }
   .d30-close { width: 100%; padding: 12px; margin-top: 6px; }
+  .d30-fin-stage { position: relative; overflow: hidden; }
+  .d30-coinlayer { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+  .d30-coin { position: absolute; top: -40px; animation: d30CoinFall linear forwards; }
+  @keyframes d30CoinFall { 0% { transform: translateY(-40px) rotate(0deg); opacity: 1; }
+    85% { opacity: 1; } 100% { transform: translateY(580px) rotate(720deg); opacity: 0; } }
+  .d30-big { font-family: 'Baloo 2', sans-serif; font-weight: 800; font-size: 62px; color: #ffd23f;
+    text-shadow: 0 0 30px rgba(255,210,63,0.8); line-height: 1.1; margin: 6px 0 2px; }
+  .d30-big.pop { animation: d30Pop 0.6s ease-out; }
+  @keyframes d30Pop { 0% { transform: scale(1); } 40% { transform: scale(1.35); } 100% { transform: scale(1); } }
 </style>
 <style>
   #userOverlay.sl-mandatory #userClose { display: none !important; }

@@ -1855,6 +1855,92 @@
     opacity: 0.5;
   }
   .shop-item-del:hover { opacity: 1; color: var(--warn); }
+  /* ---- V4.43 shop overhaul ---- */
+  .shop-head-right { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .shop-request-btn {
+    border: 2px solid #e9629b; background: linear-gradient(135deg, #ff8fb8, #e9629b);
+    color: #fff; border-radius: 999px; padding: 9px 16px; font-family: 'Baloo 2', sans-serif;
+    font-weight: 800; font-size: 14.5px; cursor: pointer; box-shadow: 0 3px 10px rgba(233,98,155,0.35);
+  }
+  .shop-request-btn:hover { transform: translateY(-1px); }
+  .shop-tools { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 0 0 10px; }
+  .shop-tools input[type="search"] {
+    flex: 1 1 190px; min-width: 150px; border: 2px solid #d9d2ee; border-radius: 999px;
+    padding: 8px 14px; font-family: inherit; font-size: 13.5px; font-weight: 600; color: var(--ink);
+  }
+  .shop-tools select {
+    border: 2px solid #d9d2ee; border-radius: 999px; padding: 8px 10px; font-family: inherit;
+    font-size: 12.5px; font-weight: 800; color: #7c8696; background: #fff; cursor: pointer;
+  }
+  .shop-chip {
+    border: 2px solid #d9d2ee; background: #fff; color: #7c8696; border-radius: 999px;
+    padding: 6px 13px; font-family: inherit; font-weight: 800; font-size: 12.5px; cursor: pointer;
+  }
+  .shop-chip.on { border-color: #2ecc71; background: #2ecc71; color: #fff; }
+  .shop-section {
+    grid-column: 1 / -1; font-family: 'Baloo 2', sans-serif; font-weight: 800; font-size: 17px;
+    color: var(--ink); margin: 4px 0 -4px; display: flex; align-items: center; gap: 8px;
+  }
+  .shop-section::after { content: ''; flex: 1; height: 2px; background: #e8e2f6; border-radius: 2px; }
+  .shop-item-prog { width: 100%; margin-top: 2px; }
+  .shop-item-progbar { height: 10px; background: #efeaf9; border-radius: 999px; overflow: hidden; }
+  .shop-item-progbar > i {
+    display: block; height: 100%; border-radius: 999px;
+    background: linear-gradient(90deg, #a78bfa, #6c5ce7); transition: width 0.4s;
+  }
+  .shop-item-prog.near .shop-item-progbar > i { background: linear-gradient(90deg, #ffd166, #ff9f43); }
+  .shop-item-proglbl { font-size: 11.5px; font-weight: 800; color: var(--ink-soft); margin-top: 3px; }
+  .shop-item-buy.can {
+    background: linear-gradient(135deg, #2ecc71, #27ae60); border-color: #27ae60;
+    animation: shopCanPulse 1.6s ease-in-out infinite;
+  }
+  @keyframes shopCanPulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.04); } }
+  .shop-item-goal {
+    position: absolute; top: 4px; left: 8px; background: none; border: none; cursor: pointer;
+    font-size: 19px; opacity: 0.55; padding: 2px;
+  }
+  .shop-item-goal:hover { opacity: 1; }
+  .shop-item-goal.set { opacity: 1; filter: drop-shadow(0 0 4px #ffd166); }
+  .shop-item-new {
+    position: absolute; top: -8px; right: 14px; background: linear-gradient(135deg, #ff8fb8, #e9629b);
+    color: #fff; font-size: 10.5px; font-weight: 800; border-radius: 999px; padding: 3px 9px;
+    box-shadow: 0 2px 6px rgba(233,98,155,0.4); letter-spacing: 0.4px;
+  }
+  .shop-goal-banner {
+    background: linear-gradient(135deg, #fff7e0, #ffedc2); border: 2px solid #ffd166;
+    border-radius: 16px; padding: 12px 16px; margin: 0 0 12px; display: flex; gap: 12px;
+    align-items: center; box-shadow: var(--shadow);
+  }
+  .shop-goal-banner .g-icon { font-size: 38px; line-height: 1; }
+  .shop-goal-banner .g-icon img { max-height: 52px; max-width: 52px; object-fit: contain; border-radius: 8px; }
+  .shop-goal-banner .g-main { flex: 1; min-width: 0; }
+  .shop-goal-banner .g-name { font-weight: 800; color: #5a3700; font-size: 14.5px; }
+  .shop-goal-banner .g-bar { height: 14px; background: #fff; border-radius: 999px; overflow: hidden; margin: 5px 0 3px; border: 1px solid #ecd9a0; }
+  .shop-goal-banner .g-bar > i { display: block; height: 100%; background: linear-gradient(90deg, #ffd166, #ff9f43); border-radius: 999px; }
+  .shop-goal-banner .g-lbl { font-size: 12px; font-weight: 800; color: #8a6a1f; }
+  .shop-goal-banner.done { background: linear-gradient(135deg, #e8fbee, #d1f5de); border-color: #2ecc71; }
+  .shop-goal-banner.done .g-name { color: #14713c; }
+  .shop-goal-banner.done .g-lbl { color: #1d8a4c; }
+  .shop-grownup { margin-top: 18px; }
+  .shop-grownup > summary {
+    cursor: pointer; font-weight: 800; color: var(--ink-soft); font-size: 13.5px;
+    padding: 8px 0; user-select: none;
+  }
+  .shop-req-modal {
+    position: fixed; inset: 0; z-index: 9600; background: rgba(30,24,58,0.55);
+    display: flex; align-items: center; justify-content: center; padding: 18px;
+  }
+  .shop-req-card {
+    background: #fff; border-radius: 18px; padding: 20px; max-width: 430px; width: 100%;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.25);
+  }
+  .shop-req-card h3 { margin: 0 0 6px; font-family: 'Baloo 2', sans-serif; }
+  .shop-req-card p { margin: 0 0 10px; color: var(--ink-soft); font-size: 13.5px; }
+  .shop-req-card textarea, .shop-req-card input {
+    width: 100%; box-sizing: border-box; border: 2px solid #d9d2ee; border-radius: 12px;
+    padding: 10px 12px; font-family: inherit; font-size: 14px; margin-bottom: 8px; resize: vertical;
+  }
+  .shop-req-btns { display: flex; gap: 8px; justify-content: flex-end; }
   .shop-redeemed-tag {
     background: var(--good);
     color: white;
@@ -3569,32 +3655,52 @@ function slWakeRelease() {
 <div id="shopView" class="hidden">
   <div class="shop-head">
     <h2>🎁 Reward Shop</h2>
-    <div class="shop-balance">⭐ <span id="shopBalance">0</span> points</div>
+    <div class="shop-head-right">
+      <button class="shop-request-btn" id="shopReqBtn" type="button">💌 Make a request</button>
+      <div class="shop-balance">⭐ <span id="shopBalance">0</span> points</div>
+    </div>
   </div>
-  <p style="color: var(--ink-soft); font-size: 14px; margin: 0 0 16px;">
-    Every game pays ⭐ points — and points buy REAL prizes. The small stuff takes a few
-    solid sessions; the epic stuff is the long game. Tap 🔗 on any prize to see it on Amazon.
+  <p style="color: var(--ink-soft); font-size: 14px; margin: 0 0 10px;">
+    Earn ⭐ in any game → save up → tap <b>Get it now!</b> and show a grown-up. Every prize is REAL.
+    Tap the ☆ on a prize to make it your <b>savings goal</b> — or 💌 request something new!
   </p>
+  <div id="shopGoal"></div>
+  <div class="shop-tools" id="shopTools"></div>
   <div id="shopFilters"></div>
   <div id="shopCount" style="color:var(--ink-soft);font-size:12.5px;font-weight:700;margin:0 0 8px;"></div>
   <div class="shop-grid" id="shopGrid"></div>
-  <div class="shop-add-form" id="shopAddForm">
-    <input class="si-icon" id="siIcon" maxlength="2" placeholder="🎁" />
-    <input class="si-name" id="siName" maxlength="40" placeholder="Reward name (e.g. Movie night)" />
-    <input class="si-cost" id="siCost" type="number" min="1" placeholder="Cost" />
-    <button class="btn btn-primary" id="siAdd" type="button">➕ Add reward</button>
-  </div>
-  <div class="shop-amazon-form" id="shopAmazonForm">
-    <div class="shop-amazon-head">🛒 Add a real Amazon item</div>
-    <p class="shop-amazon-note">Paste an Amazon link below — the reward will link straight to the product, and the name fills in automatically. Add a points cost and it appears in the shop above.</p>
-    <div class="shop-amazon-row">
-      <input class="sa-url" id="saUrl" placeholder="Paste Amazon link (https://www.amazon.co.uk/...)" />
-      <input class="sa-name" id="saName" maxlength="50" placeholder="Item name (optional)" />
-      <input class="sa-cost" id="saCost" type="number" min="1" placeholder="Cost" />
-      <button class="btn btn-primary" id="saAdd" type="button">➕ Add Amazon item</button>
+  <details class="shop-grownup">
+    <summary>👨‍👩‍👧 Grown-ups: add your own prize</summary>
+    <div class="shop-add-form" id="shopAddForm">
+      <input class="si-icon" id="siIcon" maxlength="2" placeholder="🎁" />
+      <input class="si-name" id="siName" maxlength="40" placeholder="Reward name (e.g. Movie night)" />
+      <input class="si-cost" id="siCost" type="number" min="1" placeholder="Cost" />
+      <button class="btn btn-primary" id="siAdd" type="button">➕ Add reward</button>
+    </div>
+    <div class="shop-amazon-form" id="shopAmazonForm">
+      <div class="shop-amazon-head">🛒 Add a real Amazon item</div>
+      <p class="shop-amazon-note">Paste an Amazon link below — the reward will link straight to the product, and the name fills in automatically. Add a points cost and it appears in the shop above.</p>
+      <div class="shop-amazon-row">
+        <input class="sa-url" id="saUrl" placeholder="Paste Amazon link (https://www.amazon.co.uk/...)" />
+        <input class="sa-name" id="saName" maxlength="50" placeholder="Item name (optional)" />
+        <input class="sa-cost" id="saCost" type="number" min="1" placeholder="Cost" />
+        <button class="btn btn-primary" id="saAdd" type="button">➕ Add Amazon item</button>
+      </div>
+    </div>
+  </details>
+  <div class="shop-history" id="shopHistory"></div>
+  <div id="shopReqModal" class="shop-req-modal" style="display:none;">
+    <div class="shop-req-card">
+      <h3>💌 Make a request</h3>
+      <p>Tell us what you'd love to see in the shop — it goes straight to the grown-ups!</p>
+      <textarea id="shopReqText" maxlength="300" rows="3" placeholder="What is it? (e.g. the new LEGO speed boat, a purple squishmallow...)"></textarea>
+      <input id="shopReqLink" maxlength="300" placeholder="Link, if you have one (optional)" />
+      <div class="shop-req-btns">
+        <button class="btn" id="shopReqCancel" type="button">Not now</button>
+        <button class="btn btn-primary" id="shopReqSend" type="button">📮 Send it!</button>
+      </div>
     </div>
   </div>
-  <div class="shop-history" id="shopHistory"></div>
 </div>
 
 <!-- ============================================================
@@ -15963,8 +16069,8 @@ function pbRandom() {
    treats take a couple of good sessions and the £129 epics are the long
    game. Items with a verified product photo carry img; the rest show
    their emoji. */
-const SHOP_CATALOG_VERSION = 10;
-const SHOP_CATS = {"lego": "🧱 LEGO", "games": "🎲 Games", "plush": "🧸 Plush", "cards": "🎴 Cards & collect", "action": "🦸 Action & play", "racing": "🏁 Slot racing", "popmart": "🎁 Pop Mart", "craft": "🎨 Craft", "science": "🔬 Science", "sports": "⚽ Sports & outdoor", "tech": "📱 Tech", "pocket": "🍬 Pocket money"};
+const SHOP_CATALOG_VERSION = 11;
+const SHOP_CATS = {"lego": "🧱 LEGO", "games": "🎲 Games", "plush": "🧸 Plush", "cards": "🎴 Cards & collect", "action": "🦸 Action & play", "racing": "🏁 Slot racing", "popmart": "🎁 Pop Mart", "craft": "🎨 Craft", "science": "🔬 Science", "sports": "⚽ Sports & outdoor", "tech": "📱 Tech", "books": "📚 Books", "pocket": "🍬 Pocket money"};
 const SHOP_DEFAULT_ITEMS = [
   {"id": "sv3_000", "icon": "🖐️", "name": "Sticky Hands Party Toys 12 Pack", "cost": 750, "price": "£2.99", "cat": "pocket", "url": "https://www.amazon.co.uk/s?k=sticky+hands+party+bag+toys"},
   {"id": "sv3_001", "icon": "🚗", "name": "Hot Wheels Basic Car Single (Assorted)", "cost": 800, "price": "£3.49", "cat": "cards", "url": "https://www.amazon.co.uk/s?k=hot+wheels+basic+car+single"},
@@ -16352,7 +16458,68 @@ const SHOP_DEFAULT_ITEMS = [
   {"id": "sv3_383", "icon": "✨", "name": "HD 5D Holographic Galaxy Lamp", "cost": 3900, "price": "£17.29", "cat": "tech", "url": "https://www.amazon.co.uk/dp/B0H7BCX2NG", "img": "https://m.media-amazon.com/images/I/71FFTH+PPgL._AC_UL320_.jpg"},
   {"id": "sv3_384", "icon": "🦖", "name": "Dinosaur Projector Night Light", "cost": 5400, "price": "£23.99", "cat": "tech", "url": "https://www.amazon.co.uk/dp/B0DWMFS9PD", "img": "https://m.media-amazon.com/images/I/81xxfozEyVL._AC_UL320_.jpg"},
   {"id": "sv3_385", "icon": "🦄", "name": "Unicorn Star Projector Night Light", "cost": 6000, "price": "£26.59", "cat": "tech", "url": "https://www.amazon.co.uk/dp/B09KTY7GN3", "img": "https://m.media-amazon.com/images/I/81FEIgB9qnL._AC_UL320_.jpg"},
-  {"id": "sv3_386", "icon": "🎵", "name": "Galaxy Projector with White Noise & Bluetooth", "cost": 6750, "price": "£29.99", "cat": "tech", "url": "https://www.amazon.co.uk/dp/B0D14XZD75", "img": "https://m.media-amazon.com/images/I/71HYeJJyopL._AC_UL320_.jpg"}
+  {"id": "sv3_386", "icon": "🎵", "name": "Galaxy Projector with White Noise & Bluetooth", "cost": 6750, "price": "£29.99", "cat": "tech", "url": "https://www.amazon.co.uk/dp/B0D14XZD75", "img": "https://m.media-amazon.com/images/I/71HYeJJyopL._AC_UL320_.jpg"},
+  {"id": "sv4_000", "icon": "🃏", "name": "Skip-Bo Card Game", "cost": 1700, "price": "£7.49", "cat": "games", "url": "https://www.amazon.co.uk/s?k=skip-bo+card+game+mattel+games"},
+  {"id": "sv4_001", "icon": "🎲", "name": "Yahtzee Classic Dice Game", "cost": 2250, "price": "£9.99", "cat": "games", "url": "https://www.amazon.co.uk/s?k=yahtzee+classic+dice+game+hasbro"},
+  {"id": "sv4_002", "icon": "👑", "name": "Sleeping Queens Card Game", "cost": 2700, "price": "£11.99", "cat": "games", "url": "https://www.amazon.co.uk/s?k=sleeping+queens+card+game+gamewright"},
+  {"id": "sv4_003", "icon": "🧩", "name": "Ravensburger Pokemon XXL 100 Piece Jigsaw Puzzle", "cost": 2600, "price": "£11.49", "cat": "games", "url": "https://www.amazon.co.uk/s?k=ravensburger+pokemon+xxl+100+piece+jigsaw+puzzle+kids"},
+  {"id": "sv4_004", "icon": "🏆", "name": "Beat That! The Bonkers Battle of Wacky Challenges", "cost": 3800, "price": "£16.99", "cat": "games", "url": "https://www.amazon.co.uk/s?k=beat+that+game+bonkers+battle+wacky+challenges+family"},
+  {"id": "sv4_005", "icon": "🏰", "name": "Kingdomino Board Game", "cost": 4050, "price": "£17.99", "cat": "games", "url": "https://www.amazon.co.uk/s?k=kingdomino+board+game+blue+orange+games"},
+  {"id": "sv4_006", "icon": "🚢", "name": "Battleship Classic Board Game", "cost": 4050, "price": "£17.99", "cat": "games", "url": "https://www.amazon.co.uk/s?k=battleship+classic+board+game+hasbro+gaming"},
+  {"id": "sv4_007", "icon": "🚗", "name": "ThinkFun Rush Hour Traffic Jam Logic Game", "cost": 4950, "price": "£21.99", "cat": "games", "url": "https://www.amazon.co.uk/s?k=thinkfun+rush+hour+traffic+jam+logic+puzzle+game"},
+  {"id": "sv4_008", "icon": "🟦", "name": "Blokus Classic Strategy Board Game", "cost": 4950, "price": "£21.99", "cat": "games", "url": "https://www.amazon.co.uk/s?k=blokus+classic+strategy+board+game+mattel"},
+  {"id": "sv4_009", "icon": "🌀", "name": "ThinkFun Gravity Maze Marble Run Logic Game", "cost": 6050, "price": "£26.99", "cat": "games", "url": "https://www.amazon.co.uk/s?k=thinkfun+gravity+maze+marble+run+brain+game"},
+  {"id": "sv4_010", "icon": "🔷", "name": "Qwirkle Board Game", "cost": 6050, "price": "£26.99", "cat": "games", "url": "https://www.amazon.co.uk/s?k=qwirkle+board+game+tile+matching+mindware"},
+  {"id": "sv4_011", "icon": "🏝️", "name": "CATAN Board Game (2020 Edition)", "cost": 9450, "price": "£41.99", "cat": "games", "url": "https://www.amazon.co.uk/s?k=catan+board+game+2020+edition+base+game"},
+  {"id": "sv4_012", "icon": "🦛", "name": "Squishmallows 7.5-Inch Hank the Hippo", "cost": 2250, "price": "£9.99", "cat": "plush", "url": "https://www.amazon.co.uk/s?k=squishmallows+7.5+inch+hank+hippo+plush"},
+  {"id": "sv4_013", "icon": "🍍", "name": "Squishmallows 12-Inch Maui the Pineapple", "cost": 4050, "price": "£17.99", "cat": "plush", "url": "https://www.amazon.co.uk/s?k=squishmallows+12+inch+maui+pineapple+plush"},
+  {"id": "sv4_014", "icon": "🎁", "name": "Squishville Mystery Mini Squishmallows Plush", "cost": 1800, "price": "£7.99", "cat": "plush", "url": "https://www.amazon.co.uk/s?k=squishville+squishmallows+mystery+mini+plush+blind"},
+  {"id": "sv4_015", "icon": "🥐", "name": "Jellycat Amuseable Croissant", "cost": 5600, "price": "£25.00", "cat": "plush", "url": "https://www.amazon.co.uk/s?k=jellycat+amuseable+croissant+plush"},
+  {"id": "sv4_016", "icon": "🐉", "name": "Jellycat Bashful Dragon Medium", "cost": 6100, "price": "£27.00", "cat": "plush", "url": "https://www.amazon.co.uk/s?k=jellycat+bashful+dragon+medium+soft+toy"},
+  {"id": "sv4_017", "icon": "🐇", "name": "Sylvanian Families Chocolate Rabbit Family", "cost": 4250, "price": "£18.99", "cat": "plush", "url": "https://www.amazon.co.uk/s?k=sylvanian+families+chocolate+rabbit+family+figures"},
+  {"id": "sv4_018", "icon": "🏡", "name": "Sylvanian Families Red Roof Cosy Cottage", "cost": 5600, "price": "£24.99", "cat": "plush", "url": "https://www.amazon.co.uk/s?k=sylvanian+families+red+roof+cosy+cottage+starter+home"},
+  {"id": "sv4_019", "icon": "🐢", "name": "Pokemon 8-Inch Squirtle Plush", "cost": 2900, "price": "£12.99", "cat": "plush", "url": "https://www.amazon.co.uk/s?k=pokemon+8+inch+squirtle+plush+jazwares"},
+  {"id": "sv4_020", "icon": "🎀", "name": "Pokemon 8-Inch Sylveon Plush", "cost": 3150, "price": "£13.99", "cat": "plush", "url": "https://www.amazon.co.uk/s?k=pokemon+8+inch+sylveon+plush+jazwares"},
+  {"id": "sv4_021", "icon": "💧", "name": "Aquabeads Mega Bead Refill Pack 2400 Beads", "cost": 2500, "price": "£11.00", "cat": "craft", "url": "https://www.amazon.co.uk/s?k=aquabeads+mega+bead+refill+pack+2400"},
+  {"id": "sv4_022", "icon": "🏺", "name": "Cool Maker Pottery Studio", "cost": 8300, "price": "£37.00", "cat": "craft", "url": "https://www.amazon.co.uk/s?k=cool+maker+pottery+studio+kids+clay+wheel"},
+  {"id": "sv4_023", "icon": "🖌️", "name": "Uni Posca PC-3M Paint Markers 8 Pack", "cost": 3800, "price": "£17.00", "cat": "craft", "url": "https://www.amazon.co.uk/s?k=posca+pc-3m+paint+markers+8+assorted+colours"},
+  {"id": "sv4_024", "icon": "✏️", "name": "Crayola Light Up Tracing Pad", "cost": 4300, "price": "£19.00", "cat": "craft", "url": "https://www.amazon.co.uk/s?k=crayola+light+up+tracing+pad+kids+drawing"},
+  {"id": "sv4_025", "icon": "🦕", "name": "STAEDTLER FIMO Kids Clay 6 Colour Pack", "cost": 2000, "price": "£9.00", "cat": "craft", "url": "https://www.amazon.co.uk/s?k=fimo+kids+modelling+clay+6+pack+colours"},
+  {"id": "sv4_026", "icon": "✨", "name": "Sequin Art Blue Unicorn Craft Kit", "cost": 2250, "price": "£10.00", "cat": "craft", "url": "https://www.amazon.co.uk/s?k=sequin+art+blue+unicorn+craft+kit+kids"},
+  {"id": "sv4_027", "icon": "🦋", "name": "Baker Ross Butterfly Suncatcher Kits (Pack of 8)", "cost": 1450, "price": "£6.50", "cat": "craft", "url": "https://www.amazon.co.uk/s?k=baker+ross+butterfly+suncatcher+kits+kids"},
+  {"id": "sv4_028", "icon": "👩‍🍳", "name": "KitchenCraft Let's Make Children's Baking Set", "cost": 3150, "price": "£14.00", "cat": "craft", "url": "https://www.amazon.co.uk/s?k=kitchencraft+lets+make+childrens+kids+baking+set"},
+  {"id": "sv4_029", "icon": "🦋", "name": "Insect Lore Butterfly Garden", "cost": 4500, "price": "£19.99", "cat": "science", "url": "https://www.amazon.co.uk/s?k=insect+lore+butterfly+garden+caterpillar+growing+kit"},
+  {"id": "sv4_030", "icon": "🌦️", "name": "4M KidzLabs Weather Station Kit", "cost": 2900, "price": "£12.99", "cat": "science", "url": "https://www.amazon.co.uk/s?k=4m+kidzlabs+weather+station+science+kit+kids"},
+  {"id": "sv4_031", "icon": "🦐", "name": "Sea-Monkeys Original Ocean Zoo", "cost": 3150, "price": "£13.99", "cat": "science", "url": "https://www.amazon.co.uk/s?k=sea+monkeys+original+ocean+zoo+kit"},
+  {"id": "sv4_032", "icon": "🧲", "name": "4M KidzLabs Anti-Gravity Magnetic Levitation Kit", "cost": 2600, "price": "£11.49", "cat": "science", "url": "https://www.amazon.co.uk/s?k=4m+kidzlabs+anti+gravity+magnetic+levitation+science+kit"},
+  {"id": "sv4_033", "icon": "🧪", "name": "4M KidzLabs Kitchen Science Kit", "cost": 2450, "price": "£10.99", "cat": "science", "url": "https://www.amazon.co.uk/s?k=4m+kidzlabs+kitchen+science+experiments+kit+kids"},
+  {"id": "sv4_034", "icon": "💎", "name": "National Geographic Hobby Rock Tumbler Kit", "cost": 12600, "price": "£55.99", "cat": "science", "url": "https://www.amazon.co.uk/s?k=national+geographic+rock+tumbler+kit+polisher+kids"},
+  {"id": "sv4_035", "icon": "📚", "name": "Diary of a Wimpy Kid Box of Books 1-12", "cost": 6300, "price": "£27.99", "cat": "books", "url": "https://www.amazon.co.uk/s?k=diary+of+a+wimpy+kid+box+set+books+1-12+jeff+kinney"},
+  {"id": "sv4_036", "icon": "🐶", "name": "Dog Man Supa Buddies Mega Collection (Books 1-10)", "cost": 14600, "price": "£64.99", "cat": "books", "url": "https://www.amazon.co.uk/s?k=dog+man+box+set+books+1-10+dav+pilkey+supa+buddies"},
+  {"id": "sv4_037", "icon": "🏆", "name": "Guinness World Records 2026", "cost": 2450, "price": "£10.99", "cat": "books", "url": "https://www.amazon.co.uk/s?k=guinness+world+records+2026+hardback+book"},
+  {"id": "sv4_038", "icon": "⚽", "name": "Match! Annual 2026", "cost": 1550, "price": "£6.99", "cat": "books", "url": "https://www.amazon.co.uk/s?k=match+annual+2026+football+book+kids"},
+  {"id": "sv4_039", "icon": "👵", "name": "Gangsta Granny by David Walliams", "cost": 1100, "price": "£4.99", "cat": "books", "url": "https://www.amazon.co.uk/s?k=gangsta+granny+david+walliams+paperback"},
+  {"id": "sv4_040", "icon": "✈️", "name": "Usborne 100 Paper Planes to Fold and Fly", "cost": 1550, "price": "£6.99", "cat": "books", "url": "https://www.amazon.co.uk/s?k=usborne+100+paper+planes+to+fold+and+fly"},
+  {"id": "sv4_041", "icon": "🎯", "name": "Nerf Elite 2.0 Volt SD-1 Blaster", "cost": 1550, "price": "£6.99", "cat": "sports", "url": "https://www.amazon.co.uk/s?k=nerf+elite+2.0+volt+sd-1+blaster+darts"},
+  {"id": "sv4_042", "icon": "🪁", "name": "Brookite Harlequin Kite", "cost": 1800, "price": "£7.99", "cat": "sports", "url": "https://www.amazon.co.uk/s?k=brookite+harlequin+kite+kids+single+line"},
+  {"id": "sv4_043", "icon": "💦", "name": "Zuru Bunch O Balloons 3 Pack (100+ Balloons)", "cost": 2250, "price": "£9.99", "cat": "sports", "url": "https://www.amazon.co.uk/s?k=zuru+bunch+o+balloons+water+balloons+3+pack"},
+  {"id": "sv4_044", "icon": "⚾", "name": "M.Y Rounders Set with Wooden Bat & Ball", "cost": 2250, "price": "£9.99", "cat": "sports", "url": "https://www.amazon.co.uk/s?k=my+rounders+set+wooden+bat+ball+garden+game"},
+  {"id": "sv4_045", "icon": "🛴", "name": "Mini Hornit Bike & Scooter Light with Sounds", "cost": 2900, "price": "£12.99", "cat": "sports", "url": "https://www.amazon.co.uk/s?k=mini+hornit+scooter+bike+light+horn+sound+effects+kids"},
+  {"id": "sv4_046", "icon": "🚀", "name": "Stomp Rocket Jr. Glow Rocket Launcher", "cost": 3150, "price": "£13.99", "cat": "sports", "url": "https://www.amazon.co.uk/s?k=stomp+rocket+jr+glow+kids+outdoor+rocket+launcher"},
+  {"id": "sv4_047", "icon": "⚽", "name": "Football Flick Urban Skills Trainer", "cost": 6750, "price": "£29.99", "cat": "sports", "url": "https://www.amazon.co.uk/s?k=football+flick+urban+football+skills+trainer+rebounder"},
+  {"id": "sv4_048", "icon": "🏊", "name": "Intex Rainbow Ring Play Centre Paddling Pool", "cost": 7850, "price": "£34.99", "cat": "sports", "url": "https://www.amazon.co.uk/s?k=intex+rainbow+ring+play+centre+inflatable+paddling+pool+slide"},
+  {"id": "sv4_049", "icon": "🤸", "name": "Plum 4.5ft Junior Trampoline & Enclosure", "cost": 15750, "price": "£69.99", "cat": "sports", "url": "https://www.amazon.co.uk/s?k=plum+junior+trampoline+enclosure+4.5ft+kids"},
+  {"id": "sv4_050", "icon": "🏎️", "name": "LEGO City Green Race Car 60399", "cost": 3350, "price": "£14.99", "cat": "lego", "url": "https://www.amazon.co.uk/s?k=lego+city+green+race+car+60399"},
+  {"id": "sv4_051", "icon": "🍔", "name": "LEGO City Burger Truck 60404", "cost": 3150, "price": "£13.99", "cat": "lego", "url": "https://www.amazon.co.uk/s?k=lego+city+burger+truck+60404"},
+  {"id": "sv4_052", "icon": "🌷", "name": "LEGO Creator 3in1 Flowers in Watering Can 31149", "cost": 5150, "price": "£22.99", "cat": "lego", "url": "https://www.amazon.co.uk/s?k=lego+creator+3in1+flowers+watering+can+31149"},
+  {"id": "sv4_053", "icon": "⛏️", "name": "LEGO Minecraft The Nether Portal Ambush 21255", "cost": 8300, "price": "£36.99", "cat": "lego", "url": "https://www.amazon.co.uk/s?k=lego+minecraft+nether+portal+ambush+21255"},
+  {"id": "sv4_054", "icon": "🏍️", "name": "LEGO Technic Kawasaki Ninja H2R Motorcycle 42170", "cost": 12350, "price": "£54.99", "cat": "lego", "url": "https://www.amazon.co.uk/s?k=lego+technic+kawasaki+ninja+h2r+motorcycle+42170"},
+  {"id": "sv4_055", "icon": "⌚", "name": "Casio F-91W Classic Digital Watch", "cost": 2900, "price": "£12.99", "cat": "tech", "url": "https://www.amazon.co.uk/s?k=casio+f-91w+classic+digital+watch+black"},
+  {"id": "sv4_056", "icon": "🌙", "name": "3D Moon Lamp 16 Colours with Remote & Stand", "cost": 3350, "price": "£14.99", "cat": "tech", "url": "https://www.amazon.co.uk/s?k=3d+moon+lamp+16+colours+remote+control+kids+night+light"},
+  {"id": "sv4_057", "icon": "🌋", "name": "Rocket Lava Lamp 34cm Blue/Green", "cost": 3150, "price": "£13.99", "cat": "tech", "url": "https://www.amazon.co.uk/s?k=lava+lamp+34cm+rocket+kids+bedroom+blue+green"},
+  {"id": "sv4_058", "icon": "⏰", "name": "Lexibook Pokemon Pikachu Alarm Clock Night Light", "cost": 4500, "price": "£19.99", "cat": "tech", "url": "https://www.amazon.co.uk/s?k=lexibook+pokemon+pikachu+digital+alarm+clock+night+light"},
+  {"id": "sv4_059", "icon": "🔊", "name": "JBL Go 4 Portable Bluetooth Speaker", "cost": 7200, "price": "£31.99", "cat": "tech", "url": "https://www.amazon.co.uk/s?k=jbl+go+4+portable+bluetooth+speaker"},
+  {"id": "sv4_060", "icon": "📻", "name": "Yoto Mini Kids Audio Player", "cost": 11250, "price": "£49.99", "cat": "tech", "url": "https://www.amazon.co.uk/s?k=yoto+mini+kids+audio+player+screen+free"}
 ];
 function shopGetItems() {
   const u = ensureUser(); migrateUser(u);
@@ -16364,7 +16531,7 @@ function shopGetItems() {
     /* V48 migration: swap old seed catalogues for the current one, but keep
        anything the family added themselves. (filter(Boolean): a null entry
        from the V4.17 seed must not crash this.) */
-    const custom = u.shop.items.filter(Boolean).filter(i => !/^s[1-8]$/.test(String(i.id)) && !/^sc\d\d$/.test(String(i.id)) && !/^sv3_/.test(String(i.id)));
+    const custom = u.shop.items.filter(Boolean).filter(i => !/^s[1-8]$/.test(String(i.id)) && !/^sc\d\d$/.test(String(i.id)) && !/^sv3_/.test(String(i.id)) && !/^sv4_/.test(String(i.id)));
     u.shop.items = SHOP_DEFAULT_ITEMS.map(i => Object.assign({}, i)).concat(custom);
     u.shop.catalogVersion = SHOP_CATALOG_VERSION;
     saveState();
@@ -16380,6 +16547,14 @@ function shopGetItems() {
 }
 var shopFilterCat = 'all';
 var shopAfford = false;
+var shopSearch = '';
+var shopBand = 'all';
+/* V4.43: the ✕ on a standard prize HIDES it (restorable) instead of
+   deleting it forever; hidden ids live on the user */
+function shopHiddenIds(u) {
+  if (!u.shop.hiddenIds || !Array.isArray(u.shop.hiddenIds)) u.shop.hiddenIds = [];
+  return u.shop.hiddenIds;
+}
 function shopRenderFilters(host, u) {
   const bar = document.createElement('div');
   bar.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;margin:0 0 12px;';
@@ -16395,61 +16570,132 @@ function shopRenderFilters(host, u) {
     b.addEventListener('click', () => { shopFilterCat = pair[0]; shopRender(); });
     bar.appendChild(b);
   });
-  const aff = document.createElement('button');
-  aff.type = 'button';
-  aff.textContent = shopAfford ? '✅ I can afford it' : '💰 I can afford it';
-  aff.style.cssText = 'border:2px solid ' + (shopAfford ? '#2ecc71' : '#d9d2ee') +
-    ';background:' + (shopAfford ? '#2ecc71' : '#fff') +
-    ';color:' + (shopAfford ? '#fff' : '#7c8696') +
-    ';border-radius:999px;padding:6px 13px;font-family:inherit;font-weight:800;font-size:12.5px;cursor:pointer;margin-left:auto;';
-  aff.addEventListener('click', () => { shopAfford = !shopAfford; shopRender(); });
-  bar.appendChild(aff);
   host.appendChild(bar);
 }
-function shopRender() {
+function shopRenderTools(host, u) {
+  host.innerHTML = '';
+  const search = document.createElement('input');
+  search.type = 'search';
+  search.placeholder = '🔍 Search the shop...';
+  search.value = shopSearch;
+  search.addEventListener('input', () => { shopSearch = search.value; shopRender(true); });
+  host.appendChild(search);
+  const band = document.createElement('select');
+  band.innerHTML =
+    '<option value="all">⭐ Any price</option>' +
+    '<option value="lo">Under 1,500 ⭐</option>' +
+    '<option value="mid">1,500 – 4,000 ⭐</option>' +
+    '<option value="hi">4,000 – 10,000 ⭐</option>' +
+    '<option value="epic">Epic 10,000+ ⭐</option>';
+  band.value = shopBand;
+  band.addEventListener('change', () => { shopBand = band.value; shopRender(); });
+  host.appendChild(band);
+  const aff = document.createElement('button');
+  aff.type = 'button';
+  aff.className = 'shop-chip' + (shopAfford ? ' on' : '');
+  aff.textContent = shopAfford ? '✅ I can afford it' : '💰 I can afford it';
+  aff.addEventListener('click', () => { shopAfford = !shopAfford; shopRender(); });
+  host.appendChild(aff);
+  const hid = shopHiddenIds(u);
+  if (hid.length) {
+    const res = document.createElement('button');
+    res.type = 'button';
+    res.className = 'shop-chip';
+    res.textContent = '♻️ Bring back ' + hid.length + ' hidden';
+    res.addEventListener('click', () => {
+      u.shop.hiddenIds = [];
+      saveState();
+      shopRender();
+    });
+    host.appendChild(res);
+  }
+}
+function shopBandOk(cost) {
+  if (shopBand === 'lo') return cost < 1500;
+  if (shopBand === 'mid') return cost >= 1500 && cost < 4000;
+  if (shopBand === 'hi') return cost >= 4000 && cost < 10000;
+  if (shopBand === 'epic') return cost >= 10000;
+  return true;
+}
+function shopRenderGoal(u, items) {
+  const host = document.getElementById('shopGoal');
+  if (!host) return;
+  host.innerHTML = '';
+  const goal = u.shop.goalId ? items.find(i => i.id === u.shop.goalId) : null;
+  if (!goal) { if (u.shop.goalId) { u.shop.goalId = null; saveState(); } return; }
+  const pts = u.points || 0;
+  const pct = Math.min(100, Math.round(pts / goal.cost * 100));
+  const done = pts >= goal.cost;
+  const banner = document.createElement('div');
+  banner.className = 'shop-goal-banner' + (done ? ' done' : '');
+  const media = goal.img ? '<img src="' + goal.img + '" alt="">' : (goal.icon || '🎁');
+  banner.innerHTML =
+    '<div class="g-icon">' + media + '</div>' +
+    '<div class="g-main">' +
+      '<div class="g-name">🎯 ' + (done ? 'YOU DID IT — ' : 'Saving for: ') + shopEsc(goal.name) + '</div>' +
+      '<div class="g-bar"><i style="width:' + pct + '%"></i></div>' +
+      '<div class="g-lbl">' + (done
+        ? 'You have all ' + goal.cost + ' ⭐ — tap the button to get it! 🎉'
+        : pts + ' / ' + goal.cost + ' ⭐ saved · ' + pct + '% there · ' + (goal.cost - pts) + ' to go') + '</div>' +
+    '</div>' +
+    (done ? '<button class="btn btn-primary shop-item-buy can" style="width:auto;" type="button">🎉 Get it!</button>'
+          : '<button class="shop-item-del" style="position:static;font-size:16px;" title="Stop saving for this" type="button">✕</button>');
+  const btn = banner.querySelector('button');
+  if (done) btn.addEventListener('click', () => shopRedeem(goal.id));
+  else btn.addEventListener('click', () => { u.shop.goalId = null; saveState(); shopRender(); });
+  host.appendChild(banner);
+}
+function shopRender(keepFocus) {
   const u = ensureUser(); migrateUser(u);
   updatePointsDisplay();
   const bal = document.getElementById('shopBalance');
   if (bal) bal.textContent = u.points || 0;
   const grid = document.getElementById('shopGrid');
   if (!grid) return;
+  shopFlushRequests();
   let items = shopGetItems();
   grid.innerHTML = '';
+  /* while typing in the search box, re-rendering the tools would blur the
+     input — only rebuild them on real state changes */
+  const toolsHost = document.getElementById('shopTools');
+  if (toolsHost && !keepFocus) shopRenderTools(toolsHost, u);
   const filterHost = document.getElementById('shopFilters');
-  if (filterHost) { filterHost.innerHTML = ''; shopRenderFilters(filterHost, u); }
+  if (filterHost && !keepFocus) { filterHost.innerHTML = ''; shopRenderFilters(filterHost, u); }
   /* a stale/unknown category (e.g. from an old cached build) must never
      blank the shop — fall back to All */
   if (shopFilterCat !== 'all' && !SHOP_CATS[shopFilterCat]) shopFilterCat = 'all';
+  const hid = shopHiddenIds(u);
+  const total = items.filter(Boolean).length;
+  items = items.filter(i => hid.indexOf(i.id) < 0);
+  shopRenderGoal(u, items);
   if (shopFilterCat !== 'all') items = items.filter(i => (i.cat || 'custom') === shopFilterCat);
   if (shopAfford) items = items.filter(i => (u.points || 0) >= i.cost);
+  if (shopBand !== 'all') items = items.filter(i => shopBandOk(i.cost));
+  const q = shopSearch.trim().toLowerCase();
+  if (q) items = items.filter(i => String(i.name || '').toLowerCase().indexOf(q) >= 0);
   const countEl = document.getElementById('shopCount');
-  if (countEl) countEl.textContent = items.length + ' prizes' + (shopFilterCat !== 'all' ? ' in this aisle' : ' in the shop');
+  if (countEl) countEl.textContent = 'Showing ' + items.length + ' of ' + total + ' prizes';
   if (items.length === 0) {
     grid.innerHTML = '<p style="color:var(--ink-soft);grid-column:1/-1;">' +
-      (shopAfford ? 'Nothing you can afford here yet — keep earning! ⭐' : 'No rewards here yet — add one with the form below.') + '</p>';
+      (q ? 'Nothing matches “' + shopEsc(shopSearch) + '” — try the 💌 request button to ask for it!'
+         : shopAfford ? 'Nothing you can afford with these filters yet — keep earning! ⭐'
+         : 'No rewards here yet.') + '</p>';
   }
-  items.forEach(item => {
-    const card = document.createElement('div');
-    card.className = 'shop-item';
-    const afford = (u.points || 0) >= item.cost;
-    const media = item.img
-      ? '<div class="shop-item-imgwrap"><img class="shop-item-img" src="' + item.img +
-        '" alt="" onerror="this.parentNode.innerHTML=\'<div class=&quot;shop-item-icon&quot;>' + (item.icon || '🎁') + '</div>\'"></div>'
-      : '<div class="shop-item-icon">' + (item.icon || '🎁') + '</div>';
-    card.innerHTML =
-      '<button class="shop-item-del" title="Remove reward" type="button">✕</button>' +
-      media +
-      '<div class="shop-item-name">' + shopEsc(item.name) + (item.price ? ' <span class="shop-item-price">' + item.price + '</span>' : '') + '</div>' +
-      (item.url ? '<a class="shop-item-link" href="' + String(item.url).replace(/"/g, '%22') +
-        '" target="_blank" rel="noopener">🔗 See this item</a>' : '') +
-      '<div class="shop-item-cost">⭐ ' + item.cost + ' points</div>' +
-      '<button class="btn btn-primary shop-item-buy" type="button"' +
-        (afford ? '' : ' disabled') + '>' +
-        (afford ? 'Redeem' : 'Need more ⭐') + '</button>';
-    card.querySelector('.shop-item-buy').addEventListener('click', () => shopRedeem(item.id));
-    card.querySelector('.shop-item-del').addEventListener('click', () => shopRemove(item.id));
-    grid.appendChild(card);
-  });
+  /* affordable prizes first (best first), then the rest cheapest-first so
+     the next realistic goal is always near the top */
+  const pts = u.points || 0;
+  const can = items.filter(i => pts >= i.cost).sort((a, b) => b.cost - a.cost);
+  const cant = items.filter(i => pts < i.cost).sort((a, b) => a.cost - b.cost);
+  function addSection(label) {
+    const h = document.createElement('div');
+    h.className = 'shop-section';
+    h.textContent = label;
+    grid.appendChild(h);
+  }
+  if (can.length && cant.length && !shopAfford) addSection('🎉 Yours right now (' + can.length + ')');
+  can.forEach(item => grid.appendChild(shopCard(item, u, true)));
+  if (can.length && cant.length && !shopAfford) addSection('💪 Keep saving');
+  cant.forEach(item => grid.appendChild(shopCard(item, u, false)));
   const hist = document.getElementById('shopHistory');
   if (hist) {
     const red = u.shop.redeemed || [];
@@ -16462,6 +16708,45 @@ function shopRender() {
           ' — ' + r.cost + ' points</div>').join('');
     }
   }
+}
+function shopCard(item, u, afford) {
+  const card = document.createElement('div');
+  card.className = 'shop-item';
+  const pts = u.points || 0;
+  const pct = Math.min(100, Math.round(pts / item.cost * 100));
+  const isGoal = u.shop.goalId === item.id;
+  const media = item.img
+    ? '<div class="shop-item-imgwrap"><img class="shop-item-img" src="' + item.img +
+      '" alt="" onerror="this.parentNode.innerHTML=\'<div class=&quot;shop-item-icon&quot;>' + (item.icon || '🎁') + '</div>\'"></div>'
+    : '<div class="shop-item-icon">' + (item.icon || '🎁') + '</div>';
+  const prog = afford ? '' :
+    '<div class="shop-item-prog' + (pct >= 60 ? ' near' : '') + '">' +
+      '<div class="shop-item-progbar"><i style="width:' + pct + '%"></i></div>' +
+      '<div class="shop-item-proglbl">' + pct + '% saved · ' + (item.cost - pts) + ' more ⭐</div>' +
+    '</div>';
+  card.innerHTML =
+    '<button class="shop-item-goal' + (isGoal ? ' set' : '') + '" title="' +
+      (isGoal ? 'This is your savings goal' : 'Make this my savings goal') + '" type="button">' +
+      (isGoal ? '⭐' : '☆') + '</button>' +
+    '<button class="shop-item-del" title="Hide this prize" type="button">✕</button>' +
+    (/^sv4_/.test(String(item.id)) ? '<div class="shop-item-new">✨ NEW</div>' : '') +
+    media +
+    '<div class="shop-item-name">' + shopEsc(item.name) + (item.price ? ' <span class="shop-item-price">' + item.price + '</span>' : '') + '</div>' +
+    (item.url ? '<a class="shop-item-link" href="' + String(item.url).replace(/"/g, '%22') +
+      '" target="_blank" rel="noopener">🔗 See this item</a>' : '') +
+    '<div class="shop-item-cost">⭐ ' + item.cost + ' points</div>' +
+    prog +
+    '<button class="btn btn-primary shop-item-buy' + (afford ? ' can' : '') + '" type="button"' +
+      (afford ? '' : ' disabled') + '>' +
+      (afford ? '🎉 Get it now!' : 'Keep saving ⭐') + '</button>';
+  card.querySelector('.shop-item-buy').addEventListener('click', () => shopRedeem(item.id));
+  card.querySelector('.shop-item-del').addEventListener('click', () => shopRemove(item.id));
+  card.querySelector('.shop-item-goal').addEventListener('click', () => {
+    u.shop.goalId = isGoal ? null : item.id;
+    saveState();
+    shopRender();
+  });
+  return card;
 }
 function shopRedeem(id) {
   const u = ensureUser(); migrateUser(u);
@@ -16480,10 +16765,66 @@ function shopRedeem(id) {
 }
 function shopRemove(id) {
   const u = ensureUser(); migrateUser(u);
-  if (!confirm('Remove this reward from the shop?')) return;
-  u.shop.items = shopGetItems().filter(i => i.id !== id);
+  const isStandard = /^(sv3_|sv4_|sc\d\d$|s[1-8]$)/.test(String(id));
+  if (isStandard) {
+    /* standard prizes HIDE (restorable via the ♻️ chip) — and never write
+       the family-overlay copy back into the stored catalogue */
+    if (!confirm('Hide this prize? You can bring it back with the ♻️ button.')) return;
+    const hid = shopHiddenIds(u);
+    if (hid.indexOf(id) < 0) hid.push(id);
+  } else {
+    if (!confirm('Remove this reward from the shop?')) return;
+    u.shop.items = (u.shop.items || []).filter(Boolean).filter(i => i.id !== id);
+  }
   saveState();
   shopRender();
+}
+/* ---- V4.43: kids' “make a request” — rides the shopRequest channel the
+   Control Centre inbox already reads. Offline requests queue on the user
+   and flush next time the shop renders with cloud available. ---- */
+function shopFlushRequests() {
+  try {
+    const u = ensureUser();
+    const queue = (u.shop && u.shop.reqQueue) || [];
+    if (!queue.length || typeof window.cloudShopRequest !== 'function') return;
+    const p = window.cloudShopRequest(queue[0].text);
+    if (!p) return;
+    p.then(() => {
+      u.shop.reqQueue.shift();
+      saveState();
+      if (u.shop.reqQueue.length) shopFlushRequests();
+    }).catch(() => {});
+  } catch (e) {}
+}
+function shopSendRequest() {
+  const u = ensureUser(); migrateUser(u);
+  const textEl = document.getElementById('shopReqText');
+  const linkEl = document.getElementById('shopReqLink');
+  let text = (textEl.value || '').trim();
+  const link = (linkEl.value || '').trim();
+  if (!text) { alert('Tell us what you\'d like first!'); return; }
+  if (link) text += ' — ' + link.slice(0, 200);
+  const modal = document.getElementById('shopReqModal');
+  const done = (sent) => {
+    textEl.value = ''; linkEl.value = '';
+    if (modal) modal.style.display = 'none';
+    alert(sent ? '📮 Sent! The grown-ups will see your request. 🎉'
+               : '📮 Saved! It will send by itself next time you\'re online. 🎉');
+  };
+  const p = (typeof window.cloudShopRequest === 'function') ? window.cloudShopRequest(text) : null;
+  if (p) {
+    p.then(() => done(true)).catch(() => {
+      if (!u.shop.reqQueue) u.shop.reqQueue = [];
+      u.shop.reqQueue.push({ text: text, at: Date.now() });
+      saveState();
+      done(false);
+    });
+  } else {
+    if (!u.shop.reqQueue) u.shop.reqQueue = [];
+    u.shop.reqQueue.push({ text: text, at: Date.now() });
+    saveState();
+    done(false);
+  }
 }
 function shopAddItem() {
   const u = ensureUser(); migrateUser(u);
@@ -16553,6 +16894,20 @@ function shopAddAmazon() {
   alert('🛒 “' + name + '” has been added to the shop.');
 }
 (function wireShop() {
+  const reqBtn = document.getElementById('shopReqBtn');
+  const reqModal = document.getElementById('shopReqModal');
+  if (reqBtn && reqModal) {
+    reqBtn.addEventListener('click', () => {
+      reqModal.style.display = 'flex';
+      const t = document.getElementById('shopReqText');
+      if (t) setTimeout(() => t.focus(), 50);
+    });
+    const cancel = document.getElementById('shopReqCancel');
+    if (cancel) cancel.addEventListener('click', () => { reqModal.style.display = 'none'; });
+    const send = document.getElementById('shopReqSend');
+    if (send) send.addEventListener('click', shopSendRequest);
+    reqModal.addEventListener('click', (e) => { if (e.target === reqModal) reqModal.style.display = 'none'; });
+  }
   const add = document.getElementById('siAdd');
   if (add) add.addEventListener('click', shopAddItem);
   const cost = document.getElementById('siCost');
@@ -31565,6 +31920,25 @@ var SPELL_BANKS = {
       try { myChallengeDoc.delete().catch(function () {}); } catch (e) {}
       myChallengeDoc = null;
     }
+  };
+  /* V4.43: kids' shop requests ride the same channel the Control Centre
+     inbox reads (kind shopRequest, status req — watchChallenges skips
+     non-open docs, so no toast fires). Returns the write promise, or
+     null when there's no signed-in cloud session to send through. */
+  window.cloudShopRequest = function (text) {
+    if (!me() || !db) return null;
+    try {
+      var who = myName() || 'a player';
+      var u0 = (typeof currentUser === 'function') ? currentUser() : null;
+      if (u0 && u0.name && u0.name.toLowerCase() !== String(who).toLowerCase()) {
+        who = u0.name + ' (on ' + who + '’s login)';
+      }
+      return db.collection('challenges').add({
+        kind: 'shopRequest', hostUid: me().uid, host: String(who),
+        family: myFamily() || '', text: String(text || '').slice(0, 400),
+        at: Date.now(), status: 'req'
+      });
+    } catch (e) { return null; }
   };
   window.addEventListener('beforeunload', function () { window.cloudRetractChallenge(); });
 

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover" />
-<title>Conway Family Learning Lab — Live V4.44</title>
+<title>Conway Family Learning Lab — Live V4.45</title>
 
 <!-- PWA -->
 <link rel="manifest" href="manifest.json">
@@ -3002,7 +3002,7 @@ function slWakeRelease() {
   <div class="brand">
     <span class="logo">🧪</span>
     Conway Family Learning Lab
-    <span style="font-family: 'Fredoka', sans-serif; font-size: 13px; font-weight: 600; color: var(--ink-soft); -webkit-text-fill-color: var(--ink-soft); background: var(--neutral); padding: 2px 8px; border-radius: 999px; margin-left: 6px; letter-spacing: 0.5px;">Live V4.44</span>
+    <span style="font-family: 'Fredoka', sans-serif; font-size: 13px; font-weight: 600; color: var(--ink-soft); -webkit-text-fill-color: var(--ink-soft); background: var(--neutral); padding: 2px 8px; border-radius: 999px; margin-left: 6px; letter-spacing: 0.5px;">Live V4.45</span>
   </div>
 
   <button class="user-pill" id="userPill" title="Switch player">
@@ -5083,6 +5083,116 @@ function _slide(ctx, fStart, fEnd, startAt, durMs, { wave = 'sawtooth', vol = 0.
   osc.stop(startAt + durMs / 1000 + 0.08);
 }
 
+/* ---- V4.45: a small instrument rack, so effects are music instead of
+   beeps. Everything feeds the same warm master bus. ---- */
+function _noiseBuf(ctx) {
+  if (ctx._slNoise) return ctx._slNoise;
+  const len = ctx.sampleRate | 0;
+  const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+  ctx._slNoise = buf;
+  return buf;
+}
+/* marimba/harp pluck: soft fundamental + a fast-dying upper partial */
+function _pluck(ctx, freq, t, { vol = 0.2, dur = 0.5 } = {}) {
+  const bus = _sfxBus(ctx);
+  [[1, 1, dur], [3.9, 0.22, dur * 0.28]].forEach(([mult, amt, dd]) => {
+    const o = ctx.createOscillator(); o.type = 'sine';
+    o.frequency.setValueAtTime(freq * mult, t);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(vol * amt, t + 0.004);
+    g.gain.exponentialRampToValueAtTime(0.0004, t + dd);
+    o.connect(g); g.connect(bus.input); g.connect(bus.echo);
+    o.start(t); o.stop(t + dd + 0.02);
+  });
+}
+/* soft bell: slightly inharmonic shimmer with a long tail */
+function _bell(ctx, freq, t, { vol = 0.14, dur = 0.9 } = {}) {
+  const bus = _sfxBus(ctx);
+  [[1, 1], [2.76, 0.35], [5.4, 0.12]].forEach(([mult, amt]) => {
+    const o = ctx.createOscillator(); o.type = 'sine';
+    o.frequency.setValueAtTime(freq * mult, t);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(vol * amt, t + 0.006);
+    g.gain.exponentialRampToValueAtTime(0.0004, t + dur * (mult > 2 ? 0.4 : 1));
+    o.connect(g); g.connect(bus.input); g.connect(bus.echo);
+    o.start(t); o.stop(t + dur + 0.05);
+  });
+}
+/* brass stab: sawtooth behind a filter that blooms open, like a horn hit */
+function _brass(ctx, freq, t, dur, { vol = 0.14 } = {}) {
+  const bus = _sfxBus(ctx);
+  const lp = ctx.createBiquadFilter();
+  lp.type = 'lowpass'; lp.Q.value = 1.1;
+  lp.frequency.setValueAtTime(freq * 1.4, t);
+  lp.frequency.linearRampToValueAtTime(freq * 5.5, t + 0.06);
+  lp.frequency.linearRampToValueAtTime(freq * 2.2, t + dur);
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0, t);
+  g.gain.linearRampToValueAtTime(vol, t + 0.02);
+  g.gain.setValueAtTime(vol, t + Math.max(0.02, dur - 0.09));
+  g.gain.exponentialRampToValueAtTime(0.0004, t + dur + 0.12);
+  [-6, 5].forEach((cents) => {
+    const o = ctx.createOscillator(); o.type = 'sawtooth';
+    o.frequency.setValueAtTime(freq, t);
+    if (o.detune) o.detune.setValueAtTime(cents, t);
+    const trim = ctx.createGain(); trim.gain.value = 0.5;
+    o.connect(trim).connect(lp);
+    o.start(t); o.stop(t + dur + 0.16);
+  });
+  lp.connect(g); g.connect(bus.input); g.connect(bus.echo);
+}
+/* low drum thump — heartbeat / timpani */
+function _thump(ctx, t, { f = 95, vol = 0.3 } = {}) {
+  const bus = _sfxBus(ctx);
+  const o = ctx.createOscillator(); o.type = 'sine';
+  o.frequency.setValueAtTime(f, t);
+  o.frequency.exponentialRampToValueAtTime(Math.max(30, f * 0.5), t + 0.1);
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0, t);
+  g.gain.linearRampToValueAtTime(vol, t + 0.006);
+  g.gain.exponentialRampToValueAtTime(0.0004, t + 0.24);
+  o.connect(g); g.connect(bus.input);
+  o.start(t); o.stop(t + 0.3);
+}
+/* woodblock tap: a pinch of filtered noise + a tiny ping */
+function _tap(ctx, t, { vol = 0.16, f = 1700 } = {}) {
+  const bus = _sfxBus(ctx);
+  const src = ctx.createBufferSource(); src.buffer = _noiseBuf(ctx);
+  const bp = ctx.createBiquadFilter();
+  bp.type = 'bandpass'; bp.frequency.value = f; bp.Q.value = 7;
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(vol, t);
+  g.gain.exponentialRampToValueAtTime(0.0004, t + 0.055);
+  src.connect(bp).connect(g); g.connect(bus.input);
+  src.start(t); src.stop(t + 0.07);
+  const o = ctx.createOscillator(); o.type = 'sine';
+  o.frequency.setValueAtTime(f * 0.62, t);
+  const g2 = ctx.createGain();
+  g2.gain.setValueAtTime(vol * 0.5, t);
+  g2.gain.exponentialRampToValueAtTime(0.0004, t + 0.045);
+  o.connect(g2); g2.connect(bus.input);
+  o.start(t); o.stop(t + 0.06);
+}
+/* rising cinematic swell (noise through a sweeping bandpass) */
+function _swell(ctx, t, dur, { vol = 0.1 } = {}) {
+  const bus = _sfxBus(ctx);
+  const src = ctx.createBufferSource(); src.buffer = _noiseBuf(ctx); src.loop = true;
+  const bp = ctx.createBiquadFilter();
+  bp.type = 'bandpass'; bp.Q.value = 1.4;
+  bp.frequency.setValueAtTime(260, t);
+  bp.frequency.exponentialRampToValueAtTime(1500, t + dur);
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0004, t);
+  g.gain.exponentialRampToValueAtTime(vol, t + dur);
+  g.gain.linearRampToValueAtTime(0, t + dur + 0.06);
+  src.connect(bp).connect(g); g.connect(bus.input); g.connect(bus.echo);
+  src.start(t); src.stop(t + dur + 0.1);
+}
+
 function playSfx(name) {
   const u = ensureUser();
   if (u.muted) return;
@@ -5094,33 +5204,43 @@ function playSfx(name) {
 
   switch (name) {
     case 'correct':
-      // C5 → E5 happy skip
-      _beep(ctx, 523.25, t,          120, { wave: 'sine', vol: 0.22 });
-      _beep(ctx, 659.25, t + 0.10,   160, { wave: 'sine', vol: 0.22 });
+      // bright little marimba roll up a C-major triad
+      _pluck(ctx, 523.25, t, { vol: 0.22 });
+      _pluck(ctx, 659.25, t + 0.07, { vol: 0.22 });
+      _pluck(ctx, 783.99, t + 0.14, { vol: 0.24, dur: 0.6 });
       break;
 
     case 'wrong':
-      // Descending sweep — gentle cartoon "boing"
-      _slide(ctx, 300, 130, t, 240, { wave: 'square', vol: 0.14 });
+      // kind, soft "hmm" — two low plucks stepping down, no buzz
+      _pluck(ctx, 329.63, t, { vol: 0.16, dur: 0.35 });
+      _pluck(ctx, 261.63, t + 0.16, { vol: 0.15, dur: 0.5 });
       break;
 
     case 'unlock':
-      // Bright two-note sparkle
-      _beep(ctx, 880,  t,          120, { wave: 'triangle', vol: 0.18 });
-      _beep(ctx, 1318, t + 0.09,   180, { wave: 'triangle', vol: 0.18 });
-      _beep(ctx, 1760, t + 0.20,   220, { wave: 'sine',     vol: 0.14 });
+      // harp glissando up the pentatonic + a bell on top
+      [523.25, 587.33, 659.25, 783.99, 880].forEach((f, i) =>
+        _pluck(ctx, f, t + i * 0.05, { vol: 0.16, dur: 0.45 }));
+      _bell(ctx, 1046.5, t + 0.3, { vol: 0.13 });
       break;
 
     case 'fanfare':
-      // Mini fanfare — C-E-G-C
-      _beep(ctx, 523.25, t,          140, { wave: 'triangle', vol: 0.22 });
-      _beep(ctx, 659.25, t + 0.13,   140, { wave: 'triangle', vol: 0.22 });
-      _beep(ctx, 783.99, t + 0.26,   180, { wave: 'triangle', vol: 0.22 });
-      _beep(ctx, 1046.5, t + 0.42,   280, { wave: 'triangle', vol: 0.24 });
+      // a real cadence: C — F — G — big C, horns over a drum
+      _thump(ctx, t, { f: 90, vol: 0.28 });
+      _brass(ctx, 261.63, t, 0.16, { vol: 0.1 });
+      _brass(ctx, 329.63, t, 0.16, { vol: 0.09 });
+      _brass(ctx, 349.23, t + 0.2, 0.16, { vol: 0.1 });
+      _brass(ctx, 440, t + 0.2, 0.16, { vol: 0.09 });
+      _brass(ctx, 392, t + 0.4, 0.18, { vol: 0.1 });
+      _brass(ctx, 493.88, t + 0.4, 0.18, { vol: 0.09 });
+      _thump(ctx, t + 0.62, { f: 100, vol: 0.3 });
+      _brass(ctx, 523.25, t + 0.62, 0.5, { vol: 0.12 });
+      _brass(ctx, 659.25, t + 0.62, 0.5, { vol: 0.1 });
+      _brass(ctx, 783.99, t + 0.62, 0.5, { vol: 0.09 });
+      _bell(ctx, 1046.5, t + 0.66, { vol: 0.12, dur: 1.1 });
       break;
 
     case 'tick':
-      _beep(ctx, 660, t, 50, { wave: 'square', vol: 0.08 });
+      _tap(ctx, t, { vol: 0.12 });
       break;
 
     default:
@@ -28258,15 +28378,22 @@ var OP_BANK = [
       return ctx;
     } catch (e) { return null; }
   }
-  /* countdown ticks: calm heartbeat → faster and louder as time drains */
+  /* countdown: a real heartbeat (lub-dub) that quickens and hardens as
+     time drains — far warmer than the old square-wave ticks */
   function opTickSound(urgency) {
     var ctx = opCtx(); if (!ctx) return;
     try {
       var t = ctx.currentTime;
-      var f = urgency === 2 ? 1150 : (urgency === 1 ? 850 : 620);
-      var v = urgency === 2 ? 0.2 : (urgency === 1 ? 0.11 : 0.05);
-      _beep(ctx, f, t, 45, { wave: 'square', vol: v });
-      if (urgency === 2) _beep(ctx, f * 0.75, t + 0.09, 40, { wave: 'square', vol: v * 0.8 });
+      if (urgency === 0) {
+        _thump(ctx, t, { f: 88, vol: 0.16 });
+      } else if (urgency === 1) {
+        _thump(ctx, t, { f: 96, vol: 0.24 });
+        _thump(ctx, t + 0.14, { f: 78, vol: 0.15 });
+      } else {
+        _thump(ctx, t, { f: 108, vol: 0.32 });
+        _tap(ctx, t, { vol: 0.14, f: 2100 });
+        _thump(ctx, t + 0.12, { f: 86, vol: 0.2 });
+      }
     } catch (e) {}
   }
   function opBeat(g, left) {
@@ -28277,25 +28404,29 @@ var OP_BANK = [
       opTickSound(left > 20000 ? 0 : (left > 10000 ? 1 : 2));
     }
   }
-  /* dramatic sting when the big question lands */
+  /* dramatic sting when the big question lands: rising swell into a
+     timpani hit and a horn chord — proper game-show drama */
   function opSting() {
     var ctx = opCtx(); if (!ctx) return;
     try {
       var t = ctx.currentTime;
-      _slide(ctx, 160, 420, t, 420, { wave: 'sawtooth', vol: 0.1 });
-      _beep(ctx, 523.25, t + 0.4, 160, { wave: 'triangle', vol: 0.18 });
-      _beep(ctx, 783.99, t + 0.55, 260, { wave: 'triangle', vol: 0.2 });
+      _swell(ctx, t, 0.5, { vol: 0.12 });
+      _thump(ctx, t + 0.5, { f: 72, vol: 0.34 });
+      _brass(ctx, 220, t + 0.52, 0.4, { vol: 0.11 });
+      _brass(ctx, 277.18, t + 0.52, 0.4, { vol: 0.09 });
+      _brass(ctx, 329.63, t + 0.52, 0.4, { vol: 0.09 });
+      _bell(ctx, 659.25, t + 0.56, { vol: 0.1, dur: 1 });
     } catch (e) {}
   }
-  /* exciting chip noise — rising arpeggio sparkle */
+  /* lifeline chip: a proper harp glissando with a bell sparkle on top */
   function opChipSfx() {
     var ctx = opCtx(); if (!ctx) return;
     try {
       var t = ctx.currentTime;
-      [659.25, 880, 1108.7, 1318.5].forEach(function (f, i) {
-        _beep(ctx, f, t + i * 0.07, 110, { wave: 'triangle', vol: 0.2 });
+      [587.33, 659.25, 783.99, 880, 1046.5].forEach(function (f, i) {
+        _pluck(ctx, f, t + i * 0.055, { vol: 0.17, dur: 0.5 });
       });
-      _beep(ctx, 1760, t + 0.32, 220, { wave: 'sine', vol: 0.16 });
+      _bell(ctx, 1318.5, t + 0.33, { vol: 0.12 });
     } catch (e) {}
   }
   function opChipPop(btn) {
@@ -28396,30 +28527,77 @@ var OP_BANK = [
     } catch (e) { fin(); return fin; }
   }
   /* stage-aware game-show lead-ins — the screen still shows "The X%
-     question", but the host has more than one way to say it */
+     question", but the host has more than one way to say it. Each is a
+     prefix/suffix pair around the number so Dad's recorded voice can be
+     stitched in: audio/onepct/lead_<id>_a.mp3 + num_<stage>.mp3 +
+     lead_<id>_b.mp3, or a full lead_<id>_<stage>.mp3. Missing files fall
+     back to TTS — record whenever, nothing breaks meanwhile. */
+  var OP_LEADS = {
+    e1: ["Let's warm up! Here's the ", " percent question."],
+    e2: ["Nice and easy to start. The ", " percent question!"],
+    e3: ["Off we go! This is the ", " percent question."],
+    e4: ["Here's one to get you going. The ", " percent question."],
+    m1: ["Here comes the ", " percent question!"],
+    m2: ["Next up. The ", " percent question."],
+    m3: ["Ready? This is the ", " percent question."],
+    m4: ["Let's see how you do with the ", " percent question."],
+    m5: ["On we go! The ", " percent question."],
+    h1: ["Ooh, this is a tough one. Only ", " percent of people get this right!"],
+    h2: ["Deep breath! Here's the ", " percent question."],
+    h3: ["It's getting serious now. The ", " percent question!"],
+    h4: ["Just ", " percent of grown-ups can do this one. Ready?"],
+    h5: ["This is where champions are made. The ", " percent question!"]
+  };
   function opHostLead(stage) {
-    var easy = [
-      "Let's warm up! Here's the {S} percent question.",
-      "Nice and easy to start. The {S} percent question!",
-      "Off we go! This is the {S} percent question.",
-      "Here's one to get you going. The {S} percent question."
-    ];
-    var mid = [
-      "Here comes the {S} percent question!",
-      "Next up, the {S} percent question.",
-      "Ready? This is the {S} percent question.",
-      "Let's see how you do with the {S} percent question.",
-      "On we go! The {S} percent question."
-    ];
-    var hard = [
-      "Ooh, this is a tough one. Only {S} percent of people get this right!",
-      "Deep breath! Here's the {S} percent question.",
-      "It's getting serious now. The {S} percent question!",
-      "Just {S} percent of grown-ups can do this one. Ready?",
-      "This is where champions are made. The {S} percent question!"
-    ];
-    var pool = stage >= 70 ? easy : (stage >= 30 ? mid : hard);
-    return pool[Math.floor(Math.random() * pool.length)].replace('{S}', stage);
+    var pool = stage >= 70 ? ['e1', 'e2', 'e3', 'e4']
+             : (stage >= 30 ? ['m1', 'm2', 'm3', 'm4', 'm5']
+             : ['h1', 'h2', 'h3', 'h4', 'h5']);
+    var id = pool[Math.floor(Math.random() * pool.length)];
+    return { id: id, stage: stage, text: OP_LEADS[id][0] + stage + OP_LEADS[id][1] };
+  }
+  /* speak the intro: recorded host voice when the files exist, TTS
+     otherwise; the question text is always TTS. Returns a canceller. */
+  function opSpeakIntro(lead, qTxt, onDone) {
+    var cancelled = false, audioEl = null, cancelTts = null;
+    function done() { if (!cancelled) onDone(); }
+    function speakQuestion() {
+      if (cancelled) return;
+      cancelTts = opSpeak([{ t: qTxt, pitch: 1.02, rate: 0.99 }], done);
+    }
+    function speakAll() {
+      if (cancelled) return;
+      cancelTts = opSpeak([
+        { t: (lead && lead.text) ? lead.text : String(lead || ''), pitch: 1.07, rate: 1.03 },
+        { t: qTxt, pitch: 1.02, rate: 0.99 }
+      ], done);
+    }
+    function chain(files, onFail) {
+      var i = 0;
+      function next() {
+        if (cancelled) return;
+        if (i >= files.length) { speakQuestion(); return; }
+        var a = new Audio('audio/onepct/' + files[i]);
+        audioEl = a;
+        a.onended = function () { i++; next(); };
+        a.onerror = onFail;
+        var p = a.play();
+        if (p && p.catch) p.catch(onFail);
+      }
+      next();
+    }
+    if (lead && lead.id && !opMuted()) {
+      chain(['lead_' + lead.id + '_' + lead.stage + '.mp3'], function () {
+        chain(['lead_' + lead.id + '_a.mp3', 'num_' + lead.stage + '.mp3', 'lead_' + lead.id + '_b.mp3'],
+              speakAll);
+      });
+    } else {
+      speakAll();
+    }
+    return function () {
+      cancelled = true;
+      if (audioEl) { try { audioEl.pause(); } catch (e) {} }
+      if (cancelTts) cancelTts();
+    };
   }
   var opIntroCb = null, opIntroTm = null, opIntroStopSpeak = null;
   function opIntroDone() {
@@ -28460,12 +28638,9 @@ var OP_BANK = [
       sp.classList.add('fade');
       opIntroTm = setTimeout(opIntroDone, 480);
     }
-    /* two-part delivery: the host line lands with energy, then the
-       question itself comes calmer and clearer */
-    opIntroStopSpeak = opSpeak([
-      { t: spokenLead || stageTxt, pitch: 1.07, rate: 1.03 },
-      { t: qTxt, pitch: 1.02, rate: 0.99 }
-    ], function () {
+    /* two-part delivery: the host line lands with energy (Dad's real
+       voice when recordings exist), then the question comes calmer */
+    opIntroStopSpeak = opSpeakIntro(spokenLead || stageTxt, qTxt, function () {
       spoken = true;
       setTimeout(maybeEnd, 350);   /* a beat after the voice stops */
     });
@@ -33403,9 +33578,9 @@ var SPELL_BANKS = {
   function clink(prog) {
     var ctx = d30Ctx(); if (!ctx) return;
     try {
-      var t = ctx.currentTime, f = 880 + prog * 900;
-      _beep(ctx, f, t, 30, { wave: 'square', vol: 0.09 + prog * 0.06 });
-      _beep(ctx, f * 1.5, t + 0.015, 25, { wave: 'sine', vol: 0.05 });
+      /* real coin sound: tiny bright bell, climbing as the counter runs */
+      var t = ctx.currentTime, f = 1300 + prog * 900;
+      _bell(ctx, f, t, { vol: 0.07 + prog * 0.05, dur: 0.22 });
     } catch (e) {}
   }
   function payChord() {
@@ -33413,9 +33588,11 @@ var SPELL_BANKS = {
     var ctx = d30Ctx(); if (!ctx) return;
     try {
       var t = ctx.currentTime;
-      [523.25, 659.25, 783.99, 1046.5].forEach(function (f, i) {
-        _beep(ctx, f, t + 0.3 + i * 0.06, 320, { wave: 'triangle', vol: 0.16 });
+      _thump(ctx, t + 0.28, { f: 95, vol: 0.28 });
+      [523.25, 659.25, 783.99].forEach(function (f) {
+        _brass(ctx, f, t + 0.3, 0.45, { vol: 0.1 });
       });
+      _bell(ctx, 1046.5, t + 0.34, { vol: 0.13, dur: 1.1 });
     } catch (e) {}
   }
   function coinRain(host, amount, durMs) {

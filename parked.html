@@ -24662,6 +24662,50 @@ tcGameOverlay.addEventListener('click', (e) => { if (e.target === tcGameOverlay)
     text-align:center; text-shadow:0 6px 40px rgba(0,0,0,0.55); animation: opFlashAnim 1.15s ease-out forwards; }
   @keyframes opFlashAnim { 0% { transform:scale(0.3); opacity:0; } 18% { transform:scale(1.25); opacity:1; }
     60% { transform:scale(1); opacity:1; } 100% { transform:scale(1); opacity:0; } }
+  /* V4.34: the landing page is part of the show too */
+  .op-home { position:relative; overflow:hidden; border-radius:20px; padding:28px 26px 24px;
+    background: radial-gradient(ellipse at 20% -10%, #4a2bb0 0%, transparent 55%),
+                radial-gradient(ellipse at 85% 110%, #7a2bd0 0%, transparent 50%),
+                linear-gradient(160deg,#170d3d,#241155 55%,#0d0a2a);
+    color:#fff; box-shadow:0 14px 44px rgba(30,15,80,0.45); }
+  @keyframes opSpot { 0%,100% { transform:translateX(-12%) rotate(16deg); opacity:0.45; }
+    50% { transform:translateX(14%) rotate(24deg); opacity:0.85; } }
+  .op-home::before, .op-home::after { content:""; position:absolute; top:-40%; width:34%; height:190%;
+    background:linear-gradient(rgba(255,255,255,0.10), rgba(255,255,255,0)); filter:blur(6px); pointer-events:none; }
+  .op-home::before { left:6%; animation:opSpot 7s ease-in-out infinite; }
+  .op-home::after { right:6%; animation:opSpot 8.5s ease-in-out infinite reverse; }
+  .op-home > * { position:relative; }
+  .op-home-badge { display:inline-block; font-family:'Baloo 2',sans-serif; font-weight:800; font-size:12.5px;
+    letter-spacing:3px; color:#ffd23f; text-transform:uppercase; }
+  .op-home-title { font-family:'Baloo 2',sans-serif; font-weight:800; font-size:42px; line-height:1.05; margin:2px 0 10px;
+    background:linear-gradient(90deg,#fff 20%, #ffd23f 40%, #fff 60%); background-size:200% auto;
+    -webkit-background-clip:text; background-clip:text; color:transparent; animation:opShimmer 3.5s linear infinite; }
+  @keyframes opShimmer { to { background-position:-200% center; } }
+  .op-tag { color:#d9d2f7; font-size:14.5px; line-height:1.55; margin:0 0 14px; max-width:660px; }
+  @keyframes opCtaPulse { 0%,100% { box-shadow:0 0 0 0 rgba(168,111,240,0.55); } 50% { box-shadow:0 0 0 12px rgba(168,111,240,0); } }
+  .op-cta { animation:opCtaPulse 2s infinite; }
+  .op-ladder-label { font-size:11.5px; color:#a99ee0; font-weight:700; margin:16px 0 6px; letter-spacing:0.5px; }
+  .op-home-ladder { display:flex; gap:5px; flex-wrap:wrap; }
+  .op-hrung { border-radius:8px; padding:4px 9px; font-size:12px; font-weight:800;
+    background:rgba(255,255,255,0.09); color:#8f86bb; border:1px solid rgba(255,255,255,0.08); }
+  .op-hrung.lit { background:linear-gradient(135deg,#ffd23f,#ff9f43); color:#4a3200; border-color:transparent;
+    box-shadow:0 0 10px rgba(255,210,63,0.55); }
+  .op-hrung.best { transform:scale(1.18); box-shadow:0 0 16px rgba(255,210,63,0.95); }
+  .op-hrung.club { color:#ff86e0; border-color:rgba(255,134,224,0.5); }
+  .op-hrung.club.lit { background:linear-gradient(135deg,#ff5fd2,#a86ff0); color:#fff;
+    box-shadow:0 0 14px rgba(255,95,210,0.8); animation:opUrgent 1.4s infinite; }
+  .op-home-stats { display:flex; gap:10px; flex-wrap:wrap; margin:18px 0 0; }
+  .op-hstat { flex:1; min-width:118px; background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.10);
+    border-radius:14px; padding:12px 10px; text-align:center; transition:transform .15s; }
+  .op-hstat:hover { transform:translateY(-3px); }
+  .op-hstat b { display:block; font-family:'Baloo 2',sans-serif; font-size:26px; color:#ffd23f;
+    text-shadow:0 0 14px rgba(255,210,63,0.5); }
+  .op-hstat span { font-size:11.5px; color:#bfb4e8; font-weight:700; letter-spacing:0.4px; }
+  .op-home-how { margin-top:16px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.09);
+    border-radius:14px; padding:12px 16px; font-size:13.5px; line-height:1.7; color:#e2dbff; }
+  .op-home-how b { color:#fff; }
+  .op-chipdemo { display:inline-block; border:2px solid #a86ff0; border-radius:999px; padding:1px 10px;
+    font-weight:800; font-size:12px; color:#dcd2ff; background:rgba(255,255,255,0.05); margin:0 2px; white-space:nowrap; }
 </style>
 
 <div class="overlay" id="opSoloOverlay">
@@ -27319,26 +27363,41 @@ var OP_BANK = [
     if (!view) return;
     var o = opUser();
     var best = o.bestIdx < 0 ? '—' : (o.bestIdx >= STAGES.length ? '1% CLUB!' : STAGES[o.bestIdx] + '%');
+    var inClub = o.clubWins > 0 || o.bestIdx >= STAGES.length;
+    var ladder = '';
+    for (var i = 0; i < STAGES.length; i++) {
+      var cls = 'op-hrung';
+      if (o.bestIdx >= 0 && i <= o.bestIdx) cls += ' lit';
+      if (i === o.bestIdx && o.bestIdx < STAGES.length) cls += ' best';
+      ladder += '<span class="' + cls + '">' + STAGES[i] + '%</span>';
+    }
+    ladder += '<span class="op-hrung club' + (inClub ? ' lit' : '') + '">👑 1% CLUB</span>';
+    var ladderLabel = inClub ? '👑 You’ve made the Club — how many times can you do it?'
+      : o.bestIdx < 0 ? 'Your climb — light up the rungs, one question at a time:'
+      : 'Your climb so far — the next rung is waiting:';
     view.innerHTML =
-      '<div class="op-hero">' +
-        '<h2>🏆 The 1% Challenge</h2>' +
-        '<p>15 questions, from the one 90% of people get right down to the one only 1% crack. ' +
+      '<div class="op-home">' +
+        '<span class="op-home-badge">✦ The question show ✦</span>' +
+        '<div class="op-home-title">🏆 The 1% Challenge</div>' +
+        '<p class="op-tag">15 questions, from the one 90% of people get right down to the one only 1% crack. ' +
         'No school knowledge needed — just clear thinking. One wrong answer and you’re OUT. Can you join the 1% Club?</p>' +
         '<div class="op-btns">' +
-          '<button class="btn btn-primary" id="opPlaySolo" style="padding:13px 22px;">▶️ Play a round</button>' +
-          '<button class="btn btn-primary" id="opPlayVs" style="padding:13px 22px; background:linear-gradient(135deg,#ff9f43,#ee5a24);">🤝 Challenge a friend</button>' +
+          '<button class="btn btn-primary op-cta" id="opPlaySolo" style="padding:13px 24px; font-size:16px;">▶️ Play a round</button>' +
+          '<button class="btn btn-primary" id="opPlayVs" style="padding:13px 24px; font-size:16px; background:linear-gradient(135deg,#ff9f43,#ee5a24);">🤝 Challenge a friend</button>' +
         '</div>' +
-      '</div>' +
-      '<div class="op-stats">' +
-        '<div class="op-stat"><b>' + o.plays + '</b><span>rounds played</span></div>' +
-        '<div class="op-stat"><b>' + best + '</b><span>best question reached</span></div>' +
-        '<div class="op-stat"><b>' + o.clubWins + '</b><span>times in the 1% Club</span></div>' +
-        '<div class="op-stat"><b>' + o.correct + '</b><span>questions cracked</span></div>' +
-      '</div>' +
-      '<div class="op-how"><b>How it works:</b> 40 seconds on the clock, and a wrong answer knocks you out — ' +
-      'exactly like the show. You get two lifelines per game: <b>🛟 one Pass</b> (skip a question — or it plays ' +
-      'ITSELF to save your first wrong answer) and <b>⏱️ one +20 seconds</b>. Harder questions earn more ⭐ points ' +
-      'for the Shop. Survive all 15 — and crack that final 1% question — to join the 1% Club! 🎉</div>';
+        '<div class="op-ladder-label">' + ladderLabel + '</div>' +
+        '<div class="op-home-ladder">' + ladder + '</div>' +
+        '<div class="op-home-stats">' +
+          '<div class="op-hstat"><b>' + o.plays + '</b><span>rounds played</span></div>' +
+          '<div class="op-hstat"><b>' + best + '</b><span>best question reached</span></div>' +
+          '<div class="op-hstat"><b>' + o.clubWins + '</b><span>times in the 1% Club</span></div>' +
+          '<div class="op-hstat"><b>' + o.correct + '</b><span>questions cracked</span></div>' +
+        '</div>' +
+        '<div class="op-home-how"><b>How it works:</b> ⏱️ 40 seconds on the clock, and a wrong answer knocks you out — ' +
+        'exactly like the show. Two lifelines per game: <span class="op-chipdemo">🛟 Pass</span> skips a question — or plays ' +
+        'ITSELF to save your first wrong answer — and <span class="op-chipdemo">⏱️ +20s</span> buys thinking time. ' +
+        'Harder questions earn more ⭐ for the Shop. Survive all 15 — and crack that final 1% question — to join the Club! 🎉</div>' +
+      '</div>';
     document.getElementById('opPlaySolo').addEventListener('click', soloStart);
     document.getElementById('opPlayVs').addEventListener('click', function () {
       if (typeof Peer === 'undefined') {

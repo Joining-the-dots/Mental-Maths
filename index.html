@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover" />
-<title>Conway Family Learning Lab — Live V4.37</title>
+<title>Conway Family Learning Lab — Live V4.38</title>
 
 <!-- PWA -->
 <link rel="manifest" href="manifest.json">
@@ -2916,7 +2916,7 @@ function slWakeRelease() {
   <div class="brand">
     <span class="logo">🧪</span>
     Conway Family Learning Lab
-    <span style="font-family: 'Fredoka', sans-serif; font-size: 13px; font-weight: 600; color: var(--ink-soft); -webkit-text-fill-color: var(--ink-soft); background: var(--neutral); padding: 2px 8px; border-radius: 999px; margin-left: 6px; letter-spacing: 0.5px;">Live V4.37</span>
+    <span style="font-family: 'Fredoka', sans-serif; font-size: 13px; font-weight: 600; color: var(--ink-soft); -webkit-text-fill-color: var(--ink-soft); background: var(--neutral); padding: 2px 8px; border-radius: 999px; margin-left: 6px; letter-spacing: 0.5px;">Live V4.38</span>
   </div>
 
   <button class="user-pill" id="userPill" title="Switch player">
@@ -31835,6 +31835,62 @@ var SPELL_BANKS = {
 })();
 </script>
 <script>
+/* V4.38: the FRONTIER — after every grid refresh, light up the next
+   cell to conquer in each row the player has started (and the first
+   cell of the first fresh row), so the empty board reads as an
+   invitation, not a void. */
+(function () {
+  'use strict';
+  function applyFrontier() {
+    try {
+      var grid = document.getElementById('grid');
+      if (!grid) return;
+      var byRow = {};
+      grid.querySelectorAll('.cell').forEach(function (cell) {
+        var r = +cell.dataset.r;
+        (byRow[r] = byRow[r] || []).push(cell);
+        cell.classList.remove('frontier');
+      });
+      /* rank rows by how much is conquered; light the next cell in the
+         top few, so the glow is a handful of clear invitations — not a
+         whole pulsing column (every row "starts" with the ×1/×2 gift) */
+      var rows = Object.keys(byRow).map(Number).sort(function (a, b) { return a - b; });
+      var cands = [], firstFresh = null;
+      for (var i = 0; i < rows.length; i++) {
+        var cells = byRow[rows[i]].sort(function (a, b) { return (+a.dataset.c) - (+b.dataset.c); });
+        var prog = 0, firstOpen = null;
+        for (var j = 0; j < cells.length; j++) {
+          var cl = cells[j].classList;
+          if (cl.contains('mastered') || cl.contains('correct')) prog++;
+          else if (!firstOpen) firstOpen = cells[j];
+        }
+        if (!firstOpen) continue;
+        if (prog > 0) cands.push({ row: rows[i], prog: prog, cell: firstOpen });
+        else if (!firstFresh) firstFresh = firstOpen;
+      }
+      cands.sort(function (a, b) { return b.prog - a.prog || a.row - b.row; });
+      cands.slice(0, 5).forEach(function (c) { c.cell.classList.add('frontier'); });
+      if (firstFresh) firstFresh.classList.add('frontier');
+    } catch (e) {}
+  }
+  var tries = 0;
+  var wire = setInterval(function () {
+    tries++;
+    if (typeof window.refreshCells === 'function') {
+      clearInterval(wire);
+      var orig = window.refreshCells;
+      window.refreshCells = function () {
+        var r = orig.apply(this, arguments);
+        applyFrontier();
+        return r;
+      };
+      applyFrontier();
+    } else if (tries > 20) clearInterval(wire);
+  }, 300);
+})();
+</script>
+
+<script>
 /* ================================================================
    V4.35: THE DAILY 30 — thirty minutes a day of DOUBLE POINTS on
    everything, with a mission board of quests that leads the player
@@ -31908,7 +31964,7 @@ var SPELL_BANKS = {
     window.awardPoints = function (n) {
       try {
         var u = cur(), d = u && u.daily30;
-        if (u && d && d.startedAt && !d.done && Date.now() < d.endsAt && n > 0) {
+        if (u && d && d.startedAt && !d.done && !d.pausedAt && Date.now() < d.endsAt && n > 0) {
           d.earned = (d.earned || 0) + n * 2;
           return base.call(this, n * 2);
         }
@@ -31983,10 +32039,20 @@ var SPELL_BANKS = {
         '<div class="d30-quests">' + rows + '</div>' +
         '<div class="d30-earned">⭐ Earned this mission: <b>' + (d.earned || 0) + '</b> (doubles included)</div>' +
         '<button class="btn btn-primary d30-close" type="button">Let’s go! 🚀</button>' +
+        '<button class="btn d30-pause" type="button" style="width:100%;margin-top:6px;background:rgba(255,255,255,0.10);color:#dcd2ff;border:1.5px solid rgba(168,111,240,0.5);border-radius:12px;padding:9px;font-weight:800;">⏸ Pause — snack / loo break (clock stops)</button>' +
       '</div>';
     document.body.appendChild(el);
     boardEl = el;
     el.querySelector('.d30-close').addEventListener('click', closeBoard);
+    el.querySelector('.d30-pause').addEventListener('click', function () {
+      var u2 = cur();
+      var d2 = u2 && u2.daily30;
+      if (!u2 || !d2 || d2.done || d2.pausedAt) { closeBoard(); return; }
+      d2.pausedAt = Date.now();
+      try { if (typeof saveState === 'function') saveState(); } catch (e) {}
+      closeBoard();
+      showCurtain();
+    });
     el.addEventListener('click', function (e) { if (e.target === el) closeBoard(); });
     el.querySelectorAll('.d30-go').forEach(function (b) {
       b.addEventListener('click', function () {
@@ -32003,6 +32069,41 @@ var SPELL_BANKS = {
         }
       });
     });
+  }
+
+  /* the break curtain: clock frozen, doubling off, play covered until
+     they're back — so a pause can never be farmed for extra 2× time */
+  function showCurtain() {
+    if (document.getElementById('d30Curtain')) return;
+    var el = document.createElement('div');
+    el.className = 'd30-board';
+    el.id = 'd30Curtain';
+    el.setAttribute('data-sl-modal', '1');
+    el.innerHTML =
+      '<div class="d30-panel" style="text-align:center;">' +
+        '<div style="font-size:64px;">⏸️</div>' +
+        '<div class="d30-title" style="font-size:30px;">PAUSED</div>' +
+        '<div class="d30-sub" style="font-size:15px;">Off for a snack or a loo break? Good plan. ' +
+          'Your clock is <b>frozen</b> and your points are safe — the mission carries on the moment you’re back. 🍎</div>' +
+        '<button class="btn btn-primary" id="d30Resume" type="button" style="margin-top:14px;padding:13px 26px;font-size:17px;">▶️ I’M BACK — GO!</button>' +
+      '</div>';
+    document.body.appendChild(el);
+    el.querySelector('#d30Resume').addEventListener('click', function () {
+      var u = cur();
+      var d = u && u.daily30;
+      if (u && d && d.pausedAt && !d.done) {
+        d.endsAt += Date.now() - d.pausedAt;   /* give back every paused second */
+        delete d.pausedAt;
+        try { if (typeof saveState === 'function') saveState(); } catch (e) {}
+        sfx('unlock');
+        flash('🚀 BACK IN THE GAME!', '#ffd23f');
+      }
+      try { el.remove(); } catch (e) {}
+    });
+  }
+  function dropCurtain() {
+    var el = document.getElementById('d30Curtain');
+    if (el) { try { el.remove(); } catch (e) {} }
   }
 
   var offered = {};
@@ -32162,6 +32263,21 @@ var SPELL_BANKS = {
     var u = cur();
     if (!u) { dropChip(); return; }
     var d = u.daily30;
+    if (d && d.startedAt && !d.done && d.pausedAt) {
+      /* on a break — the clock is frozen. A pause left overnight ends the
+         session gracefully (ceremony for what they earned) so tomorrow's
+         Daily 30 isn't wedged behind it. */
+      if (d.last !== todayKey() || Date.now() - d.pausedAt > 12 * 3600 * 1000) {
+        delete d.pausedAt;
+        dropCurtain();
+        finish(u, d);
+        return;
+      }
+      dropChip();
+      showCurtain();
+      return;
+    }
+    dropCurtain();
     var active = d && d.startedAt && !d.done && Date.now() < d.endsAt;
     if (d && d.startedAt && !d.done && Date.now() >= d.endsAt) { finish(u, d); return; }
     if (active) {
@@ -32288,7 +32404,27 @@ var SPELL_BANKS = {
   .modal { border-radius: 22px; box-shadow: 0 24px 70px rgba(40,25,90,0.35); }
   .cell { transition: transform .1s; }
   .cell:hover { transform: scale(1.12); z-index: 2; }
-  .cell.mastered { background: linear-gradient(135deg,#ffe9a8,#ffd23f); box-shadow: 0 0 8px rgba(255,210,63,0.45); }
+  /* (4) conquered cells look like treasure: chunky tick + corner star */
+  .cell.mastered { background: linear-gradient(135deg,#ffe9a8,#ffd23f); box-shadow: 0 0 8px rgba(255,210,63,0.45);
+    font-weight: 900; font-size: 15px; color: #7a5b00; position: relative; }
+  .cell.mastered::after { content: "⭐"; position: absolute; top: 0px; right: 1px; font-size: 8px; }
+  /* (1) the board is territory: untried cells get a whisper of colour,
+     and the FRONTIER — the next cells to conquer — invites with a pulse */
+  .cell:not(.mastered):not(.correct):not(.wrong):not(.tried) { background: #f2effb; color: #c3bbe4; }
+  @keyframes slFrontier { 0%,100% { box-shadow: 0 0 0 0 rgba(168,111,240,0.0); background: #efe8ff; }
+    50% { box-shadow: 0 0 10px 2px rgba(168,111,240,0.45); background: #e6dbff; } }
+  .cell.frontier { animation: slFrontier 2.2s ease-in-out infinite; color: #8a6ce0; font-weight: 800; }
+  /* (2) the board sits centred — no dead gutter at small ranges (safe:
+     falls back to normal left-aligned scrolling when the board is wider) */
+  .grid-frame { display: grid; justify-content: safe center; }
+  /* (3) trick names wrap instead of truncating; extra bottom room so the
+     corner chips never sit on the last entries */
+  .tp-name { white-space: normal; overflow: visible; text-overflow: clip; line-height: 1.25; }
+  .tp-row { height: auto; min-height: 34px; }
+  #trickPanel { padding-bottom: 110px; }
+  /* (5) calmer strip above the grid: the tip goes, the legend tightens */
+  .grid-hint { display: none; }
+  .legend-swatch { font-size: 11.5px; }
 
   /* ---------- Quick lesson: fits on one page, side-by-side ---------- */
   .it-modal { max-width: min(96vw, 1060px); max-height: 94vh; overflow-y: auto; }

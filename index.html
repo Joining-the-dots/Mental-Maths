@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover" />
-<title>Conway Family Learning Lab — Live V4.43</title>
+<title>Conway Family Learning Lab — Live V4.44</title>
 
 <!-- PWA -->
 <link rel="manifest" href="manifest.json">
@@ -3002,7 +3002,7 @@ function slWakeRelease() {
   <div class="brand">
     <span class="logo">🧪</span>
     Conway Family Learning Lab
-    <span style="font-family: 'Fredoka', sans-serif; font-size: 13px; font-weight: 600; color: var(--ink-soft); -webkit-text-fill-color: var(--ink-soft); background: var(--neutral); padding: 2px 8px; border-radius: 999px; margin-left: 6px; letter-spacing: 0.5px;">Live V4.43</span>
+    <span style="font-family: 'Fredoka', sans-serif; font-size: 13px; font-weight: 600; color: var(--ink-soft); -webkit-text-fill-color: var(--ink-soft); background: var(--neutral); padding: 2px 8px; border-radius: 999px; margin-left: 6px; letter-spacing: 0.5px;">Live V4.44</span>
   </div>
 
   <button class="user-pill" id="userPill" title="Switch player">
@@ -5005,29 +5005,82 @@ function getAudioCtx() {
   _audioCtx = new AC();
   return _audioCtx;
 }
+/* V4.44: warm master bus — every game sound routes through a gentle
+   compressor (stacked chords used to clip into harsh digital fuzz) plus
+   a whisper of echo for room feel. Raw oscillators into destination were
+   the "tinny" sound. Built lazily once per context. */
+function _sfxBus(ctx) {
+  if (ctx._slBus) return ctx._slBus;
+  const comp = ctx.createDynamicsCompressor();
+  comp.threshold.value = -16;
+  comp.knee.value = 18;
+  comp.ratio.value = 6;
+  comp.attack.value = 0.004;
+  comp.release.value = 0.16;
+  const master = ctx.createGain();
+  master.gain.value = 0.95;
+  comp.connect(master).connect(ctx.destination);
+  /* tiny echo send: 110ms feedback delay, darkened so tails sit behind */
+  const delay = ctx.createDelay(0.5);
+  delay.delayTime.value = 0.11;
+  const fb = ctx.createGain(); fb.gain.value = 0.3;
+  const dark = ctx.createBiquadFilter();
+  dark.type = 'lowpass'; dark.frequency.value = 1500;
+  const wet = ctx.createGain(); wet.gain.value = 0.16;
+  delay.connect(dark).connect(fb).connect(delay);
+  delay.connect(wet).connect(comp);
+  ctx._slBus = { input: comp, echo: delay };
+  return ctx._slBus;
+}
 function _beep(ctx, freq, startAt, durMs, { wave = 'sine', vol = 0.18, attack = 10, release = 60 } = {}) {
-  const osc = ctx.createOscillator();
+  const bus = _sfxBus(ctx);
   const gain = ctx.createGain();
-  osc.type = wave;
-  osc.frequency.setValueAtTime(freq, startAt);
+  /* round off the harsh upper harmonics — squares/saws get clamped hardest */
+  const lp = ctx.createBiquadFilter();
+  lp.type = 'lowpass';
+  lp.frequency.setValueAtTime(Math.min(9000, Math.max(1100, freq * (wave === 'square' || wave === 'sawtooth' ? 2.2 : 3.5))), startAt);
+  lp.Q.value = 0.6;
+  const end = startAt + durMs / 1000;
   gain.gain.setValueAtTime(0, startAt);
-  gain.gain.linearRampToValueAtTime(vol, startAt + attack / 1000);
-  gain.gain.linearRampToValueAtTime(0, startAt + durMs / 1000);
-  osc.connect(gain).connect(ctx.destination);
-  osc.start(startAt);
-  osc.stop(startAt + durMs / 1000 + release / 1000);
+  gain.gain.linearRampToValueAtTime(vol, startAt + Math.max(4, attack) / 1000);
+  gain.gain.exponentialRampToValueAtTime(Math.max(0.0004, vol * 0.004), end);
+  gain.gain.linearRampToValueAtTime(0, end + release / 1000);
+  /* two barely-detuned voices give the note body a single osc lacks */
+  [-4, 4].forEach((cents, i) => {
+    const osc = ctx.createOscillator();
+    osc.type = wave;
+    osc.frequency.setValueAtTime(freq, startAt);
+    if (osc.detune) osc.detune.setValueAtTime(cents, startAt);
+    const trim = ctx.createGain();
+    trim.gain.value = i === 0 ? 0.62 : 0.5;
+    osc.connect(trim).connect(lp);
+    osc.start(startAt);
+    osc.stop(end + release / 1000 + 0.02);
+  });
+  lp.connect(gain);
+  gain.connect(bus.input);
+  gain.connect(bus.echo);
 }
 function _slide(ctx, fStart, fEnd, startAt, durMs, { wave = 'sawtooth', vol = 0.15 } = {}) {
+  const bus = _sfxBus(ctx);
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
+  const lp = ctx.createBiquadFilter();
+  lp.type = 'lowpass';
+  lp.frequency.setValueAtTime(Math.min(9000, Math.max(1100, Math.max(fStart, fEnd) * 2.2)), startAt);
+  lp.Q.value = 0.7;
   osc.type = wave;
   osc.frequency.setValueAtTime(fStart, startAt);
   osc.frequency.linearRampToValueAtTime(fEnd, startAt + durMs / 1000);
-  gain.gain.setValueAtTime(vol, startAt);
-  gain.gain.linearRampToValueAtTime(0, startAt + durMs / 1000);
-  osc.connect(gain).connect(ctx.destination);
+  gain.gain.setValueAtTime(0, startAt);
+  gain.gain.linearRampToValueAtTime(vol, startAt + 0.008);
+  gain.gain.exponentialRampToValueAtTime(Math.max(0.0004, vol * 0.004), startAt + durMs / 1000);
+  gain.gain.linearRampToValueAtTime(0, startAt + durMs / 1000 + 0.04);
+  osc.connect(lp).connect(gain);
+  gain.connect(bus.input);
+  gain.connect(bus.echo);
   osc.start(startAt);
-  osc.stop(startAt + durMs / 1000 + 0.05);
+  osc.stop(startAt + durMs / 1000 + 0.08);
 }
 
 function playSfx(name) {
@@ -28279,11 +28332,16 @@ var OP_BANK = [
       if (!vs.length) return null;
       function score(v) {
         var n = (v.name + ' ' + v.lang).toLowerCase(), s = 0;
+        /* V4.44: modern neural voices first — they're the difference
+           between "AI reading" and a real host */
+        if (/natural|neural/.test(n)) s += 8;
+        if (/premium|enhanced/.test(n)) s += 5;
         if (n.indexOf('google uk english female') >= 0) s += 6;
         if (/en[-_]gb/.test(n)) s += 4;
-        if (/natural|neural|online/.test(n)) s += 3;
-        if (/libby|sonia|maisie|hazel|female/.test(n)) s += 1;
+        if (/online/.test(n)) s += 2;
+        if (/libby|sonia|maisie|hazel|serena|kate|female/.test(n)) s += 1;
         if (n.indexOf('en') === 0 || /\ben[-_]/.test(n)) s += 1;
+        if (/espeak|compact|whisper|novelty|bells|organ|cellos|zarvox|albert/.test(n)) s -= 6;
         return s;
       }
       var best = vs[0], bs = score(best);
@@ -28292,24 +28350,76 @@ var OP_BANK = [
     } catch (e) { return null; }
   }
   try { if (window.speechSynthesis) { speechSynthesis.getVoices(); speechSynthesis.onvoiceschanged = function () {}; } } catch (e) {}
+  /* V4.44: what the voice SAYS is not what the screen shows — symbols
+     make TTS stumble ("The 90 ... percent question" hiccup) */
+  function opSpeechText(t) {
+    return String(t == null ? '' : t)
+      .replace(/(\d)\s*%/g, '$1 percent')
+      .replace(/%/g, ' percent')
+      .replace(/·/g, ', ')
+      .replace(/×/g, ' times ')
+      .replace(/÷/g, ' divided by ')
+      .replace(/−/g, ' minus ')
+      .replace(/️/g, '')
+      .replace(/\s+/g, ' ').trim();
+  }
+  /* opSpeak(textOrChunks, onDone): a string, or [{t, pitch, rate}] chunks
+     queued as separate utterances so the host line and the question get
+     their own natural delivery. Returns a cancel function. */
   function opSpeak(text, onDone) {
     var finished = false, wd = null;
     function fin() { if (finished) return; finished = true; if (wd) clearTimeout(wd); if (onDone) onDone(); }
     try {
       if (opMuted() || !window.speechSynthesis || typeof SpeechSynthesisUtterance === 'undefined') { fin(); return fin; }
       try { speechSynthesis.cancel(); } catch (e) {}
-      var ut = new SpeechSynthesisUtterance(text);
+      var chunks = Array.isArray(text) ? text : [{ t: text }];
+      chunks = chunks.filter(function (c) { return c && String(c.t || '').trim(); });
+      if (!chunks.length) { fin(); return fin; }
       var v = opPickVoice();
-      if (v) ut.voice = v;
-      ut.rate = 1.02;
-      ut.pitch = 1.12;   /* bright game-show host energy */
-      ut.onend = fin;
-      ut.onerror = fin;
+      var totalLen = 0;
+      /* a touch of per-run variation so it never sounds like the same
+         recording twice; calmer pitch than the old 1.12 chipmunk */
+      var jitter = (Math.random() - 0.5) * 0.05;
+      chunks.forEach(function (c, i) {
+        var ut = new SpeechSynthesisUtterance(opSpeechText(c.t));
+        if (v) ut.voice = v;
+        ut.rate = (c.rate || 1.0) + jitter * 0.5;
+        ut.pitch = (c.pitch || 1.04) + jitter;
+        if (i === chunks.length - 1) { ut.onend = fin; ut.onerror = fin; }
+        else { ut.onerror = function () {}; }
+        totalLen += String(c.t).length;
+        speechSynthesis.speak(ut);
+      });
       /* end events are flaky — watchdog estimated from length */
-      wd = setTimeout(fin, Math.min(25000, 2500 + text.length * 75));
-      speechSynthesis.speak(ut);
+      wd = setTimeout(fin, Math.min(30000, 2500 + totalLen * 75 + chunks.length * 400));
       return function () { try { speechSynthesis.cancel(); } catch (e) {} fin(); };
     } catch (e) { fin(); return fin; }
+  }
+  /* stage-aware game-show lead-ins — the screen still shows "The X%
+     question", but the host has more than one way to say it */
+  function opHostLead(stage) {
+    var easy = [
+      "Let's warm up! Here's the {S} percent question.",
+      "Nice and easy to start. The {S} percent question!",
+      "Off we go! This is the {S} percent question.",
+      "Here's one to get you going. The {S} percent question."
+    ];
+    var mid = [
+      "Here comes the {S} percent question!",
+      "Next up, the {S} percent question.",
+      "Ready? This is the {S} percent question.",
+      "Let's see how you do with the {S} percent question.",
+      "On we go! The {S} percent question."
+    ];
+    var hard = [
+      "Ooh, this is a tough one. Only {S} percent of people get this right!",
+      "Deep breath! Here's the {S} percent question.",
+      "It's getting serious now. The {S} percent question!",
+      "Just {S} percent of grown-ups can do this one. Ready?",
+      "This is where champions are made. The {S} percent question!"
+    ];
+    var pool = stage >= 70 ? easy : (stage >= 30 ? mid : hard);
+    return pool[Math.floor(Math.random() * pool.length)].replace('{S}', stage);
   }
   var opIntroCb = null, opIntroTm = null, opIntroStopSpeak = null;
   function opIntroDone() {
@@ -28327,7 +28437,7 @@ var OP_BANK = [
     if (vis) { el.innerHTML = vis; el.style.display = ''; }
     else { el.innerHTML = ''; el.style.display = 'none'; }
   }
-  function opShowIntro(stageTxt, qTxt, done, vis) {
+  function opShowIntro(stageTxt, qTxt, done, vis, spokenLead) {
     var sp = document.getElementById('opIntroSplash');
     document.getElementById('opIntroStage').textContent = stageTxt;
     document.getElementById('opIntroQ').textContent = qTxt;
@@ -28350,7 +28460,12 @@ var OP_BANK = [
       sp.classList.add('fade');
       opIntroTm = setTimeout(opIntroDone, 480);
     }
-    opIntroStopSpeak = opSpeak(stageTxt + '. ' + qTxt, function () {
+    /* two-part delivery: the host line lands with energy, then the
+       question itself comes calmer and clearer */
+    opIntroStopSpeak = opSpeak([
+      { t: spokenLead || stageTxt, pitch: 1.07, rate: 1.03 },
+      { t: qTxt, pitch: 1.02, rate: 0.99 }
+    ], function () {
       spoken = true;
       setTimeout(maybeEnd, 350);   /* a beat after the voice stops */
     });
@@ -28365,7 +28480,11 @@ var OP_BANK = [
     return { solo: function () { return solo; }, p2: function () { return p2G; },
       pick: function (st, av, uq, wv) { return pickQuestion(st, av, uq, wv); },
       visRounds: function () { return pickVisRounds(); },
-      bank: function (st) { return bankByStage(st); } };
+      bank: function (st) { return bankByStage(st); },
+      speechText: function (t) { return opSpeechText(t); },
+      hostLead: function (st) { return opHostLead(st); },
+      speak: function (c, cb) { return opSpeak(c, cb); },
+      voice: function () { var v = opPickVoice(); return v ? v.name : null; } };
   };
 
   function qKey(q) {
@@ -28596,7 +28715,7 @@ var OP_BANK = [
     var g0 = solo;
     opShowIntro('The ' + stage + '% question', solo.q.q, function () {
       if (solo === g0 && !solo.answered && !solo.done) solo.deadline = Date.now() + Q_SECS * 1000;
-    }, solo.q.vis || null);
+    }, solo.q.vis || null, opHostLead(stage));
   }
   function soloTick() {
     if (!solo || solo.answered || !solo.deadline) return;
@@ -29122,7 +29241,7 @@ var OP_BANK = [
     opSetVis('op2Vis', q.vis || null);
     opShowIntro('Question ' + (g.qIdx + 1) + ' · the ' + q.stage + '% question', q.q, function () {
       if (p2G === g && !g.locked) g.deadline = Date.now() + Q_SECS * 1000;
-    }, q.vis || null);
+    }, q.vis || null, 'Question ' + (g.qIdx + 1) + '. The ' + q.stage + ' percent question.');
   }
   function p2Tick() {
     if (!p2G || p2G.locked || !p2G.deadline) return;

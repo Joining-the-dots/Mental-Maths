@@ -28551,27 +28551,17 @@ var OP_BANK = [
     var id = pool[Math.floor(Math.random() * pool.length)];
     return { id: id, stage: stage, text: OP_LEADS[id][0] + stage + OP_LEADS[id][1] };
   }
-  /* speak the intro: recorded host voice when the files exist, TTS
-     otherwise; the question text is always TTS. Returns a canceller. */
-  function opSpeakIntro(lead, qTxt, onDone) {
+  /* speak the intro: Dad's recorded voice when the files exist (host
+     line AND the question itself, generated per-question as
+     q_<qKey>.mp3), TTS for anything missing. Returns a canceller. */
+  function opSpeakIntro(lead, qTxt, qkeyStr, onDone) {
     var cancelled = false, audioEl = null, cancelTts = null;
     function done() { if (!cancelled) onDone(); }
-    function speakQuestion() {
-      if (cancelled) return;
-      cancelTts = opSpeak([{ t: qTxt, pitch: 1.02, rate: 0.99 }], done);
-    }
-    function speakAll() {
-      if (cancelled) return;
-      cancelTts = opSpeak([
-        { t: (lead && lead.text) ? lead.text : String(lead || ''), pitch: 1.07, rate: 1.03 },
-        { t: qTxt, pitch: 1.02, rate: 0.99 }
-      ], done);
-    }
-    function chain(files, onFail) {
+    function chain(files, onOk, onFail) {
       var i = 0;
       function next() {
         if (cancelled) return;
-        if (i >= files.length) { speakQuestion(); return; }
+        if (i >= files.length) { onOk(); return; }
         var a = new Audio('audio/onepct/' + files[i]);
         audioEl = a;
         a.onended = function () { i++; next(); };
@@ -28581,13 +28571,29 @@ var OP_BANK = [
       }
       next();
     }
+    function ttsQuestion() {
+      if (cancelled) return;
+      cancelTts = opSpeak([{ t: qTxt, pitch: 1.02, rate: 0.99 }], done);
+    }
+    function questionPart() {
+      if (cancelled) return;
+      if (qkeyStr && !opMuted()) chain(['q_' + qkeyStr + '.mp3'], done, ttsQuestion);
+      else ttsQuestion();
+    }
+    function ttsLead() {
+      if (cancelled) return;
+      cancelTts = opSpeak([{ t: (lead && lead.text) ? lead.text : String(lead || ''),
+                             pitch: 1.07, rate: 1.03 }], questionPart);
+    }
     if (lead && lead.id && !opMuted()) {
-      chain(['lead_' + lead.id + '_' + lead.stage + '.mp3'], function () {
+      chain(['lead_' + lead.id + '_' + lead.stage + '.mp3'], questionPart, function () {
         chain(['lead_' + lead.id + '_a.mp3', 'num_' + lead.stage + '.mp3', 'lead_' + lead.id + '_b.mp3'],
-              speakAll);
+              questionPart, ttsLead);
       });
+    } else if (lead) {
+      ttsLead();
     } else {
-      speakAll();
+      questionPart();
     }
     return function () {
       cancelled = true;
@@ -28611,7 +28617,7 @@ var OP_BANK = [
     if (vis) { el.innerHTML = vis; el.style.display = ''; }
     else { el.innerHTML = ''; el.style.display = 'none'; }
   }
-  function opShowIntro(stageTxt, qTxt, done, vis, spokenLead) {
+  function opShowIntro(stageTxt, qTxt, done, vis, spokenLead, qkeyStr) {
     var sp = document.getElementById('opIntroSplash');
     document.getElementById('opIntroStage').textContent = stageTxt;
     document.getElementById('opIntroQ').textContent = qTxt;
@@ -28636,7 +28642,7 @@ var OP_BANK = [
     }
     /* two-part delivery: the host line lands with energy (Dad's real
        voice when recordings exist), then the question comes calmer */
-    opIntroStopSpeak = opSpeakIntro(spokenLead || stageTxt, qTxt, function () {
+    opIntroStopSpeak = opSpeakIntro(spokenLead || stageTxt, qTxt, qkeyStr || null, function () {
       spoken = true;
       setTimeout(maybeEnd, 350);   /* a beat after the voice stops */
     });
@@ -28655,6 +28661,7 @@ var OP_BANK = [
       speechText: function (t) { return opSpeechText(t); },
       hostLead: function (st) { return opHostLead(st); },
       speak: function (c, cb) { return opSpeak(c, cb); },
+      qkey: function (q) { return qKey(q); },
       voice: function () { var v = opPickVoice(); return v ? v.name : null; } };
   };
 
@@ -28886,7 +28893,7 @@ var OP_BANK = [
     var g0 = solo;
     opShowIntro('The ' + stage + '% question', solo.q.q, function () {
       if (solo === g0 && !solo.answered && !solo.done) solo.deadline = Date.now() + Q_SECS * 1000;
-    }, solo.q.vis || null, opHostLead(stage));
+    }, solo.q.vis || null, opHostLead(stage), qKey(solo.q));
   }
   function soloTick() {
     if (!solo || solo.answered || !solo.deadline) return;
@@ -29412,7 +29419,10 @@ var OP_BANK = [
     opSetVis('op2Vis', q.vis || null);
     opShowIntro('Question ' + (g.qIdx + 1) + ' · the ' + q.stage + '% question', q.q, function () {
       if (p2G === g && !g.locked) g.deadline = Date.now() + Q_SECS * 1000;
-    }, q.vis || null, 'Question ' + (g.qIdx + 1) + '. The ' + q.stage + ' percent question.');
+    }, q.vis || null,
+    { id: 'q' + (g.qIdx + 1), stage: q.stage,
+      text: 'Question ' + (g.qIdx + 1) + '. The ' + q.stage + ' percent question.' },
+    qKey(q));
   }
   function p2Tick() {
     if (!p2G || p2G.locked || !p2G.deadline) return;

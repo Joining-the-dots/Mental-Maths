@@ -28777,6 +28777,10 @@ tcGameOverlay.addEventListener('click', (e) => { if (e.target === tcGameOverlay)
     if (wantVis) {
       var vs = fresh.filter(function (q) { return q.vis; });
       if (vs.length) fresh = vs;
+    } else if (!usedQs || !usedQs.length) {
+      /* V4.50: the opener is always a spoken gag, never a picture */
+      var nv = fresh.filter(function (q) { return !q.vis; });
+      if (nv.length) fresh = nv;
     }
     /* V4.42: style variety — never repeat the style of either of the two
        previous questions while the pool offers an alternative */

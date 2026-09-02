@@ -30051,6 +30051,24 @@ var OP_BANK = [
   .sp-syll { color:#6c5ce7; }
   .sp-syll:nth-child(2n) { color:#e6324b; }
   .sp-tricky { background:#fff3c4; border-radius:6px; padding:0 4px; }
+  /* V4.49 spelling show intro (reuses the 1% splash keyframes) */
+  #spIntroSplash { position:fixed; inset:0; z-index:10012; display:none; align-items:center; justify-content:center; flex-direction:column;
+    background:radial-gradient(ellipse at center,#3b1c8a 0%,#120a2e 70%); padding:30px; text-align:center; cursor:pointer; overflow:hidden; }
+  #spIntroSplash.show { display:flex; animation: opSplashIn 0.4s ease-out; }
+  #spIntroSplash.fade { animation: opSplashOut 0.42s ease-in forwards; }
+  .sp-intro-wand { font-size:84px; line-height:1; animation: spWandWave 1.6s ease-in-out infinite; filter: drop-shadow(0 0 24px #c39bff); }
+  @keyframes spWandWave { 0%,100% { transform: rotate(-12deg); } 50% { transform: rotate(14deg) scale(1.08); } }
+  .sp-intro-title { font-family:'Baloo 2',sans-serif; font-size:26px; font-weight:800; color:#ffd23f; letter-spacing:2px; text-transform:uppercase; margin-top:8px; }
+  .sp-intro-listen { font-family:'Baloo 2',sans-serif; font-size:38px; font-weight:800; color:#fff; margin:6px 0 22px; text-shadow:0 4px 30px rgba(168,111,240,0.8); animation: opQZoom 1.2s ease-out; }
+  .sp-intro-steps { display:flex; gap:10px; flex-wrap:wrap; justify-content:center; }
+  .sp-intro-step { border:2px solid rgba(255,255,255,0.25); color:#a99ee0; border-radius:999px; padding:9px 16px; font-weight:800; font-size:15px; transition: all 0.25s; }
+  .sp-intro-step.on { background:#ffd23f; color:#3b1c8a; border-color:#ffd23f; transform:scale(1.1); box-shadow:0 0 24px rgba(255,210,63,0.6); }
+  .sp-intro-step.done { color:#fff; border-color:#7bd88f; background:rgba(123,216,143,0.18); }
+  .sp-intro-spark { position:absolute; font-size:28px; opacity:0; animation: spSpark 2.4s ease-in-out infinite; left:18%; top:30%; pointer-events:none; }
+  .sp-intro-spark.s2 { left:76%; top:24%; animation-delay:0.8s; }
+  .sp-intro-spark.s3 { left:64%; top:70%; animation-delay:1.5s; }
+  @keyframes spSpark { 0% { opacity:0; transform:scale(0.4) translateY(10px); } 40% { opacity:1; transform:scale(1.2) translateY(-8px); } 100% { opacity:0; transform:scale(0.5) translateY(-30px); } }
+  .sp-intro-hint { margin-top:26px; font-size:13px; color:#a99ee0; font-weight:700; }
   .sp-hearrow { display:flex; gap:8px; justify-content:center; margin:12px 0; flex-wrap:wrap; }
   .sp-input { font-family:'Baloo 2',sans-serif; font-size:30px; font-weight:700; letter-spacing:3px;
     width:min(420px,90%); text-align:center; padding:10px 12px; border:3px solid #d9d2ee; border-radius:14px;
@@ -30092,6 +30110,19 @@ var OP_BANK = [
     border:2px solid #d9d2ee; border-radius:10px; outline:none; }
 </style>
 
+<!-- V4.49: the spelling SHOW intro: word, sentence, word, then the boxes -->
+<div id="spIntroSplash">
+  <div class="sp-intro-wand">🪄</div>
+  <div class="sp-intro-title" id="spIntroTitle">Word 1 of 10</div>
+  <div class="sp-intro-listen">Listen carefully…</div>
+  <div class="sp-intro-steps">
+    <span class="sp-intro-step" id="spStep1">🔊 The word</span>
+    <span class="sp-intro-step" id="spStep2">📖 In a sentence</span>
+    <span class="sp-intro-step" id="spStep3">🔊 The word again</span>
+  </div>
+  <div class="sp-intro-spark">✨</div><div class="sp-intro-spark s2">⭐</div><div class="sp-intro-spark s3">✨</div>
+  <div class="sp-intro-hint">tap to skip</div>
+</div>
 <div class="overlay" id="spGameOverlay">
   <div class="modal modal-wide" role="dialog" aria-modal="true">
     <div class="sp-progressrow">
@@ -30638,7 +30669,7 @@ var SPELL_BANKS = {
           resolve(true);
         });
         a.addEventListener('error', function () { if (!settled) { settled = true; attempt(i + 1); } });
-        setTimeout(function () { if (!settled) { settled = true; attempt(i + 1); } }, 1800);
+        setTimeout(function () { if (!settled) { settled = true; attempt(i + 1); } }, 4500);
       }
       attempt(0);
     });
@@ -30646,12 +30677,125 @@ var SPELL_BANKS = {
   function sayWord(w) {
     playWordFile(w.word).then(function (ok) { if (!ok) say(w.word, 0.8); });
   }
+  /* V4.49: James's Year 1-2 recordings already say word-sentence-word
+     inside the .s clip; the generated packs' .s clips are the sentence
+     only, so the game wraps them itself */
+  function sentenceIsWrapped() { return spU().band === 'y12'; }
   function saySentence(w) {
-    /* prefer the family's word-sentence-word recording; otherwise the
-       robot voice reads the full pattern */
-    playWordFile(w.word, '.s').then(function (ok) {
-      if (!ok) say(w.sentence ? (w.word + '. ' + w.sentence + '. ' + w.word + '.') : (w.word + '. ' + w.word + '.'), 0.9);
+    if (sentenceIsWrapped()) {
+      playWordFile(w.word, '.s').then(function (ok) {
+        if (!ok) say(w.sentence ? (w.word + '. ' + w.sentence + '. ' + w.word + '.') : (w.word + '. ' + w.word + '.'), 0.9);
+      });
+      return;
+    }
+    stepWord(w).then(function () { return pause(350); }).then(function () { return stepSentence(w); })
+      .then(function () { return pause(350); }).then(function () { return stepWord(w); });
+  }
+  /* play a clip and resolve when it ENDS (false = no file / blocked) */
+  function wordFileEnd(word, variant) {
+    return new Promise(function (resolve) {
+      playWordFile(word, variant).then(function (ok) {
+        if (!ok) { resolve(false); return; }
+        var a = spAudioCache[word.toLowerCase() + (variant || '')];
+        if (!a) { resolve(true); return; }
+        var done = false;
+        function fin(v) { if (done) return; done = true; resolve(v); }
+        a.addEventListener('ended', function () { fin(true); }, { once: true });
+        /* a blocked play() (no gesture) must not stall the show */
+        setTimeout(function () { if (a.paused && a.currentTime === 0) fin(false); }, 700);
+        setTimeout(function () { fin(true); }, (isFinite(a.duration) && a.duration ? a.duration * 1000 : 6000) + 1500);
+      });
     });
+  }
+  function sayP(text, rate) {
+    return new Promise(function (resolve) {
+      if (!window.speechSynthesis) { resolve(); return; }
+      var done = false;
+      function fin() { if (done) return; done = true; resolve(); }
+      try {
+        window.speechSynthesis.cancel();
+        var u = new SpeechSynthesisUtterance(text);
+        if (spVoice) u.voice = spVoice;
+        u.lang = (spVoice && spVoice.lang) || 'en-GB';
+        u.rate = rate || 0.85;
+        u.onend = fin; u.onerror = fin;
+        window.speechSynthesis.speak(u);
+        setTimeout(fin, 2500 + text.length * 80);
+      } catch (e) { fin(); }
+    });
+  }
+  function pause(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+  function stepWord(w) { return wordFileEnd(w.word).then(function (ok) { if (!ok) return sayP(w.word, 0.8); }); }
+  function stepSentence(w) {
+    return wordFileEnd(w.word, '.s').then(function (ok) {
+      if (!ok) return sayP(w.sentence ? w.sentence : w.word, 0.9);
+    });
+  }
+  /* warm the next word's clips so they are cached before they are needed */
+  function prefetchWordFiles(w) {
+    if (!w || !w.word) return;
+    ['', '.s'].forEach(function (v) {
+      var key = w.word.toLowerCase() + v;
+      if (spAudioCache[key] !== undefined) return;
+      var a = new Audio('audio/words/' + encodeURIComponent(key) + '.mp3');
+      a.preload = 'auto';
+      a.addEventListener('canplaythrough', function () { if (!spAudioCache[key]) spAudioCache[key] = a; }, { once: true });
+      a.addEventListener('error', function () { if (spAudioCache[key] === undefined) spAudioCache[key] = false; });
+    });
+  }
+  /* the show: splash up, sting, word -> sentence -> word with the step
+     pills lighting up, then the splash fades and the boxes take focus */
+  var spIntroGen = 0;
+  function spShowIntro(w, onDone) {
+    var gen = ++spIntroGen;
+    var sp = document.getElementById('spIntroSplash');
+    var g = game;
+    if (!sp || !g) { if (onDone) onDone(); return; }
+    document.getElementById('spIntroTitle').textContent =
+      g.mode === 'boss' ? 'Round ' + (g.idx + 1) : 'Word ' + (g.idx + 1) + ' of ' + g.words.length;
+    var steps = ['spStep1', 'spStep2', 'spStep3'];
+    function light(i) {
+      steps.forEach(function (id, k) {
+        var el = document.getElementById(id);
+        el.classList.toggle('on', k === i); el.classList.toggle('done', k < i);
+      });
+    }
+    light(-1);
+    sp.classList.remove('fade'); sp.classList.add('show');
+    try { if (typeof playSfx === 'function') playSfx('unlock'); } catch (e) {}
+    var finished = false;
+    function end() {
+      if (finished || gen !== spIntroGen) return;
+      finished = true;
+      sp.classList.add('fade');
+      setTimeout(function () { sp.classList.remove('show', 'fade'); if (onDone) onDone(); }, 420);
+    }
+    sp.onclick = function () {
+      if (finished) return;
+      finished = true; spIntroGen++;
+      try { if (window.speechSynthesis) window.speechSynthesis.cancel(); } catch (e) {}
+      for (var k in spAudioCache) { try { if (spAudioCache[k] && spAudioCache[k].pause) spAudioCache[k].pause(); } catch (e) {} }
+      sp.classList.remove('show', 'fade');
+      if (onDone) onDone();
+    };
+    var seq;
+    if (sentenceIsWrapped()) {
+      seq = [function () {
+        light(0);
+        setTimeout(function () { if (gen === spIntroGen) light(1); }, 1300);
+        return stepSentence(w).then(function () { if (gen === spIntroGen) light(2); return pause(700); });
+      }];
+    } else {
+      seq = [function () { light(0); return stepWord(w); },
+             function () { light(1); return stepSentence(w); },
+             function () { light(2); return stepWord(w); }];
+    }
+    (function run(i) {
+      if (gen !== spIntroGen) return;
+      if (i >= seq.length) { light(3); setTimeout(end, 550); return; }
+      pause(i === 0 ? 650 : 420).then(function () { if (gen === spIntroGen) return seq[i](); })
+        .then(function () { run(i + 1); }, function () { run(i + 1); });
+    })(0);
   }
   function spellOut(w) {
     say(w.word + '. ' + w.word.toUpperCase().split('').join(', ') + '. ' + w.word + '.', 0.75);
@@ -30774,6 +30918,7 @@ var SPELL_BANKS = {
     };
     document.getElementById('spGameOverlay').classList.add('show');
     document.getElementById('spBossArena').style.display = mode === 'boss' ? '' : 'none';
+    prefetchWordFiles(words[0]);
     askWord();
   }
 
@@ -30874,9 +31019,11 @@ var SPELL_BANKS = {
       oClear.style.display = 'none';
       document.getElementById('spTiles').style.display = 'none';
       document.getElementById('spSlots').style.display = 'none';
-      setTimeout(function () { try { oBoxes.children[0].focus(); } catch (e) {} }, 60);
     }
-    sayWord(w);
+    prefetchWordFiles(g.words[g.idx + 1]);
+    spShowIntro(w, function () {
+      if (g.mode !== 'potion') setTimeout(function () { try { oBoxes.children[0].focus(); } catch (e) {} }, 60);
+    });
   }
 
   /* potion tiles */

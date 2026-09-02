@@ -4945,6 +4945,12 @@ function awardPoints(n) {
   if (typeof u.pointsEarned !== 'number') u.pointsEarned = 0;
   u.points += n;
   u.pointsEarned += n;
+  /* V4.48: per-day tally so the Control Centre can show what a day earned */
+  try {
+    if (!u.pointsByDay || typeof u.pointsByDay !== 'object') u.pointsByDay = {};
+    const dk = todayKey();
+    u.pointsByDay[dk] = (u.pointsByDay[dk] || 0) + n;
+  } catch (e) {}
   saveState();
   updatePointsDisplay();
 }
@@ -6455,6 +6461,14 @@ function lpRender() {
    next unlocked trick, plus the 10 ⭐ bonus (awarded by the caller).
    o = { emoji, name, next: {emoji, name} | null, onGo } */
 function slTrickParty(o) {
+  /* V4.48: remember which trick was learned on which day (Control Centre day view) */
+  try {
+    var tu = ensureUser();
+    if (!tu.tricksByDay || typeof tu.tricksByDay !== 'object') tu.tricksByDay = {};
+    var tdk = todayKey();
+    if (!tu.tricksByDay[tdk]) tu.tricksByDay[tdk] = [];
+    tu.tricksByDay[tdk].push(String((o && o.name) || 'a trick'));
+  } catch (e) {}
   var d = document.createElement('div');
   d.style.cssText = 'position:fixed;inset:0;z-index:10000;background:rgba(30,25,60,0.6);display:flex;align-items:center;justify-content:center;padding:16px;';
   d.innerHTML =
@@ -18985,6 +18999,7 @@ tcGameOverlay.addEventListener('click', (e) => { if (e.target === tcGameOverlay)
       if (!u.mysteries || typeof u.mysteries !== 'object') u.mysteries = {};
       if (!u.mysteries.solved) u.mysteries.solved = {};
       u.mysteries.solved[id] = true;
+      try { if (!u.mysteries.solvedOn) u.mysteries.solvedOn = {}; u.mysteries.solvedOn[id] = todayKey(); } catch (e) {}
       if (typeof saveState === 'function') saveState();
     } catch (e) {}
   }
@@ -29137,6 +29152,7 @@ var OP_BANK = [
   function soloStart() {
     var o = opUser();
     o.plays += 1;
+    try { if (!o.playsByDay) o.playsByDay = {}; var pdk = todayKey(); o.playsByDay[pdk] = (o.playsByDay[pdk] || 0) + 1; } catch (e) {}
     if (typeof saveState === 'function') saveState();
     solo = { idx: 0, done: false, dead: false, q: null, deadline: 0, answered: false,
              passUsed: false, timeUsed: false, timeUsedThisQ: false, usedQs: [], passedIdx: {},
@@ -29278,6 +29294,7 @@ var OP_BANK = [
       try { if (typeof popConfetti === 'function') popConfetti(); } catch (e) {}
       try { if (typeof awardPoints === 'function') awardPoints(pts); } catch (e) {}
       o.correct += 1;
+      try { if (!o.correctByDay) o.correctByDay = {}; var cdk = todayKey(); o.correctByDay[cdk] = (o.correctByDay[cdk] || 0) + 1; } catch (e) {}
       if (solo.idx > o.bestIdx) o.bestIdx = solo.idx;
       if (typeof saveState === 'function') saveState();
       fb.innerHTML = '<span style="color:#2ecc71;font-weight:800;">✅ Correct! +' + pts + ' ⭐</span>' +

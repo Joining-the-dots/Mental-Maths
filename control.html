@@ -242,6 +242,48 @@
     });
   }
 
+/* V4.48: what happened on one day — built from the per-day maps the
+   game keeps (usage.appDays, pointsByDay, daily quiz counts, spelling
+   attempts, mysteries solvedOn, 1% playsByDay/correctByDay, rewards). */
+function renderDayDetail(u, key) {
+  var nice = new Date(key + 'T12:00:00').toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+  var g = u.usage || {};
+  var secs = (g.days || {})[key] || 0;
+  var apps = (g.appDays || {})[key] || {};
+  var rows = [];
+  rows.push('<div class="statrow"><span>Active time</span><b>' + (secs ? fmtSecs(secs) : 'no play') + '</b></div>');
+  var appList = Object.keys(apps).sort(function (a, b) { return apps[b] - apps[a]; });
+  if (appList.length) {
+    rows.push('<div style="margin:4px 0 2px;font-weight:700;">Where the time went</div>');
+    appList.forEach(function (a) {
+      rows.push('<div class="statrow"><span>' + (APP_LABELS[a] || esc(a)) + '</span><b>' + fmtSecs(apps[a]) + '</b></div>');
+    });
+  }
+  var pts = (u.pointsByDay || {})[key];
+  if (pts != null || secs) rows.push('<div class="statrow"><span>⭐ Points earned</span><b>' + (pts != null ? pts : '<span class="muted">not tracked before 2 Sept</span>') + '</b></div>');
+  var quiz = (u.daily || {})[key] || 0;
+  if (quiz) rows.push('<div class="statrow"><span>🔢 Maths questions answered</span><b>' + quiz + '</b></div>');
+  var op = u.onepct || {};
+  var plays = (op.playsByDay || {})[key] || 0, corr = (op.correctByDay || {})[key] || 0;
+  if (plays || corr) rows.push('<div class="statrow"><span>🏆 1% Challenge</span><b>' + plays + ' game' + (plays === 1 ? '' : 's') + ' · ' + corr + ' cracked</b></div>');
+  var att = (u.spell && u.spell.attempts) || {}, sp = [];
+  Object.keys(att).forEach(function (w) {
+    (att[w] || []).forEach(function (a) {
+      if (a.d === key) sp.push((a.ok && !a.p ? '<span class="spellmark ok">✓</span>' : (a.ok ? '<span class="spellmark peek">👀</span>' : '<span class="spellmark no">✗</span>')) + ' ' + esc(w));
+    });
+  });
+  if (sp.length) rows.push('<div style="margin:4px 0 2px;font-weight:700;">🪄 Spelling (' + sp.length + ')</div><div style="line-height:1.9;">' + sp.join(' &nbsp; ') + '</div>');
+  var tr = (u.tricksByDay || {})[key] || [];
+  if (tr.length) rows.push('<div class="statrow"><span>🎓 Tricks learned</span><b>' + tr.map(esc).join(', ') + '</b></div>');
+  var so = (u.mysteries && u.mysteries.solvedOn) || {}, my = Object.keys(so).filter(function (id) { return so[id] === key; });
+  if (my.length) rows.push('<div class="statrow"><span>🔍 Mysteries solved</span><b>' + my.length + '</b></div>');
+  var red = ((u.shop && u.shop.redeemed) || []).filter(function (r) { return r.date && String(r.date).slice(0, 10) === key; });
+  red.forEach(function (r) {
+    rows.push('<div class="statrow"><span>🎁 Redeemed ' + esc(r.icon || '') + ' ' + esc(r.name) + '</span><b>' + (r.cost || 0) + ' ⭐</b></div>');
+  });
+  if (rows.length === 1 && !secs) return '<b>' + nice + '</b><div class="muted">Nothing recorded that day.</div>';
+  return '<div style="font-weight:800;margin-bottom:4px;">' + nice + '</div>' + rows.join('');
+}
 var APP_LABELS = { maths:'🔢 Maths', spell:'🪄 Spelling', flags:'🏳️ Flags', mysteries:'🔍 Mysteries', people:'🤝 People Skills', onepct:'🏆 1% Challenge', shop:'🎁 Shop', palace:'🧠 Memory', story:'✍️ Story', chess:'♟️ Chess', unknown:'❓' };
   var presenceUnsub = null;
   function watchPresence() {
@@ -1131,8 +1173,8 @@ var APP_LABELS = { maths:'🔢 Maths', spell:'🪄 Spelling', flags:'🏳️ Fla
       var nice = new Date(k + 'T12:00:00').toLocaleDateString('en-GB',
         { weekday: 'short', day: 'numeric', month: 'short' });
       var tip = nice + ' — ' + (v ? fmtSecs(v) : 'no play');
-      return '<div class="daybar" style="height:' + Math.max(3, Math.round(v / maxDay * 100)) + '%" data-tip="' +
-        tip + '" title="' + tip + '">' + lbl + '</div>';
+      return '<div class="daybar" data-day="' + k + '" style="cursor:pointer;height:' + Math.max(3, Math.round(v / maxDay * 100)) + '%" data-tip="' +
+        tip + ' · click for detail" title="' + tip + '">' + lbl + '</div>';
     }).join('');
 
     var red = (u.shop && u.shop.redeemed) || [];
@@ -1159,6 +1201,7 @@ var APP_LABELS = { maths:'🔢 Maths', spell:'🪄 Spelling', flags:'🏳️ Fla
         '<div class="card"><h2 style="margin-top:0;">📅 Last 14 days</h2>' +
           '<div class="daybars">' + dayBars + '</div>' +
           '<div style="height:20px;"></div>' +
+          '<div id="dayDetail" class="muted" style="font-size:12px;margin:0 0 8px;">Click a bar to see what was done that day.</div>' +
           '<div class="statrow"><span>Total active time</span><b>' + fmtSecs(total) + '</b></div>' +
           '<div class="statrow"><span>Sessions</span><b>' + (g.sessions || 0) + '</b></div>' +
         '</div>' +
@@ -1178,6 +1221,14 @@ var APP_LABELS = { maths:'🔢 Maths', spell:'🪄 Spelling', flags:'🏳️ Fla
         '<div class="card"><h2 style="margin-top:0;">🎁 Rewards redeemed</h2>' + buys + '</div>' +
       '</div>';
     document.getElementById('backBtn').addEventListener('click', backFn || renderHome);
+    host.querySelectorAll('.daybar[data-day]').forEach(function (bar) {
+      bar.addEventListener('click', function () {
+        host.querySelectorAll('.daybar').forEach(function (b) { b.style.outline = ''; });
+        bar.style.outline = '2px solid #e9629b';
+        var slot = document.getElementById('dayDetail');
+        if (slot) { slot.className = ''; slot.innerHTML = renderDayDetail(u, bar.dataset.day); }
+      });
+    });
   }
 })();
 </script>

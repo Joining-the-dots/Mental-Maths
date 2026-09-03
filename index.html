@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover" />
-<title>Conway Family Learning Lab — Live V4.51</title>
+<title>Conway Family Learning Lab — Live V4.52</title>
 
 <!-- PWA -->
 <link rel="manifest" href="manifest.json">
@@ -3002,7 +3002,7 @@ function slWakeRelease() {
   <div class="brand">
     <span class="logo">🧪</span>
     Conway Family Learning Lab
-    <span style="font-family: 'Fredoka', sans-serif; font-size: 13px; font-weight: 600; color: var(--ink-soft); -webkit-text-fill-color: var(--ink-soft); background: var(--neutral); padding: 2px 8px; border-radius: 999px; margin-left: 6px; letter-spacing: 0.5px;">Live V4.51</span>
+    <span style="font-family: 'Fredoka', sans-serif; font-size: 13px; font-weight: 600; color: var(--ink-soft); -webkit-text-fill-color: var(--ink-soft); background: var(--neutral); padding: 2px 8px; border-radius: 999px; margin-left: 6px; letter-spacing: 0.5px;">Live V4.52</span>
   </div>
 
   <button class="user-pill" id="userPill" title="Switch player">
@@ -3369,6 +3369,7 @@ function slWakeRelease() {
 
 <!-- Family leaderboard -->
 <div id="flagsView" class="hidden" style="max-width: 1200px; margin: 0 auto;">
+  <div id="flagsHero"></div>
   <div class="flags-toolbar">
     <button class="btn btn-primary" id="flagsTestBtn">⚡ Test me</button>
     <button class="btn btn-primary" id="flagsChallengeBtn" style="background:linear-gradient(135deg,#ff9f43,#ee5a24);color:white;">🤝 Challenge a friend</button>
@@ -3408,9 +3409,10 @@ function slWakeRelease() {
 
 <!-- Flags test quiz -->
 <div class="overlay" id="ftQuizOverlay">
-  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="ftQuizTitle">
+  <div class="modal op-stage" role="dialog" aria-modal="true" aria-labelledby="ftQuizTitle">
     <h2 id="ftQuizTitle">⚡ Flags test</h2>
     <div class="ft-progress" id="ftProgress">Question 1 of 10</div>
+    <div class="fl-timerwrap" id="ftTimerWrap"><div class="fl-timerbar" id="ftTimerBar"><div></div></div><div class="fl-timernum" id="ftTimerNum"></div></div>
     <div class="ft-prompt" id="ftPrompt"></div>
     <div class="ft-options" id="ftOptions"></div>
     <div id="ftFeedback" style="min-height:24px; text-align:center; font-size:14px; margin-top:6px;"></div>
@@ -3464,7 +3466,7 @@ function slWakeRelease() {
 
 <!-- V19: Flag challenge — game -->
 <div class="overlay" id="fcGameOverlay">
-  <div class="modal" role="dialog" aria-modal="true">
+  <div class="modal op-stage" role="dialog" aria-modal="true">
     <h2 style="margin-bottom:4px;">🤝 Challenge</h2>
     <div class="ft-progress" id="fcProgress">Question 1 of 10</div>
     <div class="fc-scoreboard">
@@ -5039,6 +5041,53 @@ function _playSample(ctx, name, vol, at) {
   src.connect(g).connect(_sfxBus(ctx).input);
   src.start(at == null ? ctx.currentTime : at);
   return true;
+}
+/* ---- V4.52: studio helpers shared by every show (1%, Spelling, Flags) ---- */
+function slSample(name, vol, at) {
+  try {
+    const u = ensureUser(); if (u.muted) return false;
+    const ctx = getAudioCtx(); if (!ctx) return false;
+    if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+    return _playSample(ctx, name, vol, at == null ? undefined : ctx.currentTime + at);
+  } catch (e) { return false; }
+}
+function slFlash(txt, color, ms) {
+  const d = document.createElement('div');
+  d.className = 'op-flash';
+  const inner = document.createElement('div');
+  inner.textContent = txt;
+  if (color) inner.style.color = color;
+  d.appendChild(inner);
+  document.body.appendChild(d);
+  setTimeout(() => { try { d.remove(); } catch (e) {} }, ms || 1250);
+}
+/* full-screen round splash; resolves after ms or on tap */
+function slSplash(opts) {
+  return new Promise(resolve => {
+    let sp = document.getElementById('slSplash');
+    if (!sp) {
+      sp = document.createElement('div');
+      sp.id = 'slSplash';
+      sp.innerHTML = '<div class="op-intro-stage" id="slSplashBadge"></div>' +
+        '<div class="op-intro-q" id="slSplashTitle"></div>' +
+        '<div class="sl-splash-sub" id="slSplashSub"></div>' +
+        '<div class="op-intro-hint">tap to skip</div>';
+      document.body.appendChild(sp);
+    }
+    document.getElementById('slSplashBadge').textContent = opts.badge || '';
+    document.getElementById('slSplashTitle').textContent = opts.title || '';
+    document.getElementById('slSplashSub').textContent = opts.sub || '';
+    sp.classList.remove('fade'); sp.classList.add('show');
+    if (opts.sfx) slSample(opts.sfx, 0.85);
+    let done = false;
+    const end = () => {
+      if (done) return; done = true;
+      sp.classList.add('fade');
+      setTimeout(() => { sp.classList.remove('show', 'fade'); resolve(); }, 400);
+    };
+    sp.onclick = end;
+    setTimeout(end, opts.ms || 2600);
+  });
 }
 /* V4.44: warm master bus — every game sound routes through a gentle
    compressor (stacked chords used to clip into harsh digital fuzz) plus
@@ -9013,6 +9062,28 @@ function flagsRender() {
   const root = document.getElementById('flagsBrowse');
   if (!root || !window.FLAG_GROUPS || !window.COUNTRIES) return;
   root.innerHTML = '';
+  /* V4.52: the Flag Show landing panel */
+  const hero = document.getElementById('flagsHero');
+  if (hero) {
+    const learnedN = Object.keys(u.flags.cardsLearned || {}).length, totalN = window.COUNTRIES.length;
+    const runsN = (u.flags.runs || []).length;
+    hero.innerHTML = '<div class="op-home fl-studio">' +
+      '<div class="op-home-badge">✦ The Flag Show ✦</div>' +
+      '<div class="op-home-title">🏳️ Flags of the World</div>' +
+      '<p class="op-tag">' + totalN + ' flags, ' + totalN + ' capitals, one champion. Learn the stories behind the flags below, ' +
+        'then step onto the stage: ten questions, fifteen seconds each, and the crowd is watching.</p>' +
+      '<div class="fl-cta-row">' +
+        '<button class="btn btn-primary op-cta" id="flHeroTest" type="button">⚡ Take the test</button>' +
+        '<button class="btn btn-primary" id="flHeroDuel" type="button" style="background:linear-gradient(135deg,#ff9f43,#ee5a24);">🤝 Challenge a friend</button>' +
+      '</div>' +
+      '<div class="op-home-stats">' +
+        '<div class="op-hstat"><b>' + learnedN + '</b><span>of ' + totalN + ' flags met</span></div>' +
+        '<div class="op-hstat"><b>' + (u.flags.best || 0) + '</b><span>best score out of 10</span></div>' +
+        '<div class="op-hstat"><b>' + runsN + '</b><span>tests taken</span></div>' +
+      '</div></div>';
+    hero.querySelector('#flHeroTest').addEventListener('click', () => { const b = document.getElementById('flagsTestBtn'); if (b) b.click(); });
+    hero.querySelector('#flHeroDuel').addEventListener('click', () => { const b = document.getElementById('flagsChallengeBtn'); if (b) b.click(); });
+  }
   window.FLAG_GROUPS.forEach(g => {
     const list = window.flagsByGroup(g.id);
     const sec = document.createElement('div');
@@ -9317,12 +9388,42 @@ function startFlagsTest(groupIds, dir) {
     pool, idx: 0, dir, score: 0, finished: false,
     answers: [],   // [{country, picked, correct}]
   };
+  ftState.streak = 0;
   ftQuizOverlay.classList.add('show');
   document.getElementById('ftActions').innerHTML = '<button class="btn btn-ghost" id="ftForfeit">Give up</button>';
   document.getElementById('ftForfeit').addEventListener('click', () => {
     if (confirm('Give up this test?')) ftCloseQuiz();
   });
-  ftRenderQuestion();
+  document.getElementById('ftPrompt').innerHTML = '';
+  document.getElementById('ftOptions').innerHTML = '';
+  /* V4.52: round splash, then the quick-fire round */
+  const regionNames = window.FLAG_GROUPS.filter(g => groupIds.includes(g.id)).map(g => g.name);
+  const st = ftState;
+  slSplash({ badge: 'The Flag Show', title: '⚡ Ten questions. Fifteen seconds each.',
+             sub: regionNames.length === window.FLAG_GROUPS.length ? 'The whole world' : regionNames.join(' · '),
+             ms: 2600, sfx: 'sting' }).then(() => { if (ftState === st && !st.finished) ftRenderQuestion(); });
+}
+const FT_SECS = 15;
+function ftStopTimer() {
+  if (ftState && ftState.tick) { clearInterval(ftState.tick); ftState.tick = null; }
+}
+function ftStartTimer() {
+  ftStopTimer();
+  const st = ftState;
+  st.deadline = Date.now() + FT_SECS * 1000;
+  st._beatAt = 0;
+  const bar = document.getElementById('ftTimerBar'), num = document.getElementById('ftTimerNum');
+  const tick = () => {
+    if (ftState !== st || st.finished || st.answered) { ftStopTimer(); return; }
+    const left = Math.max(0, st.deadline - Date.now());
+    if (bar) { bar.firstElementChild.style.width = (left / (FT_SECS * 1000) * 100) + '%'; bar.classList.toggle('low', left < 5000); }
+    if (num) num.textContent = Math.ceil(left / 1000) + 's';
+    const interval = left > 8000 ? 2000 : (left > 4000 ? 1000 : 500);
+    if (Date.now() - st._beatAt >= interval) { st._beatAt = Date.now(); slSample('heartbeat', left > 8000 ? 0.4 : (left > 4000 ? 0.7 : 1)); }
+    if (left <= 0) { ftStopTimer(); ftAnswer({ id: null, name: 'time' }); }
+  };
+  st.tick = setInterval(tick, 100);
+  tick();
 }
 
 function ftPickActualDir() {
@@ -9380,19 +9481,28 @@ function ftRenderQuestion() {
     b.addEventListener('click', () => ftAnswer(opt));
     optsEl.appendChild(b);
   });
+  ftState.answered = false;
+  ftStartTimer();
 }
 
 function ftAnswer(picked) {
-  if (!ftState || ftState.finished) return;
+  if (!ftState || ftState.finished || ftState.answered) return;
+  ftState.answered = true;
+  ftStopTimer();
   const q = ftState.pool[ftState.idx];
   const correct = picked.id === q.id;
+  const timedOut = picked.id === null;
   ftState.answers.push({ country: q.id, picked: picked.id, correct });
   if (correct) {
     ftState.score++;
+    ftState.streak = (ftState.streak || 0) + 1;
     if (typeof playSfx === 'function') playSfx('correct');
+    try { slFlash(ftState.streak >= 3 ? '🔥 STREAK ' + ftState.streak + '!' : '✅ ' + q.name, ftState.streak >= 3 ? '#ffd23f' : '#7bd88f', 900); } catch (e) {}
     awardPoints(2);   // V31: flag answered correctly
   } else {
+    ftState.streak = 0;
     if (typeof playSfx === 'function') playSfx('wrong');
+    try { slFlash(timedOut ? '⏰ TIME!' : '❌', '#ff8a8a', 800); } catch (e) {}
   }
   // Disable + colour the options
   document.querySelectorAll('#ftOptions .ft-option').forEach(b => {
@@ -9413,8 +9523,8 @@ function ftAnswer(picked) {
   // Feedback
   const fb = document.getElementById('ftFeedback');
   fb.innerHTML = correct
-    ? `<span style="color:#1f8a4f;">✅ ${q.flag} ${q.name} — capital ${q.capital} · <span style="color:#ff9f43;">+2 ⭐</span></span>`
-    : `<span style="color:#c0392b;">❌ It was ${q.flag} ${q.name} — capital ${q.capital}</span>`;
+    ? `<span style="color:#7bd88f;">✅ ${q.flag} ${q.name} — capital ${q.capital} · <span style="color:#ffd23f;">+2 ⭐</span></span>`
+    : `<span style="color:#ff8a8a;">${timedOut ? '⏰ Out of time!' : '❌'} It was ${q.flag} ${q.name} — capital ${q.capital}</span>`;
 
   setTimeout(() => {
     ftState.idx++;
@@ -9450,6 +9560,14 @@ function ftFinish() {
     <div class="ft-prompt-sub">${isBest ? 'New best!' : (`Your best: ${prevBest}`)}</div>`;
   document.getElementById('ftProgress').textContent = 'Test complete';
   if (isBest && typeof popConfetti === 'function') { popConfetti(); setTimeout(popConfetti, 400); }
+  /* V4.52: finale */
+  try {
+    ftStopTimer();
+    const timerWrap = document.getElementById('ftTimerWrap'); if (timerWrap) timerWrap.style.visibility = 'hidden';
+    if (ftState.score === ftState.pool.length) { slFlash('🏆 PERFECT ' + ftState.score + '!', '#ffd23f', 1700); slSample('fanfare', 0.9); slSample('applause', 0.85, 0.5); }
+    else if (isBest) { slFlash('🌟 NEW BEST!', '#ffd23f', 1500); slSample('fanfare', 0.9); }
+    else if (ftState.score >= 7) { slSample('applause', 0.8); }
+  } catch (e) {}
 
   document.getElementById('ftActions').innerHTML = `
     <button class="btn btn-ghost" id="ftClose">Close</button>
@@ -9461,8 +9579,10 @@ function ftFinish() {
 }
 
 function ftCloseQuiz() {
+  ftStopTimer();
   ftState = null;
   ftQuizOverlay.classList.remove('show');
+  const timerWrap = document.getElementById('ftTimerWrap'); if (timerWrap) timerWrap.style.visibility = '';
 }
 ftQuizOverlay.addEventListener('click', (e) => { if (e.target === ftQuizOverlay) ftCloseQuiz(); });
 
@@ -25296,6 +25416,62 @@ tcGameOverlay.addEventListener('click', (e) => { if (e.target === tcGameOverlay)
   .op-chipdemo { display:inline-block; border:2px solid #a86ff0; border-radius:999px; padding:1px 10px;
     font-weight:800; font-size:12px; color:#dcd2ff; background:rgba(255,255,255,0.05); margin:0 2px; white-space:nowrap; }
 </style>
+<style id="slStudio">
+  /* V4.52: Spelling + Flags get the 1% Club studio treatment */
+  #slSplash { position:fixed; inset:0; z-index:10012; display:none; align-items:center; justify-content:center;
+    flex-direction:column; background:radial-gradient(ellipse at center,#31197a 0%,#140b33 70%);
+    padding:30px; text-align:center; cursor:pointer; }
+  #slSplash.show { display:flex; animation: opSplashIn 0.4s ease-out; }
+  #slSplash.fade { animation: opSplashOut 0.4s ease-in forwards; }
+  .sl-splash-sub { margin-top:14px; font-size:16px; color:#c9c0ee; font-weight:700; }
+  /* spelling home */
+  .sp-studio .sp-rank-studio { display:flex; justify-content:space-between; font-family:'Baloo 2',sans-serif;
+    font-weight:800; font-size:15px; color:#ffd23f; margin-top:4px; }
+  .sp-studio .sp-rankbar-studio { height:12px; background:rgba(255,255,255,0.12); border-radius:999px; overflow:hidden; margin:6px 0 4px; }
+  .sp-studio .sp-rankbar-studio > div { height:100%; background:linear-gradient(90deg,#ffd23f,#ff9f43); border-radius:999px;
+    box-shadow:0 0 12px rgba(255,210,63,0.6); }
+  .sp-studio .sp-rank-next { font-size:12px; color:#bfb4e8; font-weight:700; }
+  .sp-studio .sp-bands { margin:6px 0 14px; }
+  .sp-studio .sp-band { background:rgba(255,255,255,0.08) !important; color:#dcd2ff !important;
+    border:2px solid rgba(255,255,255,0.18) !important; box-shadow:none !important; }
+  .sp-studio .sp-band.on { background:linear-gradient(135deg,#ffd23f,#ff9f43) !important; color:#4a3200 !important;
+    border-color:transparent !important; box-shadow:0 0 14px rgba(255,210,63,0.6) !important; }
+  .sp-studio .sp-modes { margin:0; }
+  .sp-studio .sp-mode { background:rgba(255,255,255,0.07) !important; border:1px solid rgba(255,255,255,0.12) !important;
+    border-top-width:4px !important; color:#fff !important; box-shadow:none !important; transition:transform .15s, box-shadow .15s; }
+  .sp-studio .sp-mode:hover { transform:translateY(-3px); box-shadow:0 0 22px rgba(168,111,240,0.45) !important; }
+  .sp-studio .sp-mode-title { color:#fff !important; }
+  .sp-studio .sp-mode-desc { color:#c9c0ee !important; }
+  .sp-studio .op-home-how { font-size:12.5px; }
+  /* spelling stage */
+  .sp-stage .sp-progressrow, .sp-stage .sp-sentence, .sp-stage .sp-hp { color:#c9c0ee; }
+  .sp-stage .sp-word-big, .sp-stage .sp-slot-row, .sp-stage .sp-feedback { color:#fff; }
+  .sp-stage .sp-diff .ok { color:#7bd88f; }
+  .sp-stage .sp-diff .no { color:#ff8a8a; }
+  .sp-stage .sp-diff .miss { color:#8f86bb; }
+  .sp-stage .btn-ghost { background:rgba(255,255,255,0.07); color:#dcd2ff; border:2px solid #a86ff0; }
+  .sp-stage .sp-tile { background:#241456; color:#fff; border-color:#5a3fd0; }
+  .sp-stage .sp-box { background:#fff; }
+  .sp-stage .sp-syll { color:#fff; }
+  .sp-stage .sp-tricky { background:#ffd23f; color:#4a3200; }
+  .sp-stage .sp-boss-arena { background:rgba(255,255,255,0.06); border-radius:14px; padding:6px; }
+  /* flags */
+  .flags-toolbar #flagsTestBtn, .flags-toolbar #flagsChallengeBtn { display:none; }
+  #flagsHero { margin-bottom:14px; }
+  .fl-cta-row { display:flex; gap:10px; flex-wrap:wrap; margin:4px 0 6px; }
+  .fl-cta-row .btn { font-size:16px; padding:12px 22px; }
+  .op-stage .ft-prompt-text { color:#fff; }
+  .op-stage .ft-prompt-sub, .op-stage .ft-progress { color:#c9c0ee; }
+  .op-stage .ft-prompt-flag { filter:drop-shadow(0 8px 30px rgba(168,111,240,0.5)); animation: opQZoom 0.5s ease-out; }
+  .fl-timerwrap { position:relative; margin:4px 0 10px; }
+  .fl-timerbar { height:16px; background:rgba(255,255,255,0.12); border-radius:999px; overflow:hidden; }
+  .fl-timerbar > div { height:100%; width:100%; background:linear-gradient(90deg,#a86ff0,#ffd23f); border-radius:999px; transition:width .1s linear; }
+  .fl-timerbar.low > div { background:linear-gradient(90deg,#ff5f5f,#ffd23f); animation: opBarPulse 0.5s infinite; }
+  .fl-timernum { position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    font-family:'Baloo 2',sans-serif; font-weight:800; font-size:12.5px; color:#fff; text-shadow:0 1px 3px rgba(0,0,0,0.6); pointer-events:none; }
+  .op-stage .fc-side-name { color:#c9c0ee; }
+  .op-stage .fc-side-score { color:#ffd23f; }
+</style>
 
 <div class="overlay" id="opSoloOverlay">
   <div class="modal modal-wide op-stage" role="dialog" aria-modal="true">
@@ -29876,7 +30052,7 @@ tcGameOverlay.addEventListener('click', (e) => { if (e.target === tcGameOverlay)
   <div class="sp-intro-hint">tap to skip</div>
 </div>
 <div class="overlay" id="spGameOverlay">
-  <div class="modal modal-wide" role="dialog" aria-modal="true">
+  <div class="modal modal-wide op-stage sp-stage" role="dialog" aria-modal="true">
     <div class="sp-progressrow">
       <span id="spProgress">Word 1 of 10</span>
       <span class="sp-streakpips" id="spStreak"></span>
@@ -30600,44 +30776,39 @@ var SPELL_BANKS = {
     }).join('');
 
     view.innerHTML =
-      '<div class="sp-hero">' +
-        '<h2>🪄 Spellcraft</h2>' +
-        '<p>Words are spells. Hear one, type it true, and it casts in a shower of sparks — ' +
+      '<div class="op-home sp-studio">' +
+        '<div class="op-home-badge">✦ The Spelling Show ✦</div>' +
+        '<div class="op-home-title">🪄 Spellcraft</div>' +
+        '<p class="op-tag">Words are spells. Hear one, type it true, and it casts in a shower of sparks — ' +
         'get a letter wrong and the spell fizzles! Master every word to rise from Apprentice to Spellmaster Supreme.</p>' +
-        '<div class="sp-rank">' + esc(rk.name) + ' · ' + m + ' spells mastered</div>' +
-        '<div class="sp-rankbar"><div style="width:' + pct + '%"></div></div>' +
-        '<div style="font-size:12px;opacity:0.85;margin-top:4px;">' + esc(nextTxt) + '</div>' +
-      '</div>' +
-      '<div class="sp-bands" id="spBands">' + bandBtns + '</div>' +
-      '<div class="sp-modes">' +
-        '<button class="sp-mode" data-mode="quest" style="border-top-color:#6c5ce7;">' +
-          '<div class="sp-mode-emoji">🪄</div><div class="sp-mode-title">Spell Quest</div>' +
-          '<div class="sp-mode-desc">The main event: hear the word, type the spell. Tricky words come back until you own them.</div></button>' +
-        '<button class="sp-mode" data-mode="potion" style="border-top-color:#2ecc71;">' +
-          '<div class="sp-mode-emoji">🧪</div><div class="sp-mode-title">Potion Mix</div>' +
-          '<div class="sp-mode-desc">The letters are scrambled in the cauldron — tap them back into the right order.</div></button>' +
-        '<button class="sp-mode" data-mode="boss" style="border-top-color:#e6324b;">' +
-          '<div class="sp-mode-emoji">🐉</div><div class="sp-mode-title">Boss Battle</div>' +
-          '<div class="sp-mode-desc">Duel the Spellwyrm! Every correct spell is a hit. Three slips and it wins.</div></button>' +
-        '<button class="sp-mode" data-mode="book" style="border-top-color:#ff9f43;">' +
-          '<div class="sp-mode-emoji">📖</div><div class="sp-mode-title">Spellbook</div>' +
-          '<div class="sp-mode-desc">Browse every word: hear it, see the tricky part, learn the syllable chant.</div></button>' +
-      '</div>' +
-      '<div class="sp-stats">' +
-        '<div class="sp-stat"><b>' + sp.cast + '</b><span>spells cast</span></div>' +
-        '<div class="sp-stat"><b>' + m + ' / ' + (total + sp.custom.length) + '</b><span>mastered</span></div>' +
-        '<div class="sp-stat"><b>' + sp.bossWins + '</b><span>bosses beaten</span></div>' +
-      '</div>' +
-      '<div class="sp-points" style="background:#fff;border-radius:var(--radius);box-shadow:var(--shadow);padding:12px 16px;margin-top:12px;">' +
-        '<div style="font-weight:800;margin-bottom:6px;">⭐ How the points work</div>' +
-        '<div style="display:flex;flex-wrap:wrap;gap:6px;font-size:12.5px;font-weight:700;">' +
-          '<span style="background:#e5f6ea;color:#1e7d3f;padding:4px 10px;border-radius:999px;">✨ First try right · +2 ⭐</span>' +
-          '<span style="background:#eef1f6;color:#4a5568;padding:4px 10px;border-radius:999px;">🔁 Right after retries · +1 ⭐</span>' +
-          '<span style="background:#e3f4ec;color:#177245;padding:4px 10px;border-radius:999px;">🧪 Potion word · +2 ⭐</span>' +
-          '<span style="background:#fff3d9;color:#8a6100;padding:4px 10px;border-radius:999px;">🏅 Word mastered (right on 3 different days) · +3 ⭐ bonus</span>' +
-          '<span style="background:#ffe9f2;color:#c02466;padding:4px 10px;border-radius:999px;">🐉 Boss beaten · +25 ⭐</span>' +
-          '<span style="background:#ecebfb;color:#5a4fd0;padding:4px 10px;border-radius:999px;">👀 Peek and it still casts — but pays 0 ⭐ for that word</span>' +
+        '<div class="sp-rank-studio"><span>' + esc(rk.name) + '</span><span>' + m + ' spells mastered</span></div>' +
+        '<div class="sp-rankbar-studio"><div style="width:' + pct + '%"></div></div>' +
+        '<div class="sp-rank-next">' + esc(nextTxt) + '</div>' +
+        '<div class="op-ladder-label">PICK YOUR PACK</div>' +
+        '<div class="sp-bands" id="spBands">' + bandBtns + '</div>' +
+        '<div class="op-ladder-label">CHOOSE YOUR GAME</div>' +
+        '<div class="sp-modes">' +
+          '<button class="sp-mode" data-mode="quest" style="border-top-color:#a86ff0;">' +
+            '<div class="sp-mode-emoji">🪄</div><div class="sp-mode-title">Spell Quest</div>' +
+            '<div class="sp-mode-desc">The main event: hear the word, type the spell. Tricky words come back until you own them.</div></button>' +
+          '<button class="sp-mode" data-mode="potion" style="border-top-color:#2ecc71;">' +
+            '<div class="sp-mode-emoji">🧪</div><div class="sp-mode-title">Potion Mix</div>' +
+            '<div class="sp-mode-desc">The letters are scrambled in the cauldron — tap them back into the right order.</div></button>' +
+          '<button class="sp-mode" data-mode="boss" style="border-top-color:#ff5f5f;">' +
+            '<div class="sp-mode-emoji">🐉</div><div class="sp-mode-title">Boss Battle</div>' +
+            '<div class="sp-mode-desc">Duel the Spellwyrm! Every correct spell is a hit. Three slips and it wins.</div></button>' +
+          '<button class="sp-mode" data-mode="book" style="border-top-color:#ffd23f;">' +
+            '<div class="sp-mode-emoji">📖</div><div class="sp-mode-title">Spellbook</div>' +
+            '<div class="sp-mode-desc">Browse every word: hear it, see the tricky part, learn the syllable chant.</div></button>' +
         '</div>' +
+        '<div class="op-home-stats">' +
+          '<div class="op-hstat"><b>' + sp.cast + '</b><span>spells cast</span></div>' +
+          '<div class="op-hstat"><b>' + m + ' / ' + (total + sp.custom.length) + '</b><span>mastered</span></div>' +
+          '<div class="op-hstat"><b>' + sp.bossWins + '</b><span>bosses beaten</span></div>' +
+        '</div>' +
+        '<div class="op-home-how"><b>⭐ How the points work</b> · ✨ First try right <b>+2</b> · 🔁 Right after retries <b>+1</b> · ' +
+          '🧪 Potion word <b>+2</b> · 🏅 Word mastered (right on 3 different days) <b>+3 bonus</b> · 🐉 Boss beaten <b>+25</b> · ' +
+          '👀 Peek and it still casts — but pays <b>0</b> for that word</div>' +
       '</div>' +
       '<div id="spExtra"></div>';
 
@@ -30864,14 +31035,14 @@ var SPELL_BANKS = {
       if (right) {
         sfx('correct');
         document.getElementById('spFeedback').innerHTML =
-          '<span style="color:#1e9e54;">✍️ Banked! You’ll see this one again soon.</span>';
+          '<span style="color:#7bd88f;">✍️ Banked! You’ll see this one again soon.</span>';
         save();
         toNext(false);
       } else {
         sfx('wrong');
         document.getElementById('spDiff').innerHTML = letterDiff(guess, w.word);
         document.getElementById('spFeedback').innerHTML =
-          '<span style="color:#c0392b;">Copy it exactly as shown ⬆️</span>';
+          '<span style="color:#ff8a8a;">Copy it exactly as shown ⬆️</span>';
         boxesReset(true);
       }
       return;
@@ -30901,16 +31072,23 @@ var SPELL_BANKS = {
       }
       if (pts > 0) { try { if (typeof awardPoints === 'function') awardPoints(pts); } catch (e) {} }
       sfx('correct');
+      /* V4.52: show moments */
+      try {
+        slFlash(g.streak >= 5 ? '🔥 ON FIRE! ' + g.streak + ' IN A ROW' : (g.streak >= 3 ? '🔥 STREAK ' + g.streak + '!' : '✨ SPELLBOUND!'),
+                g.streak >= 3 ? '#ffd23f' : '#7bd88f');
+        if (g.streak === 3 || g.streak === 5 || g.streak === 8) slSample('applause', 0.7, 0.2);
+      } catch (e) {}
       document.getElementById('spWordBig').innerHTML = highlightWord(w);
       document.getElementById('spDiff').innerHTML = letterDiff(guess, w.word);
       document.getElementById('spFeedback').innerHTML =
         pts > 0
-          ? '<span style="color:#1e9e54;">✨ The spell casts! +' + pts + ' ⭐' + bonus + '</span>'
-          : '<span style="color:#1e9e54;">✨ The spell casts! <span style="color:#8a6100;">👀 peeked — no points and it doesn’t count. It’ll come back to try for real!</span></span>';
+          ? '<span style="color:#7bd88f;">✨ The spell casts! +' + pts + ' ⭐' + bonus + '</span>'
+          : '<span style="color:#7bd88f;">✨ The spell casts! <span style="color:#ffd23f;">👀 peeked — no points and it doesn’t count. It’ll come back to try for real!</span></span>';
       if (g.mode === 'boss') {
         g.bossHp -= 1;
         var face = document.getElementById('spBossFace');
         face.classList.remove('hit'); void face.offsetWidth; face.classList.add('hit');
+        try { slSample('chip', 0.8); } catch (e) {}
         document.getElementById('spBossHp').textContent = '💚'.repeat(Math.max(0, g.bossHp)) + '🖤'.repeat(BOSS_HP - Math.max(0, g.bossHp));
         if (g.bossHp <= 0) { save(); return bossEnd(true); }
       }
@@ -30922,6 +31100,7 @@ var SPELL_BANKS = {
       g.streak = 0;
       g.tries += 1;
       sfx('wrong');
+      try { slFlash('💨 FIZZLE!', '#ff8a8a', 900); } catch (e) {}
       document.getElementById('spDiff').innerHTML = letterDiff(guess, w.word);
       if (g.mode === 'boss') {
         g.myHp -= 1;
@@ -30930,7 +31109,7 @@ var SPELL_BANKS = {
       }
       if (g.tries === 1 && g.mode !== 'potion') {
         document.getElementById('spFeedback').innerHTML =
-          '<span style="color:#c0392b;">💨 Fizzle! Listen again — green letters are right.</span>';
+          '<span style="color:#ff8a8a;">💨 Fizzle! Listen again — green letters are right.</span>';
         spellOut(w);
         boxesReset(true);
       } else {
@@ -30940,12 +31119,12 @@ var SPELL_BANKS = {
         if (g.mode === 'potion') {
           save();
           document.getElementById('spFeedback').innerHTML =
-            '<span style="color:#c0392b;">💨 The potion curdled! The word was shown above — on to the next.</span>';
+            '<span style="color:#ff8a8a;">💨 The potion curdled! The word was shown above — on to the next.</span>';
           toNext(false);
         } else {
           g.awaitRetype = true;
           document.getElementById('spFeedback').innerHTML =
-            '<span style="color:#c0392b;">💨 Fizzle! Study it above — the yellow bit is the trap. Now type it once to bank it.</span>';
+            '<span style="color:#ff8a8a;">💨 Fizzle! Study it above — the yellow bit is the trap. Now type it once to bank it.</span>';
           spellOut(w);
           boxesReset(true);
         }
@@ -30976,12 +31155,13 @@ var SPELL_BANKS = {
     var g = game;
     g.done = true;
     sfx('win');
+    try { slFlash('🏆 QUEST COMPLETE!', '#ffd23f', 1600); slSample('fanfare', 0.9); slSample('applause', 0.8, 0.5); } catch (e) {}
     var m = masteredCount(), rk = rankOf(m);
     document.getElementById('spWordBig').innerHTML = '🎉';
     document.getElementById('spDiff').innerHTML = '';
     document.getElementById('spSentence').textContent = '';
     document.getElementById('spFeedback').innerHTML =
-      '<div style="font-family:\'Baloo 2\',sans-serif;font-size:20px;color:#6c5ce7;font-weight:800;">Quest complete!</div>' +
+      '<div style="font-family:\'Baloo 2\',sans-serif;font-size:20px;color:#ffd23f;font-weight:800;">Quest complete!</div>' +
       '<div style="margin-top:4px;">You are ' + esc(rk.name) + ' with ' + m + ' spells mastered. Same time tomorrow, wizard? 🧙</div>';
     oIn.style.display = 'none'; oCast.style.display = 'none';
     oBoxes.style.display = 'none';
@@ -31000,13 +31180,15 @@ var SPELL_BANKS = {
       try { if (typeof awardPoints === 'function') awardPoints(25); } catch (e) {}
       try { if (typeof popConfetti === 'function') { popConfetti(); setTimeout(popConfetti, 350); } } catch (e) {}
       sfx('win');
+      try { slFlash('🏆 SPELLWYRM DEFEATED!', '#ffd23f', 1700); slSample('fanfare', 0.9); slSample('applause', 0.85, 0.5); } catch (e) {}
       document.getElementById('spBossFace').textContent = '💫';
       document.getElementById('spFeedback').innerHTML =
-        '<div style="font-family:\'Baloo 2\',sans-serif;font-size:20px;color:#1e9e54;font-weight:800;">🏆 The Spellwyrm is defeated! +25 ⭐</div>';
+        '<div style="font-family:\'Baloo 2\',sans-serif;font-size:20px;color:#7bd88f;font-weight:800;">🏆 The Spellwyrm is defeated! +25 ⭐</div>';
     } else {
       sfx('lose');
+      try { slFlash('🐉 THE WYRM WINS…', '#ff8a8a', 1400); } catch (e) {}
       document.getElementById('spFeedback').innerHTML =
-        '<div style="font-family:\'Baloo 2\',sans-serif;font-size:19px;color:#c0392b;font-weight:800;">The Spellwyrm wins this time… train in the Spellbook and return!</div>';
+        '<div style="font-family:\'Baloo 2\',sans-serif;font-size:19px;color:#ff8a8a;font-weight:800;">The Spellwyrm wins this time… train in the Spellbook and return!</div>';
     }
     document.getElementById('spWordBig').innerHTML = won ? '🏆' : '🐉';
     document.getElementById('spDiff').innerHTML = '';

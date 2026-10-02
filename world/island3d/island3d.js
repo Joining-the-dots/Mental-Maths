@@ -6,7 +6,13 @@
 
    SLIsland3D.mount({reduced, user: {name, color, avatar}, on: {tapItem(uid),
      tapPet(petId), tapAvatar(), tapLand(landId), tapCell(x, y), dragStart(uid),
-     dragCell(x, y), dragEnd(), ready(), fail(reason)}, srList = true}) → stage
+     dragCell(x, y), dragEnd(), dragCancel()?, ready(), fail(reason)}, srList = true}) → stage
+     dragEnd() means the finger was LIFTED (the host may confirm the move). A cancelled drag
+     (pointercancel, a lost pointer capture that cannot be re-taken, a second finger, a sheet,
+     suspend) never calls dragEnd: it calls the optional on.dragCancel(), and without that hook
+     the ghost is put back on the cell the drag started from (on.dragCell) and placement stays open.
+     tapPet / tapAvatar come after the actors' own tap reaction (a hop + emote; the avatar's wave +
+     finger-heart): the host's emote of the same target right after it is deduped.
    stage (docs/island3d/CONTRACTS.md §5; island-architecture.json → integrationWithRewardsWorld)
      attach(el)            re-parent the persistent div.slw-3d into el (#slwStage); cheap, idempotent
      sync(view)            view = {placed, style, unlocked, pets, avatar, mode, selectedUid, placing,
@@ -27,22 +33,35 @@
                            camera change (≤ 15 Hz while things move); wrapped in .slw-tag3d
      focusItem(key | null) · resetView() · frameItem(uid) · placement(state | null)
      setCovered(on) · suspend() · resume() · setReduced(on) · setUser(user) · info() · dispose()
-   Pointer: tap = 8 px / 500 ms; long-press 450 ms frames an item (+ name bubble); an edit-mode
-   drag > 10 px on an item calls on.dragStart(uid), then on.dragCell / on.dragEnd; in place mode
-   the ghost can be dragged the same way. Pick priority: pets/avatar > items > locked land
-   (env.lockedAt) > cells. Camera: camera.js (window.SLIslandCamera).
+   Pointer: tap = 8 px, up to 1 s — a slow press released in place still counts as a tap. At
+   450 ms (long-press) the item / pet shows its name bubble without moving the camera; held still
+   for a full second (a deliberate hold, play mode only) the camera frames it and the release is
+   no tap. An edit-mode drag > 10 px on an item calls on.dragStart(uid), then on.dragCell /
+   on.dragEnd; in place mode the ghost can be dragged the same way. Pick priority: pets/avatar >
+   items > locked land (env.lockedAt) > cells. Camera: camera.js (window.SLIslandCamera).
 
-   SIBLINGS (wave C, feature-detected; built-in fallbacks keep the island whole without them):
+   SIBLINGS (wave C, feature-detected; built-in fallbacks keep the island whole without them).
+   The controller drives every sibling through the ISLAND PROTOCOL below. buildSystem wraps a
+   sibling that publishes its own documented API (adaptSystem, pure, Node-tested in
+   tests/fix-seams.test.js): actors.js {sync(pets, avatar, world), hits, anchorOf, tap, …} and
+   edit3d.js {show(cells, state), ghost(id, st, x, y, ok), hide, …} get an adapter; fx3d speaks
+   the protocol natively. A sibling of an unknown shape is dropped for the built-in fallback.
      actors  SL3D.makeActors(host) | SLActors.create(K, SL3D, host) | SLIslandActors.create(…)
              {sync(v), update(dt, t, ctx) → busy, pick(origin, dir) → {target, t}, emote(target, kind),
-              perform(kind, uid) → lead s, active(), dance(o) → s, anchor(target, out) → out|null,
-              setShow(k), setMode(m), setReduced(on), setUser(u), setQuality(q), dispose()}
+              tap(target)?, perform(kind, uid) → lead s (0 = no pet), active(), dance(o) → s,
+              anchor(target, out) → out|null, setShow(k), setMode(m), setReduced(on), setUser(u),
+              setQuality(q), dispose()}      v = actorState(…): {pets, avatar, user, placed, unlocked,
+              land, world, mode, reduced}; host.voice = false (rewards-world plays the pet voice)
      fx3d    SL3D.makeFx(host) | SLFx3D.create(K, SL3D, host) | SLIslandFx.create(…)
              {emit(kind, pos, n, opts), halo(key, on, pos, sizeU, token), decal(key, on, pos, token),
-              update(dt, t) → busy, setShow(k), setReduced(on), setQuality(q), clear(), dispose()}
+              update(dt, t) → busy, setMember(hex), setReduced(on), setQuality(q), clear(), dispose()}
+             positions reach emit as {x, y, z} (arrays from siblings are converted); emit opts use
+             fx3d names: {token | tokens[], radius, to, dur, delay, …} ('flight' flies to `to`)
      edit3d  SL3D.makeEdit(host) | SLEdit3D.create(K, SL3D, host) | SLIslandEdit.create(…)
-             {setState({mode, land, placing, ghost: {id, st, stateKey, template, material}}),
-              update(dt, t) → busy, ghostBox() → {min, max} | null, setReduced(on), dispose()}
+             {setState(editState(…)): {mode, land, unlocked, placing, ghost: {id, st, stateKey,
+              template, material}, selectedUid}, update(dt, t, ctx) → busy, ghostBox() → {min, max} |
+              null, ghostShown() → bool, setReduced(on), dispose()}   the real copy of an item being
+              moved is hidden only while a ghost is actually shown
      A sibling whose call throws is dropped for the built-in fallback (logged in QA mode).
 
    THE ANIMATION HANDLE a (one per placed copy, reused every frame — CONTRACTS §5):
@@ -175,6 +194,185 @@
     out.x = (nx + 1) / 2 * w; out.y = (1 - ny) / 2 * h;
     return out;
   }
+  /* a user / avatar record → {name, color, avatar} (an 'emoji' field is accepted as the avatar) */
+  function normUser(u) {
+    u = u || {};
+    return { name: u.name || '', color: typeof u.color === 'string' ? u.color : null, avatar: u.avatar || u.emoji || '🙂' };
+  }
+  /* what actors.sync(v) receives (the island protocol). view = rewards-world's island view;
+     o = {user (normUser), placed (the placeable list), unlocked (the risen land), land, mode, reduced} */
+  function actorState(view, o) {
+    view = view || {}; o = o || {};
+    var user = o.user || normUser(null);
+    var pets = Array.isArray(view.pets) ? view.pets.filter(function (p) { return p && p.id; }) : [];
+    var av = view.avatar === false ? null : normUser(view.avatar && typeof view.avatar === 'object' ? {
+      name: view.avatar.name || user.name, color: view.avatar.color || user.color, avatar: view.avatar.avatar || view.avatar.emoji || user.avatar
+    } : user);
+    var placed = Array.isArray(o.placed) ? o.placed : [];
+    return {
+      pets: pets, avatar: av, user: user, placed: placed, unlocked: Array.isArray(o.unlocked) ? o.unlocked : ['home'], land: o.land || null,
+      world: view.world && Array.isArray(view.world.placed) ? view.world : { placed: placed },
+      mode: normMode(o.mode || view.mode), reduced: !!o.reduced
+    };
+  }
+  /* what edit.setState(s) receives (the island protocol) */
+  function editState(mode, land, unlocked, placing, ghost, selectedUid) {
+    return {
+      mode: normMode(mode), land: land || null, unlocked: Array.isArray(unlocked) ? unlocked : ['home'],
+      placing: placing && placing.id ? placing : null, ghost: ghost || null, selectedUid: selectedUid == null ? null : selectedUid
+    };
+  }
+  /* ray (o, d unit) against a sphere → entry t ≥ 0 (0 when the origin is inside it), or -1 */
+  function raySphere(o, d, x, y, z, r) {
+    var ox = o.x - x, oy = o.y - y, oz = o.z - z;
+    var b = ox * d.x + oy * d.y + oz * d.z, c = ox * ox + oy * oy + oz * oz - r * r, disc = b * b - c;
+    if (disc < 0) return -1;
+    var s = Math.sqrt(disc), t = -b - s;
+    return t >= 0 ? t : (-b + s >= 0 ? 0 : -1);
+  }
+  /* actors.js hit spheres [{kind: 'pet' | 'me', id, x, y, z, r, pickable}] → {target, t} | null
+     (target 'pet:<id>' | 'me'; spheres marked pickable: false — edit / place mode — are skipped) */
+  function pickHits(o, d, hits) {
+    var best = Infinity, tgt = null;
+    for (var i = 0; hits && i < hits.length; i++) {
+      var h = hits[i];
+      if (!h || h.pickable === false) continue;
+      var t = raySphere(o, d, +h.x || 0, +h.y || 0, +h.z || 0, h.r > 0 ? h.r : 0.4);
+      if (t >= 0 && t < best) { best = t; tgt = h.kind === 'me' || h.id === 'me' ? 'me' : 'pet:' + String(h.id).replace(/^pet:/, ''); }
+    }
+    return tgt ? { target: tgt, t: best } : null;
+  }
+  /* any sibling position — {x, y, z}, [x, y, z] or a Vector3 — → out {x, y, z}; null when unusable */
+  function toPoint(pos, out) {
+    if (!pos || typeof pos !== 'object') return null;
+    out = out || {};
+    if (pos.x === undefined && typeof pos.length === 'number' && pos.length >= 3) { out.x = +pos[0] || 0; out.y = +pos[1] || 0; out.z = +pos[2] || 0; return out; }
+    out.x = +pos.x || 0; out.y = +pos.y || 0; out.z = +pos.z || 0;
+    return out;
+  }
+  /* emit opts from a model or sibling → a COPY in fx names: colors (actors.js) → token | tokens,
+     r → radius, to → {x, y, z} (the caller's objects are never kept) */
+  function fxOpts(o) {
+    if (!o || typeof o !== 'object') return undefined;
+    var c = {};
+    for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) c[k] = o[k];
+    if (c.colors != null) {
+      if (Array.isArray(c.colors)) { if (!c.tokens) c.tokens = c.colors.slice(); }
+      else if (!c.token && !c.color) c.token = c.colors;
+      delete c.colors;
+    }
+    if (c.r != null && c.radius == null) c.radius = c.r;
+    delete c.r;
+    if (Array.isArray(c.tokens)) c.tokens = c.tokens.slice();
+    if (c.to) c.to = toPoint(c.to, {});
+    return c;
+  }
+
+  /* ================================================================
+     SIBLING ADAPTERS (pure; Node-tested against the real actors.js / edit3d.js)
+     A sibling that speaks the island protocol is used as it is; actors.js and edit3d.js publish
+     their own documented APIs, so they are wrapped; anything else falls back to the built-ins.
+     ================================================================ */
+  function speaksIsland(kind, obj) {
+    if (kind === 'actors') return typeof obj.sync === 'function' && typeof obj.pick === 'function' && typeof obj.anchor === 'function';
+    if (kind === 'edit') return typeof obj.setState === 'function';
+    return typeof obj.emit === 'function';
+  }
+  /* → the object to drive, or null (unknown shape: use the next slot / the built-in) */
+  function adaptSystem(kind, obj, host) {
+    if (!obj || typeof obj !== 'object') return null;
+    if (speaksIsland(kind, obj)) return obj;
+    if (kind === 'actors' && typeof obj.sync === 'function' && typeof obj.hits === 'function' && typeof obj.anchorOf === 'function') return adaptActors(obj, host);
+    if (kind === 'edit' && typeof obj.show === 'function' && typeof obj.ghost === 'function') return adaptEdit(obj, host);
+    return null;
+  }
+  function call0(obj, name, a, b) { return typeof obj[name] === 'function' ? obj[name](a, b) : undefined; }
+  /* actors.js: sync(pets, avatar, world) · update(dt, t, show, beat) · hits(out) · anchorOf(target, out) ·
+     tap(target) · emote(target, kind) · perform(kind, uid) → lead | -1 · active() → id | null · dance(on) */
+  function adaptActors(A, host) {
+    var clk = { beat: 0, bpm: 100 }, hitList = [];
+    return {
+      adapted: 'actors.js', inner: A,
+      sync: function (v) {
+        v = v || {};
+        /* the land the island SHOWS (a region still waiting to rise stays out) and its layout */
+        var placed = Array.isArray(v.placed) ? v.placed : (v.world && Array.isArray(v.world.placed) ? v.world.placed : []);
+        var world = { placed: placed, unlocked: Array.isArray(v.unlocked) ? v.unlocked : ['home'], mode: normMode(v.mode) };
+        if (v.land && typeof v.land === 'object') world.land = v.land;
+        A.sync(Array.isArray(v.pets) ? v.pets : [], v.avatar ? v.avatar : null, world);
+      },
+      update: function (dt, t, ctx) {
+        if (ctx && typeof ctx === 'object') {
+          clk.beat = +ctx.beatPos; clk.bpm = +ctx.bpm;
+          return !!A.update(dt, t, typeof ctx.show === 'number' ? ctx.show : undefined, isFinite(clk.beat) && clk.bpm > 0 ? clk : null);
+        }
+        return !!A.update(dt, t);
+      },
+      pick: function (o, d) { return pickHits(o, d, A.hits(hitList)); },
+      anchor: function (target, out) { return A.anchorOf(target, out); },
+      tap: function (target) { return typeof A.tap === 'function' ? !!A.tap(target) : false; },
+      emote: function (target, kind) { return A.emote(target, kind); },
+      perform: function (kind, uid) { var r = call0(A, 'perform', kind, uid); return typeof r === 'number' && r > 0 ? r : 0; },
+      active: function () { return call0(A, 'active') || null; },
+      dance: function (o) { var s = call0(A, 'dance', o !== false); return typeof s === 'number' ? s : 0; },
+      setShow: function (k) { call0(A, 'setShow', k); },
+      setMode: function (m) { call0(A, 'setMode', normMode(m)); },
+      setReduced: function (on) { call0(A, 'setReduced', !!on); },
+      setShowtime: function () {},                 /* the Showtime mix (setShow) drives wands and tails */
+      setUser: function () {},                     /* the avatar follows view.avatar on the next sync */
+      setQuality: function () {},
+      info: function () { return call0(A, 'info') || null; },
+      dispose: function () { call0(A, 'dispose'); }
+    };
+  }
+  /* the placement edit3d.show() draws: {id, uid, x, y, ok, reason, cells?, entrance} */
+  function placementCells(pl, core) {
+    var out = { id: pl.id, uid: pl.uid == null ? null : pl.uid, x: pl.x | 0, y: pl.y | 0, ok: pl.ok !== false };
+    if (pl.reason) out.reason = pl.reason;
+    if (Array.isArray(pl.cells)) out.cells = pl.cells;
+    if (Array.isArray(pl.entrance)) out.entrance = pl.entrance;
+    else if (core && typeof core.entranceCells === 'function' && typeof core.item === 'function') {
+      try { var it = core.item(pl.id); if (it) out.entrance = core.entranceCells(it, out.x, out.y) || []; } catch (e) { /* no entrance */ }
+    }
+    return out;
+  }
+  /* edit3d.js: show(cells, state) · ghost(id, st, x, y, ok) | ghost(null) · hide() · update(dt, t, camera) ·
+     ghostPos(out) · info() → {ghost, …} · setReduced(on) · dispose() */
+  function adaptEdit(E, host) {
+    var shown = false, ghostOn = false, core = host && host.core;
+    function ghostNow() { var i = call0(E, 'info'); return !!(i && i.ghost); }
+    return {
+      adapted: 'edit3d.js', inner: E,
+      setState: function (s) {
+        s = s || {};
+        var mode = normMode(s.mode);
+        if (mode === 'play') {
+          if (shown || ghostOn) E.hide();
+          shown = false; ghostOn = false;
+          return;
+        }
+        var pl = mode === 'place' && s.placing && s.placing.id ? s.placing : null;
+        /* edit: every land cell white and dashed; place: the footprint green / red + the entrance */
+        E.show(s.land || null, pl ? placementCells(pl, core) : 'edit');
+        shown = true;
+        if (pl) {
+          var g = s.ghost && s.ghost.id === pl.id ? s.ghost : null;
+          E.ghost(pl.id, (g && g.st) || pl.st || {}, pl.x | 0, pl.y | 0, pl.ok !== false);
+          ghostOn = ghostNow();
+        } else {
+          if (ghostOn) E.ghost(null);
+          ghostOn = false;
+        }
+      },
+      ghostShown: function () { return ghostOn; },
+      ghostBox: function () { return null; },      /* the controller's SLGrid3D.hitBox + lift is the same box */
+      update: function (dt, t, ctx) { return !!E.update(dt, t, ctx && ctx.camera ? ctx.camera : undefined); },
+      setReduced: function (on) { call0(E, 'setReduced', !!on); },
+      setQuality: function () {},
+      info: function () { return call0(E, 'info') || null; },
+      dispose: function () { call0(E, 'dispose'); }
+    };
+  }
 
   /* ================================================================
      BROWSER (installed at the end of this factory, once every table below exists)
@@ -291,21 +489,31 @@
     var _sq = {}, _dr = {}, _db = {}, _st = {};
 
     function safeMake(fn) { try { return fn(); } catch (e) { issue('sound: ' + errText(e)); return null; } }
-    function normUser(u) {
-      u = u || {};
-      return { name: u.name || '', color: typeof u.color === 'string' ? u.color : null, avatar: u.avatar || u.emoji || '🙂' };
-    }
 
     /* ---------------- sound ---------------- */
     var quiet = 0;                            /* > 0: sounds and particles are suppressed (catch-up updates) */
+    function silent() { return quiet > 0 || suspended || dead; }      /* the island is not on screen */
     function sfx(name, vol, step, x) {
-      if (!sound || !name || quiet > 0) return;
+      if (!sound || !name || silent()) return;
       var pan = 0;
       if (typeof x === 'number' && Snd.panFor) pan = Snd.panFor(x + 8, 16);
       try { sound(name, vol == null ? 1 : vol, step, pan); } catch (e) { issue('sfx ' + name + ': ' + errText(e)); }
     }
+    /* the same SLSound instance for siblings (actors.js plays 'pop' / 'cheer' itself), gated alike */
+    var siblingSound = !sound ? null : (function () {
+      var f = function (name, vol, step, pan) { if (silent()) return; try { sound(name, vol, step, pan); } catch (e) { issue('sfx ' + name + ': ' + errText(e)); } };
+      f.pet = function (id, vol, pan) { if (silent() || typeof sound.pet !== 'function') return; try { sound.pet(id, vol, pan); } catch (e) { issue('pet voice: ' + errText(e)); } };
+      return f;
+    }());
+    /* the island's music context ('island_day' | 'island_showtime'). Music plays only while My Island
+       is on screen: suspended / revoked / disposed → nothing (rewards-world sets the context again when
+       the island comes back); under a sheet the latest context waits for the sheet to close. */
+    var pendingMusic = null;
     function musicContext(ctx) {
       if (!Mus || typeof Mus.island !== 'function') return;
+      if (dead || suspended || revoked) { pendingMusic = null; return; }
+      if (covered) { pendingMusic = ctx; return; }
+      pendingMusic = null;
       try { Mus.island(ctx); } catch (e) { issue('music: ' + errText(e)); }
     }
 
@@ -408,17 +616,22 @@
       edit: { slots: [['SL3D', 'makeEdit'], ['SL3D', 'makeEdit3D'], ['SLEdit3D', 'create'], ['SLIslandEdit', 'create']], make: function (h) { return new MiniEdit(h); } }
     };
     var sys = { actors: null, fx: null, edit: null };      /* {obj, external, name} */
+    /* the host object every sibling receives (actors.js / fx3d / edit3d read it as their create()
+       opts: scene, camera, reduced, tier, user, member '#hex', emit, sound / sfx, voice) */
     function hostFor(kind) {
       var g = kind === 'actors' ? actorsRoot : kind === 'fx' ? fxRoot : editRoot;
       return {
         kind: kind, K: K, SL3D: SL3D, THREE: T, tier: tier, scene: scene, group: g, camera: camera,
         renderer: lease ? lease.renderer : null, budget: SL3D.budget, quality: SL3D.quality,
         reduced: reduced, user: user, grid: Gr, motion: Mo, core: C, look: L,
-        member: function () { return user.color; },
+        member: user.color,                    /* '#hex' (fx3d, env); setUser passes the next one on */
+        voice: false,                          /* rewards-world plays the pet voice on tapPet */
+        sound: siblingSound,
         emit: function (k, pos, n, o) { fxEmit(k, pos, n, o); },
         sfx: function (name, vol, step, x) { sfx(name, vol, step, x); },
         itemPoint: function (uid, anchor, out) { return itemPoint(uid, anchor, out); },
         itemInfo: function (uid) { var r = recs.get(uid); return r ? { uid: r.uid, id: r.id, x: r.x, y: r.y, fp: r.fp } : null; },
+        itemBatch: function (uid) { var r = recs.get(uid); return r && !r.dead ? r.batch : null; },
         show: function () { return showK; },
         beat: function () { return beat; },
         mode: function () { return mode; },
@@ -430,10 +643,17 @@
       for (var i = 0; i < spec.slots.length && !obj; i++) {
         var s = spec.slots[i], owner = s[0] === 'SL3D' ? SL3D : root[s[0]], f = owner && owner[s[1]];
         if (typeof f !== 'function') continue;
-        try { obj = s[0] === 'SL3D' ? f(h) : f.call(owner, K, SL3D, h); name = s[0] + '.' + s[1]; } catch (e) { issue(kind + ' ' + s.join('.') + ' threw: ' + errText(e)); obj = null; }
-        if (obj && typeof obj !== 'object') obj = null;
+        var made = null;
+        try { made = s[0] === 'SL3D' ? f(h) : f.call(owner, K, SL3D, h); name = s[0] + '.' + s[1]; } catch (e) { issue(kind + ' ' + s.join('.') + ' threw: ' + errText(e)); made = null; }
+        if (!made || typeof made !== 'object') continue;
+        /* drive the sibling through the island protocol (actors.js / edit3d.js get an adapter) */
+        obj = adaptSystem(kind, made, h);
+        if (!obj) {
+          issue(kind + ' ' + s.join('.') + ': unknown API, using the built-in');
+          try { if (typeof made.dispose === 'function') made.dispose(); } catch (e2) {}
+        }
       }
-      if (obj) { sys[kind] = { obj: obj, external: true, name: name }; return; }
+      if (obj) { sys[kind] = { obj: obj, external: true, name: name + (obj.adapted ? ' (' + obj.adapted + ' adapter)' : '') }; return; }
       try { sys[kind] = { obj: spec.make(h), external: false, name: 'built-in' }; }
       catch (e) { issue(kind + ' fallback failed: ' + errText(e)); sys[kind] = null; }
     }
@@ -462,12 +682,13 @@
       });
     }
 
-    /* ---------------- FX helpers (all positions are copied) ---------------- */
+    /* ---------------- FX helpers (positions and opts are copied; arrays from siblings accepted) ---------------- */
     function fxEmit(kind, pos, n, o) {
       if (!pos || quiet > 0) return;
-      xcall('fx', 'emit', kind, { x: +pos.x || 0, y: +pos.y || 0, z: +pos.z || 0 }, n == null ? undefined : n, o ? shallow(o) : undefined);
+      var p = toPoint(pos, {});
+      if (!p) return;
+      xcall('fx', 'emit', kind, p, n == null ? undefined : n, fxOpts(o));
     }
-    function shallow(o) { var c = {}; for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) c[k] = o[k]; return c; }
 
     /* ================================================================
        LEASE + LOOP
@@ -488,6 +709,9 @@
     function onResumeLease() {
       placeCanvas();
       if (env && typeof env.attach === 'function') env.attach(lease.renderer);
+      /* the static shadow map is only drawn on demand: a context lost / restored while a game
+         held the renderer leaves it empty, so re-bake it once whenever the island gets it back */
+      if (env && typeof env.invalidateShadows === 'function') env.invalidateShadows();
       if (container && container.parentNode) lease.observe(container);
       if (rig) rig.apply(camera);
       anchorsDirty = true;
@@ -569,8 +793,7 @@
       if (showDirty) {
         showDirty = false;
         for (i = 0; i < recList.length; i++) callShow(recList[i], dt);
-        xcall('actors', 'setShow', showK);
-        xcall('fx', 'setShow', showK);
+        xcall('actors', 'setShow', showK);      /* fx halos follow Showtime through the kit (K.setShow) */
         busy = true;
       }
       /* live acts, controller anims, root composition */
@@ -775,8 +998,14 @@
       refreshAttachments(rec);
       rec.idlePending = true;
     }
+    /* per-copy state a model keeps for a uid (lamp levels, halos, pivots) ends with the copy */
+    function forgetCopy(rec) {
+      var m = rec.model;
+      if (m && typeof m.forget === 'function') { try { m.forget(rec.uid); } catch (e) { issue(rec.id + '.forget threw: ' + errText(e)); } }
+    }
     function restyleRec(rec, n) {
       cancelAct(rec, false);
+      forgetCopy(rec);
       var old = rec.b, it = C.item(n.id);
       old.batch.remove(rec.uid);
       releaseBatch(old);
@@ -802,6 +1031,7 @@
     function removeRec(rec) {
       if (rec.dead) return;
       cancelAct(rec, false);
+      forgetCopy(rec);
       Object.keys(rec.halos).forEach(function (name) { if (rec.halos[name] && rec.halos[name].on) xcall('fx', 'halo', rec.uid + ':' + name, false); });
       if (rec.decalOn) xcall('fx', 'decal', 'u:' + rec.uid, false);
       rec.dead = true;
@@ -896,7 +1126,7 @@
         var c = s.cues[s.ci++];
         if (c.sfx && !s.silent) sfx(c.sfx, c.vol, c.step, rec.wx);
         if (c.emit) {
-          if (which === 'drop') { _v2.set(rec.wx, rec.wy + 0.03, rec.wz); fxEmit(c.emit, _v2, c.n, { r: Math.max(rec.fp[0], rec.fp[1]) * 0.45 }); }
+          if (which === 'drop') { _v2.set(rec.wx, rec.wy + 0.03, rec.wz); fxEmit(c.emit, _v2, c.n, { radius: Math.max(rec.fp[0], rec.fp[1]) * 0.45 }); }
           else emitFor(rec, c.emit, 'top', c.n);
         }
       }
@@ -1129,14 +1359,7 @@
       recList.forEach(function (r) { if (r.it && r.it.kind === 'path') { r.pathD = dmap[r.uid]; r.a.pathD = r.pathD; } });
     }
     function syncActors(view) {
-      var pets = Array.isArray(view.pets) ? view.pets.filter(function (p) { return p && p.id; }) : [];
-      var av = view.avatar === false ? null : normUser(view.avatar && typeof view.avatar === 'object' ? {
-        name: view.avatar.name || user.name, color: view.avatar.color || user.color, avatar: view.avatar.avatar || view.avatar.emoji || user.avatar
-      } : user);
-      xcall('actors', 'sync', {
-        pets: pets, avatar: av, user: user, placed: placedList, unlocked: envUnlocked, land: landKeys,
-        world: view.world && Array.isArray(view.world.placed) ? view.world : { placed: placedList }, mode: mode, reduced: reduced
-      });
+      xcall('actors', 'sync', actorState(view, { user: user, placed: placedList, unlocked: envUnlocked, land: landKeys, mode: mode, reduced: reduced }));
     }
     function setMode(m) {
       if (m === mode && !firstSync) return;
@@ -1169,8 +1392,9 @@
         var pr = recs.get(prevUid);
         if (pr && !pr.storing) setHidden(pr, false);
       }
-      if (placing && placing.uid != null) { var r = recs.get(placing.uid); if (r) setHidden(r, true); }
       applyEdit();
+      /* the copy being moved hides behind its ghost — never when no ghost is shown (it would vanish) */
+      if (placing && placing.uid != null) { var r = recs.get(placing.uid); if (r && !r.storing) setHidden(r, mode === 'place' && !!xcall('edit', 'ghostShown')); }
       if (placing && rig && rig.phone() && !drag) {         /* keep the ghost in the central 60% */
         var pv = null;
         try { pv = Gr.pivot(placing.id, placing.x | 0, placing.y | 0); } catch (e) { pv = null; }
@@ -1183,7 +1407,7 @@
         var tf = templateFor(placing.id, lastView ? lastView.style : {});
         ghost = { id: placing.id, st: tf.st, stateKey: tf.stateKey, template: tf.tpl, material: tf.material };
       }
-      xcall('edit', 'setState', { mode: mode, land: landKeys, unlocked: envUnlocked, placing: placing, ghost: ghost, selectedUid: selectedUid });
+      xcall('edit', 'setState', editState(mode, landKeys, envUnlocked, placing, ghost, selectedUid));
     }
 
     /* ================================================================
@@ -1278,23 +1502,45 @@
       startAnim(rec, 'squish', false);          /* the universal squish + 'pop' */
       tell('tapItem', uid);
     }
+    /* a tap on a pet / the avatar: the actors' own tap reaction (a happy hop + emote; the avatar's
+       wave + finger-heart + 'pop'), then the host's hook (its emote of the same target is the same
+       moment, so the dedupe in localEmote drops it) */
     function tapActor(target) {
       if (!target) return;
-      if (target === 'me' || target === 'avatar') { localEmote('me', 'heart'); tell('tapAvatar'); return; }
-      var id = String(target).replace(/^pet:/, '');
-      localEmote('pet:' + id, null);
-      tell('tapPet', id);
+      var me = target === 'me' || target === 'avatar' || target === 'you';
+      var key = me ? 'me' : 'pet:' + String(target).replace(/^pet:/, '');
+      if (sys.actors && typeof sys.actors.obj.tap === 'function' && xcall('actors', 'tap', key)) markEmote(key);
+      else localEmote(key, me ? 'heart' : null);
+      if (me) tell('tapAvatar'); else tell('tapPet', key.slice(4));
     }
+    /* a still press of 450 ms: the name bubble only — the camera never moves under the finger, and
+       the release still counts as a tap (a slow tap) */
     function onLongPress(x, y) {
-      if (dead || mode === 'place') return;
+      if (dead || failed || mode === 'place') return;
+      var p = pick(x, y);
+      if (p.kind === 'item') showBubble('u:' + p.uid, nameOf(p.uid));
+      else if (p.kind === 'actor' && p.target) showBubble(p.target, actorName(p.target));
+    }
+    /* held still for a full second (a deliberate hold, play mode only — never while an edit-mode
+       drag claim is pending): frame the item / pet; this press is no tap */
+    function onHold(x, y, claim) {
+      if (dead || failed || mode !== 'play' || claim) return;
       var p = pick(x, y);
       if (p.kind === 'item') { frameItem(p.uid); showBubble('u:' + p.uid, nameOf(p.uid)); }
       else if (p.kind === 'actor' && p.target) {
         var a = actorPoint(p.target, _v2);
         if (a && rig) { rig.focusOn({ x: a.x, z: a.z }, { zoom: Math.min(rig.zoomMax(), 1.6) }); afterCamera(); }
+        showBubble(p.target, actorName(p.target));
       }
     }
     function nameOf(uid) { var r = recs.get(uid); return r && r.it ? r.it.name : ''; }
+    function actorName(target) {
+      if (target === 'me') return user.name || 'You';
+      var id = String(target).replace(/^pet:/, ''), pets = lastView && Array.isArray(lastView.pets) ? lastView.pets : [];
+      for (var i = 0; i < pets.length; i++) if (pets[i] && pets[i].id === id && pets[i].name) return pets[i].name;
+      var it = C.item(id);
+      return it ? it.name : '';
+    }
     function cellUnder(x, y) {
       if (!rayAt(x, y)) return null;
       var cell = null;
@@ -1315,12 +1561,16 @@
         if (!rec) { drag = null; return; }
         grabCell = start ? { c: start.c - rec.x, r: start.r - rec.y } : { c: 0, r: 0 };
         drag.fp = rec.fp; drag.x = rec.x; drag.y = rec.y;
+        drag.x0 = rec.x; drag.y0 = rec.y;
+        drag.started = true; drag.sent = true;    /* rewards-world already holds the start cell */
         tell('dragStart', drag.uid);
+        if (!drag) return;                        /* the host's redraw cancelled the gesture meanwhile */
       } else {
         var fp = (C.item(placing && placing.id) || {}).fp || [1, 1];
         var px = placing ? placing.x | 0 : 0, py = placing ? placing.y | 0 : 0;
         grabCell = start ? { c: start.c - px, r: start.r - py } : { c: 0, r: 0 };
         drag.fp = fp; drag.x = px; drag.y = py;
+        drag.x0 = px; drag.y0 = py;
       }
       drag.started = true; drag.sent = true;      /* rewards-world already holds the start cell */
       sfx('pop', 0.5);
@@ -1336,21 +1586,29 @@
       tell('dragCell', tgt.x, tgt.y);
       wake();
     }
-    /* rewards-world re-validates on dragEnd: a valid cell confirms, an invalid one stays in place mode */
-    function onDragEnd() {
+    /* the finger was lifted: rewards-world re-validates on dragEnd (a valid cell confirms, an invalid
+       one stays in place mode). A CANCELLED drag (pointercancel, a lost capture, a second finger, a
+       sheet, suspend) is never a release: nothing is confirmed — on.dragCancel() when the host has
+       it, else the ghost goes back to the cell the drag started from and placement stays open. */
+    function onDragEnd(x, y, cancelled) {
       if (!drag) return;
-      var started = drag.started;
+      var d = drag;
       drag = null; grabCell = null;
-      if (started) tell('dragEnd');
+      if (!d.started) return;
+      if (!cancelled) { tell('dragEnd'); return; }
+      if (typeof on.dragCancel === 'function') { tell('dragCancel'); return; }
+      if (d.x0 != null && (d.x !== d.x0 || d.y !== d.y0)) tell('dragCell', d.x0, d.y0);
+      wake();
     }
     function afterCamera() { hideBubble(); anchorsDirty = true; wake(); }
 
     /* ---------------- emotes ---------------- */
+    function markEmote(target) { emoteSeen.target = target; emoteSeen.t = perfNow(); }
     function localEmote(target, kind) {
       if (target === 'avatar' || target === 'you') target = 'me';
       var now = perfNow();
       if (emoteSeen.target === target && now - emoteSeen.t < 350) return;      /* the canvas tap already did it */
-      emoteSeen.target = target; emoteSeen.t = now;
+      markEmote(target);
       if (target === 'me') { xcall('actors', 'emote', 'me', kind || 'heart'); return; }
       var rec = recs.get(target.replace(/^u:/, ''));
       if (rec) { emitFor(rec, kind || 'heart', 'top', 1); return; }      /* an item: a sprite over it */
@@ -1722,10 +1980,11 @@
       o = o || {};
       wake();
       if (o.encoreMs > 0) {
-        if (userShow) { later(danceNow, reduced ? 200 : 1200); return resolved(true); }
-        if (encore) cancelLater(encore.timer);
+        if (suspended || revoked) return resolved(false);    /* off screen (a game is starting): no encore */
+        if (userShow) { later(encoreDance, reduced ? 200 : 1200); return resolved(true); }
+        if (encore) { cancelLater(encore.timer); cancelLater(encore.danceTimer); }
         var first = !encore;
-        encore = { timer: later(endEncore, Math.max(1000, +o.encoreMs)) };
+        encore = { timer: later(endEncore, Math.max(1000, +o.encoreMs)), danceTimer: 0 };
         if (first) {
           if (env) env.showtime(true, { reduced: reduced });
           if (rig) rig.showOrbit(true);
@@ -1733,11 +1992,11 @@
           sfx('sting', 0.8); sfx('whoosh', 0.7);
           xcall('actors', 'setShowtime', true);
         }
-        later(danceNow, reduced ? 300 : 1800);
+        encore.danceTimer = later(encoreDance, reduced ? 300 : 1800);
         return resolved(true);
       }
       onOff = !!onOff;
-      if (encore) { cancelLater(encore.timer); encore = null; }
+      if (encore) { cancelLater(encore.timer); cancelLater(encore.danceTimer); encore = null; }
       userShow = onOff;
       nextDanceBar = -1;
       if (env) env.showtime(onOff, { reduced: reduced });
@@ -1749,6 +2008,8 @@
     }
     function endEncore() {
       if (!encore) return;
+      if (suspended || revoked) { endEncoreQuietly(); return; }
+      cancelLater(encore.danceTimer);
       encore = null;
       if (userShow) return;
       if (env) env.showtime(false, { reduced: reduced });
@@ -1758,6 +2019,20 @@
       sfx('chip', 0.6);
       wake();
     }
+    /* the island left the screen (a game, another tab, a profile switch) mid-encore: back to day at
+       once, with no sound and no music change (rewards-world sets the music when the island returns) */
+    function endEncoreQuietly() {
+      if (!encore) return;
+      cancelLater(encore.timer); cancelLater(encore.danceTimer);
+      encore = null;
+      nextDanceBar = -1;
+      if (userShow) return;
+      if (env) env.showtime(false, { reduced: true });
+      if (rig) rig.showOrbit(false);
+      xcall('actors', 'setShowtime', false);
+    }
+    /* the encore's dance break (a timer): only while the island is on screen and the show is still on */
+    function encoreDance() { if (!suspended && !revoked && showOn()) danceNow(); }
     function scheduleDance() {
       if (!showOn() || showK < 0.98) { if (!showOn()) nextDanceBar = -1; return; }
       if (dance || mode !== 'play' || covered || suspended) return;
@@ -1770,7 +2045,7 @@
       return { x: 0, y: 0, z: 0 };
     }
     function danceNow() {
-      if (dead || dance || mode !== 'play') return;
+      if (dead || dance || mode !== 'play' || suspended || revoked) return;
       var sec = DANCE_COUNTS * 60 / DANCE_BPM;
       var total = xcall('actors', 'dance', { bpm: DANCE_BPM, counts: DANCE_COUNTS, reduced: reduced });
       total = typeof total === 'number' && total > 0 ? total : sec + (reduced ? 0 : 2);
@@ -1831,12 +2106,19 @@
       covered = !!v;
       if (lease) lease.setCovered(covered);
       if (covered && controls) controls.cancel();
-      if (!covered) wake();
+      if (!covered) {
+        if (pendingMusic) musicContext(pendingMusic);       /* a context change that waited for the sheet */
+        wake();
+      }
     }
+    /* the island leaves the screen (another tab, a game): every gesture is cancelled (never
+       confirmed), a running encore ends quietly, and nothing plays sound or music until resume */
     function suspend() {
       suspended = true;
       if (controls) controls.cancel();
       hideBubble();
+      endEncoreQuietly();
+      pendingMusic = null;
       if (lease) { lease.setHidden(true); lease.stop(); }
     }
     function resume() {
@@ -1845,7 +2127,8 @@
       if (rig) rig.releaseMove('push');
       if (env && typeof env.aim === 'function') env.aim(null, { instant: true });
       launchedUid = null;
-      if (container && container.parentNode && lease) { placeCanvas(); measure(); }
+      /* while a game holds the renderer the canvas is the game's: onResume re-parents it later */
+      if (container && container.parentNode && lease && !revoked) { placeCanvas(); measure(); }
       anchorsDirty = true;
       wake();
     }
@@ -1864,17 +2147,18 @@
     function setUser(u) {
       user = normUser(u);
       if (env && typeof env.setMember === 'function') env.setMember(user.color);
+      xcall('fx', 'setMember', user.color);
       recList.forEach(function (r) {
         cancelAct(r, false);
         var an = r.anims;
         for (var k in an) an[k].t = -1;
         r.animOn = 0; r.rootDirty = true; addLive(r);
       });
-      if (encore) { cancelLater(encore.timer); encore = null; if (!userShow) { if (env) env.showtime(false, { reduced: true }); if (rig) rig.showOrbit(false); } }
+      endEncoreQuietly();
       dance = null;
       Object.keys(litMem).forEach(function (uid) { setLitInternal(uid, false, false); });
       litMem = {};
-      xcall('actors', 'setUser', user);
+      xcall('actors', 'setUser', user);           /* the avatar itself follows the next sync's view.avatar */
       focusItem(null);
       hideBubble();
       wake();
@@ -1911,8 +2195,11 @@
       } catch (e) { fail('remount: ' + errText(e)); }
     }
     function teardownContent() {
-      recList.slice().forEach(function (r) { cancelAct(r, false); r.dead = true; });
+      recList.slice().forEach(function (r) { cancelAct(r, false); forgetCopy(r); r.dead = true; });
       recList.length = 0; recs.clear(); live.length = 0;
+      /* the lit memory describes the copies on screen: none are left, so the next sync re-lights
+         every lamp the view says is on (a context-restore rebuild starts from unlit batches) */
+      litMem = {};
       batchList.slice().forEach(function (b) { try { b.batch.dispose(); } catch (e) {} });
       batchList.length = 0; batches.clear();
       disposeSystems();
@@ -1952,7 +2239,7 @@
       rig = new CamApi.Rig({ grid: Gr, motion: Mo, reduced: reduced, land: ['home'], aspect: 16 / 9 });
       rig.update(0); rig.apply(camera);
       controls = CamApi.Controls(canvas, rig, {
-        press: onPress, tap: onTap, longPress: onLongPress, dragStart: onDragStart, drag: onDrag, dragEnd: onDragEnd,
+        press: onPress, tap: onTap, longPress: onLongPress, hold: onHold, dragStart: onDragStart, drag: onDrag, dragEnd: onDragEnd,
         camera: afterCamera, input: function () { if (lease) lease.input(); },
         error: function (e) { issue('pointer: ' + errText(e)); }
       });
@@ -2061,13 +2348,16 @@
     h.group.add(this.decals);
     this._m = new T.Matrix4(); this._c = new T.Color(); this._b = { bubble: {} }; this._pop = { x: 0, y: 0, z: 0 };
     this.colCache = {};
+    this.member = null;
+    this.setMember(typeof h.member === 'function' ? h.member() : h.member);
   }
   var FP = MiniFx.prototype;
   FP._rand = function () { return Math.random(); };
+  FP.setMember = function (hex) { this.member = typeof hex === 'string' && /^#[0-9a-f]{3}([0-9a-f]{3})?$/i.test(hex) ? hex : null; };
   FP._col = function (tok) {
     var K = this.K;
     if (tok === '@member') {
-      var hx = this.h.member && this.h.member();
+      var hx = this.member;
       if (hx) { if (!this.colCache[hx]) this.colCache[hx] = K.rgb(hx); return this.colCache[hx]; }
       tok = 'Bubblegum';
     }
@@ -2087,7 +2377,7 @@
       var k = this.n++;
       var a = this._rand() * Math.PI * 2, el = P.sphere ? (this._rand() - 0.5) * Math.PI : 0;
       var sp = P.speed[0] + this._rand() * (P.speed[1] - P.speed[0]);
-      var ringR = o.r || 0;
+      var ringR = o.radius || o.r || 0;
       if (P.ring) a = (i / count) * Math.PI * 2 + this._rand() * 0.3;
       this.slot[k] = s;
       this.px[k] = pos.x + (P.ring ? Math.cos(a) * ringR * 0.5 : 0);
@@ -2111,7 +2401,8 @@
       this.ox[k] = pos.x; this.oy[k] = pos.y; this.oz[k] = pos.z;
       if (this.mode[k] === 1) this.life[k] = 3;          /* SLMotion.bubbleTrack decides when it pops */
       if (this.mode[k] === 2) { this.tx[k] = o.to.x; this.ty[k] = o.to.y; this.tz[k] = o.to.z; this.life[k] = (o.dur || 0.5) + this.delay[k]; }
-      var tok = o.token || o.color || (P.member && this._rand() < P.member ? '@member' : P.cols[Math.floor(this._rand() * P.cols.length)]);
+      var cols = Array.isArray(o.tokens) && o.tokens.length ? o.tokens : P.cols;
+      var tok = o.token || o.color || (P.member && this._rand() < P.member ? '@member' : cols[Math.floor(this._rand() * cols.length)]);
       this.pool.set(s, this.px[k], this.py[k], this.pz[k], 0, this._col(tok), 0, this.cell[k], this.rot[k]);
     }
   };
@@ -2281,7 +2572,7 @@
     this.cells.count = 0; this.cells.frustumCulled = false; this.cells.renderOrder = 3; this.cells.name = 'edit:cells';
     this.cells.visible = false;
     h.group.add(this.cells);
-    this.ghost = null; this.ghostKey = ''; this.ghostBoxV = null; this.ghostMats = [];
+    this.ghost = null; this.ghostKey = ''; this.ghostBoxV = null; this.ghostMats = []; this.ghostOn = false;
     this.blob = K.blobs(1); this.blob.mesh.visible = false; h.group.add(this.blob.mesh);
     this.ok = true; this.t = 0; this.pulsing = false; this.wobbled = true;
     this._m = new T.Matrix4(); this._c = new T.Color(); this._q = new T.Quaternion(); this._e = new T.Euler(); this._p = new T.Vector3(); this._s = new T.Vector3(1, 1, 1);
@@ -2358,7 +2649,8 @@
         this.h.group.add(this.ghost.group);
       }
     }
-    if (!this.ghost || !pl) { this.blob.mesh.visible = false; this.ghostBoxV = null; return; }
+    if (!this.ghost || !pl) { this.blob.mesh.visible = false; this.ghostBoxV = null; this.ghostOn = false; return; }
+    this.ghostOn = true;
     var it = this.h.core.item(pl.id) || {}, fp = it.fp || [1, 1], x = pl.x | 0, y = pl.y | 0;
     var lift = E.lift || 0.25, by = 0;
     try { by = G.baseY(pl.id, x, y); } catch (e) { by = 0; }
@@ -2376,6 +2668,7 @@
     this.ghostBoxV = hb ? { min: [hb.min[0], hb.min[1] + lift, hb.min[2]], max: [hb.max[0], hb.max[1] + lift, hb.max[2]] } : null;
   };
   EP.ghostBox = function () { return this.ghostBoxV; };
+  EP.ghostShown = function () { return !!this.ghostOn; };
   EP.update = function (dt) {
     if (!this.reduced) this.t += dt;               /* reduced motion: no pulse, no wobble */
     this.uni.uTime.value = this.t;
@@ -2555,18 +2848,12 @@
   };
   AP.pick = function (o, d) {
     var best = Infinity, tgt = null, i, R = (this.h.grid && this.h.grid.PET_HIT_R) || 0.4;
-    function sphere(x, y, z, r) {
-      var ox = o.x - x, oy = o.y - y, oz = o.z - z, b = ox * d.x + oy * d.y + oz * d.z, c = ox * ox + oy * oy + oz * oz - r * r, disc = b * b - c;
-      if (disc < 0) return -1;
-      var t = -b - Math.sqrt(disc);
-      return t >= 0 ? t : (-b + Math.sqrt(disc) >= 0 ? 0 : -1);
-    }
     for (i = 0; i < this.pets.length; i++) {
-      var p = this.pets[i].rig.root.position, t = sphere(p.x, p.y + 0.3, p.z, R);
+      var p = this.pets[i].rig.root.position, t = raySphere(o, d, p.x, p.y + 0.3, p.z, R);
       if (t >= 0 && t < best) { best = t; tgt = 'pet:' + this.pets[i].id; }
     }
     if (this.avatar) {
-      var ta = sphere(this.avatar.x, this.avatar.y + 0.45, this.avatar.z, 0.45);
+      var ta = raySphere(o, d, this.avatar.x, this.avatar.y + 0.45, this.avatar.z, 0.45);
       if (ta >= 0 && ta < best) { best = ta; tgt = 'me'; }
     }
     return tgt ? { target: tgt, t: best } : null;
@@ -2640,6 +2927,11 @@
     VERSION: VERSION, OCCLUDE_U: OCCLUDE_U, DANCE_EVERY_BARS: DANCE_EVERY_BARS, DANCE_BPM: DANCE_BPM,
     normMode: normMode, batchKey: batchKey, diffPlaced: diffPlaced, litChanges: litChanges, rayBox: rayBox,
     choosePick: choosePick, dragTarget: dragTarget, itemLabel: itemLabel, petLabel: petLabel,
-    nextDance: nextDance, modelAct: modelAct, toScreen: toScreen, FX_PRESETS: FX_PRESETS
+    nextDance: nextDance, modelAct: modelAct, toScreen: toScreen, FX_PRESETS: FX_PRESETS,
+    /* the sibling seams (tests/fix-seams.test.js); mount() itself, for the Node harness that injects
+       a fake DOM, kit, lease and siblings through the same globals the browser uses */
+    mount: mount, normUser: normUser, actorState: actorState, editState: editState, raySphere: raySphere, pickHits: pickHits,
+    toPoint: toPoint, fxOpts: fxOpts, adaptSystem: adaptSystem, adaptActors: adaptActors, adaptEdit: adaptEdit,
+    placementCells: placementCells
   };
 }));

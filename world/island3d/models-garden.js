@@ -320,6 +320,27 @@
       return T(G, g, o, null, 1 / FX_SCALE);
     }
 
+    /* ---------------- per-copy memory ----------------
+       Handlers remember what they last wrote to a copy (lit level, halo, decal, LED / tip / beam
+       pivots, act carry-over) so idles only send changes. That memory belongs to ONE copy: it is
+       dropped when the uid's copy changes (a remount, a context-restore rebuild or a restyle hands
+       the handle a new ItemBatch / object, whose state is the template's initial one) and when the
+       controller calls model.forget(uid) as it removes a copy. Handles without a batch / object
+       (photocards, tests) keep plain per-uid memory. */
+    var PER_COPY = [], copyOf = new Map();
+    function perCopy(m) { PER_COPY.push(m); return m; }
+    function forget(uid) {
+      for (var i = 0; i < PER_COPY.length; i++) PER_COPY[i].delete(uid);
+      copyOf.delete(uid);
+    }
+    function own(a) {
+      if (!a || a.uid == null) return;
+      var c = a.batch || a.object || a.obj || null;
+      if (!c || copyOf.get(a.uid) === c) return;
+      forget(a.uid);
+      copyOf.set(a.uid, c);
+    }
+
     /* ---------------- animation-handle helpers (no allocation per frame) ---------------- */
     var R3 = [0, 0, 0], P3 = [0, 0, 0], S3 = [1, 1, 1];
     function setPiv(a, name, rx, ry, rz, px, py, pz, sx, sy, sz) {
@@ -355,8 +376,8 @@
     }
 
     /* ---------------- acts: SLMotion timelines with cue playback ---------------- */
-    var carry = new Map();      /* uid → {name, pose}: an interrupted act's pose for its restart */
-    var running = new Map();    /* uid → {name, end}: the live act (expires, in case a controller drops it) */
+    var carry = perCopy(new Map());      /* uid → {name, pose}: an interrupted act's pose for its restart */
+    var running = perCopy(new Map());    /* uid → {name, end}: the live act (expires, in case a controller drops it) */
     var isRunning = {
       has: function (uid, t) {
         var r = running.get(uid);
@@ -402,7 +423,7 @@
     function busy(a) { return isRunning.has(a.uid, a.t); }
 
     /* ---------------- lamps: lit level → state colour, halo, Showtime decal ---------------- */
-    var litLv = new Map(), haloOn = new Map(), decalOn = new Map();
+    var litLv = perCopy(new Map()), haloOn = perCopy(new Map()), decalOn = perCopy(new Map());
     function litNow(a) {
       if (busy(a) && litLv.has(a.uid)) return litLv.get(a.uid);
       if (typeof a.lit === 'boolean' || typeof a.lit === 'number') return clamp01(+a.lit);
@@ -469,7 +490,7 @@
       return tpl(ctx).part('body', geos, 'toon', { castShadow: true }).done();
     }
     /* blossom petals drift through the fx pool (at most 40 alive, capped there) */
-    var petalLast = new Map(), PETAL_POS = [0, 0, 0], petalOpts = null, ev = {};
+    var petalLast = perCopy(new Map()), PETAL_POS = [0, 0, 0], petalOpts = null, ev = {};
     function blossomPetals(a) {
       if (!M || !a || a.reduced || typeof a.emit !== 'function') return;
       var seed = ((a.phase || 0) * 4294967296) >>> 0;
@@ -719,7 +740,7 @@
       b.part('ledA', A, 'state', { pivot: 'leds', stateColor: { key: 'ledA', off: LIT_TOKENS.dim, on: LIT_TOKENS.white, initial: 0 } });
       b.part('ledB', B, 'state', { pivot: 'leds', stateColor: { key: 'ledB', off: LIT_TOKENS.dim, on: LIT_TOKENS.white, initial: 0 } });
     }
-    var ledShown = new Map(), LV = [0, 0];
+    var ledShown = perCopy(new Map()), LV = [0, 0];
     function ledsApply(a) {
       var k = showOf(a), on = k > 0.01;
       if (ledShown.get(a.uid) !== on) { ledShown.set(a.uid, on); setPiv(a, 'leds', 0, 0, 0, 0, 0, 0, on ? FX_SCALE : 0); }
@@ -728,7 +749,7 @@
       setState(a, 'ledA', LV[0]); setState(a, 'ledB', LV[1]);
     }
 
-    var flagOver = new Map();     /* uid → act-driven flutter amplitude */
+    var flagOver = perCopy(new Map());     /* uid → act-driven flutter amplitude */
     var flagIdl = idleOf('flag_pole', { amp: 0.04, hz: 2 });
     function clothApply(a, amp, hz) {
       var g = copyGeo(a, 'cloth'), base = g && baseAttr(a, 'cloth', 'position');
@@ -776,7 +797,7 @@
       show: function (a) { if (a) ledsApply(a); }
     };
 
-    var LAYOUT = pennantLayout(), ANG = new Array(BUNT.n), buntOver = new Map();
+    var LAYOUT = pennantLayout(), ANG = new Array(BUNT.n), buntOver = perCopy(new Map());
     var buntIdl = idleOf('bunting', { deg: 6, hz: 0.8 });
     function pennantsApply(a, front, rAmp) {
       var g = copyGeo(a, 'pennants'), base = g && baseAttr(a, 'pennants', 'position');
@@ -940,7 +961,7 @@
     /* windmill: lattice sails on 'spin'; Showtime neon tips with 6-segment light streaks */
     var TOWER_PROF = [[0, 0], [1, 0], [0.97, 0.25], [0.86, 0.7], [0.78, 1], [0, 1]];
     var DOME_PROF = [[0, 0], [1, 0], [0.96, 0.3], [0.72, 0.72], [0.32, 0.96], [0, 1]];
-    var millExtra = new Map(), millBase = new Map(), tipsShown = new Map();
+    var millExtra = perCopy(new Map()), millBase = perCopy(new Map()), tipsShown = perCopy(new Map());
     var millIdl = idleOf('windmill', { rps: 0.25 });
     function millAngle(a) { return M.spin(a.t, millIdl.rps, a.phase, a.reduced) + (millExtra.get(a.uid) || 0); }
     function tipsApply(a) {
@@ -1006,7 +1027,7 @@
     var LH_PROF = [[0, 0], [1, 0], [0.96, 0.22], [0.93, 0.36], [0.87, 0.58], [0.84, 0.72], [0.74, 1], [0, 1]];
     var lhCfg = lampCfg('lighthouse'), lhShow = (LOOKS.lighthouse && LOOKS.lighthouse.show && LOOKS.lighthouse.show.beam) || {};
     var beamRps = lhShow.rps || 0.3, beamEvery = lhShow.every || 4, beamTok = lhShow.token || 'Lamp Halo';
-    var beamTokens = lhShow.tokens || NEON3, beamMatObj = null, beamCols = null, beamTmp = null, bc = {}, beamUp = new Map();
+    var beamTokens = lhShow.tokens || NEON3, beamMatObj = null, beamCols = null, beamTmp = null, bc = {}, beamUp = perCopy(new Map());
     function beamMat() {
       if (!beamMatObj && K0 && typeof K0.variant === 'function') {
         beamMatObj = K0.variant('glow:' + beamTok, 'gardenBeam', { opacity: 0.32, visible: true, vertexColors: true });
@@ -1079,7 +1100,7 @@
        runway: a 'glow:Neon Cyan' under-plate whose instance colour the chase drives
        ================================================================ */
     var runTok = (LOOKS.path_stone && LOOKS.path_stone.show && LOOKS.path_stone.show.glow && LOOKS.path_stone.show.glow.token) || 'Neon Cyan';
-    var runOn = new Map();
+    var runOn = perCopy(new Map());
     function runwayPlate(G) {
       return G.paintBy(T(G, G.cone(0.69, 0.002, 4), [0, 0.004, 0], [0, 45, 0]), function (v) { return v.y > 0.004 ? LIT_TOKENS.white : LIT_TOKENS.dim; });
     }
@@ -1127,6 +1148,14 @@
       return g;
     });
 
+    /* every handler first checks that its per-copy memory describes the handle's copy; forget(uid)
+       is the controller's hook for a removed copy (island3d calls it on remove / restyle / teardown) */
+    function owned(fn) { return function (a, x, y) { own(a); return fn.call(this, a, x, y); }; }
+    Object.keys(models).forEach(function (id) {
+      var m = models[id];
+      ['idle', 'show', 'act', 'lit'].forEach(function (k) { if (typeof m[k] === 'function') m[k] = owned(m[k]); });
+      m.forget = forget;
+    });
     return models;
   }
 

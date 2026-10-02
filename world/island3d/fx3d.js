@@ -11,13 +11,17 @@
      fx.emit(kind, worldPos, n, opts) → count spawned
          worldPos: Vector3 | [x, y, z] | {x, y, z} | Object3D (its world position). pos and opts are
          COPIED (models reuse scratch objects). kinds: sparkle sparkleRing heart note star confetti
-         streamer dust splash drop bubble petal snow firework glow exhaust smoke trail glint dizzy,
-         and 'emote' (→ fx.emote). Unknown kinds play 'sparkle'.
+         streamer dust splash drop bubble petal snow firework glow exhaust smoke trail glint dizzy
+         flight, and 'emote' (→ fx.emote). Unknown kinds play 'sparkle'.
          opts: {token | color ('#hex' | Color) | tokens[], member '#hex', size (u), cell (atlas name),
                 max (live cap for this kind), seed (bubbles follow SLMotion.bubbleTrack), pearl (holo
                 sheen; bubbles always have it), idle (no pop sparkle), reduced (force the reduced
                 variant), radius (ring / dust spread, u), dir [x, y, z] + dirSpeed [min, max] + cone
-                (rad), speed ×, life ×, up ×}
+                (rad), speed ×, life ×, up ×, to (flight target: a position in any form above),
+                dur (flight seconds, 0.5), delay (seconds before it sets off)}
+         'flight' (an item put away → the tray): a gold sparkle that waits `delay`, then flies along
+         a raised arc (flightAt) to `to` over `dur`, leaving a short trail; without `to` — or under
+         reduced motion — it is a still sparkle at the emit point.
      fx.halo(key, on, pos, sizeU, token)     keyed additive glow billboard (K.billboards show pool:
                                              Showtime grows it 1 → 1.6× and 0.5 → 0.9 opacity)
      fx.decal(key, on, pos, token)           keyed additive light pool on the ground (r 0.7, 0.35)
@@ -161,7 +165,10 @@
       beh: 'hump', reduced: 'static', reducedMax: 1 },
     dizzy: { cells: ['star'], glow: 0, n: 3, life: [1.2, 1.2], speed: [0, 0], up: [0, 0], spread: 'none', jitter: 0,
       g: 0, drag: 0, size: [0.11, 0.11], end: 1, spin: [1.5, 1.5], orbit: [0.2, 0.9], alpha: 1, tokens: ['Star Gold'],
-      beh: 'orbit', reduced: 'static', reducedMax: 3 }
+      beh: 'orbit', reduced: 'static', reducedMax: 3 },
+    flight: { cells: ['sparkle'], glow: 1, n: 1, maxPerCall: 4, life: [0.5, 0.5], speed: [0, 0], up: [0, 0], spread: 'none',
+      jitter: 0, g: 0, drag: 0, size: [0.26, 0.3], end: 0.5, spin: [2, 3], alpha: 1, tokens: ['Star Gold', 'Gold Light'],
+      beh: 'flight', reduced: 'static', reducedMax: 1 }
   };
   /* model / controller names that mean the same thing */
   var ALIAS = {
@@ -380,6 +387,20 @@
     out.alpha = clamp01((d - t) / 0.3);
     return out;
   }
+  /* the 'flight' sparkle at `age`: still at `from` during `delay`, then an ease-out along a raised
+     arc to `to`, arriving at `life`. from / to are [x, y, z] (any array, read at fi / ti — the
+     particle arrays are passed in directly); out {x, y, z, f (0..1 progress)} */
+  var FLIGHT_ARC = 0.6;
+  function flightAt(age, delay, life, from, fi, to, ti, out) {
+    out = out || {};
+    fi = fi || 0; ti = ti || 0;
+    var span = Math.max(0.01, life - (delay > 0 ? delay : 0)), f = clamp01((age - (delay > 0 ? delay : 0)) / span), e = outQuad(f);
+    out.f = f;
+    out.x = from[fi] + (to[ti] - from[fi]) * e;
+    out.y = from[fi + 1] + (to[ti + 1] - from[fi + 1]) * e + Math.sin(PI * f) * FLIGHT_ARC;
+    out.z = from[fi + 2] + (to[ti + 2] - from[fi + 2]) * e;
+    return out;
+  }
   /* camera shake: a decaying buzz, |offset| ≤ amp, zero once done or under reduced motion */
   function shakeOffset(t, amp, dur, seed, reduced, out) {
     out = out || {};
@@ -492,7 +513,7 @@
   /* ================================================================
      create(K, SL3D, opts) → fx   (browser; THREE comes from K.THREE)
      ================================================================ */
-  var BEH = { none: 0, track: 1, orbit: 2, shell: 3 };
+  var BEH = { none: 0, track: 1, orbit: 2, shell: 3, flight: 4 };
   var KIND_NAMES = Object.keys(KINDS);
   var MARK_CAP = 40, EMOTE_CAP = 8, EMOTE_SLOTS = 3;
   var HALO_CAP = 48, QUEUE_CAP = 32;
@@ -513,8 +534,8 @@
     var rnd = rng(opts.seed != null ? opts.seed : (Date.now() >>> 0));
 
     /* scratch (nothing below allocates per frame) */
-    var _v = new T.Vector3(), _v2 = new T.Vector3(), _col = new T.Color();
-    var _sp = {}, _ho = {}, _et = {}, _sh = { x: 0, y: 0, z: 0 }, _bt = {};
+    var _v = new T.Vector3(), _v2 = new T.Vector3(), _to = new T.Vector3(), _col = new T.Color();
+    var _sp = {}, _ho = {}, _et = {}, _sh = { x: 0, y: 0, z: 0 }, _bt = {}, _fl = { x: 0, y: 0, z: 0, f: 0 };
     var _basis = { rx: 1, ry: 0, rz: 0, ux: 0, uy: 1, uz: 0 };
     /* the opts one emit uses, copied here (a caller's object is never kept) */
     var _eo = { reduced: false, hasMember: false, memberShare: null, cell: null, size: 0, radius: 0, life: 0, speed: 0, up: 0,
@@ -648,7 +669,7 @@
         rot: new Float32Array(cap), spin: new Float32Array(cap), g: new Float32Array(cap), drag: new Float32Array(cap),
         a0: new Float32Array(cap), swA: new Float32Array(cap), swHz: new Float32Array(cap), swPh: new Float32Array(cap),
         flHz: new Float32Array(cap), flPh: new Float32Array(cap), twHz: new Float32Array(cap), twPh: new Float32Array(cap),
-        rgb: new Float32Array(cap * 3), tmr: new Float32Array(cap),
+        rgb: new Float32Array(cap * 3), tmr: new Float32Array(cap), tgt: new Float32Array(cap * 3), dly: new Float32Array(cap),
         cell: new Uint8Array(cap), mode: new Uint8Array(cap), beh: new Uint8Array(cap), capK: new Uint8Array(cap),
         flags: new Uint8Array(cap), kind: new Uint8Array(cap), seed: new Uint32Array(cap),
         counts: new Int32Array(CAP_KEYS.length)
@@ -717,6 +738,7 @@
         _col.copy(HOLO[_ho.i]).lerp(HOLO[_ho.j], _ho.k);
       } else _col.setRGB(P.rgb[j], P.rgb[j + 1], P.rgb[j + 2]);
       if (P.beh[i] === BEH.track) { a = P.a0[i]; size = P.size[i]; }     /* the bubble track owns both */
+      else if (P.beh[i] === BEH.flight && age < P.dly[i]) a = 0;         /* waiting for its delay */
       P.spr.write(i, x, y, z, flipAt(age, P.flHz[i], P.flPh[i]), _col, a, size, P.rot[i], P.cell[i], P.mode[i]);
     }
 
@@ -753,10 +775,14 @@
       var pick = _pick.color || _pick.token || _pick.max || _pick.idle || _pick.pearl ? _pick : null;
       var seed = o && o.seed != null ? (o.seed >>> 0) : 0;
       var useTrack = spec.beh === 'track' && o && o.seed != null && !!(Mo && Mo.bubbleTrack);
+      /* a flight needs its target (copied: the caller's object is never kept) */
+      var fly = spec.beh === 'flight' && !reduced && !!(o && o.to) && readPos(o.to, _to);
+      var flyDelay = fly && o.delay > 0 ? +o.delay : 0, flyDur = fly && o.dur > 0 ? +o.dur : 0.5;
       var made = 0;
       for (var i = 0; i < count; i++) {
         spawn(spec, i, count, rnd, _eo, _sp);
         if (useTrack && !reduced) _sp.life = 3.2;                 /* the track decides when it pops */
+        if (fly) _sp.life = flyDelay + flyDur;
         var idx = addParticle(kindIdx, spec, _sp, x, y, z, tokens, pick);
         if (idx < 0) break;
         made++;
@@ -766,6 +792,15 @@
           if (P.beh[idx] === BEH.track) { P.a0[idx] = 0; writeParticle(idx); }     /* shown from the first step */
         }
         if (spec.beh === 'orbit') P.tmr[idx] = (i / count) * TAU;
+        if (spec.beh === 'flight') {
+          if (!fly && P.beh[idx] === BEH.flight) P.beh[idx] = BEH.none;           /* no target: a still sparkle */
+          if (P.beh[idx] === BEH.flight) {
+            var jj = idx * 3;
+            P.tgt[jj] = _to.x; P.tgt[jj + 1] = _to.y; P.tgt[jj + 2] = _to.z;
+            P.dly[idx] = flyDelay; P.tmr[idx] = 0;
+            writeParticle(idx);
+          }
+        }
       }
       if (tmpMember) { memberC.copy(_memberSave); }
       if (spec.extra && !reduced && made) emitAt(spec.extra, x, y, z, spec.extraN || 2, null);
@@ -827,6 +862,13 @@
           var orb = KINDS.dizzy.orbit, ang = P.tmr[i] + TAU * safeHz(orb[1]) * age;
           P.pos[j] = P.org[j] + Math.cos(ang) * orb[0]; P.pos[j + 1] = P.org[j + 1] + 0.03 * Math.sin(TAU * age);
           P.pos[j + 2] = P.org[j + 2] + Math.sin(ang) * orb[0];
+        } else if (beh === BEH.flight) {
+          flightAt(age, P.dly[i], P.life[i], P.org, j, P.tgt, j, _fl);
+          P.pos[j] = _fl.x; P.pos[j + 1] = _fl.y; P.pos[j + 2] = _fl.z;
+          if (age >= P.dly[i] && _fl.f < 1) {
+            P.tmr[i] += dt;
+            if (P.tmr[i] >= 0.045) { P.tmr[i] = 0; emitAt('trail', _fl.x, _fl.y, _fl.z, 1, null); }
+          }
         } else if (!(P.flags[i] & F_STILL)) {
           integrate(P.pos, P.vel, i, P.g[i], P.drag[i], dt);
           if (beh === BEH.shell) {
@@ -1234,7 +1276,8 @@
     EMOTE_SEC: EMOTE_SEC, EMOTE_REDUCED_SEC: EMOTE_REDUCED_SEC, MARK_CAP: MARK_CAP, EMOTE_CAP: EMOTE_CAP, HALO_CAP: HALO_CAP,
     /* pure helpers */
     kindOf: kindOf, emoteOf: emoteOf, caps: caps, emitCount: emitCount, spawn: spawn, coneVelocity: coneVelocity,
-    alphaAt: alphaAt, sizeAt: sizeAt, flipAt: flipAt, integrate: integrate, holoAt: holoAt, emoteTrack: emoteTrack,
+    alphaAt: alphaAt, sizeAt: sizeAt, flipAt: flipAt, integrate: integrate, holoAt: holoAt, emoteTrack: emoteTrack, flightAt: flightAt,
+    FLIGHT_ARC: FLIGHT_ARC,
     shakeOffset: shakeOffset, fireworkPlan: fireworkPlan, cannonPlan: cannonPlan, rng: rng, safeHz: safeHz,
     SHADERS: { SPRITE_VERT: SPRITE_VERT, SPRITE_FRAG: SPRITE_FRAG }
   };

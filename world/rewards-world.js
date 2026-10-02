@@ -30,7 +30,19 @@
   function W() { var u = me(); return u ? C.ensureWorld(u) : null; }
   /* free test mode (index.html: window.SL_WORLD_TRIAL = true): island items cost 0,
      children's ⭐ are never used, and each free item is tagged in the ledger */
-  function trial() { return window.SL_WORLD_TRIAL === true; }
+  function trial() {
+    if (window.SL_WORLD_TRIAL !== true) return false;
+    /* optional hard end (ms since epoch), checked against the server-anchored clock */
+    var until = +window.SL_WORLD_TRIAL_UNTIL || 0;
+    if (until && nowMs() >= until) return false;
+    /* optional allow-list of family codes; signed-out or other families pay real prices */
+    var fams = window.SL_WORLD_TRIAL_FAMILIES;
+    if (fams && fams.length) {
+      var cs = window.cloudState, code = cs && cs.doc && cs.doc.familyCode;
+      if (!code || fams.indexOf(code) < 0) return false;
+    }
+    return true;
+  }
   function TO() { return { trial: trial() }; }
   function iState(u, id) { return C.itemState(u, id, TO()); }
 
@@ -360,7 +372,7 @@
       cells.forEach(function (c) { var q = c.split(','); xs.push(+q[0]); sy += +q[1]; });
       var onLeft = (Math.min.apply(null, xs) + Math.max.apply(null, xs)) / 2 < C.COLS / 2;
       var it = C.item(R.unlock);
-      html += '<button type="button" class="slw-sign" data-land="' + it.id + '" style="' + (onLeft ? 'left:1%;' : 'left:auto;right:1%;') + 'transform:translate(0,-50%);top:' + pct(PAD + (sy / cells.length + 0.5) * CH, STAGE_H) + ';">🔒 ' + esc(R.name) + '<br>⭐ ' + fmt(it.price) + '</button>';
+      html += '<button type="button" class="slw-sign" data-land="' + it.id + '" style="' + (onLeft ? 'left:1%;' : 'left:auto;right:1%;') + 'transform:translate(0,-50%);top:' + pct(PAD + (sy / cells.length + 0.5) * CH, STAGE_H) + ';">🔒 ' + esc(R.name) + (trial() ? '<br>FREE' : '<br>⭐ ' + fmt(it.price)) + '</button>';
     });
     /* you (avatar) beside the house */
     var house = w.placed.filter(function (p) { return p.id === 'house_cottage'; })[0];
@@ -698,7 +710,7 @@
       : s.state === 'locked' ? '<span class="chip lock">🔒 Needs ' + esc(C.item(s.needs[0]).name) + '</span>'
       : s.state === 'capped' ? '<span class="chip own">✓ Plenty for testing (' + s.copies + ')</span>'
       : rep ? '<span class="chip rep">' + (trial() ? 'Get as many as you like' : 'Buy as many as you like') + (s.copies ? ' · you have ' + s.copies : '') + '</span>'
-      : '<span class="chip uni">Buy once, keep forever</span>';
+      : '<span class="chip uni">' + (trial() ? 'Free while we test' : 'Buy once, keep forever') + '</span>';
     var buyLabel = s.state === 'owned' ? (it.kind === 'style' || it.kind === 'cosmetic' || it.kind === 'variant' ? 'Use it' : 'Owned ✓')
       : s.state === 'locked' ? '🔒 Locked' : s.state === 'short' ? 'Need ' + fmt(s.need) + ' more ⭐' : s.state === 'capped' ? 'Plenty ✓' : s.free ? 'Get it free' : 'Buy';
     var disabled = s.state === 'locked' || s.state === 'short' || s.state === 'capped' || (s.state === 'owned' && !(it.kind === 'style' || it.kind === 'cosmetic' || it.kind === 'variant'));
@@ -725,14 +737,15 @@
       /* affordable & useful first, owned uniques last */
       items.sort(function (a, b) {
         var sa = iState(u2, a.id).state, sb = iState(u2, b.id).state;
-        var rank = { affordable: 0, short: 1, locked: 2, owned: 3 };
-        return (rank[sa] - rank[sb]) || (a.price - b.price);
+        var rank = { affordable: 0, short: 1, locked: 2, capped: 3, owned: 3 };
+        return ((rank[sa] == null ? 9 : rank[sa]) - (rank[sb] == null ? 9 : rank[sb])) || (a.price - b.price);
       });
       var next = null;
       if (!items.length && shopCat === 'afford') {
         C.shopItems().forEach(function (it) { if (iState(u2, it.id).state === 'short' && (!next || it.price < next.price)) next = it; });
       }
       $('#slwShopGrid', ov).innerHTML = items.length ? items.map(function (it) { return cardHtml(u2, it); }).join('')
+        : trial() ? '<p style="grid-column:1/-1;font-weight:800;text-align:center;color:#1d8a4c;padding:18px;">🎉 You’ve got everything there is! Thanks for testing.</p>'
         : '<p style="grid-column:1/-1;font-weight:800;text-align:center;color:#6b6390;padding:18px;">Nothing to buy just yet — every bit of learning earns ⭐!' +
           (next ? '<br>Next up: <b>' + esc(next.name) + '</b> — just ' + fmt(next.price - (u2.points || 0)) + ' more ⭐.' : '') + '</p>';
       ov.querySelectorAll('[data-cat]').forEach(function (b) { b.addEventListener('click', function () { shopCat = b.dataset.cat; paint(); }); });
@@ -773,7 +786,7 @@
   /* item detail sheet (preview, unlocks, buy, goal) */
   function unlockText(it) {
     var parts = [];
-    if (it.kind === 'attraction') parts.push('🎮 Unlocks a new game for keeps — tap it on your island to play.');
+    if (it.kind === 'attraction') parts.push(trial() ? '🎮 Unlocks a new game — tap it on your island to play.' : '🎮 Unlocks a new game for keeps — tap it on your island to play.');
     (it.includes || []).forEach(function (inc) { var ii = C.item(inc); if (ii) parts.push('🎁 Comes with: ' + ii.name); });
     if (it.kind === 'land') parts.push('🏝️ Opens ' + (C.REGION_CELLS[it.region] || []).length + ' new squares of island.');
     if (it.kind === 'pet') parts.push('🐾 A new pet who wanders your island and can run your obstacle course.');
@@ -818,7 +831,7 @@
       loadGame(demoGame).then(function () {
         var host = $('#slwBig', ov); if (!host) return;
         host.innerHTML = '';
-        var stop = window.SLGames[demoGame].demo(host, { variant: it.kind === 'variant' ? it.id : null, world: W(), seconds: 7, endText: s.state === 'owned' ? 'It’s yours — play it on your island!' : 'Buy it to play!' });
+        var stop = window.SLGames[demoGame].demo(host, { variant: it.kind === 'variant' ? it.id : null, world: W(), seconds: 7, endText: s.state === 'owned' ? 'It’s yours — play it on your island!' : (trial() ? 'Get it free to play!' : 'Buy it to play!') });
         var prevClose = ov._close;
         ov._close = function () { try { stop(); } catch (e) {} prevClose(); };
         setTimeout(function () { dm.disabled = false; }, 7500);
@@ -888,7 +901,7 @@
     if (it.kind === 'attraction') {
       if (res.placedUid) { window._slwNew = window._slwNew || {}; window._slwNew[res.placedUid] = 1; }
       draw();
-      celebrate({ title: (isGoal ? '🎯 Goal reached! ' : '🎉 ') + it.name + '!', sub: res.placedUid ? 'It’s on your island now — look for the ▶ PLAY sign. Yours forever!' : 'Your island is full — put something away in ✏️ Edit to make room. You can play it from 🎮 Games right now.', icon: it.id, sfx: 'fanfare',
+      celebrate({ title: (isGoal ? '🎯 Goal reached! ' : '🎉 ') + it.name + '!', sub: res.placedUid ? 'It’s on your island now — look for the ▶ PLAY sign.' + (trial() ? '' : ' Yours forever!') : 'Your island is full — put something away in ✏️ Edit to make room. You can play it from 🎮 Games right now.', icon: it.id, sfx: 'fanfare',
         btns: [{ label: '▶ Play now', fn: function () { launch(it.game); } }] });
       return;
     }
@@ -942,7 +955,7 @@
       return C.CATALOG.filter(function (it) { return it.kind === 'style' && it.slot === slot; }).map(function (it) {
         var own = C.owns(w, it.id), on = it.multi ? !!w.details[it.id] : st[slot] === it.id;
         return '<button type="button" class="slw-trayitem" data-style="' + it.id + '" ' + (own ? '' : 'data-locked="1"') + ' style="' + (on ? 'border-color:#6c5ce7;background:#f1edfb;' : '') + (own ? '' : 'opacity:.55;') + '">' +
-          ART.icon(it.id) + '<span>' + esc(it.name) + (own ? (on ? ' ✓' : '') : ' · ⭐' + fmt(it.price)) + '</span></button>';
+          ART.icon(it.id) + '<span>' + esc(it.name) + (own ? (on ? ' ✓' : '') : (trial() ? ' · FREE' : ' · ⭐' + fmt(it.price))) + '</span></button>';
       }).join('');
     }
     var ov = overlay('<h2>🏠 Your home</h2><div class="slw-detail"><div class="big" style="max-width:300px;">' + ART.sprite('house_cottage', st).svg + '</div><div class="info">' +
@@ -1001,8 +1014,8 @@
   function openInfo() {
     var st = arcadeState();
     var ov = overlay('<h2>❓ How My Island works</h2>' +
-      '<p style="font-weight:700;line-height:1.6;">📚 <b>Learn</b> anywhere in the app → you earn ⭐ points.<br>🛍️ <b>Spend</b> them in the Island Shop → your island grows.<br>🎮 <b>Play</b> your island games — they’re just for fun and never cost or earn points.<br>' +
-      '🐾 Your pets are always happy, even if you have a break.<br>⭐ Spending points never lowers your total-earned score.</p>' + timeHtml(st) +
+      '<p style="font-weight:700;line-height:1.6;">📚 <b>Learn</b> anywhere in the app → you earn ⭐ points.<br>' + (trial() ? '🧪 Everything in the Island Shop is <b>free while we test</b> — your ⭐ stay safe.' : '🛍️ <b>Spend</b> them in the Island Shop → your island grows.') + '<br>🎮 <b>Play</b> your island games — they’re just for fun and never cost or earn points.<br>' +
+      '🐾 Your pets are always happy, even if you have a break.' + (trial() ? '' : '<br>⭐ Spending points never lowers your total-earned score.') + '</p>' + timeHtml(st) +
       '<div style="display:flex;gap:8px;flex-wrap:wrap;"><button class="slw-btn" type="button" id="slwReplay">▶ Show the welcome again</button></div>', { small: true });
     $('#slwReplay', ov).addEventListener('click', function () { ov._close(); showIntro(); });
   }
@@ -1014,7 +1027,17 @@
   }
 
   /* ---------------- intro (once, skippable) ---------------- */
-  function maybeIntro() { var w = W(); if (w && !w.introSeen) showIntro(); }
+  function maybeIntro() {
+    var w = W(); if (!w) return;
+    if (!w.introSeen) { showIntro(); return; }
+    if (!trial() && !w.trialOverSeen && (w.ledger || []).some(function (e) { return e && e.trial; })) {
+      var ov = overlay('<div class="slw-intro"><div class="card" style="margin:0 auto;"><div class="hero">⭐ 🏝️</div><h2>Testing’s over — thank you!</h2>' +
+        '<p style="font-weight:700;color:#4a3f75;">From now on, island things cost ⭐ — the same ⭐ you save for real prizes in the 🎁 Shop. Everything you already picked is still on your island.</p>' +
+        '<div style="display:flex;justify-content:center;"><button class="slw-btn big on" type="button" id="slwTrialOk">Got it! 🎉</button></div></div></div>',
+        { small: true, onClose: function () { commit(function (u) { var fw = C.ensureWorld(u); if (fw.trialOverSeen) return { ok: false }; fw.trialOverSeen = true; return { ok: true }; }); } });
+      $('#slwTrialOk', ov).addEventListener('click', function () { ov._close(); });
+    }
+  }
   function showIntro() {
     var slides = [
       ['🏝️', 'This is your island!', 'It’s all yours — with a home, a pet and an obstacle course to play.'],

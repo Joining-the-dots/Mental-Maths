@@ -691,10 +691,18 @@
     nw.ledger.concat(gw.ledger).forEach(function (e) { if (e && e.tx && !byTx[e.tx]) byTx[e.tx] = e; });
     /* a one-off item bought on BOTH forks is kept once and paid for once (earliest row wins) */
     var rows = Object.keys(byTx).map(function (k) { return byTx[k]; }).sort(function (a, b) { return (a.at || '') < (b.at || '') ? -1 : (a.at || '') > (b.at || '') ? 1 : (a.tx < b.tx ? -1 : 1); });
-    var seenUnique = {}, spentUnion = 0;
+    /* for each one-off item keep ONE row: the earliest paid row if there is one
+       (so a real payment is never relabelled as a free test item), else the earliest row */
+    var keepUnique = {};
+    rows.forEach(function (e) {
+      var it = item(e.item); if (!it || isRepeatable(it)) return;
+      var k = keepUnique[e.item];
+      if (!k || (k.trial && !e.trial)) keepUnique[e.item] = e;
+    });
+    var spentUnion = 0;
     rows = rows.filter(function (e) {
       var it = item(e.item);
-      if (it && !isRepeatable(it)) { if (seenUnique[e.item]) return false; seenUnique[e.item] = 1; }
+      if (it && !isRepeatable(it) && keepUnique[e.item] !== e) return false;
       spentUnion += isInt(e.price) ? e.price : 0;
       return true;
     });

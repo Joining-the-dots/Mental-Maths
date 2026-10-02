@@ -533,3 +533,15 @@ test('test mode merges: free rows never move a balance', () => {
   assert.equal(m.points, 0);
   assert.ok(C.owns(m.world, 'pet_dragon') && C.owns(m.world, 'att_pitch') && C.owns(m.world, 'fountain'));
 });
+
+test('merge: a one-off bought for real on one fork and got free on the other keeps the PAID row', () => {
+  const base = kid(1000);
+  const n = JSON.parse(JSON.stringify(base)), g = JSON.parse(JSON.stringify(base));
+  C.purchase(n, 'pet_kitten', { tx: 'tx_trial_first', trial: true, now: Date.parse('2026-10-02T09:00:00Z') });   /* free, earlier */
+  C.purchase(g, 'pet_kitten', { tx: 'tx_paid_later', now: Date.parse('2026-10-02T10:00:00Z') });                  /* paid 600 */
+  const m = C.mergeWorlds(n, g);
+  const rows = m.world.ledger.filter(e => e.item === 'pet_kitten');
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].tx, 'tx_paid_later', 'the real payment stays on record');
+  assert.equal(m.points, 400);
+});

@@ -147,7 +147,7 @@
         var key = def.key + ':' + String(variant || 'std');
         var rec = cfg.pb && cfg.pb[key];
         if (!rec) return 'No personal best yet — set one!';
-        return '🏆 Your best: ' + (rec.ms != null ? (rec.ms / 1000).toFixed(2) + ' s' : rec.score);
+        return '🏆 Your best: ' + (rec.ms != null ? (rec.ms / 1000).toFixed(2) + ' s' : 'score ' + String(rec.score).replace(/\B(?=(\d{3})+(?!\d))/g, ','));
       }
       function menu() {
         phase = 'menu'; stopLoop(); setBanner(null); renderTouch(false);

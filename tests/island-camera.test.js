@@ -331,17 +331,20 @@ test('camera: apply() writes a duck-typed PerspectiveCamera and never rolls', ()
 });
 
 /* ---------------- gestures ---------------- */
-test('gesture: a tap is ≤ 8 px and ≤ 500 ms; more is not a tap', () => {
+test('gesture: a tap is ≤ 8 px and ≤ 1 s (a slow press still counts); more is not a tap', () => {
   const g = new Cam.Gesture();
   assert.equal(g.down(1, 100, 100, 0, { cam: 'orbit' })[0].type, 'press');
   g.move(1, 105, 103, 50);
   const up = g.up(1, 105, 103, 120);
-  assert.equal(up.length, 1); assert.equal(up[0].type, 'tap'); assert.equal(up[0].count, 1);
+  assert.equal(up.length, 1); assert.equal(up[0].type, 'tap'); assert.equal(up[0].count, 1); assert.equal(up[0].long, false);
   g.down(1, 100, 100, 1000, { cam: 'orbit' });
-  assert.deepEqual(g.up(1, 100, 100, 1600), [], 'too slow');
-  g.down(1, 100, 100, 3000, { cam: 'none' });
-  g.move(1, 112, 100, 3020);
-  assert.deepEqual(g.up(1, 112, 100, 3050), [], 'moved beyond the slop');
+  const slow = g.up(1, 100, 100, 1600);
+  assert.equal(slow.length, 1, 'a 600 ms press is a (slow) tap'); assert.equal(slow[0].type, 'tap');
+  g.down(1, 100, 100, 2000, { cam: 'orbit' });
+  assert.deepEqual(g.up(1, 100, 100, 3100), [], 'too slow');
+  g.down(1, 100, 100, 5000, { cam: 'none' });
+  g.move(1, 112, 100, 5020);
+  assert.deepEqual(g.up(1, 112, 100, 5050), [], 'moved beyond the slop');
 });
 
 test('gesture: double taps count 2 within 320 ms and 24 px', () => {
@@ -355,17 +358,36 @@ test('gesture: double taps count 2 within 320 ms and 24 px', () => {
   assert.equal(g.up(1, 200, 55, 650)[0].count, 1, 'too far for a double');
 });
 
-test('gesture: a 450 ms long-press fires once and is never also a tap', () => {
+test('gesture: a 450 ms long-press fires once; released in place it is still a (long) tap; a 1 s hold is not', () => {
   const g = new Cam.Gesture();
   g.down(1, 10, 10, 0, { claim: 'item' });
   assert.deepEqual(g.tick(300), []);
+  assert.equal(g.nextTick(300), 150, 'the long-press is due at 450 ms');
   const lp = g.tick(460);
   assert.equal(lp.length, 1); assert.equal(lp[0].type, 'longpress'); assert.equal(lp[0].claim, 'item');
   assert.deepEqual(g.tick(900), [], 'once');
-  assert.deepEqual(g.up(1, 10, 10, 480), [], 'no tap after a long-press');
-  g.down(1, 10, 10, 1000, {});
-  g.move(1, 30, 10, 1100);
-  assert.deepEqual(g.tick(1500), [], 'moved: no long-press');
+  assert.equal(g.nextTick(900), 100, 'then the hold at 1 s');
+  const slow = g.up(1, 10, 10, 700);
+  assert.equal(slow.length, 1); assert.equal(slow[0].type, 'tap'); assert.equal(slow[0].long, true, 'a slow tap after the long-press');
+  assert.equal(slow[0].count, 1);
+  /* a long tap never forms a double tap */
+  g.down(1, 10, 10, 800, {});
+  assert.equal(g.up(1, 10, 10, 850)[0].count, 1);
+  /* held still for 1 s: 'hold' (once) and no tap on release */
+  g.down(1, 10, 10, 2000, { claim: 'item' });
+  assert.deepEqual(g.tick(2460).map((e) => e.type), ['longpress']);
+  assert.deepEqual(g.tick(3010).map((e) => e.type), ['hold']);
+  assert.deepEqual(g.tick(3500), [], 'the hold fires once');
+  assert.equal(g.nextTick(3500), -1);
+  assert.deepEqual(g.up(1, 10, 10, 3050), [], 'no tap after a hold');
+  /* a late timer catches both at once */
+  g.down(1, 10, 10, 5000, {});
+  assert.deepEqual(g.tick(6200).map((e) => e.type), ['longpress', 'hold']);
+  g.up(1, 10, 10, 6300);
+  g.down(1, 10, 10, 7000, {});
+  g.move(1, 30, 10, 7100);
+  assert.deepEqual(g.tick(7500), [], 'moved: no long-press');
+  assert.equal(g.nextTick(7500), -1);
 });
 
 test('gesture: a claimed press becomes an item drag after 10 px', () => {

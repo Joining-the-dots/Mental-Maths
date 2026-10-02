@@ -38,14 +38,18 @@
      rig.pose {px, py, pz, tx, ty, tz, yaw, elev, zoom, dist, fov, aspect, near, far}
      rig.version (bumps whenever the pose changes) · rig.moving · rig.apply(camera)
      rig.project(p, out) · rig.groundAt(nx, ny, y, out) · rig.zoomedIn() · rig.canOrbit() · rig.info()
-   Gesture(o) → pure pointer recognizer (tap 8 px / 500 ms, long-press 450 ms,
+   Gesture(o) → pure pointer recognizer (tap 8 px / up to 1 s — a slow press released in place is
+     still a tap, also after the long-press —, long-press 450 ms, hold 1 s (no tap after it),
      claimed item drag 10 px, double tap 320 ms / 24 px, pinch + twist)
-     down(id, x, y, tMs, {claim, cam}) / move / up / cancel(id) / tick(tMs) → events[]
-     events: press · tap {count} · longpress · dragstart · drag · dragend {cancelled} ·
+     down(id, x, y, tMs, {claim, cam}) / move / up / cancel(id) / tick(tMs) → events[] · nextTick(tMs)
+     events: press · tap {count, long} · longpress · hold · dragstart · drag · dragend {cancelled} ·
              orbit | orbitX | pan {dx, dy} · pinch {scale, rotate, dx, dy, cx, cy} · release {vx, vy, mode}
    Controls(el, rig, hooks) → {key(e) → handled, setEnabled(on), cancel(), dispose()}   (browser only)
-     hooks {press(x, y, e) → 'item' | 'ghost' | null, tap(x, y, count, e), longPress(x, y),
-            dragStart(x, y, x0, y0), drag(x, y), dragEnd(x, y, cancelled), camera(), input()}
+     hooks {press(x, y, e) → 'item' | 'ghost' | null, tap(x, y, count, long), longPress(x, y, claim),
+            hold(x, y, claim), dragStart(x, y, x0, y0), drag(x, y), dragEnd(x, y, cancelled), camera(), input()}
+     dragEnd(…, cancelled = true) is a cancel, never a release: pointercancel, a second finger,
+     cancel() / setEnabled(false), or a lost pointer capture that cannot be taken back (a capture lost
+     while the finger is down — the element was re-parented — is re-taken and the gesture goes on).
      Mouse: left-drag orbits (play mode), right/shift-drag pans, wheel zooms toward the cursor.
      Touch: one finger orbits (yaw) — or pans once zoomed in —, two fingers pinch-zoom,
      twist-rotate and pan. Keys (while the camera buttons have focus): [ ] rotate,
@@ -591,10 +595,15 @@
   /* ================================================================
      GESTURE — a pure pointer recognizer (times in ms, positions in CSS px)
      ================================================================ */
+  /* young children press and hold: a press released within the slop counts as a tap for up to
+     tapMs (1 s), even after the 450 ms long-press fired (that tap carries long: true and never
+     forms a double tap). Held still until holdMs (= tapMs) it becomes a deliberate 'hold' (once),
+     and the release is no tap. */
   function Gesture(o) {
     o = o || {};
     this.slop = o.slop || 8; this.dragPx = o.dragPx || 10;
-    this.tapMs = o.tapMs || 500; this.longMs = o.longMs || 450;
+    this.tapMs = o.tapMs || 1000; this.longMs = o.longMs || 450;
+    this.holdMs = Math.max(this.longMs, o.holdMs || this.tapMs);
     this.doubleMs = o.doubleMs || 320; this.doublePx = o.doublePx || 24;
     this.flingMs = o.flingMs || 80;
     this.ptrs = [];
@@ -603,7 +612,7 @@
   }
   var GP = Gesture.prototype;
   GP._reset = function () {
-    this.state = 'idle'; this.claim = null; this.cam = 'none'; this.long = false;
+    this.state = 'idle'; this.claim = null; this.cam = 'none'; this.long = false; this.held = false;
     this.vx = 0; this.vy = 0; this.lt = 0;
     this.pd = 0; this.pa = 0; this.pcx = 0; this.pcy = 0;
   };
@@ -688,11 +697,11 @@
     if (p.extra) return out;
     if (st === 'press' && !this.ptrs.length) {
       var dist = Math.hypot(p.x - p.x0, p.y - p.y0);
-      if (!this.long && t - p.t0 <= this.tapMs && dist <= this.slop) {
-        var lt = this.lastTap, count = 1;
-        if (lt && t - lt.t <= this.doubleMs && Math.hypot(p.x - lt.x, p.y - lt.y) <= this.doublePx) count = 2;
-        this.lastTap = count === 2 ? null : { x: p.x, y: p.y, t: t };
-        out.push({ type: 'tap', x: p.x, y: p.y, count: count, claim: this.claim });
+      if (!this.held && t - p.t0 <= this.tapMs && dist <= this.slop) {
+        var lt = this.lastTap, count = 1, slow = this.long;
+        if (!slow && lt && t - lt.t <= this.doubleMs && Math.hypot(p.x - lt.x, p.y - lt.y) <= this.doublePx) count = 2;
+        this.lastTap = count === 2 || slow ? null : { x: p.x, y: p.y, t: t };
+        out.push({ type: 'tap', x: p.x, y: p.y, count: count, claim: this.claim, long: slow });
       }
     } else if (st === 'drag') {
       out.push({ type: 'dragend', x: p.x, y: p.y, cancelled: false });
@@ -724,14 +733,29 @@
     this._reset();
     return out;
   };
-  /* long-press check (call from a timer): fires once, single pointer, still within the slop */
+  /* long-press / hold check (call from a timer): single pointer, still within the slop;
+     'longpress' fires once at longMs, then 'hold' once at holdMs */
   GP.tick = function (t) {
-    if (this.state !== 'press' || this.long || this.ptrs.length !== 1) return [];
+    if (this.state !== 'press' || this.held || this.ptrs.length !== 1) return [];
     var p = this.ptrs[0];
-    if (t - p.t0 < this.longMs) return [];
     if (Math.hypot(p.x - p.x0, p.y - p.y0) > this.slop) return [];
-    this.long = true;
-    return [{ type: 'longpress', x: p.x, y: p.y, claim: this.claim }];
+    var out = [];
+    if (!this.long) {
+      if (t - p.t0 < this.longMs) return out;
+      this.long = true;
+      out.push({ type: 'longpress', x: p.x, y: p.y, claim: this.claim });
+    }
+    if (t - p.t0 >= this.holdMs) {
+      this.held = true;
+      out.push({ type: 'hold', x: p.x, y: p.y, claim: this.claim });
+    }
+    return out;
+  };
+  /* ms until the next tick() can fire for the current press (-1 = nothing pending) */
+  GP.nextTick = function (t) {
+    if (this.state !== 'press' || this.held || this.ptrs.length !== 1) return -1;
+    var p = this.ptrs[0];
+    return Math.max(0, p.t0 + (this.long ? this.holdMs : this.longMs) - t);
   };
 
   /* ================================================================
@@ -765,8 +789,9 @@
       for (var i = 0; i < evs.length; i++) {
         var ev = evs[i];
         switch (ev.type) {
-          case 'tap': call('tap', ev.x, ev.y, ev.count); break;
+          case 'tap': call('tap', ev.x, ev.y, ev.count, !!ev.long); break;
           case 'longpress': call('longPress', ev.x, ev.y, ev.claim); break;
+          case 'hold': call('hold', ev.x, ev.y, ev.claim); break;
           case 'dragstart': call('dragStart', ev.x, ev.y, ev.x0, ev.y0, ev.claim); break;
           case 'drag': call('drag', ev.x, ev.y); break;
           case 'dragend': call('dragEnd', ev.x, ev.y, ev.cancelled); break;
@@ -785,9 +810,16 @@
         }
       }
     }
+    /* the long-press, then the hold: one timer at a time, re-armed after each tick */
     function armLong() {
       clearTimeout(lpTimer);
-      lpTimer = setTimeout(function () { if (!disposed) dispatch(g.tick(nowMs())); }, g.longMs + 10);
+      var wait = g.nextTick(nowMs());
+      if (wait < 0) return;
+      lpTimer = setTimeout(function () {
+        if (disposed) return;
+        dispatch(g.tick(nowMs()));
+        armLong();
+      }, wait + 10);
     }
     function onDown(e) {
       if (!enabled || disposed) return;
@@ -824,6 +856,19 @@
       dispatch(g.cancel(e.pointerId));
       delete kinds[e.pointerId];
     }
+    /* capture lost while the finger is still down: the canvas was re-parented (the host redrew its
+       page around the persistent stage) — take the capture back and carry on; only when that is
+       impossible (the element left the page, the pointer is gone) is the gesture cancelled */
+    function onLost(e) {
+      if (disposed || !g.has(e.pointerId)) return;      /* after pointerup / pointercancel: nothing to do */
+      if (el.isConnected !== false && typeof el.setPointerCapture === 'function') {
+        try { el.setPointerCapture(e.pointerId); } catch (er) {}
+        var kept = false;
+        try { kept = typeof el.hasPointerCapture === 'function' ? !!el.hasPointerCapture(e.pointerId) : false; } catch (er2) { kept = false; }
+        if (kept) return;
+      }
+      onCancel(e);
+    }
     function onWheel(e) {
       if (!enabled || disposed) return;
       call('input');
@@ -838,7 +883,7 @@
     el.addEventListener('pointermove', onMove);
     el.addEventListener('pointerup', onUp);
     el.addEventListener('pointercancel', onCancel);
-    el.addEventListener('lostpointercapture', onCancel);
+    el.addEventListener('lostpointercapture', onLost);
     el.addEventListener('wheel', onWheel, { passive: false });
     el.addEventListener('contextmenu', onContext);
 
@@ -871,7 +916,7 @@
         el.removeEventListener('pointermove', onMove);
         el.removeEventListener('pointerup', onUp);
         el.removeEventListener('pointercancel', onCancel);
-        el.removeEventListener('lostpointercapture', onCancel);
+        el.removeEventListener('lostpointercapture', onLost);
         el.removeEventListener('wheel', onWheel, { passive: false });
         el.removeEventListener('contextmenu', onContext);
       }

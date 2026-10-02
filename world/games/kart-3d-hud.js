@@ -5,11 +5,16 @@
      top-left    place chip 'P3/6' + gap chip '+0.8 s to P2'  (Solo: pacer splits)
      top-centre  lap pips; the 'ENCORE LAP!' gradient banner (1.6 s)
      top-right   SVG minimap (track + every racer) and the 🎥 camera button
-     right edge  the HYPE WAND: 8 pips in the signature colour + a star bulb
+     right edge  the HYPE WAND: a light stick — 8 pips in the signature colour
+                 and a ✦ sparkle bulb (never the reward-points star emoji)
      centre      pop words (≤ 2 at once; big = Bagel Fat One, small = Baloo 2)
      WRONG WAY   the shell-style banner
+   Short screens (≤ 600 px tall — every phone held sideways): the right edge has
+   no room between the map + 🎥 button and the pads, so the wand lies flat in
+   the top centre under the lap pips instead (WAND_ROW_MAX_H).
    Glass panels by day; dark glass with white text on the Encore lap.
-   Every DOM write happens only when its value changes.
+   Every DOM write happens only when its value changes. The decorative parts
+   are aria-hidden one by one; the 🎥 button stays in the accessibility tree.
 
    makeHud(mid, o) → hud
      o {core, sigHex, reduced, onCam(), camLabel}
@@ -17,7 +22,11 @@
      hud.setCam(label), hud.setReduced(on), hud.setVisible(on), hud.dispose()
    ================================================================ */
 
-const CSS = [
+/* the viewport height (px) up to which the Hype Wand lies flat under the lap pips */
+export const WAND_ROW_MAX_H = 600;
+/* the wand's bulb: a puffy four-point ✦ sparkle (light-stick style) */
+export const SPARKLE = 'M12 1.5C12.9 7.6 16.4 11.1 22.5 12C16.4 12.9 12.9 16.4 12 22.5C11.1 16.4 7.6 12.9 1.5 12C7.6 11.1 11.1 7.6 12 1.5Z';
+export const CSS = [
   '.k3d-hud{position:absolute;inset:0;pointer-events:none;z-index:2;font-family:"Baloo 2",system-ui,sans-serif;color:#2B2140;overflow:hidden;}',
   '.k3d-hud.off{display:none;}',
   '.k3d-glass{background:rgba(255,255,255,.78);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);box-shadow:0 3px 12px rgba(19,12,46,.18);}',
@@ -44,13 +53,18 @@ const CSS = [
   '.k3d-cam:focus-visible{outline:3px solid #FFD23F;outline-offset:2px;}',
   '.k3d-wand{position:absolute;right:14px;top:46%;transform:translateY(-50%);display:flex;flex-direction:column;align-items:center;gap:3px;',
   '  padding:8px 6px 6px;border-radius:999px;}',
-  '.k3d-bulb{font-size:26px;line-height:1;filter:grayscale(.6) opacity(.65);}',
-  '.k3d-bulb.full{filter:none;animation:k3dBulb 1s ease-in-out infinite alternate;}',
+  /* the bulb: an outline ✦ until the wand is full (shape + glow, never colour alone), then the signature colour */
+  '.k3d-bulb{display:block;width:26px;height:26px;overflow:visible;fill:rgba(59,47,74,.14);stroke:rgba(59,47,74,.55);stroke-width:1.8;stroke-linejoin:round;}',
+  '.k3d-hud.night .k3d-bulb{fill:rgba(255,255,255,.12);stroke:rgba(255,255,255,.7);}',
+  '.k3d-bulb.full,.k3d-hud.night .k3d-bulb.full{fill:currentColor;stroke:#FFFFFF;}',
+  '.k3d-bulb.full{animation:k3dBulb 1s ease-in-out infinite alternate;}',
   '.k3d-wpip{width:16px;height:13px;border-radius:7px;background:rgba(59,47,74,.15);transition:background .15s;}',
   '.k3d-hud.night .k3d-wpip{background:rgba(255,255,255,.18);}',
   '.k3d-wpip.pop{animation:k3dPip .25s cubic-bezier(.34,1.56,.64,1);}',
   '.k3d-handle{width:12px;height:28px;border-radius:6px;background:#fff;border:2px solid rgba(59,47,74,.3);}',
-  '.k3d-spot{font-family:"Bagel Fat One","Baloo 2",sans-serif;font-size:13px;color:#FFD23F;filter:drop-shadow(0 1px 0 #3B2F4A);opacity:0;}',
+  /* out of the flow (so the hidden tag never widens the wand): beside the bulb, on the screen side */
+  '.k3d-spot{position:absolute;right:calc(100% + 6px);top:10px;white-space:nowrap;',
+  '  font-family:"Bagel Fat One","Baloo 2",sans-serif;font-size:13px;color:#FFD23F;filter:drop-shadow(0 1px 0 #3B2F4A);opacity:0;}',
   '.k3d-spot.on{opacity:1;}',
   '.k3d-word{position:absolute;left:50%;top:33%;transform:translate(-50%,-50%);white-space:nowrap;pointer-events:none;',
   '  font-family:"Bagel Fat One","Baloo 2",sans-serif;font-size:calc(clamp(30px,7vmin,64px) * var(--k3ds,1));line-height:1;',
@@ -64,11 +78,32 @@ const CSS = [
   '  30%{transform:translate(-50%,-50%) scale(1);}78%{opacity:1;}100%{transform:translate(-50%,-62%) scale(1);opacity:0;}}',
   '@keyframes k3dFade{0%{opacity:0;}15%{opacity:1;}78%{opacity:1;}100%{opacity:0;}}',
   '@keyframes k3dPip{0%{transform:scale(1);}50%{transform:scale(1.25);}100%{transform:scale(1);}}',
-  '@keyframes k3dBulb{from{filter:drop-shadow(0 0 2px #FFD23F);}to{filter:drop-shadow(0 0 9px #FFD23F);}}',
+  '@keyframes k3dBulb{from{filter:drop-shadow(0 0 2px currentColor);}to{filter:drop-shadow(0 0 9px currentColor);}}',
   '.k3d-hud.rm .k3d-word{animation:k3dFade .9s linear forwards;}',
   '.k3d-hud.rm .k3d-wpip.pop,.k3d-hud.rm .k3d-bulb.full{animation:none;}',
   '@media (prefers-reduced-motion: reduce){.k3d-word{animation:k3dFade .9s linear forwards;}.k3d-wpip.pop,.k3d-bulb.full{animation:none;}}',
-  '@media (max-height:420px){.k3d-wand{transform:translateY(-50%) scale(.8);}.k3d-map svg{width:96px;}}'
+  /* short screens: the right edge between the map + 🎥 button and the pads is too short for the
+     standing wand, so it lies flat under the lap pips (handle left → pips → ✦ bulb right); the
+     Encore-lap banner and WRONG WAY move down below it */
+  '@media (max-height:' + WAND_ROW_MAX_H + 'px){',
+  '  .k3d-wand{top:42px;right:auto;left:50%;transform:translateX(-50%);flex-direction:row-reverse;padding:5px 8px 5px 6px;}',
+  '  .k3d-wpip{width:13px;height:16px;}',
+  '  .k3d-handle{width:24px;height:12px;}',
+  '  .k3d-bulb{width:22px;height:22px;}',
+  '  .k3d-spot{right:auto;left:50%;top:calc(100% + 3px);transform:translateX(-50%);}',
+  '  .k3d-tc .k3d-banner{margin-top:60px;}',
+  '  .k3d-wrong{top:136px;}',
+  '}',
+  /* a narrow AND short window: a slimmer flat wand (no handle), just under the place / gap chips,
+     still fits between the left chips and the map + 🎥 button */
+  '@media (max-height:' + WAND_ROW_MAX_H + 'px) and (max-width:560px){',
+  '  .k3d-wand{top:80px;padding:5px 6px;gap:2px;}',
+  '  .k3d-tc .k3d-banner{margin-top:96px;}',
+  '  .k3d-wpip{width:10px;height:14px;}',
+  '  .k3d-handle{display:none;}',
+  '  .k3d-bulb{width:18px;height:18px;}',
+  '}',
+  '@media (max-height:420px){.k3d-map svg{width:96px;}}'
 ].join('\n');
 
 function injectCss() {
@@ -89,8 +124,10 @@ const SVG = 'http://www.w3.org/2000/svg';
 export function makeHud(mid, o) {
   injectCss();
   const core = o.core;
+  /* NOT aria-hidden as a whole: it holds the focusable 🎥 button (an aria-hidden ancestor would
+     hide a control that Tab still reaches). Each decorative part is hidden on its own instead. */
   const root = el('div', 'k3d-hud off');
-  root.setAttribute('aria-hidden', 'true');
+  const deco = (n) => { n.setAttribute('aria-hidden', 'true'); return n; };
   /* top-left */
   const tl = el('div', 'k3d-tl'), place = el('div', 'k3d-chip k3d-place k3d-glass'), gap = el('div', 'k3d-chip k3d-glass');
   const splits = [el('div', 'k3d-chip'), el('div', 'k3d-chip')];
@@ -109,9 +146,14 @@ export function makeHud(mid, o) {
   const cam = el('button', 'k3d-cam k3d-glass', '🎥');
   cam.type = 'button';
   cam.setAttribute('aria-label', 'Change camera');
-  tr.append(mapBox, cam);
-  /* right edge: the Hype Wand */
-  const wand = el('div', 'k3d-wand k3d-glass'), bulb = el('div', 'k3d-bulb', '⭐'), spotTag = el('div', 'k3d-spot', 'SPOTLIGHT!');
+  tr.append(deco(mapBox), cam);
+  /* right edge: the Hype Wand (a light stick with a ✦ bulb in the signature colour) */
+  const wand = el('div', 'k3d-wand k3d-glass'), spotTag = el('div', 'k3d-spot', 'SPOTLIGHT!');
+  const bulb = document.createElementNS(SVG, 'svg'), bulbPath = document.createElementNS(SVG, 'path');
+  bulb.setAttribute('class', 'k3d-bulb');
+  bulb.setAttribute('viewBox', '0 0 24 24');
+  bulbPath.setAttribute('d', SPARKLE);
+  bulb.appendChild(bulbPath);
   wand.append(spotTag, bulb);
   const wpips = [];
   for (let i = 7; i >= 0; i--) { const p = el('div', 'k3d-wpip'); wpips[i] = p; wand.appendChild(p); }
@@ -119,7 +161,7 @@ export function makeHud(mid, o) {
   /* centre */
   const wrong = el('div', 'k3d-wrong', '↩ WRONG WAY — turn around!');
   wrong.hidden = true;
-  root.append(tl, tc, tr, wand, wrong);
+  root.append(deco(tl), deco(tc), tr, deco(wand), deco(wrong));
   /* above the canvases, below the shell's count-down / banner / screens */
   const touch = mid.querySelector && mid.querySelector('#slgTouch');
   if (touch) mid.insertBefore(root, touch); else mid.appendChild(root);
@@ -132,6 +174,7 @@ export function makeHud(mid, o) {
   const limiter = new core.WordLimiter(2, 0.9);
   let dots = [], sx = 1, lastPips = -1, last = {}, sig = o.sigHex || '#FF5FA2', reduced = !!o.reduced, bannerTimer = 0, words = [];
   if (reduced) root.classList.add('rm');
+  bulb.style.color = sig;                              /* the lit ✦ and its glow (currentColor) */
   function set(key, node, prop, val) { if (last[key] === val) return; last[key] = val; node[prop] = val; }
   function setTrack(track, laps) {
     const mm = core.minimap(track, 150);
@@ -186,7 +229,8 @@ export function makeHud(mid, o) {
       }
       lastPips = v.wandPips;
     }
-    set('full', bulb, 'className', 'k3d-bulb' + (v.full || v.spot ? ' full' : ''));
+    const lit = !!(v.full || v.spot);
+    if (last.full !== lit) { last.full = lit; bulb.classList.toggle('full', lit); }   /* an SVG's className is read-only */
     set('spot', spotTag, 'className', 'k3d-spot' + (v.spot ? ' on' : ''));
     set('wrong', wrong, 'hidden', !v.wrong);
     /* minimap dots (pacers, rivals, then you on top) */
@@ -206,7 +250,7 @@ export function makeHud(mid, o) {
     const w = typeof key === 'string' ? core.WORDS[key] : key;
     if (!w || !limiter.push(t)) return false;
     words = words.filter((n) => n.isConnected);
-    const n = el('div', 'k3d-word' + (w.big ? '' : ' small') + (words.length ? ' b2' : ''), w.text);
+    const n = deco(el('div', 'k3d-word' + (w.big ? '' : ' small') + (words.length ? ' b2' : ''), w.text));
     n.style.color = color || w.color || sig;
     if (w.scale && w.scale !== 1) n.style.setProperty('--k3ds', String(w.scale));
     root.appendChild(n);
@@ -223,7 +267,7 @@ export function makeHud(mid, o) {
   return {
     root, setTrack, update, word, banner: showBanner,
     setCam(label) { set('cam', cam, 'textContent', '🎥 ' + label); },
-    setSig(hex) { sig = hex || sig; lastPips = -1; },
+    setSig(hex) { sig = hex || sig; lastPips = -1; bulb.style.color = sig; },
     setReduced(on) { reduced = !!on; root.classList.toggle('rm', reduced); },
     setVisible(on) { if (last.vis !== !!on) { last.vis = !!on; root.classList.toggle('off', !on); } },
     clearWords() { words.forEach((n) => n.remove()); words = []; limiter.clear(); banner.classList.remove('on'); },

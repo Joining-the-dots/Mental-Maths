@@ -14,6 +14,10 @@
    🎵 setting (localStorage 'slMusic', default on), fades out over 200 ms when
    the page hides and back in over 300 ms. It only plays when My Island or a
    game asks (SLMusic.island / channel.play); the integration stops it on exit.
+   A BEAT game (TRACKS[id].gameToggle: Debut Run's 'course', where the song is
+   the level) has its own 🎵 instead — localStorage 'slMusic:<track>', default
+   ON, set from the game's menu — so turning the island music off never takes
+   the beat away: SLMusic.gameEnabled(track), SLMusic.setGameEnabled(track, on).
 
      SLMusic.channel(opts) -> { play(track, {countInSec, clock?, bpm?, state?}),
          menuMode(on), pause(ms), resume(ms), stop(ms), set(name, value),
@@ -61,8 +65,10 @@
       mood: 'dreamy evening synth-pop with plucky arpeggios, airy pumping pads and a soft-punchy kick' },
     shop: { bpm: 92, key: 'D major', bars: 16, chords: ['Gmaj7', 'A', 'F#m7', 'Bm7'], level: 3, island: true, swing: 0.16, bassDur: 0.3,
       mood: 'cosy lo-fi pop' },
+    /* gameToggle: a beat game ("the song is the level") keeps its own 🎵 setting, default ON,
+       instead of following the island's — see gameEnabled() / setGameEnabled() */
     course: { bpm: 128, key: 'C major', bars: 32, chords: ['F', 'G', 'Em', 'Am'], encoreChords: ['Eb', 'F', 'Dm', 'Gm'], level: 0,
-      feverLift: 2, countIn: 'sticks', fileTone: [2500, 6000, 0, 0], mood: 'bouncy cartoon dance-pop' },
+      feverLift: 2, countIn: 'sticks', fileTone: [2500, 6000, 0, 0], gameToggle: true, mood: 'bouncy cartoon dance-pop' },
     penalty: { bpm: 112, key: 'G major', bars: 16, chords: ['C', 'D', 'Bm', 'Em'], level: 0, countIn: 'sticks',
       fileTone: [1400, 2500, 5000, 10000, 0], stabDur: 0.28, mood: 'stadium pop with toms, claps and wordless crowd shouts of hey' },
     kart: { bpm: 140, key: 'A minor', bars: 32, chords: ['Am', 'F', 'C', 'G'], level: 3, countIn: 'kickhats', liftOpenHats: true,
@@ -455,6 +461,14 @@
   function writeEnabled(storage, on) {
     try { if (!storage) return false; storage.setItem(STORE_KEY, on ? '1' : '0'); return true; } catch (e) { return false; }
   }
+  /* a gameToggle track's own setting: localStorage 'slMusic:<track>', default ON */
+  function gameKey(track) { return STORE_KEY + ':' + track; }
+  function readGameEnabled(storage, track) {
+    try { var v = storage && storage.getItem(gameKey(track)); return !(v === '0' || v === 'off' || v === 'false'); } catch (e) { return true; }
+  }
+  function writeGameEnabled(storage, track, on) {
+    try { if (!storage) return false; storage.setItem(gameKey(track), on ? '1' : '0'); return true; } catch (e) { return false; }
+  }
   /* ms argument: default when missing; values under 10 are read as seconds
      (some specs write duck(0.4, 0.35)); capped */
   function normMs(v, def, max) {
@@ -706,13 +720,26 @@
       gestured: false, hidden: !!(env.hidden && env.hidden()), enabled: null, timer: null, pool: [],
       manifest: null, manP: null, bufs: {}, loads: {}, bad: {}, lru: [], wantLoad: {}, memory: {},
       duckEnd: 0, duckLevel: 1, seq: 0, deckSeq: 0, tok: 0, waitingFor: null,
-      fadeOn: false, fadeOffAt: 0, silent: false, stageApplied: null, t0: perf()
+      fadeOn: false, fadeOffAt: 0, silent: false, stageApplied: null, t0: perf(), game: {}
     };
     var INST = makeInst(noiseBuf);
 
     function perf() { try { return env.now ? +env.now() : Date.now() / 1000; } catch (e) { return Date.now() / 1000; } }
     function store() { try { return env.storage ? env.storage() : null; } catch (e) { return null; } }
     function isEnabled() { if (E.enabled == null) E.enabled = readEnabled(store()); return E.enabled; }
+    /* the 🎵 setting that governs a track: a gameToggle (beat) game has its own, default ON, so
+       its beat is there even when the child turned the island music off; every other track —
+       the island loops, penalty, kart — follows the island's 🎵 */
+    function gameEnabled(track) {
+      var tr = String(track || '');
+      if (!TRACKS[tr] || !TRACKS[tr].gameToggle) return isEnabled();
+      if (E.game[tr] == null) E.game[tr] = readGameEnabled(store(), tr);
+      return E.game[tr];
+    }
+    function enabledFor(o) {
+      if (!o) return isEnabled();
+      return o === ISLAND ? isEnabled() : gameEnabled(o.track);
+    }
     function H(name) { return typeof g[name] === 'function' ? g[name] : LOCAL[name]; }
     function noiseBuf(c) {
       if (typeof g._noiseBuf === 'function') { try { var b = g._noiseBuf(c); if (b) return b; } catch (e) {} }
@@ -1004,7 +1031,7 @@
       if (!d.clock) return;
       d.waiting = false; d.lastC = readClock(d); d.lastMoveAt = now;
     }
-    function audibleTarget() { return isEnabled() && !mutedNow() && !E.hidden; }
+    function audibleTarget() { return enabledFor(E.owner) && !mutedNow() && !E.hidden; }
     function updateFade(force) {
       if (!E.N) return;
       var on = audibleTarget(), now = E.ctx.currentTime;
@@ -1148,7 +1175,12 @@
     /* ---------- who plays what ---------- */
     function apply() {
       var o = E.owner;
-      if (!o || !isEnabled() || E.hidden) return;
+      if (!o || E.hidden) return;
+      if (!enabledFor(o)) {
+        /* a game whose own 🎵 is off has the music: the muffled island loop it took over stops too */
+        if (o !== ISLAND && E.cur && E.cur.owner !== o && E.ctx) { retire(E.cur, E.ctx.currentTime, CUT_FADE); E.cur = null; E.tok++; E.waitingFor = null; }
+        return;
+      }
       var tr = o === ISLAND ? E.island : o.track;
       if (!tr || !TRACKS[tr] || (o !== ISLAND && o.stage === 'paused')) return;
       if (E.cur && E.cur.owner === o && E.cur.track === tr && (o === ISLAND || E.cur.gen === o.gen)) return;
@@ -1224,9 +1256,29 @@
       writeEnabled(store(), on);
       if (!E.ctx) { if (on) apply(); return on; }
       var now = E.ctx.currentTime;
-      if (!on) { E.decks.slice().forEach(function (d) { retire(d, now, HIDE_FADE); }); E.cur = null; E.tok++; E.waitingFor = null; }
+      if (!on) {
+        /* everything that follows the island's 🎵 stops; a beat game with its own 🎵 on plays on */
+        E.decks.slice().forEach(function (d) { if (!enabledFor(d.owner)) retire(d, now, HIDE_FADE); });
+        if (E.cur && !enabledFor(E.cur.owner)) E.cur = null;
+        E.tok++; E.waitingFor = null;
+      }
       updateFade(false);
       if (on) apply();
+      return on;
+    }
+    /* a beat game's own 🎵 (its menu chip). Other tracks have no setting of their own: for them
+       this is the island's 🎵, unchanged. */
+    function setGameEnabled(track, on) {
+      var tr = String(track || '');
+      if (!TRACKS[tr] || !TRACKS[tr].gameToggle) return isEnabled();
+      on = !!on;
+      E.game[tr] = on;
+      writeGameEnabled(store(), tr, on);
+      var o = E.owner, mine = o && o !== ISLAND && o.track === tr;
+      if (!E.ctx) { if (on && mine) apply(); return on; }
+      if (!on && mine && E.cur && E.cur.owner === o) { retire(E.cur, E.ctx.currentTime, HIDE_FADE); E.cur = null; }
+      updateFade(false);
+      if (on && mine) apply();
       return on;
     }
     /* the beat clock the island scene reads: beat = (performance.now()/1000 - t0) * bpm / 60.
@@ -1392,6 +1444,7 @@
       channel: channel, island: island, stopAll: stopAll, duck: duck,
       enabled: function () { return isEnabled(); }, setEnabled: setEnabled,
       toggle: function () { return setEnabled(!isEnabled()); },
+      gameEnabled: gameEnabled, setGameEnabled: setGameEnabled,
       clock: clock, preload: preload, state: debugState,
       TRACKS: TRACKS,
       /* test / QA hooks */
@@ -1446,7 +1499,8 @@
     parts: parts, bandEvents: bandEvents, admitVoices: admitVoices, voicesOf: voicesOf,
     /* files, tone, settings */
     parseManifest: parseManifest, loopPoints: loopPoints, fileFor: fileFor, toneFor: toneFor,
-    readEnabled: readEnabled, writeEnabled: writeEnabled, normMs: normMs, islandTrack: islandTrack,
+    readEnabled: readEnabled, writeEnabled: writeEnabled, readGameEnabled: readGameEnabled, writeGameEnabled: writeGameEnabled,
+    normMs: normMs, islandTrack: islandTrack,
     /* engine */
     createEngine: createEngine, browserEnv: browserEnv
   };

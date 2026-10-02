@@ -557,7 +557,7 @@ test('penalty: medalFor and rivalUnlocked truth tables (old std bests carry over
 test('penalty: def wiring — shell hooks, rival menu, PB text and copy', () => {
   const def = Pen.def;
   assert.equal(def.key, 'penalty');
-  assert.equal(def.title, 'Penalty Shootout');
+  assert.equal(def.title, 'Encore Shootout', 'one name everywhere (the island Games sheet says Encore Shootout)');
   assert.deepEqual(def.view3d, { src: 'world/games/penalty-3d.js' });
   assert.equal(def.menuVariantsTitle, 'Choose your rival');
   assert.equal(def.menuVariantsLabel, 'rival');

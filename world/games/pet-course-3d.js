@@ -96,17 +96,28 @@ async function build(mid, opts) {
     }
   } catch (e) { K = null; }
   if (!K) { fail('kit'); return null; }
-  try { return makeView(mid, opts, M, S, SL3D, K, hub, tier, budget || DEFAULT_BUDGET[tier], fail); }
+  /* makeView may take the island's renderer lease before something in it throws: then its own
+     dispose() (published first thing) tears the half-built view down and hands the lease back.
+     A leaked game lease would stay current, and the 3D island would never render again. */
+  const built = { dispose: null };
+  try { return makeView(mid, opts, M, S, SL3D, K, hub, tier, budget || DEFAULT_BUDGET[tier], fail, built); }
   catch (e) {
-    if (hub) { try { hub.dispose(); } catch (er) { /* best effort */ } }
+    if (built.dispose) bestEffort(built.dispose);         /* releases the lease and the hub too */
+    else if (hub) bestEffort(function () { hub.dispose(); });
     fail('build'); return null;
   }
 }
+/* one teardown step; a step for something a failed build never reached throws (a ReferenceError
+   for a name not declared yet) and is skipped, so every other step still runs */
+function bestEffort(fn) { try { fn(); } catch (e) { /* not built, or already gone */ } }
 
 /* ================================================================
    THE VIEW
    ================================================================ */
-function makeView(mid, opts, M, S, SL3D, K, hub, tier, budget, fail) {
+function makeView(mid, opts, M, S, SL3D, K, hub, tier, budget, fail, built) {
+  /* first, before anything that can throw: what dispose() needs to undo a half-built view */
+  if (built) built.dispose = dispose;
+  let lease = null, renderer = null, ownRenderer = false, lost = false, paused = false, disposed = false;
   const cfg = opts.cfg || {};
   const reduced = !!(opts.reduced || cfg.reduced);
   const low = tier === 'LOW';
@@ -123,8 +134,7 @@ function makeView(mid, opts, M, S, SL3D, K, hub, tier, budget, fail) {
   const PP = SL3D && SL3D.petPose ? SL3D.petPose : (window.SLCharacters && window.SLCharacters.sample ? window.SLCharacters : null);
   const demo = !!cfg.demo;
 
-  /* ---------------- renderer: the stage lease (or our own) ---------------- */
-  let lease = null, renderer = null, ownRenderer = false, lost = false, paused = false, disposed = false;
+  /* ---------------- renderer: the stage lease (or our own; state declared at the top) ---------------- */
   const handlers = {
     onRevoke: function (L, why) { if (why === 'dispose') { paused = true; fail('revoked'); } else paused = true; },
     onResume: function () { paused = false; reattach(); },
@@ -240,7 +250,8 @@ function makeView(mid, opts, M, S, SL3D, K, hub, tier, budget, fail) {
   const clipOpts = { species: petId, speed: 0, intensity: 1, reduced: reduced, seed: 4242, rate: 1, bpm: M.BPM, height: 0, dur: 0.6, ground: false };
   const V = M.newVisual();
 
-  /* the child's avatar (finish only), built on demand */
+  /* the child's avatar: shown at the finish only, but built hidden up front (see the end of
+     makeView) so warm() compiles its shaders with the rest of the scene */
   let avatar = null;
   function ensureAvatar() {
     if (avatar) return avatar;
@@ -829,28 +840,35 @@ function makeView(mid, opts, M, S, SL3D, K, hub, tier, budget, fail) {
     else { if (variant) menuVariant = variant; bound = null; s = null; course = null; theme && theme.obstacles.bind(null); if (avatar) avatar.root.visible = false; }
     ensureTheme(round ? round.variant : menuVariant);
   }
+  /* Also the teardown of a build that threw halfway (build() calls it then): every step is
+     bestEffort(), so whatever was not built yet is skipped and the rest — above all
+     lease.release() — still runs. */
   function dispose() {
     if (disposed) return;
     disposed = true;
-    if (unsubQ) { try { unsubQ(); } catch (e) { /* gone */ } }
-    dropTheme();
-    parts.forEach(function (p) { try { p.dispose(); } catch (e) { /* gone */ } });
-    parts.length = 0;
-    if (hat) hat.dispose();
-    try { rig.dispose(); } catch (e) { /* gone */ }
-    if (avatar) { try { avatar.dispose(); } catch (e) { /* gone */ } }
-    [shieldMesh, graceMesh].forEach(function (m) { m.removeFromParent(); m.dispose(); });
-    own.forEach(function (o) { try { o.dispose(); } catch (e) { /* gone */ } });
-    scene.clear();
-    K.uniforms.uRimColor.value.copy(rimSave.color); K.uniforms.uRimStrength.value = rimSave.strength;
-    if (canvas.parentNode === mid) mid.removeChild(canvas);
-    canvas.className = savedClass; canvas.style.cssText = savedCss; canvas.removeAttribute('aria-hidden');
-    api.canvas = null;                                     /* the shared canvas goes back to the island, not to the shell */
-    if (lease) { try { lease.release(); } catch (e) { /* gone */ } }
-    else if (ownRenderer) { try { renderer.dispose(); renderer.forceContextLoss(); } catch (e) { /* gone */ } }
-    if (hub) { try { hub.dispose(); } catch (e) { /* gone */ } }
+    bestEffort(function () { if (unsubQ) unsubQ(); });
+    bestEffort(dropTheme);
+    bestEffort(function () { parts.forEach(function (p) { bestEffort(function () { p.dispose(); }); }); parts.length = 0; });
+    bestEffort(function () { if (hat) hat.dispose(); });
+    bestEffort(function () { rig.dispose(); });
+    bestEffort(function () { if (avatar) avatar.dispose(); });
+    bestEffort(function () { shieldMesh.removeFromParent(); shieldMesh.dispose(); });
+    bestEffort(function () { graceMesh.removeFromParent(); graceMesh.dispose(); });
+    bestEffort(function () { own.forEach(function (o) { bestEffort(function () { o.dispose(); }); }); });
+    bestEffort(function () { scene.clear(); });
+    bestEffort(function () { K.uniforms.uRimColor.value.copy(rimSave.color); K.uniforms.uRimStrength.value = rimSave.strength; });
+    bestEffort(function () { if (canvas.parentNode === mid) mid.removeChild(canvas); });
+    bestEffort(function () { canvas.className = savedClass; canvas.style.cssText = savedCss; canvas.removeAttribute('aria-hidden'); });
+    bestEffort(function () { api.canvas = null; });       /* the shared canvas goes back to the island, not to the shell */
+    if (lease) bestEffort(function () { lease.release(); });
+    else if (ownRenderer) bestEffort(function () { renderer.dispose(); renderer.forceContextLoss(); });
+    if (hub) bestEffort(function () { hub.dispose(); });
   }
 
+  /* the avatar is built (hidden) BEFORE the warm-up below, so its programs — the face's alpha-
+     tested 'state' material, the wand's plain toon / neon / halo meshes, none of which the
+     course otherwise uses — compile behind the menu, not in the frame its finish cheer starts */
+  ensureAvatar();
   ensureTheme(menuVariant);
   camera.position.set(3, 1.6, 7.5);
   const api = {

@@ -11,7 +11,7 @@
    banners appear at scale 1 and fade.
    ================================================================ */
 const CSS_ID = 'p3dCss';
-const CSS = [
+export const CSS = [
   '.p3d{position:absolute;inset:0;z-index:2;pointer-events:none;overflow:hidden;font-family:"Baloo 2",system-ui,sans-serif;color:#fff;}',
   '.p3d *{box-sizing:border-box;}',
   '.p3d-pips{position:absolute;left:12px;top:10px;display:flex;align-items:center;gap:6px;}',
@@ -47,8 +47,9 @@ const CSS = [
   '.p3d-replay{position:absolute;left:50%;top:10px;transform:translateX(-50%);background:#FF4FB8;border:2px solid #fff;border-radius:999px;padding:2px 14px;font-weight:800;font-size:15px;letter-spacing:.08em;display:none;}',
   /* the photocard sits beside the keeper (the intro camera frames him in the middle) */
   '.p3d-card{position:absolute;left:76%;top:50%;width:min(40vmin,230px);aspect-ratio:3/4;transform:translate(-50%,-50%);border-radius:18px;padding:5px;display:none;',
-  '@media (orientation: portrait){.p3d-card{left:50%;top:70%;width:min(44vmin,200px);}}',
   '  background:conic-gradient(from 210deg,#FFB3E6,#B3E5FF,#C9FFE5,#FFF3B3,#FFB3E6);box-shadow:0 14px 40px rgba(0,0,0,.45);}',
+  /* portrait: centred under the goal (a top-level rule AFTER the base one, so it wins) */
+  '@media (orientation: portrait){.p3d-card{left:50%;top:70%;width:min(44vmin,200px);}}',
   '.p3d-card.on{display:block;animation:p3dFlip .3s ease-out both;}',
   '@keyframes p3dFlip{0%{transform:translate(-50%,-50%) perspective(600px) rotateY(80deg)}100%{transform:translate(-50%,-50%) perspective(600px) rotateY(0)}}',
   '.p3d-card>div{width:100%;height:100%;border-radius:14px;background:radial-gradient(circle at 50% 28%,#3B1E6E,#1A1240 72%);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:10px;text-align:center;}',

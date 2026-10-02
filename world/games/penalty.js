@@ -1,5 +1,8 @@
 /* ================================================================
-   Game B — Penalty Shootout · "ENCORE SHOOTOUT" (unlocked by the Penalty Pitch).
+   Game B — Encore Shootout, a penalty shoot-out (unlocked by the Penalty Pitch).
+   One name everywhere: the island Games sheet, the shell title / menu heading
+   and the 3D LED all say "Encore Shootout"; only the catalogue item keeps
+   its own name, "Penalty Pitch".
    8 kicks against one of 4 original goalie-blob rivals. Tap once to lock the
    SIDE (cyan marker), tap again to lock the HEIGHT (pink reticle). Each rival
    gives his dive away with ONE learnable tell: Mochi LEANS, Bop dance-steps on
@@ -1140,7 +1143,7 @@
   }
 
   var def = {
-    key: 'penalty', title: 'Penalty Shootout', subtitle: 'ENCORE SHOOTOUT', emoji: '⚽', LW: LW, LH: LH, defaultVariant: 'std',
+    key: 'penalty', title: 'Encore Shootout', subtitle: 'ENCORE SHOOTOUT', emoji: '⚽', LW: LW, LH: LH, defaultVariant: 'std',
     tutorial: [
       ['👀', 'The keeper gives away his dive. Shoot the OTHER way!'],
       ['👆', 'Tap for SIDE (blue), tap again for HEIGHT (pink)'],

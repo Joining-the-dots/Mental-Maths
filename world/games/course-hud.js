@@ -12,10 +12,53 @@
    Only heart changes, 'Encore unlocked' and the curtain call are
    announced (aria-live polite); the shell's top text stays the
    accessible summary.
+
+   SHORT LANDSCAPE (phones held sideways, COMPACT.mq): the top band is
+   where the action flies — ENCORE letters, glow stars and the pet at
+   every double-jump / BOING apex — so nothing may sit there. Hearts,
+   HYPE + letters, the counter and the 'TAP to jump!' tip stack in a
+   narrow column at the left edge, BEHIND the pet (left of its screen x
+   in the 3D follow camera and in the letterboxed 2D view alike), and
+   the mini runway drops to the bottom between the pads.
    ================================================================ */
 (function () {
   'use strict';
-  if (typeof window === 'undefined' || typeof document === 'undefined') return;
+  /* the short-landscape column, in px (the CSS below is built from these numbers; the Node
+     tests project the real course against the same rectangles) */
+  var COMPACT = {
+    mq: '(max-height: 500px) and (orientation: landscape)',
+    x: 8, w: 132,                          /* the column's left edge and its widest panel (the tip) */
+    hearts: { top: 6, h: 32 }, mid: { top: 42, h: 56 }, cnt: { top: 102, h: 42 }, tip: { top: 150 },
+    prog: { bottom: 12, side: 150 },       /* the mini runway: clear of the pads at both sides */
+    /* the smallest phones (568 wide): the letterboxed 2D pet starts ~135 px in, so the tip shrinks */
+    narrow: { mq: '(max-height: 500px) and (orientation: landscape) and (max-width: 600px)', w: 118 }
+  };
+  var LETTERS_TIP = 'Collect all 6 letters for an ENCORE stage!', LETTERS_TIP_SHORT = 'All 6 letters = ENCORE!';
+  function compactCss() {
+    var C = COMPACT, px = function (v) { return v + 'px'; };
+    return '@media ' + C.mq + '{' + [
+      '.slc-hearts{left:' + px(C.x) + ';top:' + px(C.hearts.top) + ';height:' + px(C.hearts.h) + ';padding:2px 8px;}',
+      '.slc-w{width:18px;height:24px;}',
+      '.slc-mid{left:' + px(C.x) + ';top:' + px(C.mid.top) + ';height:' + px(C.mid.h) + ';transform:none;min-width:0;padding:4px 8px;gap:3px;justify-content:center;}',
+      '.slc-hype{height:8px;}',
+      '.slc-hl{font-size:11px;}',
+      '.slc-letters{gap:2px;}',
+      '.slc-l{width:16px;height:18px;font-size:11px;border-radius:5px;}',
+      '.slc-cnt{left:' + px(C.x) + ';right:auto;top:' + px(C.cnt.top) + ';height:' + px(C.cnt.h) + ';max-width:' + px(C.w) + ';padding:4px 10px;font-size:13px;line-height:1.2;white-space:normal;display:flex;align-items:center;}',
+      '.slc-tip{left:' + px(C.x) + ';transform:none;bottom:auto;top:' + px(C.tip.top) + ';max-width:' + px(C.w) + ';padding:5px 10px;border-width:2px;border-radius:18px;font-size:15px;line-height:1.2;white-space:normal;}',
+      '.slc-tip.big{font-size:16px;}',
+      '.slc-prog{bottom:' + px(C.prog.bottom) + ';width:min(420px,calc(100% - ' + px(2 * C.prog.side) + '));}'
+    ].join('') + '}\n@media ' + C.narrow.mq + '{' + [
+      '.slc-cnt,.slc-tip{max-width:' + px(C.narrow.w) + ';}',
+      '.slc-tip{font-size:13px;padding:5px 8px;}',
+      '.slc-tip.big{font-size:14px;}'
+    ].join('') + '}';
+  }
+  function compactNow() { try { return !!(window.matchMedia && window.matchMedia(COMPACT.mq).matches); } catch (e) { return false; } }
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    if (typeof module === 'object' && module.exports) module.exports = { COMPACT: COMPACT, compactCss: compactCss };
+    return;
+  }
 
   var PET_HEAD = { pet_puppy: '🐶', pet_kitten: '🐱', pet_bunny: '🐰', pet_dragon: '🐲' };
   var POP_BIG = { door: 1, fever: 1, tier: 1, cleanStage: 1, lettersComplete: 1, encoreStart: 1, finish: 1, curtain: 1 };
@@ -70,7 +113,8 @@
       '.slc-hud.rm .slc-w,.slc-hud.rm .slc-hype,.slc-hud.rm .slc-pop.on{animation:none !important;}',
       '.slc-hud.rm .slc-pop.on{opacity:1;}',
       '@media (prefers-reduced-motion: reduce){.slc-w,.slc-hype{animation:none !important;}.slc-pop.on{animation:none;opacity:1;}}',
-      '@media (max-width:560px){.slc-cnt{font-size:14px;padding:5px 10px;}.slc-w{width:20px;height:27px;}.slc-mid{top:48px;}}'
+      '@media (max-width:560px){.slc-cnt{font-size:14px;padding:5px 10px;}.slc-w{width:20px;height:27px;}.slc-mid{top:48px;}}',
+      compactCss()                                /* last, so it wins over the rules above */
     ].join('\n');
     document.head.appendChild(c);
   }
@@ -168,7 +212,7 @@
           case 'fever': pop('FEVER!', 2); break;
           case 'door': pop((secs[e.sec] && secs[e.sec].pop) || e.name, 2); break;
           case 'cleanStage': pop('CLEAN STAGE +25', 2); break;
-          case 'letter': if (e.li >= 0 && round.state.lettersMask === (1 << e.li)) tip('Collect all 6 letters for an ENCORE stage!', 2600, false); break;
+          case 'letter': if (e.li >= 0 && round.state.lettersMask === (1 << e.li)) tip(compactNow() ? LETTERS_TIP_SHORT : LETTERS_TIP, 2600, false); break;
           case 'lettersComplete': pop('ENCORE UNLOCKED!', 2); say('Encore unlocked!'); break;
           case 'encoreStart': pop('ENCORE!', 2); break;
           case 'finish': pop('SHOW COMPLETE!', 2); break;
@@ -236,5 +280,6 @@
     return { update: update, dispose: dispose };
   }
 
-  window.SLCourseHUD = { mount: mount };
+  window.SLCourseHUD = { mount: mount, COMPACT: COMPACT };
+  if (typeof module === 'object' && module.exports) module.exports = { mount: mount, COMPACT: COMPACT, compactCss: compactCss };
 })();

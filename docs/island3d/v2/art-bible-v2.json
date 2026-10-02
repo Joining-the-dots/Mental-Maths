@@ -1,0 +1,310 @@
+{
+ "name": "Encore City: Neon K-pop City (art bible v2, a delta from 'Island Encore' v1)",
+ "vibe": "My Island becomes a tiny harbour city at golden hour that turns into a neon stage after dark. The reference is a sleek designer-toy diorama, not a nursery toy. It has crisp bevelled architecture, smoked glass, concrete, teak boardwalks, LED strips and screens. All of it sits on an island with a real irregular coastline, faceted cliffs at the back, a gentle hill rising behind the home and a city skyline glittering across the bay.\n\nGOLDEN HOUR is the default look: a peach-to-violet sky, a low warm key light with long shadows, the first signs and windows already lit. SHOWTIME is full night: an indigo sky, a magenta city glow on the horizon, three sweeping spotlights, LED edges chasing along the boardwalks and the crew dancing on the concert stage.\n\nThe K-pop energy comes only from original staging: streetwear, light sticks, LED screens, stage trusses, dance breaks and member colours. Nothing is copied.\n\nCOLOUR RULE v2 (replaces v1's 70/20/10 pastel rule):\n- 60% deep and mid neutrals (sky, sea, concrete, graphite, deep greens)\n- 28% mid-saturated colour (pets, walls, props, the child's member colour)\n- 12% neon, on emissive lines, rings, signs and screens only. Neon stays under 8% of the frame at golden hour.\n\nThe cuteness dial moves from 'baby' to 'cool older sibling': smaller confident eyes, longer legs, less squash, cleaner shapes, and witty copy instead of 'Yay!'.\n\nANTI-RIGID RULE: every home shape, every building and every repeatable decor has 2–3 deterministic per-copy variants (hash of uid or profile). The coastline is seeded per child. No two islands, homes or trees look stamped out, and nothing is ever random at purchase.",
+ "paletteV2": [
+  {
+   "name": "Midnight Ink",
+   "hex": "#14101F",
+   "use": "Character outline hulls (0.009 u), tyres, LED-screen off-black, the pearls in the boba sign. Replaces Ink #3B2F4A for 3D outlines."
+  },
+  {
+   "name": "Night Base",
+   "hex": "#0E0B1A",
+   "use": "Page and game-shell background behind the island (replaces Stage Night #130C2E)"
+  },
+  {
+   "name": "Panel Glass",
+   "hex": "#161228",
+   "use": "HUD panels and sheets at 72% alpha; #15112A solid on LOW or without backdrop-filter"
+  },
+  {
+   "name": "Graphite",
+   "hex": "#2E2B3A",
+   "use": "Streetwear (hoodies, sleeves), dark cladding, Recording Studio body, speaker stacks, cap crown"
+  },
+  {
+   "name": "Asphalt",
+   "hex": "#3A3646",
+   "use": "Avatar joggers, stage deck, plaza paving joints"
+  },
+  {
+   "name": "Concrete",
+   "hex": "#8C8798",
+   "use": "Building bodies and plinths, retaining walls, Dance Studio, boba café body"
+  },
+  {
+   "name": "Concrete Light",
+   "hex": "#C9C5D3",
+   "use": "Upper storeys, parapet caps, stair treads, stone-path paver tops, beanie ribs"
+  },
+  {
+   "name": "Bone White",
+   "hex": "#F4F2FA",
+   "use": "Sneakers, drawstrings, trims, lighthouse white, windmill slats. Use it instead of #FFFFFF on lit surfaces so they don't glare under Neutral tone mapping."
+  },
+  {
+   "name": "Smoked Glass",
+   "hex": "#1B2438",
+   "use": "All glazing (opaque matcap base): windows, shopfronts, balustrades, LED visor"
+  },
+  {
+   "name": "Glass Edge",
+   "hex": "#8FB7FF",
+   "use": "Spec and rim stop of the Smoked Glass matcap"
+  },
+  {
+   "name": "Gunmetal",
+   "hex": "#5A5F72",
+   "use": "Truss, railings, posts, door frames, headphone cups, light-stick collar (dark-chrome matcap mid)"
+  },
+  {
+   "name": "Dusk Zenith",
+   "hex": "#2B1E5C",
+   "use": "Sky top at golden hour"
+  },
+  {
+   "name": "Dusk Mid",
+   "hex": "#6A3D8F",
+   "use": "Sky middle at golden hour"
+  },
+  {
+   "name": "Dusk Horizon",
+   "hex": "#FF9A7A",
+   "use": "Horizon band at golden hour, and the sun-disc haze behind the skyline"
+  },
+  {
+   "name": "Dusk Fog",
+   "hex": "#7E4E8E",
+   "use": "Fog and clear colour at golden hour"
+  },
+  {
+   "name": "Night Zenith",
+   "hex": "#0B0A1F",
+   "use": "Sky top at Showtime. Darkest value allowed anywhere in the scene."
+  },
+  {
+   "name": "Night Mid",
+   "hex": "#1E1450",
+   "use": "Sky middle and fog at Showtime"
+  },
+  {
+   "name": "City Glow",
+   "hex": "#C2338F",
+   "use": "Night horizon band 0–8° above the sea, as if the skyline lights the clouds"
+  },
+  {
+   "name": "Lagoon",
+   "hex": "#3FB8D0",
+   "use": "Shallow water at golden hour"
+  },
+  {
+   "name": "Deep Bay",
+   "hex": "#1E3F86",
+   "use": "Open water at golden hour"
+  },
+  {
+   "name": "Foam Dusk",
+   "hex": "#FFD9E8",
+   "use": "Shore foam at golden hour (picks up the pink sky)"
+  },
+  {
+   "name": "Night Lagoon",
+   "hex": "#1F4FA8",
+   "use": "Shallow water at Showtime"
+  },
+  {
+   "name": "Night Deep",
+   "hex": "#0B1440",
+   "use": "Open water at Showtime"
+  },
+  {
+   "name": "Foam Night",
+   "hex": "#B9A8FF",
+   "use": "Shore foam at Showtime"
+  },
+  {
+   "name": "Turf",
+   "hex": "#4FA36A",
+   "use": "Grass tops (replaces Grass Top #8EE07A for land). ±4% lightness noise, no checker."
+  },
+  {
+   "name": "Turf Shade",
+   "hex": "#3C8456",
+   "use": "Grass slopes between terraces, hedges, lower canopy facets"
+  },
+  {
+   "name": "Hill Moss",
+   "hex": "#5DB67E",
+   "use": "Hill crowns, Meadow Hill tops"
+  },
+  {
+   "name": "Cliff Rock",
+   "hex": "#5A5168",
+   "use": "Flat-shaded cliff faces on the back and west coast (replaces the green slab sides)"
+  },
+  {
+   "name": "Dune",
+   "hex": "#E9C9A0",
+   "use": "Beaches and Beach Cove land (replaces Sand / Cove Sand in 3D)"
+  },
+  {
+   "name": "Wet Dune",
+   "hex": "#B98F6E",
+   "use": "Waterline ring and tide line"
+  },
+  {
+   "name": "Teak",
+   "hex": "#9A6A4A",
+   "use": "Boardwalk planks (alternating with Teak Light), bench slats, pier"
+  },
+  {
+   "name": "Teak Light",
+   "hex": "#B07E58",
+   "use": "Alternate boardwalk plank"
+  },
+  {
+   "name": "Leaf Deep",
+   "hex": "#2F7D57",
+   "use": "Low-poly canopy base facets (oak, apple, pine)"
+  },
+  {
+   "name": "Leaf Lit",
+   "hex": "#57B07A",
+   "use": "Key-lit canopy facets and highlights"
+  },
+  {
+   "name": "Neon Magenta",
+   "hex": "#FF2E9A",
+   "use": "EMISSIVE ONLY: primary sign tubes, stage LEDs, spotlight 1, NEW chip outline, primary glow"
+  },
+  {
+   "name": "Neon Cyan",
+   "hex": "#22E4FF",
+   "use": "EMISSIVE ONLY: path and boardwalk LED edges, valid-cell edge, spotlight 2, secondary button border, headphone ring"
+  },
+  {
+   "name": "Electric Violet",
+   "hex": "#8A5CFF",
+   "use": "EMISSIVE ONLY: spotlight 3, LED-screen gradients, buoy rings"
+  },
+  {
+   "name": "Laser Lime",
+   "hex": "#C6FF3D",
+   "use": "EMISSIVE ONLY: garage sign, at most one accent per building"
+  },
+  {
+   "name": "Sunset Amber",
+   "hex": "#FFB23E",
+   "use": "Warm practical lights: bollards, Edison string lights, lantern head, ferry windows"
+  },
+  {
+   "name": "Window Warm",
+   "hex": "#FFD08A",
+   "use": "Lit windows and skyline window quads (60% at golden hour, 100% at Showtime)"
+  },
+  {
+   "name": "CTA Magenta",
+   "hex": "#E0157F",
+   "use": "Primary button gradient start (white text 4.6:1)"
+  },
+  {
+   "name": "CTA Violet",
+   "hex": "#7B4DFF",
+   "use": "Primary button gradient end (white text 4.8:1)"
+  },
+  {
+   "name": "Text Muted",
+   "hex": "#B8B2D6",
+   "use": "Secondary text on dark panels (about 8.6:1)"
+  },
+  {
+   "name": "Star Gold",
+   "hex": "#FFD23F",
+   "use": "KEPT: ⭐ points number, 3 px focus ring, edit-mode selection hull, gold matcap"
+  },
+  {
+   "name": "Success",
+   "hex": "#2ECC71",
+   "use": "KEPT: BUY button and valid placement cell (money meaning unchanged)"
+  },
+  {
+   "name": "Error Coral",
+   "hex": "#FF5A6A",
+   "use": "Invalid placement cell and error text on dark panels (replaces #E74C3C on dark)"
+  },
+  {
+   "name": "Crowd Shadow",
+   "hex": "#2A2348",
+   "use": "Fan-silhouette bodies (seeded with #33295A and #3D3166); the light sticks provide the colour"
+  },
+  {
+   "name": "Foil Pink",
+   "hex": "#FF7AD9",
+   "use": "Foil gradient stop 1: shop shine edges, shades lens at night (FOIL matcap)"
+  },
+  {
+   "name": "Foil Blue",
+   "hex": "#7AD7FF",
+   "use": "Foil gradient stop 2"
+  },
+  {
+   "name": "Foil Mint",
+   "hex": "#9DFFCF",
+   "use": "Foil gradient stop 3"
+  },
+  {
+   "name": "Foil Gold",
+   "hex": "#FFE27A",
+   "use": "Foil gradient stop 4"
+  }
+ ],
+ "lightingDefault": "DEFAULT = GOLDEN HOUR. It replaces DAY as the preset the island opens in and the one every encore returns to; the v1 pastel DAY preset leaves the toggle. The 'slwShowtime' localStorage key keeps its meaning: '1' gives Showtime, anything else gives golden hour. Renderer unchanged: NeutralToneMapping, SRGBColorSpace.\n\nGolden hour values:\n- Exposure 1.05.\n- HemisphereLight: sky #9C8CFF, ground #3A2550, intensity 1.35. No ambient light.\n- Key 'sun': #FFB48A at 2.2, position (-10, 6.5, 8) aimed at (0, 0, 0). That is about 30° elevation from front-left, so faces toward the camera are warm-lit and long shadows fall back-right.\n- Calibration: lit Turf reads #4FA36A ±6% L on screen. Tune only the key intensity.\n- Shadows (MID/HIGH, static map, autoUpdate false): ortho camera widened to left/right -13..13 and top/bottom -9..9 for the longer shadows, near 1, far 45, bias -0.0005, normalBias 0.03. 1024² on MID, 2048² on HIGH. LOW uses blob shadows only.\n- Rim: #FFB0D9 at strength 0.35, mixed 25% with the member colour, exponent 3.0 (was 2.5).\n- Sky dome: #2B1E5C → #6A3D8F → #FF9A7A. A sun-disc halo sprite (r 3 u, #FFD6A0 at 0.6, additive) sits on the horizon behind the skyline at yaw -30°.\n- Fog: #7E4E8E, near 28, far 72. The skyline uses fog:false with a manual 55% haze tint toward #7E4E8E.\n- Sea: shallow #3FB8D0, deep #1E3F86, foam #FFD9E8, wave lines #FFC7B0 at 0.35. The 40 glints stay, tinted #FFD6A0.\n- Already on at golden hour: neon sleeves at 0.25, halos ×1.2 at opacity 0.6, windows at 0.6, skyline windows 30% lit, stars 0.25 (zenith only), LED screens 0.7. Spot cones are off.\n\nSHOWTIME = NIGHT STAGE (the toggle, plus the 8 s encore after a purchase, an unlock or a goal):\n- Exposure 1.1.\n- Hemisphere: sky #5A4BD1, ground #1A1030, intensity 0.75.\n- Key 'moon': #A9B8FF at 0.8 from (-7, 14, 9). It is higher than the sun so the grid stays readable.\n- Rim: #FF5FD2 at strength 0.6, mixed 50% with the member colour.\n- Sky: #0B0A1F → #1E1450 → #C2338F, the city-glow band.\n- Fog: #1E1450, near 22, far 58.\n- Sea: shallow #1F4FA8, deep #0B1440, foam #B9A8FF. Add additive Magenta/Cyan reflection streaks under each lit sign (instanced quads, max 24).\n- Neon at 1.0, halos ×1.6 at 0.9, windows 1.0, skyline windows 70% lit, stars on (250, or 120 on LOW), LED screens 1.0.\n- 3 spot cones: Neon Magenta, Neon Cyan, Electric Violet, sweeping ±25° at 0.12 Hz, 120° apart. They mount on the LED ring buoys and the stage truss when bld_stage is placed, otherwise on the pole behind the home.\n\nTRANSITION: 1.6 s inOutSine (reduced motion: a 0.25 s crossfade). Signs and windows switch on in a 'city wakes up' ripple outward from the home, 40 ms per cell. Each light fades in over 0.3 s, never pops. Under reduced motion they all switch together in the crossfade.\n\nPHOTOCARD / SHOP STUDIO preset:\n- hemi #B9B0FF / #2A2240 at 1.4\n- key #FFE2C8 at 2.2 from (-5, 8, 9)\n- rim = member colour at 0.45\n- transparent clear colour over the dark CSS card well\n\nFLASH SAFETY:\n- Full-contrast LED chases ≤ 1.5 Hz.\n- Beat-synced pulses ≤ 1.97 Hz (118 BPM) with at most ±35% brightness change.\n- Skyline windows toggle ≤ 0.2 Hz each.\n- No full-screen luminance change > 20% within 0.5 s, and no strobe.",
+ "materialsAndOutlines": "TOON: keep the single shared MeshToon program (customProgramCacheKey 'encore-toon'). The ramp moves from 4 soft bands [110,165,215,255] to 4 crisper, deeper bands [64,128,200,255]. Darker core shadows give a graphic, night-time read instead of a pastel nursery read. Rim patch: same code, new values (exponent 2.5 → 3.0 for a thinner, glossier rim; strengths and colours as in lightingDefault).\n\nBEVELS AND PROPORTIONS:\n- Architecture (home shapes, buildings, attractions, paths, benches, bollards): slab default radius 0.05 × the smallest side (was 0.18), segments 2. That gives crisp designer edges.\n- Organic and character pieces (pets, avatar, plants, rocks, bean bags) keep 0.18.\n- Drop the '1.2× chunkier than real' rule for architecture (use 1.0×); props use 1.1×.\n- Trees become low-poly: Icosahedron detail 0, flatShading, 3–5 clusters. No more puff canopies.\n\nOUTLINES:\n- Architecture loses the ink hull entirely: houses, buildings, attractions, decor. Crisp bevels plus rim do the job and save about 8–12 draw calls.\n- Characters (pets, accessories, avatar) keep a hull at 0.009 u (was 0.012) in Midnight Ink #14101F, MID/HIGH only.\n- The only hull on architecture is edit-mode selection: 0.02 u in Star Gold #FFD23F, pulsing 0.02↔0.03 at 1.5 Hz.\n\nMATCAPS (128², canvas-drawn, one shared matcap program):\n- GOLD and CHROME: kept.\n- SMOKED GLASS: radial, a #8FB7FF spec dot at uv (0.32, 0.28) → #2A3B5C at 35% → #1B2438 at 70% → #0E1626 at the edge. It is OPAQUE: the v1 transparent PEARL 'glass' is retired for windows (fill-rate). Lit windows swap to Window Warm through the existing 'state' material.\n- GUNMETAL: #E6E9F2 → #7C8194 → #5A5F72 → #2A2D3A, for railings, truss, posts, frames.\n- FOIL: conic #FF7AD9 → #7AD7FF → #9DFFCF → #FFE27A. It replaces PEARL for the holo bits (shades lens at night, bubbles).\n\nNEON: same core-plus-additive-sleeve system, with a sharper core:\n- core r 0.015 (was 0.02), sleeve r 0.05\n- sleeve opacity 0.25 at golden hour, 0.45 at Showtime\n- Neon is always a line, ring, sign or pictogram, never a painted surface.\n\nLED SCREENS: MeshBasic with a canvas atlas (256×64, or 256×128 for the stage), animated only by UV offset and never redrawn per frame.\n- Content: original abstract graphics only (EQ bars, waves, ✦ sparks, member-colour gradients, the child's emoji). The only word allowed is ENCORE.\n- Share the program the avatar's emoji face already compiles (basic + map) so the total stays ≤ 12 shader programs.\n\nSURFACE RICHNESS WITHOUT TEXTURES: concrete and paving get vertex-colour noise of ±3% L on a 0.25 u grid. Teak alternates Teak/Teak Light per plank. No extra decal layers (3 overlapping transparents max).\n\nEMISSIVE DECALS: reuse the existing ground decal for uplight pools under trees, bollards and signs (r 0.5; opacity 0.25 at golden hour, 0.4 at night, in the light's colour). LED edge strips on paths and boardwalks reuse the v1 path under-glow quad.\n\nWATER: same shader with new colours. Wave lines are 0.6× as wide. The foam band 0.10 + 0.05·sin follows the new noisy coastline through the re-baked shore field.\n\nPER-OBJECT RULE:\n- Each object uses ≤ 3 tones of one family plus ≤ 1 neon accent.\n- Buildings use 1 neutral body + 1 accent (member colour or a fixed accent) + Smoked Glass + neon/LED: ≤ 4 materials and ≤ 4 merged meshes.",
+ "characterRestyle": "PETS (pet_puppy, pet_kitten, pet_bunny, pet_dragon). PETCOL colours stay LOCKED; only shape, eyes and motion change. Edits are in models-characters.js assemblePet / jointsOf / socketsOf.\n\nProportions:\n- Head puff r 0.17 → 0.155 (head is now about 40% of height, was 45%).\n- Body bean(0.17, 0.18) scaled [0.9, 0.78, 0.8] → bean(0.16, 0.20) scaled [0.85, 0.80, 0.85].\n- Legs puff 0.048 × [1, 1.55, 1] → 0.042 × [1, 1.9, 1]: longer and more athletic.\n- BODY_Y 0.22 → 0.235. Head, sockets and anchors move +0.015 y.\n- Muzzle scale [1.25, 0.8, 0.85] → [1.15, 0.72, 0.95], a slightly longer snout.\n\nEyes (the biggest de-babying lever):\n- Ink puff 0.032 × [0.9, 1.15, 0.55] → 0.024 × [1.15, 0.8, 0.5], at x ±0.072 (was ±0.068) and y 0.402.\n- Rolled 8° so the outer corner sits higher.\n- Add an upper-lid ribbon (r 0.006, Tk.dark) over each eye.\n- Glint disc 0.011 → 0.006, moved upper-outer.\n- Resting openness 1 → 0.88 for a relaxed, confident look. Blinks unchanged (0.16 s every 3–6 s).\n\nFace:\n- Blush discs are removed at rest. They show only in cheer/happy, at a 0.3 mix (was 0.6, always on).\n- Mouth: the symmetric smile becomes a small side-smirk (ribbon points [-0.02, 0.316, 0.35] → [0.002, 0.31, 0.357] → [0.024, 0.322, 0.35]).\n\nSpecies:\n- Puppy: ears [0.42, 1.3, 0.85] → [0.36, 1.25, 0.8], tucked 10° back.\n- Kitten: ear cones h 0.11 → 0.125, slightly sharper.\n- Bunny: the right ear rests folded at 35° (asymmetry gives it attitude).\n- Dragon: horns cone(0.022, 0.065) → cone(0.02, 0.095), swept back 40°. Spines 3 → 5 smaller rounded cones (0.025 × 0.07). Each wing gains 3 rib ribbons (r 0.006) for a sleek scalloped edge. Still puffs sparkles, never fire.\n\nMotion:\n- Idle squash 0.015 → 0.007.\n- Universal tap squish 1 → 0.92 → 1.06 → 1 becomes 1 → 0.96 → 1.03 → 1.\n- Walk speed 0.9 → 1.0 u/s.\n- 'roll over' and 'scratch' idles are replaced by 'lean' (hips 6°, head tilt 8°, 2 s), 'nod to the beat' (headPitch ±6° on beats, only while music plays) and 'look-back' (head yaw 60° and back).\n\nDance break (generic moves only, 8 counts at 118 BPM):\n- 1–2: groove bounce (0.02 u on half-beats) plus a shoulder pop\n- 3–4: step-touch\n- 5–6: signature moves: puppy paw-point combo, kitten slide-step, bunny hop-turn 180°, dragon wing-flare\n- 7: snap to camera\n- 8: freeze pose with one paw raised and head tilted 12°\n\nOutline: 0.009 u in Midnight Ink.\n\nEXISTING 6 ACCESSORIES: restyled, but names and descriptions stay true.\n- Party hat: matte with 2 stripes.\n- Crown: thinner band (h 0.03) with 5 sharper points.\n- Bow: same spots, 15% smaller.\n- Scarf: slimmer torus (r 0.022).\n- Shades: one wraparound shield lens (tube segment R 0.15, 150°, h 0.032) in Midnight Ink, switching to FOIL at night.\n- Cape: Gunmetal clasp.\n\nACCESSORIES TO ADD (new CATALOG ids, cat 'pets'; each ≤ 300 tris with fixed tokens so photocards are stable):\n- acc_cap 'Snapback' (hat, 160 ⭐): worn backwards (yaw 180°). Crown is a half-puff r 0.085 squashed to y 0.6 in Graphite. Flat brim slab 0.10 × 0.012 × 0.075 with a Neon Magenta underside (lit only at night) and a Concrete Light top button. Bunny wears it between the ears.\n- acc_beanie 'Beanie' (hat, 120 ⭐): tube r 0.088 h 0.07 with 10 vertex-colour ribs (Concrete Light / Graphite), a folded cuff torus and a tiny Laser Lime tag. Bunny ears poke through.\n- acc_headphones 'Studio headphones' (neck, 180 ⭐): worn round the neck DJ-style. Half-torus band R 0.10 r 0.012 in Graphite, 2 Gunmetal cups (tube r 0.042 h 0.03) with Neon Cyan rings that glow at night and pulse ±20% on the beat. Rides the neck bone, no bone switching.\n- acc_hoodie 'Hoodie' (back, 260 ⭐): a body shell (the body bean ×1.06, top 70%) in Graphite, a hood draped behind the head (half-puff r 0.09) and 2 Neon Magenta drawstrings (r 0.006, l 0.06).\n- acc_visor 'LED visor' (face, 220 ⭐): a wraparound Smoked Glass band (R 0.16, 140°, h 0.03) with a Neon Cyan LED line. At night one dot scrolls across it at 1 Hz; it is static under reduced motion.\n- acc_bomber 'Bomber jacket' (back, 240 ⭐): the hoodie shell in #4E5A3E olive with a #FF8A3D collar lining and ribbed cuffs.\n\n'YOU' AVATAR: idol-style chibi in streetwear. The face stays the child's own emoji on the face cap, never a realistic face. Height 0.95 → 1.0 u, ≤ 1,500 tris on MID and 1,050 on LOW.\n- Head: the face-cap sphere R 0.244 → 0.205 (same emojiFace texture). It sits inside a HOOD shell: sphere r 0.225 keeping only back, top and sides (z < 0.12), in member colour −12% L. A hood-rim torus R 0.165 r 0.02 in member colour frames the emoji. Two Bone White drawstrings (r 0.006, l 0.09). A thin Gunmetal headset-mic ribbon (r 0.005) runs from the left side of the hood to the cheek and ends in a 0.012 puff: the 'on stage' tell.\n- Torso: an oversized hoodie, bean(0.17, 0.20) in Graphite, with a member-colour chest band (y 0.36–0.40) and member cuffs. Sleeves are Graphite arm beans; hands are Bone White puffs r 0.03.\n- Legs (new; v1 had only foot puffs): 2 beans r 0.06, len 0.10, in Asphalt (joggers).\n- Sneakers: slab 0.10 × 0.055 × 0.15 (radius 0.02) in Bone White, with a 0.012 member-colour sole stripe and a Midnight Ink lace dot.\n- Idle: weight shift (hips 5°, 2.4 s period); the glance every ~6 s is kept.\n- Tap: one of 3 emotes, cycled by hash plus tap count: a finger-heart (neon line-heart sprite), a V-sign with head tilt, or a mic-point to camera.\n- Showtime: holds the Spark Stick and twirls it 360° over 1.2 s every 8 s (off under reduced motion).\n\nSPARK STICK: replaces the puffy 5-point Island Wand everywhere (avatar, crowd, loading spinner, Showtime icon). makeWand keeps its API. ≤ 260 tris.\n- Handle: tube r 0.014 h 0.13 in Midnight Ink, with a member-colour grip band (h 0.02) and a Gunmetal collar ring.\n- Head: a crisp 4-point ✦ prism (ExtrudeGeometry rOut 0.06, rIn 0.016, depth 0.022, bevel 0.004 × 1 seg) in member-colour neon. A white inner ✦ at 60% scale sits 0.002 proud for a frosted-acrylic read. Halo 0.35 u.\n- It is 4-pointed so it never reads as the 5-point ⭐ reward. It must not resemble any real light stick.\n\nCROWD: fan blobs become night silhouettes.\n- Bodies in Crowd Shadow #2A2348, #33295A or #3D3166 (seeded). The 'crowd' detail has no face; the colour comes from their Spark Sticks (member colours plus Magenta/Cyan/Violet).\n- 'Hero' fans get 2 tiny Bone White eye dots.\n- Wave timing unchanged.",
+ "uiV2": "FONTS (Google Fonts, one link, display=swap; island and games only, learning screens keep their fonts):\n- Unbounded 800 (display): screen titles, banners (GOAL!, ENCORE, NEW PERSONAL BEST), countdown digits and the PET COURSE banner texture. Letter-spacing -0.01em, never below 20 px, never body copy.\n- Unbounded 600: sheet headings (h2), 20–24 px.\n- Outfit 700/800: buttons, chips, prices and HUD. Outfit 600 for labels. Outfit 400/500 for body at 16 px, line-height 1.45.\n- Any number that changes (points, timers, scores) uses font-variant-numeric: tabular-nums.\n- Tokens: --sle-display: 'Unbounded', system-ui, -apple-system, 'Segoe UI', sans-serif; --sle-ui and --sle-body: 'Outfit', same fallbacks.\n\nCOLOUR: one dark theme in both presets; Showtime only adds glow.\n- Island page background #0E0B1A.\n- Panels: rgba(22,18,40,0.72) with backdrop-filter blur(16px) saturate(1.3) plus the -webkit- prefix. On LOW, or where it isn't supported, solid #15112A. Border 1px rgba(255,255,255,0.12), inner highlight inset 0 1px 0 rgba(255,255,255,0.08), shadow 0 12px 32px rgba(0,0,0,0.45), radius 16px (sheets: 20px top corners).\n- Text #FFFFFF, secondary #B8B2D6, disabled #6E6890 on #221C3A.\n- Primary CTA: linear-gradient(120deg, #E0157F, #7B4DFF), white Outfit 700 15px, letter-spacing 0.02em, glow 0 6px 20px rgba(224,21,127,0.35).\n- Secondary: transparent, 1.5px #22E4FF border, #22E4FF text.\n- Ghost: rgba(255,255,255,0.06) with a 1px rgba(255,255,255,0.14) border.\n- BUY stays green (#2ECC71 → #1FA463, text #04301A).\n- Points pill: panel glass, ⭐, a #FFD23F tabular number and a 1px rgba(255,210,63,0.35) border. One 0.4 s shimmer when points change.\n- Focus ring stays 3px #FFD23F with offset 2px.\n\nSHAPES (replaces the puffy-sticker style):\n- Buttons are flat: no 3px white sticker border, no 4px 'lip' shadow. Radius 12px, min 44×44, padding 10px 16px. Pressed = scale(0.97) and the glow halves.\n- Chips and pills: 999px with a 1px edge. Cards: radius 14px.\n- Icon buttons: 44px circles in ghost style. Camera controls ⟲ ⟳ ＋ － ⌂ become a vertical ghost stack.\n- Celebrations: a centred glass card (max-width 420px) over a 40% #0E0B1A scrim, not a full-screen candy gradient.\n\nSHOP (dark 'drop' cards, 3:4):\n- Card #1A1530 with a 1px rgba(255,255,255,0.10) edge. Image well radial-gradient(circle at 50% 35%, #3A2A6E, #15112A 70%), the item on a Gunmetal riser with a Neon Magenta ring.\n- Name Outfit 700 15px white; description Outfit 400 13px #B8B2D6; price Outfit 800 16px #FFD23F.\n- Shine goes by price only; the bands are unchanged:\n  - shine 0: plain edge\n  - shine 1: 1.5px foil edge (#FF7AD9 → #7AD7FF)\n  - shine 2: animated foil border with an 8 s hue drift (was 6 s; slower reads classier)\n  - shine 3: gold foil (#FFE89A → #F0C02F → #C9921A) with 2 glints every 4 s (was 3)\n- Tilt-shine ±6°, desktop only, never on touch or under reduced motion.\n- NEW chip: a #FF2E9A outline pill with white text, not a filled bubblegum pill.\n- New shop tab 'City' for the buildings. The home sheet gets a 'Shape' row first, then Walls, Roof, Door, Extras.\n\nICONS:\n- Replace the UI-chrome emoji (🛍️ 🐾 🎮 ✏️ 🏠 🎯 📦 🌙✨ ☀️) with an in-house inline-SVG line set: 24-unit grid, 2px stroke, round caps and joins, currentColor, shown at 20–22px.\n- Showtime = crescent moon plus ✦. Golden hour = half-sun on a horizon line.\n- Emoji remain only as the child's avatar and as ⭐ for points.\n\nMOTION:\n- Hover and press: 160 ms ease-out.\n- Sheets: slide 280 ms cubic-bezier(.2,.8,.2,1). No overshoot; the v1 cubic-bezier(.2,1.2,.4,1) bounce reads babyish.\n- Toasts: 200 ms, 8px drop plus fade, auto-hide after 2.4 s.\n- Celebration card: scale .94 → 1 plus blur 6px → 0 over 320 ms; title letters fade up with a 30 ms stagger.\n- The slwPopIn scale-from-0.2 overshoot is retired. Confetti cannons stay for purchases ≥ 300 ⭐.\n- Nothing in the UI loops faster than 0.5 Hz except the foil drift.\n- Reduced motion: 120 ms opacity fades only.\n\nGAME SHELL:\n- Background #0E0B1A. Top bar glass rgba(255,255,255,0.06) with blur 10px. Title in Outfit 800.\n- Pad states keep their sizes; borders by state: s1 #22E4FF, s2 #FF2E9A, s3 #FFD23F.\n- The .go button uses the primary CTA gradient.\n- Countdown digits: Unbounded 800 at clamp(84px,18vw,160px), white, with a 0 0 24px member-colour glow and a thin expanding ring each beat.\n- Results: radial-gradient(circle at 50% 30%, #2A1856, #0B0A1F 70%) with 2 soft spotlight wedges. The PB badge is a gold-foil pill.\n\nLEGIBILITY:\n- At least 4.5:1 for all text (white on the CTA stops: #E0157F 4.6:1, #7B4DFF 4.8:1).\n- #FF2E9A and #22E4FF are used as text only at ≥ 18px bold or on dark; otherwise as borders and glows.\n- On/off states always change the icon or label too, not just the colour.",
+ "copyTone": "VOICE: a cool older cousin who runs the stage crew: short, confident, a little witty, never babyish, never sarcastic or mocking.\n\nStyle rules:\n- UK English (colour, favourite).\n- Sentence case. Verbs first. One idea per line.\n- At most one emoji per message, placed at the end, and only when it carries meaning (⭐ for points stays).\n- Ban list in island and game UI: yay, yippee, hooray, boing, oopsie, uh-oh, cosy, little, tiny, cute, poorly, magic(al), friendly, super, sparkly, 'lovely'.\n- Talk about building, styling, the crew and the stage, not 'playing with' things. 'Pets' becomes 'Crew' in UI copy only (ids unchanged).\n- Celebrate effort and saving ('you saved for that'), never luck.\n- Keep every reassurance (pets never get sad, game scores don't earn or spend ⭐), just say it cooler.\n\nHow to apply it:\n- Item NAMES stay exactly as in CATALOG.\n- Descriptions and UI strings are re-voiced through a new display-copy table (world/world-copy.js: id or key → string, falling back to CATALOG desc). The CATALOG text itself is never edited.\n- Results-screen safety lines stay ('Game scores don't earn or spend ⭐').\n\nREWRITES (current → v2):\n1. 'Yay! 🎉' (celebration button) → 'Nice'\n2. 'Pets never get sad or poorly — they’re always happy to see you.' → 'Your crew never gets sad. Take a break — they’ll be ready when you’re back.'\n3. '🐾 Hello, Biscuit!' (after naming a pet) → 'Biscuit it is.'\n4. 'Placed! ✨' / 'Moved! ✨' → 'Placed.' / 'Moved.'\n5. '📦 Put away safely — it’s in your storage.' → 'Stored. Find it in Edit.'\n6. 'Your home has had a makeover. Switch styles any time by tapping your home.' → 'New look, locked in. Tap your home to restyle any time.'\n7. 'Your pet is wearing it now. Swap it between pets in 🐾 Pets.' → 'Equipped. Swap it around in Crew.'\n8. 'You saved up and did it. Pick your next goal in the shop!' → 'Goal smashed — you saved for that. Set the next one.'\n9. '✏️ Tap something on your island to move it or put it away.' → 'Edit mode: tap anything to move it or store it.'\n10. 'Tap it and your pet bounces! Boing!' (trampoline desc) → 'Tap it — your pet does a triple bounce and a flip.'\n11. 'Pick a player first 🙂' → 'Choose a player to enter the island.'\n12. '🎯 Pick a savings goal in the shop' → 'Set a goal 🎯'\n13. 'Selected — you’ll see it next time you play.' → 'Equipped for your next run.'\n14. '☀️ Day' / '🌙✨ Showtime' → 'Golden hour' / 'Showtime'\n15. 'Faded ones are in the shop — tap to see them.' → 'Dimmed ones are in the shop.'\n\nNew-building lines in the same voice:\n- Boba Café: 'Tap for a fresh order.'\n- Dance Studio: 'Tap and your pet hits the floor.'\n- Concert Stage: 'Tap to bring the whole crew on.'",
+ "whatToChangePerModule": [
+  "docs/island3d: write art-bible.v2.json (keep v1 for history) with the palette, presets, materials and characters from this delta. CONTRACTS.md §0 needs three edits: (1) fonts become 'Unbounded 600/800 + Outfit 400–800 for island and games; Bagel Fat One/Baloo 2/Fredoka only on learning screens'; (2) 'architecture has no ink hull; characters 0.009 u Midnight Ink'; (3) add LED_CHASE_HZ ≤ 1.5 next to the 2 Hz rule.",
+  "world/world-core.js (ADDITIVE ONLY): new style slot 'shape' with five ids:\n- shape_cottage 'Classic cottage', 0 ⭐\n- shape_loft 'City loft', 0 ⭐\n- shape_split 'Split-level studio', 400 ⭐\n- shape_dome 'Pod dome', 450 ⭐\n- shape_tower 'Sky tower', 500 ⭐\nAdd DEFAULTS.shape; world-look SLOT_DEFAULTS mirrors it (test-enforced).\nRECOMMENDATION: DEFAULTS.shape = 'shape_loft'. Every existing save (no sel.shape) then opens on the new look with its wall, roof and door choices carried over. Both 0-⭐ shapes are taken through the normal 0-price buy path, so switching back to the cottage is always one tap. This is a parent call: 'shape_cottage' means zero visual change for existing saves.\nOther new ids:\n- walls: wall_graphite #34303F 150, wall_concrete #A9A5B3 150, wall_midnight #232A57 180, wall_gallery #ECEAF2 150. Put them in a NEW WALL2 table; LOCKED WALL is untouched.\n- doors: door_glass 150, door_neon 220 (member-colour frame).\n- details (multi): detail_neon 'Neon roofline' 250, detail_led 'LED screen' 300, detail_deck 'Roof deck' 280.\n- buildings as kind 'fun' (unique, placeable, storable under existing rules), new cat 'city', entrance false: bld_boba 'Boba Café' fp [2,1] 600; bld_record 'Recording Studio' fp [2,2] 800; bld_rooftop 'Rooftop Hangout' fp [2,2] 700; bld_dance 'Dance Studio' fp [2,2] 900; bld_stage 'Concert Stage' fp [3,2] 1200. Acts: serve, record, hangout, dance, perform. Prices are suggestions for the economy owner; they sit in the existing shine bands.\n- accessories: acc_cap 160, acc_beanie 120, acc_headphones 180 (neck), acc_hoodie 260 (back), acc_visor 220 (face), acc_bomber 240 (back).\nNO change to ECONOMY, REGIONS, canPlace, occupancy, the placed-record schema, or any existing id, price, name or desc.",
+  "world/world-look.js:\n- LOOK_VERSION 1 → 2 (busts the photocard cache).\n- Add the v2 PALETTE tokens and keep every v1 token defined (LOCKED and the 2D fallback still use them).\n- Re-point the land, sea, sky and character tokens to v2.\n- DUSK preset becomes the default and replaces DAY in presetAt(k), which mixes DUSK → SHOW; new SHOW values per lightingDefault.\n- MATERIAL: toonRamp [64,128,200,255]; rim exp 3.0; outline {building: 0, character: 0.009, token: 'Midnight Ink'}; neonSleeve core 0.015 / r 0.05 / day 0.25.\n- MATCAPS: add smoked, gunmetal, foil.\n- CHARACTERS: avatar v2 parts, wand → Spark Stick, fanBlob silhouette tokens.\n- LOOK entries for every new id.\n- A VARIANTS table {id: count} for the deterministic per-uid variants.\n- ORGANIC yaw: trees 0–360°, scale 0.88–1.12. SMALL_DECOR_YAW = [-20, 0, 20].\n- LED_CHASE_HZ 1.5 alongside MAX_FLASH_HZ 2.",
+  "world/world-art.js (2D fallback): 2D sprites and icons for every new id, silhouette-first. Loft = two offset boxes; tower = tall plus low wing; dome = semicircle on a ring; split = butterfly roofs. Also the 5 buildings and 6 accessories. Add an optional dusk 2D island palette keyed off the same toggle. Existing sprites unchanged.",
+  "world/island3d/grid3d.js (pure, testable):\n- surfaceY adds a gentle home-region rise toward the back: row 1 +0.25, row 2 +0.12; cove cells dip -0.04 toward the sea.\n- Meadow terraces 0.45/0.35/0.25/0.15 are kept but blended with smoothstep slopes in a 0.14 u border; each cell keeps a flat 0.72 × 0.72 pad, so baseY, plinths, pets and the pick heightfield stay exact.\n- New pure helpers: coastNoise(x, z, seed), a 2-octave value noise with wavelengths 2.4 u and 0.9 u and amplitudes 0.18 and 0.06, seeded by hash(profileKey) so each sibling's coast differs; and coastOffset(), clamped ≥ 0.12 u outside every land cell so the coast never cuts a buildable square.\nAdd Node tests for both.",
+  "world/island3d/env.js:\n- Replace the per-cell grass/sand slab instancing and the checker with ONE terrain mesh: 0.25 u vertex grid from the re-baked shore field plus coastOffset. Turf tops with ±4% vertex-colour noise.\n- Back (−z) and west edges get faceted Cliff Rock faces 0.35–0.6 u tall (flatShading). Front and cove edges get Dune beaches 0.3–0.5 u wide with a Wet Dune ring.\n- Concrete retaining walls wherever a terrace step over 0.1 u is exposed.\n- ≤ 6k tris and 1–2 draw calls for all land.\n- Boardwalks: path_wood tiles on the coast grow a 0.5 u pier over the water with 2 Gunmetal posts. Planks orient across the path direction (from pathNetworks). Neon Cyan edge strips, and Sunset Amber bollards on every 2nd tile, light at golden hour and night.\n- Fixed 'harbour pier' dressing off the east shore, outside every cell: 0.8 × 3 u, with a small ferry (≤ 400 tris, lit windows) docking every 60 s; static under reduced motion.\n- BACKDROP CITY across the bay at z −16…−22, x −24…24, not pickable: 18 merged towers (≤ 600 tris, haze-tinted, fog:false), 220 instanced Window Warm quads (30% → 70% lit, ≤ 0.2 Hz toggles), 2 LED billboards (atlas UV scroll, abstract), and a low hill-ridge silhouette. That adds +3 draw calls and about 1.2k tris.\n- Stage buoys become LED ring buoys (torus R 0.4, Electric Violet core).\n- Wire the DUSK/SHOW presets and the 'city wakes up' ripple.",
+  "world/island3d/kit.js:\n- Toon ramp [64,128,200,255].\n- slab() takes an architecture radius preset of 0.05 × the smallest side.\n- New matcaps: smoked (opaque), gunmetal, foil. The 'glass' material key maps to the opaque smoked matcap.\n- LED-screen helper: a 256×64 / 256×128 atlas animated only by UV offset, sharing the emoji-face basic+map program.\n- OUTLINE_W for architecture 0. Character hull 0.009 in #14101F.\n- Keep ≤ 12 programs: call renderer.compile behind the veil.",
+  "world/island3d/models-home.js: shape dispatch by st.shape (default from SLOT_DEFAULTS). Every shape ≤ 3,000 tris (≤ 3,500 with details), ≤ 4 materials (toon, smoked glass, neon, window state) and ≤ 2.9 u tall.\nThe shapes:\n- shape_cottage: the v1 house, re-materialised with crisp bevels, no hull, Smoked Glass windows and a Gunmetal door frame.\n- shape_loft (h 2.2): ground box 1.5 × 0.95 × 1.15; upper box 1.25 × 0.8 × 1.0 cantilevered at (+0.22 x, −0.1 z) with a full-width 0.5-tall glass band; flat roof with a 0.06 parapet.\n- shape_tower (h 2.8): a 1.0 × 2.55 × 0.95 tower at back-left; a 0.85 × 1.0 × 1.0 front-right wing holding the door; a member-colour neon fin (0.04 × 1.8) on the tower corner; slit windows every 0.7 u.\n- shape_dome (h 1.75): flat-shaded 10-segment Lathe hemisphere r 0.82 on a 0.16 Concrete ring plinth; 3 portholes r 0.13; a tube vestibule r 0.3 for the door; an LED ring at the base.\n- shape_split (h 2.05): a left block 0.85 × 1.55 × 1.15 and a right block 0.8 × 1.05 × 1.15 offset 0.15 forward; butterfly monopitch roofs at 12°; a clerestory glass strip 0.18 tall.\nThe ROOF slot becomes each shape's 'crown', so every roof name stays true:\n- red: terracotta tiled parapet cap and entrance canopy\n- blue: slate cladding on the top storey\n- thatch: fluffy straw pergola canopy\n- candy: icing-drip parapet, sprinkles and a cherry\n- castle: crenellated parapet plus 2 turret cones, capped at 2.9\nDetails per shape:\n- chimney: steel flue r 0.06 on modern shapes, same smoke\n- fairy lights: follow the eave or parapet\n- flag: on the highest point\n- detail_neon: member-colour tube on every roof edge, chase ≤ 1 Hz at night\n- detail_led: 0.7 × 0.35 facade screen (child's emoji plus waves)\n- detail_deck: roof deck with glass rail and 2 bean bags, or a balcony on the cottage and dome\nVariety: each shape has 2 trim variants by hash(profileKey) (window rhythm and accent-panel side). A shape change uses the existing restyle path (invalidateShadows).",
+  "NEW world/island3d/models-city.js (SL3D.defineModels('city')). Every building: ≤ 3,000 tris on MID (−30% on LOW), ≤ 4 materials and meshes, hit box = fp × max(h, 0.8), 3 deterministic trim variants by hash(uid) (accent from {member, Magenta, Cyan}, sign side, stripe pattern). No words, logos or real brands; screens show icons, waves and the child's emoji.\n- bld_boba (2×1, h 1.55): Concrete box 1.75 × 1.0 × 0.75 with a Smoked Glass front 1.3 × 0.7; flat awning 0.08 thick × 0.35 deep with white stripes and a Neon Magenta edge. Roof cup sign: frosted tube r 0.17 h 0.4, 7 Midnight Ink pearls r 0.035, a member-colour straw r 0.02 at 12°. 2 stools and a round table out front. Act 'serve' (≤ 2.5 s): the cup spins 360° in 0.8 s, the pearls bounce, the pet trots to the counter and back; pop → chip → star.\n- bld_dance (2×2, h 2.0): Concrete box 1.7 × 1.6 × 1.5; full-height glass front 1.4 × 1.3 showing a chrome-matcap mirror wall and a 3 × 3 instanced LED floor; on the parapet, an original neon pictogram (a sneaker plus 3 motion lines). Act 'dance' (4 s): the pet runs in and dances behind the glass; floor tiles chase ≤ 1.5 Hz.\n- bld_record (2×2, h 1.8): Graphite box 1.7 × 1.2 × 1.4 with acoustic-foam relief (36 instanced pyramid studs per side wall); a porthole window; a steady red 'recording' lamp, never blinking; roof dish and antenna; a corner vinyl-disc sign (r 0.3, member-colour label) turning at 0.1 rev/s. Act 'record' (3 s): lamp on, 8 facade EQ bars driven by the music clock, plus SLMusic drop() for one bar when music is on.\n- bld_rooftop (2×2, h 2.4): open ground floor (4 Gunmetal pillars, 0.08 u square, plus a Concrete core); upper deck 1.7 × 0.12 × 1.5 at y 1.25 with a 0.3-tall glass balustrade; 2 bean bags; 8 Sunset Amber Edison bulbs; a telescope; an 8-tread zig-zag stair. Act 'hangout' (3 s): the avatar climbs up and sits, a pet follows, the lights brighten 0.6 → 1, and the camera pushes in 6%.\n- bld_stage (3×2, h 2.6): riser 2.8 × 0.35 × 1.4 with an Asphalt deck and a Neon Cyan LED edge; box-truss arch (4 Gunmetal tubes r 0.02 per leg plus bracing ribbons); back LED screen 1.6 × 0.9 (EQ waves, member gradient, ENCORE); 2 speaker stacks. The 3 spotlight cones re-mount on its truss when it is placed. Act 'perform' (one 8-count, about 4.1 s): every owned pet and the avatar run up and do the dance break; the screen pulses the member colour.",
+  "world/island3d/models-garden.js:\n- Trees: low-poly faceted canopies (Leaf Deep / Turf Shade / Leaf Lit), with 3 canopy layouts per species picked by hash(uid), yaw 0–360° and scale 0.88–1.12.\n- Flowers: 3 colour mixes per id.\n- Small decor (bench, umbrella, lantern, sandcastle, snowman, flag): deterministic yaw from {−20°, 0°, +20°}.\n- Lantern: a slim modern bollard (Gunmetal post, frosted cube head, Sunset Amber).\n- Mushroom caps: Cyan/Violet LED.\n- Mossy rock: loses the blinking eyes.\n- Lighthouse: stays red-and-white (its desc) with crisp bevels and an LED gallery ring.\n- Windmill: slim slat sails.\n- Snowman and sandcastle: crisper, coal dots only.\nHouses, buildings, attractions and paths still never jitter.",
+  "world/island3d/models-fun.js: shapes modernise, acts and descs stay true.\n- Trampoline: Graphite mat with a Neon Cyan rim pad.\n- Fountain: a square plaza basin with LED-tinted jets for the water show.\n- Tree swing: low-poly tree with a Teak seat.\n- Bubble machine: a sleek speaker-style bubble cannon in Graphite with a Foil ring.",
+  "world/island3d/models-attractions.js: LOCKED THEME, KARTS, BALLS and STADIA colours untouched.\n- Course gate: a sleek LED-strip arch; the PET COURSE banner is redrawn in Unbounded 800, white on Graphite with a member underline; marquee bulbs become LED dots.\n- Kart garage: becomes a pit garage with a Laser Lime LED bolt sign.\n- Pitch: stands get crowd silhouettes and Spark Sticks.",
+  "world/island3d/models-characters.js: everything in characterRestyle (pet proportions, eyes, blush, mouth, species, motion, dance-break moves, 0.009 hulls), the 6 new accessory builders (≤ 300 tris each, existing sockets), the avatar v2 (hood, headset mic, hoodie, legs, sneakers) under the same bones (adding legs to the body bone is fine), the Spark Stick under the makeWand API, and crowd silhouettes in makeFanBlob.",
+  "world/island3d/fx3d.js:\n- Confetti: 55% thin rectangles, 25% ✦ sparks, 20% curly streamers, no hearts or circles. Colours: 40% member colour, the rest Magenta, Cyan, Violet and Bone White.\n- Fireworks: ring bursts with ✦ trails.\n- Dust puffs: a small grey-violet.\n- Hearts only for the finger-heart emote.",
+  "world/island3d/island3d.js + actors.js + pets-brain.js:\n- Boot in DUSK; the toggle maps to SHOW; encores return to DUSK.\n- Act handlers for serve, dance, record, hangout and perform; one live act per uid, interruptible, as before.\n- Pets prefer to idle near owned buildings (stage riser, roof deck).\n- New idle actions: lean, beat-nod, look-back.",
+  "world/island3d/camera.js: FOV 30 → 32 and default elevation 52° → 48°, so the skyline shows while the grid stays readable. Edit mode stays at 62°. The Showtime orbit grows from 8° over 8 s to 12° over 10 s. Static cuts under reduced motion.",
+  "world/island3d/photocard.js: STUDIO light preset; transparent clear colour over the dark CSS well; riser is a Gunmetal disc r 0.7 with a Neon Magenta ring and 2 crossing cones; cache key uses LOOK_VERSION 2. Style items preview on the player's own current shape.",
+  "world/island-encore.css: swap the token values per uiV2 and keep the --sle-* names and hook classes, so rewards-world.js needs no structural change.\n- fonts\n- dark panels at 72% with solid #15112A on LOW\n- flat 12px buttons without white borders or lips\n- dark shop cards with the slower 8 s foil\n- outline NEW chip\n- glass celebration card replacing slwPopIn\n- no-overshoot sheet easing\n- game-shell countdown and results",
+  "world/rewards-world.js:\n- All strings go through world/world-copy.js (new pure module plus a Node test that every overridden id exists in CATALOG).\n- Toggle labels 'Golden hour' / 'Showtime'.\n- New 'City' shop tab; 'Shape' row first in the home sheet.\n- Inline SVG icons replace the chrome emoji.\n- 'Pets' becomes 'Crew' in labels only.\n- One-time toast for existing saves: 'Your home got a city makeover — tap it to switch back to the cottage.'",
+  "index.html + sw.js (lead): add family=Unbounded:wght@600;800 and Outfit:wght@400;500;600;700;800 to the Google Fonts link (display=swap), bump SL_WORLD_VER and the service-worker cache.",
+  "world/music.js (light touch, same track names): island_day becomes a 'golden hour' city-pop feel at 100 BPM in F major, with a warm electric-piano lead and plucks replacing the marimba and steel-drum. island_showtime is unchanged and already fits.",
+  "world/games/*-3d*.js and the HUDs (logic and GAME_RULES untouched):\n- Menus and results adopt the night palette.\n- Unbounded countdown; Outfit tabular HUD numbers.\n- Midnight Ink 0.009 hulls on characters.\n- Crowd silhouettes with Spark Sticks.\n- Course THEMES, kart TRACKS and STADIA colours stay LOCKED.",
+  "tests:\n- update island-look tests: new tokens, a LOOK entry for every new id, SLOT_DEFAULTS === DEFAULTS including shape, every show hz ≤ 2, every chase ≤ LED_CHASE_HZ.\n- grid3d: coastOffset never enters a land cell; terraces keep flat pads.\n- world-core: the new fp [2,1] and [3,2] buildings place and store through the existing canPlace.\n- save compatibility: a v1 save with no sel.shape and no new ids loads, renders the default shape and keeps its wall, roof and door selections."
+ ],
+ "dontDo": [
+  "Don't copy or evoke real idols, groups, agencies, songs, music shows, venues, logos, fandom names or fandom colour schemes. No Hangul and no 'K-pop' or 'idol' wording in the UI. Never let one two-colour pair dominate a scene; always mix Magenta, Cyan, Violet and the member colour.",
+  "Don't use any real light-stick silhouette: no sphere-on-a-stick, hammer, cube, heart, bird, crown, hexagon or ring-with-logo heads. The 4-point ✦ Spark Stick is the only light stick, and it must never read as the 5-point ⭐ reward.",
+  "Don't use recognisable choreography. Dance clips are built only from generic moves: groove bounce, step-touch, point, spin, freeze pose.",
+  "Don't flash faster than 2 Hz. Full-contrast LED chases ≤ 1.5 Hz, beat pulses limited to ±35% brightness, no strobe, no full-screen flash. Reduced motion freezes chases to a steady glow.",
+  "Don't go edgy or teen-adult: no skulls, flames, weapons, graffiti words, ripped or revealing outfits, make-up, smoking, nightclubs, bars or alcohol (the café serves boba). Streetwear stays modest: hoodies, joggers, sneakers, caps.",
+  "Don't make it dark or scary. The darkest value is Night Zenith #0B0A1F; the island must read clearly on the LOW tier with no shadows and no outlines, at both golden hour and Showtime. No under-lighting on faces.",
+  "Don't paint neon onto big surfaces (walls, ground, sky). Neon is lines, rings, signs and screens: ≤ 8% of the frame at golden hour, ≤ 15% at Showtime.",
+  "Don't edit existing CATALOG ids, prices, names, descriptions, LOCKED colours, ECONOMY, REGIONS, canPlace or GAME_RULES. Don't add fields (such as rotation) to placed records. All variety comes from deterministic hash(uid)/hash(profileKey) variants and new additive ids.",
+  "Don't introduce chance: no random variants at purchase, no gacha, loot boxes, timers or 'limited time'. Shine stays price-only, and buildings and acts never award or spend points.",
+  "Don't jitter the position or yaw of houses, buildings, attractions or paths. Only organic decor gets yaw/scale jitter, and small decor only the fixed −20°/0°/+20° set.",
+  "Don't make the backdrop skyline, harbour pier or ferry pickable, or look like buildable land; it sits well outside the 16×10 grid.",
+  "Don't use transparent glass, PointLights or SpotLights, real-time shadow updates or new post-processing. Stay within ≤ 12 shader programs and ≤ 70/100/150 island draw calls (LOW/MID/HIGH), plus the tri budgets.",
+  "Don't put words in textures except ENCORE, PET COURSE and GOAL-type banners, and never brand-like logos. Screens show abstract graphics, icons and the child's emoji.",
+  "Don't download models, textures, HDRIs or sounds, and don't load fonts beyond Unbounded and Outfit for the island and games.",
+  "Don't lose the cartoon safety net: tumbles stay goofy, pets never get sad, there are no injuries, the dragon never breathes fire and the volcano never erupts.",
+  "Don't over-bounce. No overshoot easing on UI sheets or celebration cards, no jelly squash on buildings. Keep the reduced 0.96/1.03 tap squish and the drop-in landing only.",
+  "Don't write babyish copy (yay, boing, cosy, tiny, poorly), and don't put more than one emoji in a message."
+ ]
+}

@@ -1,0 +1,2161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="robots" content="noindex, nofollow" />
+<title>Island 3D Lab</title>
+<!-- DEV ONLY — My Island 3D QA lab (island architecture chunk 16). Not linked from the app and
+     not precached by sw.js. Serve the repo root (python3 -m http.server 8000) and open
+     /island3d_lab.html. Modes: ?mode=showcase (default) | ?item=<id> | ?mode=pets | ?mode=karts |
+     ?mode=env | ?mode=island (&fixture=starter|max|showcase). See island3d_lab_core.js for every
+     URL parameter. The import map below is the same as index.html's (three r170 from jsDelivr). -->
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.min.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+} }
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Baloo+2:wght@600;700;800&family=Bagel+Fat+One&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #2B2140; --ink2: #5B4F7A; --glass: rgba(255,255,255,0.78); --glass-solid: #FFF8FD; --edge: rgba(255,255,255,0.9);
+    --chip: #FFFFFF; --chip-ink: #2B2140; --well: rgba(43,33,64,0.06);
+    --ok: #1C8F57; --warn: #A86400; --over: #C8283A; --gold: #FFD23F;
+    --sky: linear-gradient(180deg, #8FD3FF 0%, #CDEBFF 55%, #FFE3F1 100%);
+  }
+  body.showtime {
+    --ink: #FFFFFF; --ink2: #D9D2FF; --glass: rgba(26,18,64,0.72); --glass-solid: #1A1240; --edge: rgba(255,255,255,0.25);
+    --chip: rgba(255,255,255,0.12); --chip-ink: #FFFFFF; --well: rgba(255,255,255,0.08);
+    --ok: #5CE6A0; --warn: #FFC24D; --over: #FF8A96;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body { background: #FFF8FD; color: var(--ink); font: 500 14px/1.4 'Fredoka', system-ui, -apple-system, sans-serif; overflow: hidden; }
+  body.showtime { background: #130C2E; }
+  button, select, input { font: inherit; color: inherit; }
+  :focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
+  #app { display: grid; grid-template-columns: minmax(0, 1fr) 360px; grid-template-rows: auto minmax(0, 1fr); height: 100vh; height: 100dvh; }
+  .glass { background: var(--glass); -webkit-backdrop-filter: blur(14px) saturate(1.4); backdrop-filter: blur(14px) saturate(1.4);
+           border: 1.5px solid var(--edge); border-radius: 22px; box-shadow: 0 10px 30px rgba(43,33,64,0.16); }
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) { .glass { background: var(--glass-solid); } }
+  header { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; padding: 8px 12px; margin: 8px 8px 0; min-width: 0; }
+  header h1 { margin: 0; font: 400 22px/1 'Bagel Fat One', system-ui, sans-serif; letter-spacing: 0.5px; white-space: nowrap;
+              background: linear-gradient(135deg, #FF5FA2, #A66BFF); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  #modes { display: flex; gap: 6px; overflow-x: auto; min-width: 0; flex: 1; padding: 4px 2px; scrollbar-width: none; }
+  #status { font: 700 12px/1 'Baloo 2', sans-serif; padding: 7px 12px; border-radius: 999px; background: var(--well); white-space: nowrap; max-width: 34vw; overflow: hidden; text-overflow: ellipsis; }
+  #stage { position: relative; overflow: hidden; margin: 8px; border-radius: 22px; background: var(--sky); min-height: 0; touch-action: none; }
+  #stage canvas.lab-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  #mountHost { position: absolute; inset: 0; }
+  #mountHost[hidden] { display: none; }
+  #labels { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+  #labels.off .tag { display: none !important; }
+  .tag { position: absolute; left: 0; top: 0; pointer-events: auto; cursor: pointer; font: 700 11px/1.15 'Baloo 2', sans-serif;
+         padding: 3px 8px; border-radius: 999px; background: rgba(255,255,255,0.94); color: #2B2140; border: 2px solid #FFFFFF;
+         box-shadow: 0 2px 6px rgba(43,33,64,0.2); white-space: nowrap; will-change: transform; }
+  .tag .b { margin-left: 4px; padding: 0 5px; border-radius: 999px; font-size: 10px; background: #EDE8F7; color: #4F4870; }
+  .tag .sw { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-left: 4px; border: 1px solid #2B2140; vertical-align: -1px; }
+  .tag.ph { background: #FFE3F1; border: 2px dashed #E0408A; color: #8E1650; }
+  .tag.err { background: #FFE0E0; border-color: #C8283A; }
+  .tag.over .t { color: #C8283A; }
+  .tag.sel { outline: 3px solid var(--gold); outline-offset: 1px; }
+  .tag.hdr { cursor: default; background: none; border: none; box-shadow: none; padding: 0; font: 400 16px/1 'Bagel Fat One', system-ui, sans-serif;
+             color: #2B2140; text-shadow: 0 2px 0 #FFFFFF, 0 0 6px #FFFFFF; pointer-events: none; }
+  body.showtime .tag.hdr { color: #FFFFFF; text-shadow: 0 2px 0 #3B1E6E, 0 0 8px #A66BFF; }
+  #msg { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); max-width: min(440px, 86%); padding: 16px 18px; text-align: center; z-index: 5; }
+  #msg h2 { margin: 0 0 6px; font: 400 20px/1.1 'Bagel Fat One', system-ui, sans-serif; }
+  #msg p { margin: 4px 0; color: var(--ink2); }
+  #note { position: absolute; left: 10px; top: 10px; right: 10px; padding: 7px 12px; font-size: 12px; z-index: 4; border-radius: 16px; }
+  #cues { position: absolute; left: 10px; bottom: 10px; display: flex; flex-direction: column; gap: 3px; pointer-events: none; z-index: 3; }
+  #cues span { font: 700 11px/1 'Baloo 2', sans-serif; padding: 4px 8px; border-radius: 999px; background: rgba(43,33,64,0.62); color: #FFFFFF; transition: opacity 600ms; }
+  #panel { margin: 8px 8px 8px 0; padding: 10px; overflow-y: auto; overflow-x: hidden; min-height: 0; }
+  #panelToggle { display: none; }
+  .card { padding: 8px 4px 10px; border-bottom: 1px solid var(--well); }
+  .card:last-child { border-bottom: 0; }
+  .card h2 { margin: 0 0 6px; font: 800 12px/1.2 'Baloo 2', sans-serif; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink2); }
+  .row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 4px 0; }
+  .row > label { font: 700 12px/1.2 'Baloo 2', sans-serif; color: var(--ink2); min-width: 62px; }
+  .chip, .btn { min-height: 36px; padding: 6px 12px; border-radius: 18px; border: 3px solid #FFFFFF; background: var(--chip); color: var(--chip-ink);
+                font: 700 13px/1 'Baloo 2', sans-serif; cursor: pointer; box-shadow: 0 3px 0 #D8D0EA, 0 6px 14px rgba(43,33,64,0.14);
+                transition: transform 180ms ease-out, box-shadow 180ms ease-out; white-space: nowrap; }
+  body.showtime .chip, body.showtime .btn { border-color: rgba(255,255,255,0.55); box-shadow: 0 3px 0 rgba(0,0,0,0.35), 0 0 12px rgba(166,107,255,0.35); }
+  .chip:active, .btn:active { transform: translateY(3px); box-shadow: 0 1px 0 #D8D0EA; }
+  .chip[aria-pressed="true"], .btn.primary { background: linear-gradient(135deg, #E0408A, #8F55F0); color: #FFFFFF; box-shadow: 0 3px 0 #9B2E7A, 0 6px 14px rgba(43,33,64,0.18); }
+  .btn.secondary { background: linear-gradient(135deg, #2BA9D6, #5A66E8); color: #FFFFFF; box-shadow: 0 3px 0 #3A46B0, 0 6px 14px rgba(43,33,64,0.18); }
+  .chip[aria-pressed="true"]::before { content: '✓ '; }
+  .chip:disabled, .btn:disabled { background: #E4E0EE; color: #4F4870; cursor: not-allowed; box-shadow: none; transform: none; }
+  .chip.sm { min-height: 30px; padding: 4px 9px; font-size: 12px; }
+  #modes .chip[aria-pressed="true"]::before { content: ''; }
+  select, input[type="text"] { min-height: 36px; padding: 4px 10px; border-radius: 14px; border: 2px solid var(--edge); background: var(--chip); color: var(--chip-ink); max-width: 100%; }
+  select option { color: #2B2140; }
+  input[type="range"] { flex: 1; min-width: 120px; accent-color: #E0408A; }
+  input[type="color"] { width: 40px; height: 32px; border: 2px solid #FFFFFF; border-radius: 10px; padding: 0; background: none; }
+  table.stats { width: 100%; border-collapse: collapse; font: 600 12px/1.3 'Baloo 2', sans-serif; }
+  table.stats td { padding: 3px 4px; border-bottom: 1px dashed var(--well); }
+  table.stats td.v { text-align: right; font-variant-numeric: tabular-nums; }
+  .lv { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; background: #B8B0CC; }
+  .lv.ok { background: var(--ok); } .lv.warn { background: var(--warn); } .lv.over { background: var(--over); }
+  tr.over td, li.over { color: var(--over); font-weight: 700; } tr.warn td, li.warn { color: var(--warn); }
+  li.ok { color: var(--ok); }
+  ul.list { margin: 4px 0; padding-left: 18px; font-size: 12px; }
+  ul.list li { margin: 2px 0; overflow-wrap: anywhere; }
+  .small { font-size: 12px; color: var(--ink2); overflow-wrap: anywhere; }
+  .mono { font: 600 11px/1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  .icon2d { width: 92px; height: 92px; flex: none; border-radius: 16px; background: radial-gradient(#FFF0FA, #E8F4FF); padding: 6px; border: 2px solid #FFFFFF; }
+  .icon2d svg { width: 100%; height: 100%; }
+  .swatches { display: flex; flex-wrap: wrap; gap: 4px; }
+  .swatches span { display: inline-flex; align-items: center; gap: 4px; font: 600 11px/1 'Baloo 2', sans-serif; padding: 3px 6px 3px 3px; border-radius: 999px; background: var(--well); }
+  .swatches i { width: 14px; height: 14px; border-radius: 50%; border: 1.5px solid #2B2140; }
+  .shot { max-width: 100%; border-radius: 14px; border: 2px solid #FFFFFF; margin-top: 6px; display: block; }
+  .files { columns: 2; column-gap: 10px; }
+  .files div { break-inside: avoid; }
+  @media (max-width: 820px) {
+    body { overflow: auto; }
+    #app { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(52vh, 1fr) auto; height: auto; min-height: 100dvh; }
+    header { margin: 8px 16px 0; padding: 6px 10px; }
+    header h1 { font-size: 18px; }
+    #status { display: none; }
+    #stage { margin: 8px 16px; height: 56vh; }
+    #panel { margin: 0 16px 16px; max-height: none; }
+    #panel.collapsed > .card { display: none; }
+    #panelToggle { display: inline-flex; }
+    .files { columns: 1; }
+  }
+  @media (prefers-reduced-motion: reduce) { .chip, .btn { transition: opacity 120ms; } }
+</style>
+</head>
+<body>
+<div id="app">
+  <header class="glass">
+    <h1>Island Lab</h1>
+    <nav id="modes" aria-label="Lab mode"></nav>
+    <span id="status" role="status">Loading…</span>
+  </header>
+  <main id="stage" aria-label="3D view">
+    <div id="mountHost" hidden></div>
+    <div id="labels"></div>
+    <div id="note" class="glass" hidden></div>
+    <div id="cues" aria-live="polite"></div>
+    <div id="msg" class="glass" hidden></div>
+  </main>
+  <aside id="panel" class="glass" aria-label="Lab controls">
+    <button id="panelToggle" class="chip" type="button" aria-expanded="true">⚙️ Panel</button>
+    <section class="card" id="secView"><h2>View</h2></section>
+    <section class="card" id="secMode"><h2>Mode</h2></section>
+    <section class="card" id="secInfo"><h2>Inspect</h2><p class="small">Tap an item or its label.</p></section>
+    <section class="card" id="secStats"><h2>Stats</h2></section>
+    <section class="card" id="secFiles"><h2>Files &amp; issues</h2></section>
+    <section class="card" id="secTools"><h2>Tools</h2></section>
+  </aside>
+</div>
+<noscript><p style="padding:20px">The Island 3D Lab needs JavaScript.</p></noscript>
+
+<script>
+window.SL_WORLD_VER = '1';
+/* verbatim copy of index.html's 3D loader (resolves THREE through the import map, or null) */
+(function () {
+  var p = null;
+  window.slLoad3D = function () {
+    if (p) return p;
+    p = new Promise(function (resolve) {
+      try { if (localStorage.getItem('slNo3D') === '1') return resolve(null); } catch (e) {}
+      var ok = false;
+      try { var c = document.createElement('canvas'); ok = !!(c.getContext('webgl2') || c.getContext('webgl')); } catch (e) {}
+      if (!ok) return resolve(null);
+      var done = false, timer = setTimeout(function () { if (!done) { done = true; resolve(null); } }, 15000);
+      var imp;
+      try { imp = new Function('return import("three")')(); } catch (e) { imp = Promise.reject(e); }
+      imp.then(function (T) { if (!done) { done = true; clearTimeout(timer); resolve(T); } })
+        .catch(function () { if (!done) { done = true; clearTimeout(timer); resolve(null); } });
+    });
+    return p;
+  };
+})();
+</script>
+<script src="island3d_lab_core.js"></script>
+<script id="labMain">
+/* ================================================================
+   Island 3D Lab — the page controller (classic script; THREE only via SL3D.THREE).
+   Boot: world-core, world-art, world-look, games/fx, sound → island3d/stage.js →
+   SLIsland3D.ensure(). Every mode builds from SL3D.make / SL3D.makeRig and degrades
+   to placeholders or lab stand-ins when another branch's file is missing.
+   Automation: window.labShot(opts) → data URL; window.lab (state, setMode, set, act,
+   stats, memoryCycle, ready).
+   ================================================================ */
+(function () {
+  'use strict';
+  var $ = function (id) { return document.getElementById(id); };
+  var LAB = window.SLIslandLab;
+  if (!LAB) { showMsg('Lab helpers missing', 'island3d_lab_core.js did not load.'); return; }
+
+  var P = LAB.parseParams(location.search);
+  var D2R = Math.PI / 180;
+  var MEDIA_REDUCED = false;
+  try { MEDIA_REDUCED = !!window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) {}
+  var S = {
+    mode: P.mode, item: P.item, st: P.st, tier: null, tierPinned: !!P.tier, show: P.show,
+    reduced: P.reduced == null ? MEDIA_REDUCED : P.reduced, wire: P.wire, outlines: P.outlines, shadows: P.shadows,
+    idle: P.idle, spin: P.spin, sound: P.sound, labels: true, fixture: P.fixture, engine: P.engine, sim: P.sim,
+    clip: P.clip, playAll: false, speed: 1, intensity: 1, acc: P.acc, driver: false, driverPet: 'pet_puppy',
+    member: '#FF5FA2', timeScale: 1, fresh: P.fresh
+  };
+  var G = {};            /* SL3D, THREE, K, C, L, M, T, Grid, ART, Orbit */
+  var R = {
+    renderer: null, scene: null, camera: null, controls: null, hemi: null, sun: null, fx: null, view: null,
+    t: 0, last: 0, width: 1, height: 1, info: { calls: 0, tris: 0 }, labels: [], selected: null, shake: null,
+    showAnim: null, lostCount: 0, issues: [], issuesDirty: true, fixtures: {}, lit: {}, wireMats: new Set(),
+    lastStats: 0, fatal: false, home: null, statsTimer: 0, fallbackTpl: {}
+  };
+  var meter = LAB.fpsMeter(60), workAvg = 0;
+  var readyResolve;
+  var readyP = new Promise(function (res) { readyResolve = res; });
+  var CTRL_ACTS = { squish: 1, dropIn: 1, debut: 1, store: 1, hop: 1 };
+  /* the kit's shared materials (wireframe on a mounted island, whose scene the lab can't reach) */
+  var KIT_MAT_KEYS = ['toon', 'gold', 'chrome', 'pearl', 'glass', 'state', 'ink', 'blob', 'outline:0.018', 'outline:0.012'];
+
+  /* ---------------- small helpers ---------------- */
+  function msgOf(e) { return e && e.message ? e.message : String(e); }
+  function clamp01(v) { return v < 0 ? 0 : v > 1 ? 1 : v; }
+  function labIssue(text) {
+    if (R.issues.indexOf(text) >= 0) return;          /* once per message (rebuilds repeat them) */
+    R.issues.push(text);
+    if (R.issues.length > 80) R.issues.shift();
+    R.issuesDirty = true;
+    if (window.console) console.warn('[lab] ' + text);
+  }
+  function safe(fn, what) { try { return fn(); } catch (e) { labIssue((what || 'lab') + ': ' + msgOf(e)); return undefined; } }
+  function el(tag, attrs, kids) {
+    var n = document.createElement(tag);
+    if (attrs) Object.keys(attrs).forEach(function (k) {
+      var v = attrs[k];
+      if (v == null || v === false) return;
+      if (k === 'text') n.textContent = v;
+      else if (k === 'html') n.innerHTML = v;
+      else if (k === 'class') n.className = v;
+      else if (k.slice(0, 2) === 'on' && typeof v === 'function') n.addEventListener(k.slice(2), v);
+      else n.setAttribute(k, v === true ? '' : String(v));
+    });
+    (kids || []).forEach(function (c) { if (c != null) n.appendChild(typeof c === 'string' ? document.createTextNode(c) : c); });
+    return n;
+  }
+  function clear(node) { while (node && node.firstChild) node.removeChild(node.firstChild); return node; }
+  function setStatus(t) { $('status').textContent = t; }
+  function showMsg(title, text, extra) {
+    var m = $('msg');
+    clear(m);
+    m.appendChild(el('h2', { text: title }));
+    (Array.isArray(text) ? text : [text]).forEach(function (t) { if (t) m.appendChild(el('p', { text: t })); });
+    if (extra) m.appendChild(extra);
+    m.hidden = false;
+  }
+  function hideMsg() { $('msg').hidden = true; }
+  var swWarning = '';
+  function note(text) { var n = $('note'), t = text || swWarning; n.textContent = t; n.hidden = !t; }
+  function cue(text) {
+    var box = $('cues'), s = el('span', { text: text });
+    box.appendChild(s);
+    while (box.children.length > 6) box.removeChild(box.firstChild);
+    setTimeout(function () { s.style.opacity = '0'; }, 1800);
+    setTimeout(function () { if (s.parentNode) s.parentNode.removeChild(s); }, 2500);
+  }
+  function rng(seed) {                    /* mulberry32 */
+    var s = seed >>> 0;
+    return function () {
+      s = (s + 0x6D2B79F5) >>> 0;
+      var t = s;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  function loadScript(src) {
+    return new Promise(function (res) {
+      var s = document.createElement('script');
+      s.src = src; s.async = false;
+      s.onload = function () { res(true); };
+      s.onerror = function () { res(false); };
+      document.head.appendChild(s);
+    });
+  }
+  var dynImport = (function () {
+    try { var f = new Function('u', 'return import(u)'); return function (u) { try { return f(u); } catch (e) { return Promise.reject(e); } }; }
+    catch (e) { return function () { return Promise.reject(new Error('dynamic import unavailable')); }; }
+  }());
+  function updateURL() {
+    var q = LAB.toQuery({
+      mode: S.mode, item: S.item, st: S.st, tier: S.tierPinned ? S.tier : null, show: S.show,
+      reduced: S.reduced === MEDIA_REDUCED ? null : S.reduced, wire: S.wire, outlines: S.outlines, shadows: S.shadows,
+      idle: S.idle, spin: S.spin, sound: S.sound, fixture: S.fixture, engine: S.engine, sim: S.sim, clip: S.clip, acc: S.acc, fresh: S.fresh
+    });
+    try { history.replaceState(null, '', location.pathname + q); } catch (e) {}
+  }
+
+  /* ================================================================
+     BOOT
+     ================================================================ */
+  var VQ = '?v=' + (P.fresh ? 'lab' + Date.now() : (window.SL_WORLD_VER || '1'));
+  var bootFiles = ['world/world-core.js', 'world/world-art.js', 'world/world-look.js', 'world/games/fx.js', 'world/sound.js'];
+  var bootStatus = {};
+  var simCleanup = null;
+  function boot() {
+    buildModeTabs();
+    swCheck();
+    setStatus('Loading scripts…');
+    Promise.all(bootFiles.map(function (f) { return loadScript(f + VQ); })).then(function (ok) {
+      bootFiles.forEach(function (f, i) { bootStatus[f] = ok[i]; });
+      if (!window.SLWorldCore || !window.SLIslandLook) throw new Error('world-core.js / world-look.js did not load');
+      return loadScript('world/island3d/stage.js' + VQ);
+    }).then(function (ok) {
+      bootStatus['world/island3d/stage.js'] = ok;
+      if (!ok || !window.SLIsland3D || typeof window.SLIsland3D.ensure !== 'function') throw new Error('world/island3d/stage.js did not load');
+      applySim();
+      setStatus('Loading three r170 + island3d…');
+      return window.SLIsland3D.ensure({ tier: P.tier || undefined, deadlineMs: 25000 });
+    }).then(function (sl3d) {
+      if (simCleanup) { simCleanup(); simCleanup = null; }
+      if (!sl3d) return unavailable();
+      return start(sl3d);
+    }).catch(function (e) {
+      if (simCleanup) { simCleanup(); simCleanup = null; }
+      setStatus('Boot failed');
+      showMsg('Boot failed', [msgOf(e), 'Serve the repo root over http (python3 -m http.server 8000).']);
+      readyResolve(false);
+    });
+  }
+  /* ?sim=no3d: the CDN / WebGL path fails; ?sim=slNo3D: the parent switch (restored after boot,
+     so the real app on this origin is never affected) */
+  function applySim() {
+    if (S.sim === 'no3d') window.slLoad3D = function () { return Promise.resolve(null); };
+    if (S.sim === 'slNo3D') {
+      var prev = null;
+      try { prev = localStorage.getItem('slNo3D'); localStorage.setItem('slNo3D', '1'); } catch (e) {}
+      simCleanup = function () { try { if (prev == null) localStorage.removeItem('slNo3D'); else localStorage.setItem('slNo3D', prev); } catch (e) {} };
+    }
+  }
+  function unavailable() {
+    var why = (window.SLIsland3D && window.SLIsland3D.failed && window.SLIsland3D.failed()) || 'unknown';
+    setStatus('3D unavailable: ' + why);
+    var back = el('button', { type: 'button', class: 'btn primary', text: 'Reload without the simulation',
+      onclick: function () { S.sim = null; updateURL(); location.reload(); } });
+    showMsg('3D unavailable', ['SLIsland3D.ensure() resolved null (' + why + ').',
+      S.sim ? 'This is the ' + S.sim + ' simulation: the app would show its 2D island silently.' : 'The app would stay on its 2D island silently.'], S.sim ? back : null);
+    renderFiles();
+    readyResolve(false);
+  }
+  function start(sl3d) {
+    G.SL3D = sl3d; G.THREE = sl3d.THREE; G.C = window.SLWorldCore; G.L = window.SLIslandLook; G.M = window.SLMotion;
+    G.T = window.SLTier; G.Grid = window.SLGrid3D; G.ART = window.SLWorldArt;
+    S.tier = (P.tier && G.T.parseTier(P.tier)) || sl3d.tier;
+    if (G.ART && typeof G.ART.defs === 'function' && !$('labArtDefs')) {
+      var d = el('div', { id: 'labArtDefs', 'aria-hidden': 'true', style: 'position:absolute;width:0;height:0;overflow:hidden' });
+      safe(function () { d.innerHTML = G.ART.defs(); }, 'art defs');
+      document.body.appendChild(d);
+    }
+    var combo = LAB.COMBOS.filter(function (c) { return c.key === S.item; })[0];
+    if (combo) { S.item = 'house_cottage'; S.st = S.st || JSON.parse(JSON.stringify(combo.st)); }
+    return dynImport('three/addons/controls/OrbitControls.js').then(function (m) { G.Orbit = m && m.OrbitControls; }, function (e) {
+      G.Orbit = null; labIssue('OrbitControls import failed: ' + msgOf(e) + ' (the camera stays put)');
+    }).then(function () {
+      buildViewPanel(); buildToolsPanel();
+      $('panelToggle').addEventListener('click', function () {
+        var p = $('panel'), c = p.classList.toggle('collapsed');
+        this.setAttribute('aria-expanded', String(!c));
+      });
+      window.addEventListener('resize', resize);
+      if (typeof ResizeObserver === 'function') new ResizeObserver(function () { resize(); }).observe($('stage'));
+      setMode(S.mode, true);
+      setInterval(function () { renderStats(); if (R.issuesDirty) renderFiles(); }, 500);
+      readyResolve(true);
+    });
+  }
+  function swCheck() {
+    try {
+      if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+        swWarning = '⚠ The app’s service worker controls this page: sw.js stores every navigation as ./index.html and caches each lab script. Use another port or unregister it before QA.';
+        note('');
+      }
+    } catch (e) {}
+  }
+
+  /* ================================================================
+     RENDERER, SCENE, CAMERA
+     ================================================================ */
+  function budget() { return G.T.budget(S.tier, window.devicePixelRatio || 1); }
+  function budgetForStats() { return S.tier === G.SL3D.tier && G.SL3D.budget ? G.SL3D.budget : budget(); }
+  function wantOutlines() { return S.tier !== 'LOW' && (S.outlines == null ? !!budget().outlines : !!S.outlines); }
+  function wantShadows() { return S.shadows == null ? !!budget().shadows : !!S.shadows; }
+  function createRenderer() {
+    disposeRenderer();
+    var b = budget();
+    var r = G.SL3D.createRenderer({ antialias: !!b.antialias, pixelRatio: b.pixelRatio, shadows: wantShadows(), alpha: true });
+    if (!r) { showMsg('No renderer', 'SL3D.createRenderer() returned null — see Files & issues.'); return false; }
+    r.setClearColor(0x000000, 0);
+    r.domElement.className = 'lab-canvas';
+    r.domElement.setAttribute('aria-hidden', 'true');
+    $('stage').insertBefore(r.domElement, $('mountHost'));
+    r.domElement.addEventListener('webglcontextlost', onLost, false);
+    r.domElement.addEventListener('webglcontextrestored', onRestored, false);
+    r.domElement.addEventListener('pointerdown', onPointerDown);
+    r.domElement.addEventListener('pointerup', onPointerUp);
+    R.renderer = r;
+    R.camera = new G.THREE.PerspectiveCamera(30, 1, 0.1, 400);
+    if (G.Orbit) {
+      R.controls = new G.Orbit(R.camera, r.domElement);
+      R.controls.enableDamping = true; R.controls.dampingFactor = 0.12;
+      R.controls.screenSpacePanning = true; R.controls.maxPolarAngle = 88 * D2R;
+    }
+    resize();
+    R.last = 0;
+    r.setAnimationLoop(tick);
+    return true;
+  }
+  function disposeRenderer() {
+    var r = R.renderer;
+    if (!r) return;
+    R.renderer = null;
+    try { r.setAnimationLoop(null); } catch (e) {}
+    if (R.controls) { safe(function () { R.controls.dispose(); }); R.controls = null; }
+    var c = r.domElement;
+    c.removeEventListener('webglcontextlost', onLost, false);
+    c.removeEventListener('webglcontextrestored', onRestored, false);
+    try { r.dispose(); } catch (e) {}
+    try { r.forceContextLoss(); } catch (e) {}
+    if (c.parentNode) c.parentNode.removeChild(c);
+  }
+  function resize() {
+    var st = $('stage'), w = Math.max(1, st.clientWidth), h = Math.max(1, st.clientHeight);
+    R.width = w; R.height = h;
+    if (R.renderer) R.renderer.setSize(w, h, false);
+    if (R.camera) { R.camera.aspect = w / h; R.camera.updateProjectionMatrix(); }
+    R.labels.forEach(function (L) { L.x = -1e4; });
+  }
+  function newScene() {
+    var T = G.THREE, sc = new T.Scene();
+    R.hemi = new T.HemisphereLight(0xffffff, 0xffffff, 1.9);
+    R.sun = new T.DirectionalLight(0xffffff, 2.4);
+    R.sun.name = 'sun';
+    R.sun.castShadow = wantShadows();
+    var ms = budget().shadowMapSize || 1024;
+    R.sun.shadow.mapSize.set(ms, ms);
+    R.sun.shadow.bias = -0.0004; R.sun.shadow.normalBias = 0.03;
+    sc.add(R.hemi, R.sun, R.sun.target);
+    sc.fog = new T.Fog(0xffffff, 30, 70);
+    return sc;
+  }
+  /* aim the static shadow map at the content */
+  function fitSun(center, radius) {
+    var T = G.THREE, d = new T.Vector3(-7, 14, 9).normalize();
+    R.sun.target.position.copy(center);
+    R.sun.position.copy(center).addScaledVector(d, radius + 12);
+    var cam = R.sun.shadow.camera;
+    cam.left = -radius; cam.right = radius; cam.top = radius; cam.bottom = -radius;
+    cam.near = 0.5; cam.far = radius * 2 + 30;
+    cam.updateProjectionMatrix();
+    if (R.renderer) R.renderer.shadowMap.needsUpdate = true;
+  }
+  /* frame a box from an elevation/yaw (degrees), like the photocard / island cameras */
+  function frameBox(box, elev, yaw, fill) {
+    var T = G.THREE, sph = box.getBoundingSphere(new T.Sphere()), cam = R.camera;
+    var c = sph.center, rad = Math.max(0.3, sph.radius);
+    var vf = cam.fov * D2R, hf = 2 * Math.atan(Math.tan(vf / 2) * cam.aspect);
+    var dist = Math.max(rad / Math.sin(vf / 2), rad / Math.sin(hf / 2)) * (fill || 1.05);
+    var e = elev * D2R, y = yaw * D2R;
+    cam.position.set(c.x + dist * Math.cos(e) * Math.sin(y), c.y + dist * Math.sin(e), c.z + dist * Math.cos(e) * Math.cos(y));
+    cam.near = Math.max(0.05, dist - rad * 3); cam.far = dist + rad * 4 + 120;
+    cam.updateProjectionMatrix();
+    cam.lookAt(c);
+    if (R.controls) { R.controls.target.copy(c); R.controls.update(); }
+    R.scene.fog.near = Math.max(30, dist + rad * 2); R.scene.fog.far = R.scene.fog.near + 60;
+    R.home = { box: box.clone(), elev: elev, yaw: yaw, fill: fill };
+  }
+  function goHome() {
+    if (R.view && R.view.kind === 'mount') { safe(function () { if (R.view.stage.resetView) R.view.stage.resetView(); }); return; }
+    if (R.view && R.view.camera) { placeCamera(R.view.camera); return; }
+    if (R.home) frameBox(R.home.box, R.home.elev, R.home.yaw, R.home.fill);
+  }
+  /* SLGrid3D.fitCamera output → camera */
+  function placeCamera(fc) {
+    var cam = R.camera;
+    cam.fov = fc.fov || 30;
+    cam.position.set(fc.position.x, fc.position.y, fc.position.z);
+    cam.near = 0.5; cam.far = 200;
+    cam.updateProjectionMatrix();
+    cam.lookAt(fc.target.x, fc.target.y, fc.target.z);
+    if (R.controls) { R.controls.target.set(fc.target.x, fc.target.y, fc.target.z); R.controls.update(); }
+    R.scene.fog.near = 30; R.scene.fog.far = 70;
+  }
+
+  /* ================================================================
+     MODES
+     ================================================================ */
+  var MODE_LABEL = { showcase: '🧸 Showcase', item: '🔍 Item', pets: '🐶 Pets', karts: '🏎️ Karts', env: '🌊 Env', island: '🏝️ Island' };
+  function buildModeTabs() {
+    var nav = clear($('modes'));
+    LAB.MODES.forEach(function (m) {
+      nav.appendChild(el('button', { type: 'button', class: 'chip', 'data-mode': m, 'aria-pressed': String(S.mode === m), text: MODE_LABEL[m],
+        onclick: function () { if (G.SL3D) setMode(m); } }));
+    });
+  }
+  function setMode(m, first) {
+    if (LAB.MODES.indexOf(m) < 0) m = 'showcase';
+    if (m === 'item' && !S.item) S.item = 'house_cottage';
+    S.mode = m;
+    Array.prototype.forEach.call($('modes').children, function (b) { b.setAttribute('aria-pressed', String(b.getAttribute('data-mode') === m)); });
+    updateURL();
+    rebuild();
+    if (first) setStatus('Ready · session tier ' + G.SL3D.tier + (P.tier ? ' (?tier)' : ''));
+  }
+  var BUILD = {
+    showcase: function () { return buildShowcase(); },
+    item: function () { return buildItem(); },
+    pets: function () { return buildPets(); },
+    karts: function () { return buildKarts(); },
+    env: function () { return buildEnv(); },
+    island: function () { return buildIsland(); }
+  };
+  function rebuild() {
+    hideMsg();
+    note('');
+    disposeView();
+    select(null);
+    var wantMount = S.mode === 'island' && useMount();
+    if (wantMount) {
+      disposeRenderer();
+      R.scene = null;
+      R.view = safe(function () { return mountIsland(); }, 'mount');
+      if (R.view) { buildModePanel(); renderInfo(); renderFiles(); return; }
+      labIssue('mount failed: showing the lab preview instead');
+    }
+    if (!R.renderer && !createRenderer()) return;
+    G.K = G.SL3D.kit(S.tier);
+    G.K.setOutlines(wantOutlines());
+    R.scene = newScene();
+    R.renderer.shadowMap.enabled = wantShadows();
+    R.fx = makeFx();
+    R.building = null;
+    try { R.view = BUILD[S.mode](); }
+    catch (e) {
+      labIssue(S.mode + ' build failed: ' + msgOf(e));
+      showMsg('Build failed', [S.mode + ': ' + msgOf(e)]);
+      R.view = R.building || newView(S.mode);          /* keep what was built so it is still disposed */
+    }
+    R.building = null;
+    applyShow(S.show, true);
+    applyWire();
+    R.renderer.shadowMap.needsUpdate = true;
+    meter.reset();
+    buildModePanel();
+    renderInfo();
+    renderFiles();
+  }
+  function newView(kind) {
+    var v = {
+      kind: kind, entries: [], batches: [], objects: [], scope: 'info', update: null, dynamicShadows: false, camera: null, env: null,
+      add: function (en) { v.entries.push(en); R.scene.add(en.holder); return en; }
+    };
+    R.building = v;
+    return v;
+  }
+  function disposeView() {
+    var v = R.view;
+    R.view = null;
+    clearLabels();
+    if (!v) return;
+    if (v.kind === 'mount') { safe(function () { v.dispose(); }, 'island dispose'); return; }
+    v.entries.forEach(function (en) {
+      if (en.act && en.act.obj && typeof en.act.obj.cancel === 'function') safe(function () { en.act.obj.cancel(); });
+      if (en.driver) { safe(function () { if (en.driver.root.parent) en.driver.root.parent.remove(en.driver.root); en.driver.dispose(); }, 'driver dispose'); }
+      if (en.decal && en.decal.parent) en.decal.parent.remove(en.decal);
+      if (en.rig) safe(function () { en.rig.dispose(); }, 'rig dispose');
+      else if (en.disposeFn) safe(en.disposeFn, en.key + ' dispose');
+      else if (en.obj && en.obj.userData && typeof en.obj.userData.dispose === 'function') safe(function () { en.obj.userData.dispose(); }, 'item dispose');
+      if (en.holder && en.holder.parent) en.holder.parent.remove(en.holder);
+    });
+    v.batches.forEach(function (b) { safe(function () { b.dispose(); }, 'batch dispose'); });
+    v.objects.forEach(function (o) {
+      if (o.userData && typeof o.userData.dispose === 'function') safe(function () { o.userData.dispose(); });
+      if (o.parent) o.parent.remove(o);
+    });
+    if (v.env) safe(function () { v.env.dispose(); }, 'env dispose');
+    if (R.fx) { safe(function () { R.fx.parts.dispose(); R.fx.halos.dispose(); }); R.fx = null; }
+    if (R.sun) { safe(function () { R.sun.shadow.dispose(); }); }       /* the shadow map render target, or every rebuild leaks one */
+    R.activePet = null;
+    restoreWire();
+  }
+  /* a renderer setting that needs a fresh context (antialias, shadow programs) */
+  function renewRenderer() { disposeView(); createRenderer(); rebuild(); }
+
+  /* ---------------- building blocks ---------------- */
+  function hasInfo() {
+    return {
+      model: function (id) { var m = G.SL3D.models[id]; return !!(m && typeof m.build === 'function'); },
+      rig: typeof G.SL3D.makeRig === 'function', env: !!window.SLIslandEnv
+    };
+  }
+  /* SL3D.make with the lab's outline choice (make reads SL3D.quality.outlines) */
+  function labMake(id, st) {
+    var q = G.SL3D.quality, prev = q ? q.outlines : null;
+    if (q) q.outlines = wantOutlines();
+    try { return G.SL3D.make(id, st || {}, S.tier); } finally { if (q) q.outlines = prev; }
+  }
+  /* a lab-only template, built once per tier through the kit's part cache (disposed with the kit) */
+  function labTemplate(key, build) {
+    return G.K.parts.get('lab:' + key, S.tier, function (K) { return build(K, K.template(K.ctx('lab_' + key.replace(/\W/g, '_'), {}))); });
+  }
+  function labObject(key, build) {
+    var o = G.K.instantiate(labTemplate(key, build), { outlines: false, castShadow: false });
+    return o;
+  }
+  function riserObj(r) {
+    var rr = Math.round(r * 10) / 10;
+    return labObject('riser' + rr, function (K, b) {
+      var top = K.G.t(K.G.tube(rr, rr * 1.04, 0.14), { p: [0, 0.07, 0] });
+      K.G.paintBy(top, function (v) { return v.ny > 0.6 ? 'Riser Top' : 'Holo Pink'; });
+      var ring = K.G.paint(K.G.t(K.G.ring(rr * 1.02, 0.025), { r: [90, 0, 0], p: [0, 0.14, 0] }), 'Cloud White');
+      return b.part('top', [top], 'toon').part('ring', [ring], 'neon:Neon Pink').done();
+    });
+  }
+  function floorObj(w, d) {
+    var W = Math.ceil(w + 2), D = Math.ceil(d + 2);
+    return labObject('floor' + W + 'x' + D, function (K, b) {
+      var g = K.G.t(K.G.slab(W, 0.2, D, 0.3), { p: [0, -0.16, 0] });
+      K.G.paintBy(g, function (v) { return v.ny > 0.6 ? 'Riser Top' : 'Holo Blue'; });
+      return b.part('floor', [g], 'toon').done();
+    });
+  }
+  /* one instanced tile batch per footprint size (one draw call each) */
+  function tileBatch(view, w, d, token, side) {
+    var key = 'tile' + w + 'x' + d + token.replace(/\W/g, '');
+    view.tiles = view.tiles || {};
+    if (view.tiles[key]) return view.tiles[key];
+    var tpl = labTemplate(key, function (K, b) {
+      var g = K.G.t(K.G.slab(w - 0.08, 0.12, d - 0.08), { p: [0, -0.06, 0] });
+      K.G.paintBy(g, function (v) { return v.ny > 0.6 ? token : side; });
+      return b.part('tile', [g], 'toon', { receiveShadow: true }).done();
+    });
+    var batch = G.K.batch(tpl, { outlines: false, castShadow: false });
+    R.scene.add(batch.group);
+    view.batches.push(batch);
+    view.tiles[key] = batch;
+    return batch;
+  }
+  function landTileObj(id) {
+    var look = G.L.LOOK[id] || {}, c = look.colors || {};
+    return labObject('land_' + id, function (K, b) {
+      var g = K.G.t(K.G.slab(1.8, 0.24, 1.8), { p: [0, 0.12, 0] });
+      K.G.paintBy(g, function (v) { return v.ny > 0.6 ? (c.top || 'Sand') : (c.side || 'Wet Sand'); });
+      return b.part('land', [g], 'toon').done();
+    });
+  }
+
+  /* ---------------- pets: SL3D.makeRig, or a lab stand-in in the locked PETCOL colours ---------------- */
+  /* an Object3D, or the root/group/object of a handle that wraps one */
+  function toObj(v) {
+    if (!v) return null;
+    if (v.isObject3D) return v;
+    var o = v.root || v.group || v.object;
+    return o && o.isObject3D ? o : null;
+  }
+  function makeRig(petId, acc) {
+    var fn = G.SL3D.makeRig;
+    if (typeof fn === 'function') {
+      try {
+        var rig = fn(petId, acc || {}, S.tier);
+        if (rig && rig.root && rig.root.isObject3D) return rig;
+        labIssue('makeRig(' + petId + ') returned no root: lab stand-in used');
+      } catch (e) { labIssue('makeRig(' + petId + ') threw: ' + msgOf(e) + ' — lab stand-in used'); }
+    }
+    return fallbackRig(petId, acc);
+  }
+  function fallbackRig(petId, acc) {
+    var key = 'pet_' + petId;
+    var tpl = labTemplate(key, function (K, b) {
+      var G3 = K.G, pc = 'PETCOL.' + petId + '.';
+      var body = G3.paint(G3.t(G3.bean(0.15, 0.12), { p: [0, 0.2, -0.02], r: [90, 0, 0] }), pc + 'body');
+      var belly = G3.paint(G3.t(G3.puff(0.1), { p: [0, 0.18, 0.08], s: [1, 0.9, 0.7] }), pc + 'light');
+      var legs = [[-0.08, 0.08], [0.08, 0.08], [-0.08, -0.1], [0.08, -0.1]].map(function (q) {
+        return G3.paint(G3.t(G3.tube(0.04, 0.04, 0.1, { radial: 6 }), { p: [q[0], 0.05, q[1]] }), pc + 'dark');
+      });
+      var tail = G3.paint(G3.t(G3.puff(0.05), { p: [0, 0.24, -0.19] }), petId === 'pet_bunny' ? 'Cloud White' : pc + 'dark');
+      var head = G3.paint(G3.t(G3.puff(0.17, { sphere: true }), { p: [0, 0.42, 0.06] }), pc + 'body');
+      var muzzle = G3.paint(G3.t(G3.puff(0.07), { p: [0, 0.38, 0.2], s: [1.2, 0.8, 0.8] }), pc + 'light');
+      var nose = G3.paint(G3.t(G3.puff(0.025), { p: [0, 0.41, 0.26] }), pc + 'nose');
+      var eyes = [-0.065, 0.065].map(function (x) { return G3.paint(G3.t(G3.puff(0.032), { p: [x, 0.46, 0.2] }), 'Ink'); });
+      var ears;
+      if (petId === 'pet_bunny') ears = [-0.06, 0.06].map(function (x) { return G3.paint(G3.t(G3.bean(0.035, 0.16), { p: [x, 0.66, 0.02], r: [-8, 0, x < 0 ? 8 : -8] }), pc + 'body'); });
+      else if (petId === 'pet_kitten') ears = [-0.09, 0.09].map(function (x) { return G3.paint(G3.t(G3.cone(0.05, 0.1), { p: [x, 0.58, 0.05] }), pc + 'dark'); });
+      else if (petId === 'pet_dragon') ears = [-0.06, 0.06].map(function (x) { return G3.paint(G3.t(G3.cone(0.03, 0.08), { p: [x, 0.6, 0.04] }), 'Star Gold'); });
+      else ears = [-0.15, 0.15].map(function (x) { return G3.paint(G3.t(G3.drop(0.06, 0.16), { p: [x, 0.5, 0.04], r: [180, 0, x < 0 ? -20 : 20] }), pc + 'dark'); });
+      return b.pivot('head', [0, 0.36, 0.04])
+        .part('body', [body, belly, tail].concat(legs), 'toon', { outline: 0.012 })
+        .part('head', [head, muzzle, nose].concat(eyes, ears), 'toon', { pivot: 'head', outline: 0.012 })
+        .anchor('top', [0, 0.72, 0]).done();
+    });
+    var root = G.K.instantiate(tpl, { outlines: wantOutlines() });
+    var head = root.userData.pivots.head;
+    return {
+      root: root, fallback: true, bones: { head: head }, sockets: {}, clips: LAB.CLIPS,
+      setPose: function () {}, setShow: function () {},
+      play: function (clip, t, o) { fallbackClip(root, head, clip, t, o || {}); },
+      dispose: function () { root.userData.dispose(); }
+    };
+  }
+  /* a rough procedural stand-in for each built-in clip (only when makeRig is missing) */
+  function fallbackClip(root, head, clip, t, o) {
+    var sp = o.speed || 1, k = o.intensity == null ? 1 : o.intensity, x = t * sp;
+    var y = 0, rx = 0, ry = 0, rz = 0, sy = 1, hx = 0;
+    if (!o.reduced) {
+      switch (clip) {
+        case 'walk': y = 0.02 * Math.abs(Math.sin(x * 8)); rz = 3 * Math.sin(x * 8); break;
+        case 'run': y = 0.06 * Math.abs(Math.sin(x * 12)); rx = -8; break;
+        case 'hop': case 'jump': case 'cheer': y = 0.25 * k * Math.max(0, Math.sin(x * Math.PI * 1.4)); sy = 1 + 0.06 * Math.sin(x * Math.PI * 2.8); break;
+        case 'fall': rx = 25 * Math.min(1, (x % 1.6) / 0.4); y = -0.05; break;
+        case 'slide': rx = -14; y = 0.01; break;
+        case 'tumble': rx = (x * 360) % 360; y = 0.12 * Math.abs(Math.sin(x * Math.PI)); break;
+        case 'dizzy': ry = 14 * Math.sin(x * 6); rz = 8 * Math.sin(x * 6 + 1); break;
+        case 'dance': rz = 10 * k * Math.sin(x * Math.PI * 1.97); y = 0.03 * Math.abs(Math.sin(x * Math.PI * 1.97)); break;
+        case 'sad': hx = 22; sy = 0.96; break;
+        case 'sit': y = -0.05; rx = -12; break;
+        case 'kick': rx = -16 * Math.max(0, Math.sin(x * Math.PI * 1.5)); break;
+        case 'drive': y = 0.008 * Math.sin(x * 20); break;
+        default: sy = 1 + 0.02 * Math.sin(x * 2.4);
+      }
+    } else if (clip === 'sad') hx = 22;
+    else if (clip === 'sit') y = -0.05;
+    root.position.y = y;
+    root.rotation.set(rx * D2R, ry * D2R, rz * D2R);
+    root.scale.set(1, sy, 1);
+    if (head) head.rotation.x = hx * D2R;
+  }
+
+  /* ---------------- entries: one built thing + its animation handle ---------------- */
+  function buildObject(pe) {
+    if (pe.via === 'rig') {
+      var rig = makeRig(pe.base, (pe.st && pe.st.acc) || {});
+      return { obj: rig.root, rig: rig, placeholder: false, fallback: !!rig.fallback, modelId: pe.base };
+    }
+    if (pe.via === 'land') return { obj: landTileObj(pe.id), land: true, modelId: pe.id };
+    var id = pe.via === 'base' ? pe.base : pe.id;
+    var obj = labMake(id, pe.st);
+    if (!obj) throw new Error('SL3D.make(' + id + ') returned null');
+    var tpl = obj.userData ? obj.userData.template : null;
+    return { obj: obj, template: tpl, model: G.SL3D.models[id] || null, placeholder: !!(tpl && tpl.placeholder), modelId: id };
+  }
+  function createEntry(pe, uid) {
+    var T = G.THREE;
+    var en = { key: pe.key, id: pe.id, pe: pe, uid: 'lab:' + uid, st: pe.st || {}, holder: new T.Group(), fx: new T.Group(), off: {}, act: null, cact: null, clipT: 0 };
+    en.holder.name = 'lab:' + pe.key;
+    en.holder.add(en.fx);
+    var b;
+    try { b = buildObject(pe); }
+    catch (e) {
+      labIssue(pe.key + ': ' + msgOf(e));
+      b = { obj: safe(function () { return labMake(pe.id, {}); }, pe.key + ' placeholder') || null, placeholder: true, modelId: pe.id };
+      if (b.obj && b.obj.userData) b.template = b.obj.userData.template;
+    }
+    for (var k in b) en[k] = b[k];
+    if (en.obj) en.fx.add(en.obj);
+    en.adapter = en.obj && !en.rig && !en.land ? objAdapter(en.obj, en.template) : nullAdapter(en);
+    en.a = makeHandle(en, en.adapter);
+    return en;                         /* show(a, k) runs once the scene is lit (applyShow in rebuild) */
+  }
+  function call(en, kind, fn) {
+    if (en.off[kind]) return undefined;
+    try { return fn(); }
+    catch (e) {
+      en.off[kind] = true;
+      labIssue((en.modelId || en.id) + ' ' + kind + '() threw: ' + msgOf(e) + ' (disabled in the lab)');
+      if (en.label) en.label.el.classList.add('err');
+      return undefined;
+    }
+  }
+  /* the pivot/state surface of an instantiated item (kit instantiate: userData.pivots / setState) */
+  function objAdapter(obj, tpl) {
+    var T = G.THREE, ud = obj.userData || {}, nodes = ud.pivots || {}, base = {}, warned = {};
+    function node(name) {
+      if (name === 'root') return obj;
+      if (nodes[name]) return nodes[name];
+      if (name === 'sway' && !(tpl && tpl.pivots && tpl.pivots.sway)) return obj;
+      return null;
+    }
+    return {
+      pivot: function (name, rot, pos, scale) {
+        var n = node(name);
+        if (!n) { if (!warned[name]) { warned[name] = 1; labIssue((ud.id || obj.name) + ': idle/act wrote unknown pivot "' + name + '"'); } return; }
+        var b = base[name] || (base[name] = n.position.clone());
+        n.rotation.set(rot ? (rot[0] || 0) * D2R : 0, rot ? (rot[1] || 0) * D2R : 0, rot ? (rot[2] || 0) * D2R : 0);
+        n.position.set(b.x + (pos ? pos[0] || 0 : 0), b.y + (pos ? pos[1] || 0 : 0), b.z + (pos ? pos[2] || 0 : 0));
+        if (scale == null) n.scale.set(1, 1, 1);
+        else if (typeof scale === 'number') n.scale.set(scale, scale, scale);
+        else n.scale.set(scale[0], scale[1], scale[2]);
+      },
+      reset: function () {
+        Object.keys(base).forEach(function (name) { var n = node(name); if (n) { n.position.copy(base[name]); n.rotation.set(0, 0, 0); n.scale.set(1, 1, 1); } });
+      },
+      state: function (k, v) { if (typeof ud.setState === 'function') ud.setState(k, v); },
+      geometry: function (part) { var m = ud.meshes && ud.meshes[part]; return m ? m.geometry : null; },
+      basePositions: function (part) {
+        var ps = tpl ? tpl.parts : [];
+        for (var i = 0; i < ps.length; i++) if (ps[i].name === part) return ps[i].geo.getAttribute('position').array;
+        return null;
+      },
+      anchorWorld: function (name, out) {
+        out = out || new T.Vector3();
+        var an = ud.anchors && (ud.anchors[name] || null), n = an || node(name) || (ud.anchors && ud.anchors.top) || obj;
+        return n.getWorldPosition(out);
+      },
+      mesh: function (part) { return (ud.meshes && ud.meshes[part]) || null; }
+    };
+  }
+  /* ItemBatch surface (island preview) */
+  function batchAdapter(batch, uid) {
+    var T = G.THREE;
+    return {
+      pivot: function (name, rot, pos, scale) { batch.setPivot(uid, name, rot, pos, scale); },
+      reset: function () { batch.resetPivots(uid); },
+      state: function (k, v) { batch.setState(uid, k, v); },
+      geometry: function (part) { return batch.copyGeometry(uid, part); },
+      basePositions: function (part) { return batch.basePositions(part); },
+      anchorWorld: function (name, out) { return batch.anchorWorld(uid, name, out || new T.Vector3()); },
+      mesh: function () { return null; }
+    };
+  }
+  function nullAdapter(en) {
+    var T = G.THREE;
+    return {
+      pivot: function () {}, reset: function () {}, state: function () {}, geometry: function () { return null; },
+      basePositions: function () { return null; }, mesh: function () { return null; },
+      anchorWorld: function (name, out) {
+        out = out || new T.Vector3();
+        var b = new T.Box3().setFromObject(en.holder);
+        return b.isEmpty() ? en.holder.getWorldPosition(out) : out.set((b.min.x + b.max.x) / 2, b.max.y, (b.min.z + b.max.z) / 2);
+      }
+    };
+  }
+  /* the animation handle `a` (architecture → modelFactoryApi → ANIMATION HANDLE). The island
+     controller (wave C) owns the canonical one; this mirrors every documented field. a.rand is a
+     seeded generator that also reads as a fixed number (valueOf), so either use works. */
+  function makeHandle(en, adapter) {
+    var M = G.M, uid = en.uid, seed = M.hash(uid), proxies = {};
+    var rand = rng(seed), fixed = (seed % 100003) / 100003;
+    rand.valueOf = function () { return fixed; };
+    var a = {
+      uid: uid, id: en.modelId || en.id, look: G.L.LOOK[en.modelId || en.id] || {}, st: en.st || {}, tier: S.tier,
+      K: G.K, THREE: G.THREE, template: en.template || null, object: en.obj || null,
+      t: 0, dt: 0, phase: M.phaseOf(uid), rand: rand, reduced: !!S.reduced, beat: 0, bar: 0, bpm: 100, show: S.show, lit: false,
+      pivot: function (name) {
+        var p = proxies[name];
+        if (!p) {
+          p = proxies[name] = {
+            set: function (rot, pos, scale) { adapter.pivot(name, rot, pos, scale); return p; },
+            reset: function () { adapter.pivot(name, null, null, null); return p; }
+          };
+        }
+        return p;
+      },
+      state: function (key, value) { if (key === 'lit') a.lit = !!value; adapter.state(key, value); },
+      halo: function (name, on, size, token) { fxHalo(en, name, on, size, token); },
+      decal: function (on, token) { fxDecal(en, on, token); },
+      emit: function (kind, where, n, opts) { fxEmit(en, kind, where, n, opts); },
+      sfx: function (name, vol, step) { playSfx(name, vol, step); },
+      pets: {
+        active: function () { return R.activePet || null; },
+        perform: function (kind, who) { cue('pets.perform(' + kind + ')'); return 0; }
+      },
+      shake: function (amp, dur) { if (!S.reduced) R.shake = { amp: amp || 0.06, dur: dur || 0.18, t: 0 }; },
+      squish: function () { startCtrlAct(en, 'squish'); },
+      geometry: adapter.geometry, copyGeometry: adapter.geometry, basePositions: adapter.basePositions,
+      anchorWorld: adapter.anchorWorld, mesh: adapter.mesh
+    };
+    return a;
+  }
+  var _beat = {};
+  function stepEntry(en, dt) {
+    var a = en.a;
+    if (a) {
+      a.t += dt; a.dt = dt; a.reduced = !!S.reduced; a.show = S.show; a.tier = S.tier;
+      a.beat = _beat.frac || 0; a.bar = _beat.bar || 0; a.bpm = _beat.bpm || 100;
+    }
+    if (en.rig) {
+      var clip = en.clip || S.clip;
+      en.clipT += dt;
+      if (S.idle || clip !== 'idle') call(en, 'play', function () { en.rig.play(clip, en.clipT, { speed: S.speed, intensity: S.intensity, reduced: !!S.reduced }); });
+    } else if (en.model && a && S.idle && typeof en.model.idle === 'function') {
+      call(en, 'idle', function () { en.model.idle(a); });
+    }
+    if (en.driver) call(en, 'driver', function () { en.driver.play('drive', R.t, { speed: S.speed, intensity: S.intensity, reduced: !!S.reduced }); });
+    if (en.extraUpdate) call(en, 'update', function () { en.extraUpdate(dt, R.t); });
+    if (en.act) stepAct(en, dt);
+    if (en.cact) stepCtrlAct(en, dt);
+  }
+
+  /* ---------------- acts ---------------- */
+  function startAct(en, name) {
+    if (!en) return;
+    if (CTRL_ACTS[name]) { startCtrlAct(en, name); return; }
+    if (en.act) { var old = en.act.obj; if (old && typeof old.cancel === 'function') call(en, 'act', function () { old.cancel(); }); en.act = null; }
+    startCtrlAct(en, 'squish');                         /* every tap squishes first */
+    var M = G.M;
+    if (!en.model || typeof en.model.act !== 'function') {
+      cue((en.modelId || en.id) + ': no act handler — timeline cues only');
+      startCues(en, name);
+      return;
+    }
+    en.off.act = false;
+    var obj = call(en, 'act', function () { return en.model.act(en.a, name); });
+    if (!obj) { cue('act ' + name + ' → null'); return; }
+    var dur = typeof obj.dur === 'number' ? obj.dur : safe(function () { return M.durOf(name, { reduced: !!S.reduced }); }) || 3;
+    en.act = { obj: obj, name: name, t: 0, dur: dur };
+    cue('act ' + name + ' (' + dur.toFixed(2) + ' s)');
+  }
+  /* Act = {dur, update(a, tAct) → alive, cancel()}; an update that returns nothing runs for dur */
+  function stepAct(en, dt) {
+    var A = en.act;
+    A.t += dt;
+    var alive = call(en, 'act', function () { return typeof A.obj.update === 'function' ? A.obj.update(en.a, A.t) : A.t < A.dur; });
+    if (en.off.act || alive === false || (alive == null && A.t >= A.dur) || A.t > A.dur + 6) en.act = null;
+  }
+  /* the controller's own acts (squish, drop-in, debut, store, hop) on the entry's fx group */
+  function startCtrlAct(en, name) {
+    var M = G.M, o = { reduced: !!S.reduced };
+    var dur = safe(function () { return M.durOf(name, o); });
+    if (dur == null) return;
+    en.cact = { name: name, t: 0, dur: dur, cues: safe(function () { return M.cues(name, o); }) || [], ci: 0, out: {} };
+  }
+  function startCues(en, name) {
+    var list = safe(function () { return G.M.cues(name, { reduced: !!S.reduced }); }) || [];
+    en.cues = { list: list, i: 0, t: 0 };
+  }
+  function fireCue(en, c) {
+    if (c.sfx) en.a.sfx(c.sfx, c.vol, c.step);
+    if (c.emit) en.a.emit(c.emit, 'top', c.n);
+  }
+  function stepCtrlAct(en, dt) {
+    var c = en.cact, f = en.fx, M = G.M;
+    c.t += dt;
+    while (c.ci < c.cues.length && c.cues[c.ci].t <= c.t) fireCue(en, c.cues[c.ci++]);
+    var o = M.sample(c.name, Math.min(c.t, c.dur), c.out, { reduced: !!S.reduced });
+    if (c.name === 'squish') f.scale.set(o.sxz, o.sy, o.sxz);
+    else if (c.name === 'dropIn') { f.position.y = o.dy; f.scale.set(o.sxz, o.sy, o.sxz); }
+    else if (c.name === 'debut') { f.rotation.y = o.deg * D2R; f.scale.setScalar(o.s); }
+    else if (c.name === 'store') f.scale.setScalar(Math.max(0.001, o.s));
+    else if (c.name === 'hop') { f.position.y = o.dy; f.scale.set(1, o.sy, 1); }
+    if (c.t >= c.dur + (c.name === 'store' ? 0.4 : 0)) {
+      f.position.set(0, 0, 0); f.rotation.set(0, 0, 0); f.scale.set(1, 1, 1);
+      en.cact = null;
+    }
+  }
+  function stepCues(en, dt) {
+    var q = en.cues;
+    q.t += dt;
+    while (q.i < q.list.length && q.list[q.i].t <= q.t) fireCue(en, q.list[q.i++]);
+    if (q.i >= q.list.length) en.cues = null;
+  }
+
+  /* ---------------- lab FX: particles, halos, decals, shake, sound ---------------- */
+  var EMIT = {
+    sparkle: { cell: 'sparkle', tok: ['Star Gold', 'Cloud White', 'Holo Pink'], up: 1.1, spread: 0.6, life: 0.9, size: 0.16, g: 1.2 },
+    sparkleRing: { cell: 'sparkle', tok: ['Star Gold', 'Neon Cyan', 'Holo Pink'], up: 0.2, spread: 1.6, life: 0.8, size: 0.14, g: 0, ring: true },
+    heart: { cell: 'heart', tok: ['Neon Pink', 'Bubblegum'], up: 0.9, spread: 0.3, life: 1.2, size: 0.2, g: 0 },
+    emote: { cell: 'heart', tok: ['Neon Pink'], up: 0.7, spread: 0.1, life: 1.1, size: 0.24, g: 0 },
+    bubble: { cell: 'bubble', tok: ['Holo Pink', 'Holo Blue', 'Holo Mint'], up: 0.8, spread: 0.35, life: 2.2, size: 0.16, g: -0.1 },
+    dust: { cell: 'puff', tok: ['Cloud White', 'Pebble'], up: 0.25, spread: 1.1, life: 0.6, size: 0.18, g: 0, ring: true },
+    exhaust: { cell: 'puff', tok: ['Holo Pink', 'Holo Blue', 'Holo Lemon'], up: 0.35, spread: 0.3, life: 0.8, size: 0.2, g: 0 },
+    smoke: { cell: 'puff', tok: ['Cloud White'], up: 0.5, spread: 0.1, life: 1.6, size: 0.2, g: 0 },
+    note: { cell: 'note', tok: ['Neon Violet', 'Neon Cyan'], up: 0.8, spread: 0.3, life: 1.2, size: 0.2, g: 0 },
+    star: { cell: 'star', tok: ['Star Gold'], up: 0.9, spread: 0.4, life: 1, size: 0.18, g: 0.6 },
+    confetti: { cell: 'rect', tok: ['Neon Pink', 'Neon Cyan', 'Star Gold', 'Neon Lime'], up: 1.6, spread: 1, life: 1.6, size: 0.1, g: 2 },
+    petal: { cell: 'petal', tok: ['Blossom Light'], up: -0.2, spread: 0.4, life: 2, size: 0.12, g: 0 }
+  };
+  function makeFx() {
+    var K = G.K;
+    var parts = K.billboards({ capacity: 192, texture: 'sparkles', name: 'lab-particles' });
+    var halos = K.billboards({ capacity: 48, texture: 'halo', show: true, name: 'lab-halos' });
+    R.scene.add(parts.mesh, halos.mesh);
+    return { parts: parts, halos: halos, live: [], haloSlots: {}, p: new G.THREE.Vector3() };
+  }
+  function wherePos(en, where, out) {
+    if (Array.isArray(where)) { out.set(where[0] || 0, where[1] || 0, where[2] || 0); return en.obj ? en.obj.localToWorld(out) : en.holder.localToWorld(out); }
+    if (where && where.isVector3) return out.copy(where);
+    return en.adapter.anchorWorld(typeof where === 'string' ? where : 'top', out);
+  }
+  function fxEmit(en, kind, where, n, opts) {
+    var fx = R.fx;
+    if (!fx) return;
+    var spec = EMIT[kind] || EMIT.sparkle, K = G.K, p = wherePos(en, where, fx.p);
+    n = Math.min(Math.max(1, n | 0 || 6), 24);
+    if (S.reduced) n = Math.min(n, 6);
+    for (var i = 0; i < n; i++) {
+      var k = fx.parts.alloc();
+      if (k < 0) break;
+      var ang = spec.ring ? (i / n) * Math.PI * 2 : Math.random() * Math.PI * 2, sp = spec.spread * (spec.ring ? 1 : 0.4 + 0.6 * Math.random());
+      fx.live.push({
+        k: k, x: p.x, y: p.y, z: p.z, vx: Math.cos(ang) * sp, vy: spec.up * (0.6 + 0.6 * Math.random()), vz: Math.sin(ang) * sp,
+        age: 0, life: spec.life * (0.8 + 0.4 * Math.random()), size: spec.size, cell: K.ATLAS[spec.cell] || 0,
+        tok: (opts && opts.token) || spec.tok[i % spec.tok.length], rot: Math.random() * 6, g: spec.g
+      });
+    }
+    cue('emit ' + kind + ' ×' + n);
+  }
+  function fxHalo(en, name, on, size, token) {
+    var fx = R.fx;
+    if (!fx) return;
+    var key = en.uid + ':' + name, slot = fx.haloSlots[key];
+    if (on) {
+      if (!slot) { var k = fx.halos.alloc(); if (k < 0) return; slot = fx.haloSlots[key] = { k: k, en: en, name: name }; }
+      slot.size = size || 0.8; slot.tok = token || 'Lamp Halo';
+    } else if (slot) { fx.halos.free(slot.k); delete fx.haloSlots[key]; }
+  }
+  function fxDecal(en, on, token) {
+    if (!on) { if (en.decal) en.decal.visible = false; return; }
+    if (!en.decal) {
+      var geo = G.K.parts.get('lab:decal', S.tier, function (K) { return K.G.paint(K.G.tube(0.7, 0.7, 0.01, { radial: 24 }), 'Cloud White'); });
+      en.decal = new G.THREE.Mesh(geo, G.K.mat('glow:' + (token || 'Lamp Warm')));
+      en.decal.position.y = 0.012;
+      en.decal.renderOrder = 2;
+      en.holder.add(en.decal);
+    }
+    en.decal.material = G.K.mat('glow:' + (token || 'Lamp Warm'));
+    en.decal.visible = true;
+  }
+  function stepFx(dt) {
+    var fx = R.fx;
+    if (!fx) return;
+    for (var i = fx.live.length - 1; i >= 0; i--) {
+      var q = fx.live[i];
+      q.age += dt;
+      if (q.age >= q.life) { fx.parts.free(q.k); fx.live.splice(i, 1); continue; }
+      if (!S.reduced) { q.x += q.vx * dt; q.y += q.vy * dt; q.z += q.vz * dt; q.vy -= q.g * dt; q.rot += dt; }
+      fx.parts.set(q.k, q.x, q.y, q.z, q.size, q.tok, 1 - q.age / q.life, q.cell, q.rot);
+    }
+    fx.parts.commit();
+    for (var key in fx.haloSlots) {
+      var s = fx.haloSlots[key];
+      s.en.adapter.anchorWorld(s.name, fx.p);
+      fx.halos.set(s.k, fx.p.x, fx.p.y, fx.p.z, s.size, s.tok, 1, 0, 0);
+    }
+    fx.halos.commit();
+  }
+  var sound = null;
+  function playSfx(name, vol, step) {
+    cue('♪ ' + name + (step != null ? ' ' + step : ''));
+    if (!S.sound || !window.SLSound || typeof window.SLSound.make !== 'function') return;
+    try {
+      if (!sound) sound = window.SLSound.make({ muted: function () { return !S.sound; } });
+      sound(name, vol, step);
+    } catch (e) { labIssue('SLSound: ' + msgOf(e)); }
+  }
+
+  /* ================================================================
+     SHOWCASE — every CATALOG id on a labelled grid
+     ================================================================ */
+  function buildShowcase() {
+    var T = G.THREE, view = newView('showcase');
+    var secs = LAB.showcaseSections(G.C, G.L, hasInfo());
+    var lay = LAB.layoutGrid(secs, {});
+    lay.items.forEach(function (it, i) {
+      var en = view.add(createEntry(it.entry, 'sc' + i));
+      en.holder.position.set(it.x, 0, it.z);
+      tileBatch(view, it.w, it.d, 'Grass Top', 'Grass Side').add('t' + i, { pos: [it.x, 0, it.z] });
+    });
+    Object.keys(view.tiles || {}).forEach(function (k) { view.tiles[k].commit(); });
+    var floor = floorObj(lay.bounds.width, lay.bounds.depth);
+    floor.position.y = -0.12;
+    R.scene.add(floor); view.objects.push(floor);
+    view.entries.forEach(function (en) { addEntryLabel(en); });
+    view.headers = lay.headers.map(function (h) {
+      var pos = new T.Vector3(h.x + 0.1, 0.05, h.z);
+      addLabel({ el: el('span', { class: 'tag hdr', text: h.name }), pos: pos, anchorY: 0.5 });
+      return { name: h.name, pos: pos };
+    });
+    view.bounds = lay.bounds;
+    /* ⌂ is the whole grid; the page opens on the first rows, where labels are readable */
+    var box = new T.Box3(new T.Vector3(lay.bounds.minX, 0, lay.bounds.minZ), new T.Vector3(lay.bounds.maxX, 1.5, lay.bounds.maxZ));
+    frameBox(box, 55, 0, 0.82);
+    if (view.headers.length) jumpTo(view.headers[0], lay.bounds);
+    fitSun(new T.Vector3(0, 0, 0), Math.max(lay.bounds.width, lay.bounds.depth) * 0.6);
+    view.scope = 'info';
+    return view;
+  }
+  function jumpTo(h, bounds) {
+    var T = G.THREE, b = bounds || (R.view && R.view.bounds);
+    if (!b) return;
+    var box = new T.Box3(new T.Vector3(b.minX, 0, h.pos.z - 0.4), new T.Vector3(b.maxX, 1.6, h.pos.z + 4.5));
+    var home = R.home;
+    frameBox(box, 50, 0, 0.8);
+    R.home = home;
+  }
+
+  /* ================================================================
+     ITEM — a single-item turntable with idle/act playback
+     ================================================================ */
+  function itemPlan() {
+    var C = G.C, id = S.item && C.item(S.item) ? S.item : 'house_cottage';
+    S.item = id;
+    var pe = LAB.plan(id, C, G.L, hasInfo());
+    if (S.st) {
+      var st = {}, k;
+      for (k in pe.st) st[k] = pe.st[k];
+      for (k in S.st) st[k] = S.st[k];
+      pe.st = st;
+    }
+    return pe;
+  }
+  function buildItem() {
+    var T = G.THREE, view = newView('item');
+    var pe = itemPlan();
+    var en = view.add(createEntry(pe, 'item'));
+    var box = new T.Box3().setFromObject(en.holder);
+    var size = box.getSize(new T.Vector3());
+    var r = Math.max(0.7, Math.max(size.x, size.z) * 0.62);
+    var riser = riserObj(r);
+    R.scene.add(riser); view.objects.push(riser);
+    en.holder.position.y = 0.14;
+    addEntryLabel(en);
+    view.item = en;
+    view.dynamicShadows = true;
+    view.update = function (dt) { if (S.spin && !S.reduced) en.holder.rotation.y += dt * 0.15 * Math.PI * 2; };
+    box.setFromObject(en.holder);
+    box.expandByPoint(new T.Vector3(-r, 0, -r)).expandByPoint(new T.Vector3(r, 0, r));
+    frameBox(box, 22, 25, 1.08);
+    fitSun(box.getCenter(new T.Vector3()), Math.max(2, box.getSize(new T.Vector3()).length() * 0.6));
+    view.scope = 'item';
+    select(en);
+    return view;
+  }
+
+  /* ================================================================
+     PETS — the 4 rigs, every accessory, every built-in clip
+     ================================================================ */
+  function buildPets() {
+    var T = G.THREE, view = newView('pets');
+    LAB.PETS.forEach(function (id, i) {
+      var pe = { key: id, id: id, label: id, via: 'rig', base: id, st: { acc: S.acc }, fp: [1, 1], kind: 'pet', note: '' };
+      var en = view.add(createEntry(pe, 'pet' + i));
+      en.holder.position.set((i - 1.5) * 1.25, 0, 0);
+      tileBatch(view, 1, 1, 'Grass Top', 'Grass Side').add('p' + i, { pos: [(i - 1.5) * 1.25, 0, 0] });
+      addEntryLabel(en);
+    });
+    R.activePet = view.entries[0] ? view.entries[0].rig : null;
+    extras(view);
+    Object.keys(view.tiles || {}).forEach(function (k) { view.tiles[k].commit(); });
+    var box = new T.Box3().setFromObject(R.scene);
+    if (box.isEmpty()) box.set(new T.Vector3(-3, 0, -1), new T.Vector3(3, 1, 1));
+    frameBox(box, 16, 0, 1.0);
+    fitSun(box.getCenter(new T.Vector3()), 5);
+    view.dynamicShadows = true;
+    view.scope = 'game';
+    view.update = function (dt) {
+      if (!S.playAll) return;
+      R.playT = (R.playT || 0) + dt;
+      if (R.playT > 2.6) {
+        R.playT = 0;
+        S.clip = LAB.CLIPS[(LAB.CLIPS.indexOf(S.clip) + 1) % LAB.CLIPS.length];
+        view.entries.forEach(function (en) { en.clipT = 0; });
+        var sel = $('clipSel');
+        if (sel) sel.value = S.clip;
+      }
+    };
+    return view;
+  }
+  /* avatar, wand and fan blob when models-characters exposes them */
+  function extras(view) {
+    var specs = [
+      { key: 'avatar', fn: 'makeAvatar', args: function () { return [{ color: S.member, emoji: '🦄' }, S.tier]; } },
+      { key: 'wand', fn: 'makeWand', args: function () { return [S.member, S.tier]; } },
+      { key: 'fanBlob', fn: 'makeFanBlob', args: function () { return [7, S.tier]; } }
+    ];
+    var x = -1.25;
+    specs.forEach(function (s) {
+      var f = G.SL3D[s.fn];
+      if (typeof f !== 'function') return;
+      var made = safe(function () { return f.apply(null, s.args()); }, s.fn);
+      var obj = toObj(made);
+      if (!obj) { labIssue(s.fn + ' returned no Object3D'); return; }
+      var T = G.THREE, en = { key: s.key, id: s.key, pe: { key: s.key, label: s.key, note: s.fn }, uid: 'lab:' + s.key, holder: new T.Group(), fx: new T.Group(),
+                              off: {}, obj: obj, modelId: s.key, extra: true, st: {} };
+      en.holder.add(en.fx); en.fx.add(obj);
+      en.holder.position.set(x, 0, -1.5); x += 1.25;
+      en.adapter = nullAdapter(en); en.a = makeHandle(en, en.adapter);
+      if (made !== obj && typeof made.play === 'function') en.extraUpdate = function (dt, t) { made.play('idle', t, { reduced: !!S.reduced }); };
+      if (made !== obj && typeof made.dispose === 'function') en.disposeFn = function () { made.dispose(); };
+      else if (obj.userData && typeof obj.userData.dispose === 'function') en.disposeFn = function () { obj.userData.dispose(); };
+      view.add(en);
+      addEntryLabel(en);
+    });
+  }
+
+  /* ================================================================
+     KARTS — the 5 karts in their locked colours
+     ================================================================ */
+  function buildKarts() {
+    var T = G.THREE, view = newView('karts');
+    LAB.KARTS.forEach(function (id, i) {
+      var pe = LAB.plan(id, G.C, G.L, hasInfo());
+      var en = view.add(createEntry(pe, 'kart' + i));
+      var x = (i - 2) * 1.5;
+      var riser = riserObj(0.7);
+      riser.position.set(x, 0, 0);
+      R.scene.add(riser); view.objects.push(riser);
+      en.holder.position.set(x, 0.14, 0);
+      en.extraUpdate = function (dt) { if (S.spin && !S.reduced) en.holder.rotation.y += dt * 0.15 * Math.PI * 2; };
+      if (S.driver) seatDriver(en);
+      addEntryLabel(en);
+    });
+    var box = new T.Box3().setFromObject(R.scene);
+    frameBox(box, 20, 20, 1.0);
+    fitSun(box.getCenter(new T.Vector3()), 6);
+    view.dynamicShadows = true;
+    view.scope = 'game';
+    return view;
+  }
+  function seatDriver(en) {
+    var ud = en.obj && en.obj.userData;
+    var seat = ud && ((ud.pivots && ud.pivots.seat) || (ud.anchors && ud.anchors.seat));
+    if (!seat) { labIssue(en.id + ': no "seat" pivot or anchor for a driver'); return; }
+    var rig = makeRig(S.driverPet, S.acc);
+    seat.add(rig.root);
+    en.driver = rig;
+  }
+
+  /* ================================================================
+     ENV — SLIslandEnv when it exists (chunk 3), else lab ground tiles
+     ================================================================ */
+  function fixtureProfile(name) {
+    if (!R.fixtures[name]) {
+      R.fixtures[name] = LAB.fixture(name, G.C);
+      (R.fixtures[name].errors || []).forEach(function (e) { labIssue('fixture ' + name + ': ' + e); });
+    }
+    return R.fixtures[name];
+  }
+  /* SLIslandEnv has no published API yet: the lab accepts create|build|mount|make(opts) or a bare
+     factory, and uses {group|root|object|scene, setShow(k), update|tick|frame(dt, t), dispose()} */
+  function makeEnv(u) {
+    var E = window.SLIslandEnv;
+    if (!E) return null;
+    var w = u.world, C = G.C;
+    var opts = {
+      THREE: G.THREE, K: G.K, SL3D: G.SL3D, tier: S.tier, scene: R.scene, renderer: R.renderer, camera: R.camera,
+      land: C.landSet(w), unlocked: C.unlockedRegions(w), world: w, reduced: !!S.reduced, show: S.show, shadows: wantShadows(), member: S.member
+    };
+    var fnName = ['create', 'build', 'mount', 'make'].filter(function (k) { return typeof E[k] === 'function'; })[0];
+    var env = null;
+    try { env = fnName ? E[fnName](opts) : (typeof E === 'function' ? E(opts) : null); }
+    catch (e) { labIssue('SLIslandEnv.' + (fnName || '()') + ' threw: ' + msgOf(e)); return null; }
+    if (!env) { labIssue('SLIslandEnv.' + (fnName || '()') + ' returned nothing'); return null; }
+    var root = env.isObject3D ? env : toObj(env) || (env.scene && env.scene.isObject3D ? env.scene : null);
+    if (root && root !== R.scene && !root.parent) R.scene.add(root);
+    var lights = false;
+    if (root) root.traverse(function (o) { if (o.isLight) lights = true; });
+    var up = env.update || env.tick || env.frame;
+    return {
+      fn: fnName || 'factory', lights: lights,
+      setShow: function (k) { if (typeof env.setShow === 'function') env.setShow(k); },
+      update: function (dt, t) { if (typeof up === 'function') up.call(env, dt, t); },
+      dispose: function () { if (typeof env.dispose === 'function') env.dispose(); if (root && root !== R.scene && root.parent) root.parent.remove(root); }
+    };
+  }
+  function addGround(view, u) {
+    var env = safe(function () { return makeEnv(u); }, 'env');
+    if (env) {
+      view.env = env;
+      if (env.lights) { R.hemi.visible = false; R.sun.visible = false; }
+      view.envNote = 'SLIslandEnv.' + env.fn + '()' + (env.lights ? ' (its own lights)' : ' (lab lights)');
+      return;
+    }
+    /* stand-in: grass / cove tiles on the unlocked land and a flat sea */
+    var C = G.C, Grid = G.Grid, land = C.landSet(u.world), i = 0;
+    Object.keys(land).forEach(function (k) {
+      var p = k.split(',').map(Number), c = Grid.cellCenter(p[0], p[1]);
+      var cove = C.CELL_REGION[k] === 'cove';
+      var b = tileBatch(view, 1, 1, cove ? 'Cove Sand' : ((p[0] + p[1]) % 2 ? 'Grass Alt' : 'Grass Top'), cove ? 'Wet Sand' : 'Grass Side');
+      b.add('g' + (i++), { pos: [c.x, c.y, c.z] });
+    });
+    Object.keys(view.tiles || {}).forEach(function (k) { view.tiles[k].commit(); });
+    var sea = labObject('sea', function (K, b) {
+      var g = K.G.t(K.G.slab(40, 0.1, 30, 0.05), { p: [0, -0.37, 0] });
+      K.G.paint(g, 'Sea Shallow');
+      return b.part('sea', [g], 'toon').done();
+    });
+    R.scene.add(sea); view.objects.push(sea);
+    view.envNote = 'env.js not built yet: lab stand-in ground';
+  }
+  function buildEnv() {
+    var view = newView('env');
+    var u = fixtureProfile(S.fixture);
+    addGround(view, u);
+    view.update = function (dt, t) { if (view.env) call(view, 'env', function () { view.env.update(dt, t); }); };
+    view.off = {}; view.id = 'SLIslandEnv';
+    view.camera = G.Grid.fitCamera({ land: G.C.unlockedRegions(u.world), aspect: R.width / R.height, fov: 30, yaw: 0, elev: 52 });
+    placeCamera(view.camera);
+    R.home = null;
+    fitSun(new G.THREE.Vector3(0, 0, 0), 11);
+    view.scope = 'island';
+    note(view.envNote);
+    return view;
+  }
+
+  /* ================================================================
+     ISLAND — SLIsland3D.mount (wave C) with fixture worlds, or the lab preview
+     ================================================================ */
+  function useMount() {
+    return S.engine !== 'preview' && !!window.SLIsland3D && typeof window.SLIsland3D.mount === 'function';
+  }
+  function mountIsland() {
+    var u = fixtureProfile(S.fixture), C = G.C, host = $('mountHost'), view = { kind: 'mount', scope: 'island', entries: [] };
+    host.hidden = false;
+    clear(host);
+    var stage = window.SLIsland3D.mount({
+      reduced: !!S.reduced, user: { name: 'Lab', color: S.member, avatar: '🦄' },
+      on: {
+        tapItem: function (uid) { cue('tapItem ' + uid); islandTap(view, uid); },
+        tapPet: function (id) { cue('tapPet ' + id); safe(function () { if (stage.emote) stage.emote('pet:' + id); }); },
+        tapAvatar: function () { cue('tapAvatar'); },
+        tapLand: function (region) { cue('tapLand ' + region); },
+        tapCell: function (x, y) { cue('tapCell ' + x + ',' + y); },
+        dragStart: function (uid) { cue('dragStart ' + uid); }, dragCell: function () {}, dragEnd: function () { cue('dragEnd'); },
+        ready: function () { cue('island ready'); setStatus('Island mounted · ' + G.SL3D.tier); },
+        fail: function (reason) {
+          cue('fail: ' + reason);
+          showMsg('Island fell back', ['on.fail(' + reason + '): the app disposes the stage and redraws the 2D island.']);
+        }
+      }
+    });
+    if (!stage) { host.hidden = true; return null; }
+    view.stage = stage;
+    view.u = u;
+    view.sync = function () { safe(function () { stage.sync(LAB.islandView(C, u, { lit: R.lit })); }, 'island sync'); };
+    safe(function () { stage.attach(host); }, 'island attach');
+    view.sync();
+    if (S.show >= 0.5) safe(function () { stage.showtime(true); });
+    if (S.wire) applyWire();
+    view.showOn = S.show >= 0.5;
+    view.dispose = function () { safe(function () { stage.dispose(); }, 'island dispose'); clear(host); host.hidden = true; restoreWire(); };
+    note('SLIsland3D.mount() · fixture: ' + S.fixture + ' · stats from the shared lease');
+    return view;
+  }
+  /* emulate rewards-world's play-mode taps */
+  function islandTap(view, uid) {
+    var p = null;
+    view.u.world.placed.forEach(function (q) { if (q.uid === uid) p = q; });
+    var it = p && G.C.item(p.id);
+    if (!it || !it.act) return;
+    if (it.act === 'glow') { R.lit[uid] = !R.lit[uid]; view.sync(); playSfx(R.lit[uid] ? 'star' : 'chip'); return; }
+    safe(function () { view.stage.act(uid, it.act); }, 'island act');
+  }
+  function buildIsland() {
+    var T = G.THREE, C = G.C, Grid = G.Grid, K = G.K, view = newView('island');
+    var u = fixtureProfile(S.fixture), vm = LAB.islandView(C, u, { lit: R.lit });
+    addGround(view, u);
+    var groups = {};
+    vm.placed.forEach(function (p, i) {
+      var st = LAB.styleFor(p.id, vm.style, C.DEFAULTS), sk = K.stateKey(p.id, st), key = p.id + '#' + sk;
+      var gs = groups[key];
+      if (!gs) {
+        var tpl = K.templates.get(p.id, sk, S.tier, st);
+        var batch = K.batch(tpl, { outlines: wantOutlines() });
+        R.scene.add(batch.group);
+        view.batches.push(batch);
+        gs = groups[key] = { batch: batch, tpl: tpl, model: G.SL3D.models[p.id] || null, n: 0 };
+      }
+      gs.n++;
+      var pv = Grid.pivot(p.id, p.x, p.y), j = Grid.jitter(p.uid, p.id);
+      gs.batch.add(p.uid, { x: p.x, y: p.y, fp: Grid.footprint(p.id), pos: [pv.x, pv.y, pv.z] }, { jitter: { yaw: j.yawDeg, scale: j.scale } });
+      var en = { key: p.uid, id: p.id, modelId: p.id, uid: p.uid, st: st, template: gs.tpl, model: gs.model, off: {}, act: null, cact: null,
+                 holder: new T.Group(), fx: new T.Group(), placeholder: gs.tpl.placeholder };
+      en.adapter = batchAdapter(gs.batch, p.uid);
+      en.a = makeHandle(en, en.adapter);
+      if (vm.lit[p.uid]) en.adapter.state('lit', 1);
+      view.entries.push(en);
+    });
+    /* pets beside the house, the avatar on the left half of its entrance cell */
+    var spots = LAB.petSpots(C, u, vm.pets.length);
+    vm.pets.forEach(function (p, i) {
+      var s = spots[i];
+      if (!s) return;
+      var pe = { key: p.id, id: p.id, via: 'rig', base: p.id, st: { acc: p.acc }, fp: [1, 1], kind: 'pet', note: p.name };
+      var en = view.add(createEntry(pe, 'ipet' + i)), c = Grid.cellCenter(s.c, s.r, vm.unlocked);
+      en.holder.position.set(c.x, c.y, c.z);
+      en.holder.rotation.y = (Grid.hash01('pet:' + p.id) - 0.5) * 1.2;
+      if (p.active) R.activePet = en.rig;
+    });
+    if (typeof G.SL3D.makeAvatar === 'function') {
+      var spot = Grid.avatarSpot(vm.placed);
+      var av = spot && toObj(safe(function () { return G.SL3D.makeAvatar({ color: S.member, emoji: '🦄' }, S.tier); }, 'makeAvatar'));
+      if (av) { av.position.set(spot.x - 0.25, spot.y, spot.z); R.scene.add(av); view.objects.push(av); }
+    }
+    view.groups = groups;
+    view.update = function (dt, t) {
+      if (view.env) call(view, 'env', function () { view.env.update(dt, t); });
+      for (var k in groups) groups[k].batch.commit();
+    };
+    view.off = {}; view.id = 'island preview';
+    view.camera = Grid.fitCamera({ land: vm.unlocked, aspect: R.width / R.height, fov: 30, yaw: 0, elev: 52 });
+    placeCamera(view.camera);
+    R.home = null;
+    fitSun(new T.Vector3(0, 0, 0), 11);
+    view.scope = 'island';
+    note('Lab preview (island3d.js ' + (window.SLIsland3D && window.SLIsland3D.mount ? 'present, preview forced' : 'not built yet') + '): real ItemBatch per (id, stateKey) · ' +
+      Object.keys(groups).length + ' batches · ' + vm.placed.length + ' items · ' + (view.envNote || ''));
+    return view;
+  }
+
+  /* ================================================================
+     SHOW, WIREFRAME
+     ================================================================ */
+  function applyShow(k, force) {
+    k = clamp01(+k || 0);
+    var changed = force || k !== S.show;
+    S.show = k;
+    var pre = G.L.presetAt(k, S.member);
+    document.body.classList.toggle('showtime', k >= 0.5);
+    $('stage').style.background = 'linear-gradient(180deg, ' + pre.skyTop + ' 0%, ' + pre.skyMid + ' 55%, ' + pre.skyHorizon + ' 100%)';
+    var v = R.view;
+    if (v && v.kind === 'mount') {
+      var on = k >= 0.5;
+      if (on !== v.showOn) { v.showOn = on; safe(function () { v.stage.showtime(on); }, 'showtime'); }
+      return;
+    }
+    if (!R.scene || !G.K) return;
+    R.hemi.color.set(pre.hemiSky); R.hemi.groundColor.set(pre.hemiGround); R.hemi.intensity = pre.hemiIntensity;
+    R.sun.color.set(pre.sunColor); R.sun.intensity = pre.sunIntensity;
+    R.scene.fog.color.set(pre.fogColor);
+    if (R.renderer) R.renderer.toneMappingExposure = pre.exposure;
+    G.K.setRim(pre.rimColor, pre.rimStrength);
+    G.K.setShow(k);
+    if (!changed || !v) return;
+    if (v.env) call(v, 'envShow', function () { v.env.setShow(k); });
+    v.entries.forEach(function (en) {
+      if (en.a) en.a.show = k;
+      if (en.rig && typeof en.rig.setShow === 'function') call(en, 'setShow', function () { en.rig.setShow(k); });
+      if (en.driver && typeof en.driver.setShow === 'function') call(en, 'setShow', function () { en.driver.setShow(k); });
+      if (en.model && typeof en.model.show === 'function') call(en, 'show', function () { en.model.show(en.a, k); });
+    });
+  }
+  function animateShow(target) {
+    if (R.view && R.view.kind === 'mount') { applyShow(target); updateURL(); return; }   /* the stage animates its own Showtime */
+    R.showAnim = { from: S.show, to: target, t: 0 };
+  }
+  function applyWire() {
+    if (!S.wire) { restoreWire(); return; }
+    var apply = function (m) { if (m && 'wireframe' in m) { R.wireMats.add(m); m.wireframe = true; } };
+    if (R.scene) R.scene.traverse(function (o) { if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(apply); });
+    else if (G.SL3D) { var K = G.SL3D.kit(G.SL3D.tier); KIT_MAT_KEYS.forEach(function (k) { apply(K.mat(k)); }); }
+  }
+  function restoreWire() { R.wireMats.forEach(function (m) { m.wireframe = false; }); R.wireMats.clear(); }
+
+  /* ================================================================
+     FRAME LOOP
+     ================================================================ */
+  function tick(now) {
+    if (R.fatal || !R.renderer || !R.scene) return;
+    var dtMs = R.last ? now - R.last : 16.7;
+    R.last = now;
+    meter.push(dtMs);
+    var real = Math.min(0.1, dtMs / 1000), dt = real * S.timeScale;
+    var t0 = performance.now();
+    try {
+      R.t += dt;
+      var bpm = S.show >= 0.5 ? G.L.TEMPO.show : G.L.TEMPO.day;
+      G.M.beatInfo(R.t, bpm, 0, _beat);
+      _beat.bpm = bpm;
+      if (R.showAnim) {
+        R.showAnim.t += real;
+        var k = G.M.showMix(R.showAnim.t, R.showAnim.from, R.showAnim.to, !!S.reduced);
+        if (R.showAnim.t >= (S.reduced ? G.M.SHOW_MIX_REDUCED_SEC : G.M.SHOW_MIX_SEC)) { k = R.showAnim.to; R.showAnim = null; }
+        applyShow(k);
+        var sl = $('showRange');
+        if (sl) sl.value = String(S.show);
+      }
+      var v = R.view;
+      if (v) {
+        for (var i = 0; i < v.entries.length; i++) {
+          var en = v.entries[i];
+          stepEntry(en, dt);
+          if (en.cues) stepCues(en, dt);
+        }
+        if (v.update) v.update(dt, R.t);
+      }
+      stepFx(dt);
+      if (R.controls) R.controls.update();
+      var sx = 0, sy = 0;
+      if (R.shake) {
+        R.shake.t += real;
+        var amp = R.shake.amp * Math.max(0, 1 - R.shake.t / R.shake.dur);
+        sx = (Math.random() - 0.5) * 2 * amp; sy = (Math.random() - 0.5) * 2 * amp;
+        if (R.shake.t >= R.shake.dur) R.shake = null;
+        R.camera.position.x += sx; R.camera.position.y += sy;
+      }
+      if (v && v.dynamicShadows && R.renderer.shadowMap.enabled) R.renderer.shadowMap.needsUpdate = true;
+      R.renderer.render(R.scene, R.camera);
+      R.info.calls = R.renderer.info.render.calls;
+      R.info.tris = R.renderer.info.render.triangles;
+      if (sx || sy) { R.camera.position.x -= sx; R.camera.position.y -= sy; }
+      updateLabels();
+    } catch (e) {
+      R.fatal = true;
+      labIssue('frame threw: ' + msgOf(e));
+      showMsg('Frame error', [msgOf(e), 'The loop stopped; fix the error and reload (see Files & issues).']);
+    }
+    var work = performance.now() - t0;
+    workAvg = workAvg ? workAvg * 0.9 + work * 0.1 : work;
+  }
+
+  /* ================================================================
+     LABELS + PICKING
+     ================================================================ */
+  var _v3 = null;
+  function addLabel(L) {
+    L.x = -1e4; L.y = -1e4; L.vis = true;
+    $('labels').appendChild(L.el);
+    R.labels.push(L);
+    return L;
+  }
+  function clearLabels() { R.labels.forEach(function (L) { if (L.el.parentNode) L.el.parentNode.removeChild(L.el); }); R.labels = []; }
+  function addEntryLabel(en) {
+    var T = G.THREE, box = new T.Box3().setFromObject(en.holder);
+    var pos = box.isEmpty() ? en.holder.position.clone().setY(0.8) : new T.Vector3((box.min.x + box.max.x) / 2, box.max.y + 0.12, (box.min.z + box.max.z) / 2);
+    var pe = en.pe || {}, tag = el('button', { type: 'button', class: 'tag', title: (pe.note || '') + (en.placeholder ? ' · placeholder' : '') });
+    tag.appendChild(el('span', { class: 't', text: pe.label || en.id }));
+    var sw = lockedHex(en);
+    if (sw) tag.appendChild(el('i', { class: 'sw', style: 'background:' + sw, title: 'LOCKED ' + sw }));
+    if (en.placeholder) { tag.classList.add('ph'); tag.appendChild(el('span', { class: 'b', text: 'placeholder' })); }
+    else if (en.fallback) { tag.classList.add('ph'); tag.appendChild(el('span', { class: 'b', text: 'stand-in' })); }
+    else if (pe.via === 'base') tag.appendChild(el('span', { class: 'b', text: 'on ' + pe.base.replace(/^att_|_cottage$/g, '') }));
+    else if (pe.via === 'land') tag.appendChild(el('span', { class: 'b', text: 'env' }));
+    var look = G.L.LOOK[en.modelId] || {};
+    if (en.template && typeof look.tris === 'number' && en.template.tris > look.tris) tag.classList.add('over');
+    tag.addEventListener('click', function () { select(en); });
+    en.label = addLabel({ el: tag, pos: pos, anchorY: 1 });
+  }
+  /* the locked colour an item must match (karts, walls, doors, roofs, pets, balls, stadia) */
+  function lockedHex(en) {
+    var Lk = G.L.LOCKED, id = en.id;
+    if (Lk.KARTS[id]) return Lk.KARTS[id];
+    if (Lk.WALL[id]) return Lk.WALL[id];
+    if (Lk.DOOR[id]) return Lk.DOOR[id];
+    if (Lk.ROOF[id]) return Lk.ROOF[id][0];
+    if (Lk.PETCOL[id]) return Lk.PETCOL[id].body;
+    if (Lk.BALLS[id]) return Lk.BALLS[id][0];
+    if (Lk.STADIA[id]) return Lk.STADIA[id][1];
+    if (Lk.THEME[id]) return Lk.THEME[id][0];
+    return null;
+  }
+  function updateLabels() {
+    if (!S.labels || !R.labels.length) return;
+    var cam = R.camera, w = R.width, h = R.height, v = _v3 || (_v3 = new G.THREE.Vector3());
+    for (var i = 0; i < R.labels.length; i++) {
+      var L = R.labels[i];
+      v.copy(L.pos).project(cam);
+      var vis = v.z < 1 && v.x > -1.1 && v.x < 1.1 && v.y > -1.1 && v.y < 1.15;
+      if (vis !== L.vis) { L.el.style.display = vis ? '' : 'none'; L.vis = vis; }
+      if (!vis) continue;
+      var x = (v.x * 0.5 + 0.5) * w, y = (-v.y * 0.5 + 0.5) * h;
+      if (Math.abs(x - L.x) > 0.4 || Math.abs(y - L.y) > 0.4) {
+        L.x = x; L.y = y;
+        L.el.style.transform = 'translate(' + x.toFixed(1) + 'px,' + y.toFixed(1) + 'px) translate(-50%,-' + (L.anchorY * 100) + '%)';
+      }
+    }
+  }
+  var downAt = null;
+  function onPointerDown(e) { downAt = { x: e.clientX, y: e.clientY }; }
+  function onPointerUp(e) {
+    if (!downAt || !R.view) return;
+    var moved = Math.abs(e.clientX - downAt.x) + Math.abs(e.clientY - downAt.y);
+    downAt = null;
+    if (moved > 6) return;
+    var T = G.THREE, rect = R.renderer.domElement.getBoundingClientRect();
+    var ndc = new T.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
+    var ray = new T.Raycaster();
+    ray.setFromCamera(ndc, R.camera);
+    var best = null, bestD = Infinity, hit = new T.Vector3(), box = new T.Box3();
+    R.view.entries.forEach(function (en) {
+      if (!en.holder || !en.holder.parent) return;
+      box.setFromObject(en.holder);
+      if (box.isEmpty() || !ray.ray.intersectBox(box, hit)) return;
+      var d = hit.distanceTo(ray.ray.origin);
+      if (d < bestD) { bestD = d; best = en; }
+    });
+    if (best) { select(best); if (S.mode === 'item' || S.mode === 'pets' || S.mode === 'karts') startAct(best, best.rig ? 'hop' : 'squish'); }
+  }
+  function select(en) {
+    var prev = R.selected;
+    if (prev && prev.label) prev.label.el.classList.remove('sel');
+    if (prev && prev.obj && prev.obj.userData && typeof prev.obj.userData.setHighlight === 'function') safe(function () { prev.obj.userData.setHighlight(0); });
+    R.selected = en || null;
+    if (en && en.label) en.label.el.classList.add('sel');
+    if (en && en.obj && en.obj.userData && typeof en.obj.userData.setHighlight === 'function') safe(function () { en.obj.userData.setHighlight(1); });
+    if (G.SL3D) renderInfo();
+  }
+
+  /* ================================================================
+     INSPECT — checks against the look table
+     ================================================================ */
+  function templateBounds(tpl) {
+    var inf = Infinity, mn = [inf, inf, inf], mx = [-inf, -inf, -inf], lmn = [inf, inf], lmx = [-inf, -inf];
+    tpl.parts.forEach(function (p) {
+      var a = p.geo.getAttribute('position').array;
+      for (var i = 0; i < a.length; i += 3) {
+        var x = a[i], y = a[i + 1], z = a[i + 2];
+        if (x < mn[0]) mn[0] = x; if (y < mn[1]) mn[1] = y; if (z < mn[2]) mn[2] = z;
+        if (x > mx[0]) mx[0] = x; if (y > mx[1]) mx[1] = y; if (z > mx[2]) mx[2] = z;
+        if (y < 1.0) { if (x < lmn[0]) lmn[0] = x; if (z < lmn[1]) lmn[1] = z; if (x > lmx[0]) lmx[0] = x; if (z > lmx[1]) lmx[1] = z; }
+      }
+    });
+    return {
+      size: { w: mx[0] - mn[0], h: mx[1], d: mx[2] - mn[2] },
+      low: lmn[0] === inf ? { w: 0, d: 0 } : { w: lmx[0] - lmn[0], d: lmx[1] - lmn[1] }
+    };
+  }
+  function meshStats(root) {
+    var tris = 0, calls = 0, hull = 0, BS = G.THREE.BackSide;
+    root.traverse(function (o) {
+      if (!(o.isMesh || o.isLine || o.isPoints) || !o.visible) return;
+      var g = o.geometry, pa = g && g.getAttribute('position');
+      if (!pa) return;
+      calls++;
+      if (!o.isMesh) return;
+      var n = (g.index ? g.index.count : pa.count) / 3 * (o.isInstancedMesh ? o.count : 1);
+      if (/:outline$/.test(o.name) || (o.material && o.material.side === BS)) hull += n; else tris += n;
+    });
+    return { tris: Math.round(tris), calls: calls, hullTris: Math.round(hull) };
+  }
+  function itemReport(en) {
+    var id = en.modelId || en.id, look = G.L.LOOK[id] || {}, tpl = en.template;
+    var r = { id: id, look: look, fp: G.Grid ? G.Grid.footprint(id) : [1, 1], placeholder: !!en.placeholder, st: en.st };
+    if (tpl) {
+      var b = templateBounds(tpl), mats = {};
+      tpl.parts.forEach(function (p) { if (!p.pivot && !p.perCopy) mats[p.mat] = 1; });
+      r.size = b.size; r.low = b.low; r.tris = tpl.tris; r.parts = tpl.parts.length; r.staticMats = Object.keys(mats).length;
+      r.pivots = Object.keys(tpl.pivots); r.anchors = Object.keys(tpl.anchors);
+    }
+    return r;
+  }
+  function rigReport(en) {
+    var out = [], L = G.L, rig = en.rig, ms = meshStats(rig.root);
+    var accN = Object.keys((en.st && en.st.acc) || {}).filter(function (k) { return en.st.acc[k]; }).length;
+    var limit = L.BUDGET.pet + L.BUDGET.acc * accN;
+    if (rig.fallback) out.push({ level: 'over', msg: 'SL3D.makeRig missing: lab stand-in' });
+    out.push({ level: ms.tris > limit ? 'over' : 'ok', msg: ms.tris + ' tris (budget ' + limit + ' with ' + accN + ' accessories)' });
+    out.push({ level: ms.calls - (ms.hullTris ? 1 : 0) > 3 + accN ? 'warn' : 'ok', msg: ms.calls + ' draw calls' + (ms.hullTris ? ' incl. outline' : '') });
+    if (!rig.fallback) {
+      var bones = rig.bones || {}, sockets = rig.sockets || {};
+      var mb = L.PET_BONES.filter(function (b) { return !bones[b]; }), msk = L.PET_SOCKETS.filter(function (s) { return !sockets[s]; });
+      out.push({ level: mb.length ? 'warn' : 'ok', msg: mb.length ? 'missing bones: ' + mb.join(', ') : 'all ' + L.PET_BONES.length + ' bones' });
+      out.push({ level: msk.length ? 'warn' : 'ok', msg: msk.length ? 'missing sockets: ' + msk.join(', ') : 'all sockets' });
+      ['play', 'setPose', 'setShow', 'dispose'].forEach(function (f) { if (typeof rig[f] !== 'function') out.push({ level: 'over', msg: 'PetRig.' + f + '() missing' }); });
+    }
+    return out;
+  }
+  function renderInfo() {
+    var sec = clear($('secInfo')), en = R.selected;
+    sec.appendChild(el('h2', { text: 'Inspect' }));
+    if (R.view && R.view.kind === 'mount') {
+      sec.appendChild(el('p', { class: 'small', text: 'The mounted island owns picking: taps show in the cue log; acts play through stage.act().' }));
+      return;
+    }
+    if (!en) { sec.appendChild(el('p', { class: 'small', text: 'Tap an item or its label.' })); return; }
+    var C = G.C, id = en.modelId || en.id, it = C.item(en.id) || C.item(id), pe = en.pe || {};
+    var head = el('div', { class: 'row' });
+    var icon = el('div', { class: 'icon2d', title: '2D reference (world-art.js)' });
+    /* the SVG art reads house details as {id: true}, the shape styleFor keeps */
+    if (G.ART && it) safe(function () { icon.innerHTML = G.ART.icon(pe.via === 'base' ? id : en.id, LAB.styleFor(id, en.st, C.DEFAULTS)); }, 'art icon');
+    head.appendChild(icon);
+    head.appendChild(el('div', { style: 'min-width:0;flex:1' }, [
+      el('div', { style: 'font:800 15px/1.2 "Baloo 2",sans-serif', text: (it ? it.name : id) }),
+      el('div', { class: 'small mono', text: en.id + (pe.via === 'base' ? ' → on ' + pe.base : '') }),
+      el('div', { class: 'small', text: (pe.note || (it && it.kind) || '') + (en.template ? ' · ' + en.template.tris + ' tris · ' + en.template.parts.length + ' parts' : '') })
+    ]));
+    sec.appendChild(head);
+    var colors = safe(function () { return G.L.colorsFor(id, G.L.resolveStyle(id, en.st)); }) || {};
+    var sw = el('div', { class: 'swatches' });
+    Object.keys(colors).slice(0, 12).forEach(function (k) { if (colors[k]) sw.appendChild(el('span', { title: colors[k] }, [el('i', { style: 'background:' + colors[k] }), k])); });
+    sec.appendChild(sw);
+    var checks = en.rig ? rigReport(en) : en.extra ? extraReport(en) : pe.via === 'land'
+      ? [{ level: window.SLIslandEnv ? 'ok' : 'warn', msg: 'land is drawn by env.js' + (window.SLIslandEnv ? ' (see Env mode)' : ' (not built yet)') + '; this is a lab tile' }]
+      : LAB.checkItem(itemReport(en), G.L);
+    var ul = el('ul', { class: 'list' });
+    checks.forEach(function (c) { ul.appendChild(el('li', { class: c.level, text: c.msg })); });
+    sec.appendChild(ul);
+    if (en.template) {
+      sec.appendChild(el('div', { class: 'small mono', text: 'pivots: ' + (Object.keys(en.template.pivots).join(', ') || '—') + ' · anchors: ' + Object.keys(en.template.anchors).join(', ') }));
+      sec.appendChild(el('div', { class: 'small mono', text: 'mats: ' + en.template.parts.map(function (p) { return p.name + ':' + p.mat + (p.pivot ? '@' + p.pivot : '') + (p.perCopy ? ' (perCopy)' : ''); }).join(' · ') }));
+    }
+    var m = en.model;
+    sec.appendChild(el('div', { class: 'small', text: 'handlers: ' + ['build', 'idle', 'act', 'show'].map(function (h) { return h + (m && typeof m[h] === 'function' ? ' ✓' : ' –'); }).join('  ') }));
+    if (S.mode !== 'item' && !en.extra && pe.key && G.C.item(pe.id)) {
+      sec.appendChild(el('div', { class: 'row' }, [el('button', { type: 'button', class: 'btn primary', text: 'Open turntable', onclick: function () { openItem(pe); } })]));
+    }
+  }
+  function extraReport(en) {
+    var ms = meshStats(en.obj), ch = G.L.CHARACTERS[en.key] || {};
+    return [{ level: ch.tris && ms.tris > ch.tris ? 'over' : 'ok', msg: ms.tris + ' tris' + (ch.tris ? ' (budget ' + ch.tris + ')' : '') + ' · ' + ms.calls + ' draw calls' }];
+  }
+  function openItem(pe) {
+    if (pe.combo) { S.item = 'house_cottage'; S.st = JSON.parse(JSON.stringify(pe.st)); }
+    else { S.item = pe.id; S.st = null; }
+    setMode('item');
+  }
+
+  /* ================================================================
+     PANELS
+     ================================================================ */
+  function seg(options, current, onPick) {
+    var box = el('div', { class: 'row', role: 'group' });
+    options.forEach(function (o) {
+      box.appendChild(el('button', { type: 'button', class: 'chip sm', 'aria-pressed': String(o.value === current), text: o.label,
+        onclick: function () {
+          Array.prototype.forEach.call(box.children, function (b) { b.setAttribute('aria-pressed', 'false'); });
+          this.setAttribute('aria-pressed', 'true');
+          onPick(o.value);
+        } }));
+    });
+    return box;
+  }
+  function toggle(label, get, set, disabled) {
+    var b = el('button', { type: 'button', class: 'chip sm', 'aria-pressed': String(!!get()), disabled: disabled ? true : null, text: label,
+      onclick: function () { var v = !get(); set(v); b.setAttribute('aria-pressed', String(!!get())); updateURL(); } });
+    return b;
+  }
+  function selectBox(id, options, current, onChange, aria) {
+    var s = el('select', { id: id || null, 'aria-label': aria || null });
+    var group = null;
+    options.forEach(function (o) {
+      if (o.group) { group = el('optgroup', { label: o.group }); s.appendChild(group); return; }
+      var opt = el('option', { value: o.value, text: o.label });
+      if (o.value === current) opt.selected = true;
+      (group || s).appendChild(opt);
+    });
+    s.addEventListener('change', function () { onChange(s.value); });
+    return s;
+  }
+  function buildViewPanel() {
+    var sec = clear($('secView'));
+    sec.appendChild(el('h2', { text: 'View' }));
+    var tr = el('div', { class: 'row' }, [el('label', { text: 'Tier' })]);
+    tr.appendChild(seg(G.T.TIERS.map(function (t) { return { value: t, label: t + (t === G.SL3D.tier ? ' •' : '') }; }), S.tier, setTier));
+    sec.appendChild(tr);
+    sec.appendChild(el('div', { class: 'small', text: 'Session tier ' + G.SL3D.tier + ' (' + G.SL3D.tierWhy + '), marked •. Other tiers rebuild with their own kit and renderer settings.' }));
+    var range = el('input', { id: 'showRange', type: 'range', min: '0', max: '1', step: '0.01', value: String(S.show), 'aria-label': 'Day to Showtime' });
+    range.addEventListener('input', function () { R.showAnim = null; applyShow(+range.value); });
+    range.addEventListener('change', updateURL);
+    sec.appendChild(el('div', { class: 'row' }, [el('label', { text: '☀ ↔ 🌙' }), range]));
+    var member = el('input', { type: 'color', value: S.member, 'aria-label': 'Member colour (rim, avatar, wand)' });
+    member.addEventListener('change', function () { S.member = member.value; if (S.mode === 'pets') rebuild(); else applyShow(S.show, true); });
+    sec.appendChild(el('div', { class: 'row' }, [
+      el('button', { type: 'button', class: 'btn', text: '☀️ Day', onclick: function () { animateShow(0); } }),
+      el('button', { type: 'button', class: 'btn primary', text: '🌙 Showtime', onclick: function () { animateShow(1); } }),
+      member
+    ]));
+    var t = el('div', { class: 'row' });
+    t.appendChild(toggle('Reduced motion', function () { return S.reduced; }, function (v) {
+      S.reduced = v;
+      if (R.view && R.view.kind === 'mount') safe(function () { if (R.view.stage.setReduced) R.view.stage.setReduced(v); });
+    }));
+    t.appendChild(toggle('Wireframe', function () { return S.wire; }, function (v) { S.wire = v; applyWire(); }));
+    t.appendChild(toggle('Outlines', function () { return wantOutlines(); }, function (v) {
+      S.outlines = v;
+      if (R.view && R.view.kind === 'mount') safe(function () { G.SL3D.kit(G.SL3D.tier).setOutlines(v); }); else rebuild();
+    }, S.tier === 'LOW'));
+    t.appendChild(toggle('Shadows', function () { return wantShadows(); }, function (v) { S.shadows = v; if (!(R.view && R.view.kind === 'mount')) renewRenderer(); }));
+    t.appendChild(toggle('Idle', function () { return S.idle; }, function (v) {
+      S.idle = v;
+      if (!v && R.view) R.view.entries.forEach(function (en) { if (en.adapter) en.adapter.reset(); });
+    }));
+    t.appendChild(toggle('Spin', function () { return S.spin; }, function (v) { S.spin = v; }));
+    t.appendChild(toggle('Labels', function () { return S.labels; }, function (v) { S.labels = v; $('labels').classList.toggle('off', !v); }));
+    t.appendChild(toggle('Sound', function () { return S.sound; }, function (v) { S.sound = v; }));
+    sec.appendChild(t);
+    var slow = el('input', { type: 'range', min: '0.1', max: '1', step: '0.05', value: String(S.timeScale), 'aria-label': 'Animation speed' });
+    slow.addEventListener('input', function () { S.timeScale = +slow.value; });
+    sec.appendChild(el('div', { class: 'row' }, [el('label', { text: 'Slow-mo' }), slow,
+      el('button', { type: 'button', class: 'chip sm', text: '⌂ View', onclick: goHome })]));
+  }
+  function setTier(t) {
+    if (t === S.tier) return;
+    S.tier = t; S.tierPinned = true;
+    updateURL();
+    if (R.view && R.view.kind === 'mount') { location.reload(); return; }   /* the shared stage keeps its session tier */
+    renewRenderer();
+    buildViewPanel();
+  }
+  function itemOptions() {
+    var out = [];
+    LAB.showcaseSections(G.C, G.L, hasInfo()).forEach(function (s) {
+      out.push({ group: s.name });
+      s.entries.forEach(function (e) { out.push({ value: e.key, label: e.label + (e.note ? ' — ' + e.note : '') }); });
+    });
+    return out;
+  }
+  function buildModePanel() {
+    var sec = clear($('secMode')), m = S.mode;
+    sec.appendChild(el('h2', { text: MODE_LABEL[m].replace(/^\S+\s/, '') }));
+    if (m === 'showcase') {
+      var v = R.view, miss = v ? v.entries.filter(function (en) { return en.placeholder || en.fallback; }).length : 0;
+      sec.appendChild(el('p', { class: 'small', text: (v ? v.entries.length : 0) + ' entries (every CATALOG id + house combos) · ' + miss + ' placeholders. Tap a label to inspect.' }));
+      if (v && v.headers) {
+        var jr = el('div', { class: 'row' });
+        v.headers.forEach(function (h) { jr.appendChild(el('button', { type: 'button', class: 'chip sm', text: h.name, onclick: function () { jumpTo(h); } })); });
+        sec.appendChild(jr);
+      }
+    } else if (m === 'item') {
+      var opts = itemOptions(), cur = S.st && S.item === 'house_cottage' ? matchCombo() || S.item : S.item;
+      var keys = opts.filter(function (o) { return o.value; }).map(function (o) { return o.value; });
+      var pick = function (key) {
+        var combo = LAB.COMBOS.filter(function (c) { return c.key === key; })[0];
+        S.item = combo ? 'house_cottage' : key; S.st = combo ? JSON.parse(JSON.stringify(combo.st)) : null;
+        updateURL(); rebuild();
+      };
+      var step = function (d) { var i = keys.indexOf(cur); pick(keys[(i + d + keys.length) % keys.length]); };
+      sec.appendChild(el('div', { class: 'row' }, [
+        el('button', { type: 'button', class: 'chip sm', text: '◀', 'aria-label': 'Previous item', onclick: function () { step(-1); } }),
+        selectBox('itemSel', opts, cur, pick, 'Item'),
+        el('button', { type: 'button', class: 'chip sm', text: '▶', 'aria-label': 'Next item', onclick: function () { step(1); } })
+      ]));
+      var en = R.view && R.view.item;
+      if (en) {
+        var acts = LAB.actsFor(en.rig ? en.id : (en.modelId || en.id), G.C, G.M);
+        var ar = el('div', { class: 'row' }, [el('label', { text: 'Acts' })]);
+        acts.item.forEach(function (n) { ar.appendChild(el('button', { type: 'button', class: 'btn primary', text: n, onclick: function () { startAct(en, n); } })); });
+        if (!acts.item.length) ar.appendChild(el('span', { class: 'small', text: 'no tap act (squish only)' }));
+        sec.appendChild(ar);
+        var cr = el('div', { class: 'row' }, [el('label', { text: 'Controller' })]);
+        acts.controller.forEach(function (n) { cr.appendChild(el('button', { type: 'button', class: 'chip sm', text: n, onclick: function () { startAct(en, n); } })); });
+        sec.appendChild(cr);
+        if (en.rig) clipControls(sec);
+        styleControls(sec, en);
+      }
+    } else if (m === 'pets') {
+      accControls(sec, S.acc, function (acc) { S.acc = acc; updateURL(); rebuild(); });
+      clipControls(sec);
+      if (!hasInfo().rig) sec.appendChild(el('p', { class: 'small', text: 'SL3D.makeRig is not defined yet (models-characters.js): lab stand-ins in PETCOL colours.' }));
+    } else if (m === 'karts') {
+      var dr = el('div', { class: 'row' }, [toggle('Driver on seat', function () { return S.driver; }, function (v) { S.driver = v; rebuild(); })]);
+      dr.appendChild(selectBox(null, LAB.PETS.map(function (p) { return { value: p, label: p.replace('pet_', '') }; }), S.driverPet, function (v) { S.driverPet = v; if (S.driver) rebuild(); }, 'Driver'));
+      sec.appendChild(dr);
+      sec.appendChild(el('p', { class: 'small', text: 'Dots on the labels are the LOCKED KARTS colours (world-art.js).' }));
+    } else if (m === 'env' || m === 'island') {
+      sec.appendChild(el('div', { class: 'row' }, [el('label', { text: 'Fixture' }),
+        seg([{ value: 'starter', label: 'Starter' }, { value: 'max', label: 'Max island' }, { value: 'showcase', label: 'All 81' }], S.fixture, function (f) {
+          S.fixture = f; updateURL();
+          if (R.view && R.view.kind === 'mount') { R.view.u = fixtureProfile(f); R.view.sync(); buildModePanel(); }
+          else rebuild();
+        })]));
+      if (m === 'island') {
+        var mountOk = !!(window.SLIsland3D && window.SLIsland3D.mount);
+        sec.appendChild(el('div', { class: 'row' }, [el('label', { text: 'Engine' }),
+          seg([{ value: null, label: 'Auto' }, { value: 'mount', label: 'mount()' }, { value: 'preview', label: 'Lab preview' }], S.engine, function (e) { S.engine = e; updateURL(); rebuild(); })]));
+        if (!mountOk) sec.appendChild(el('p', { class: 'small', text: 'SLIsland3D.mount is not defined yet (island3d.js, wave C): the lab preview batches the fixture with K.batch.' }));
+        if (R.view && R.view.kind === 'mount') {
+          var st = R.view.stage, row = el('div', { class: 'row' });
+          [['Encore 8 s', function () { st.showtime(true, { encoreMs: 8000 }); }], ['Dance now', function () { st.danceNow(); }],
+           ['Reset view', function () { st.resetView(); }], ['Remount', function () { rebuild(); }]].forEach(function (b) {
+            row.appendChild(el('button', { type: 'button', class: 'chip sm', text: b[0], onclick: function () { safe(b[1], b[0]); } }));
+          });
+          sec.appendChild(row);
+        }
+      }
+      var u = R.fixtures[S.fixture];
+      if (u) sec.appendChild(el('p', { class: 'small', text: u.name + ': ' + u.world.placed.length + ' placed · ' + Object.keys(u.world.owned).length + ' ids owned · land ' +
+        G.C.unlockedRegions(u.world).join(', ') + (u.errors && u.errors.length ? ' · ' + u.errors.length + ' fixture errors' : '') }));
+    }
+  }
+  function matchCombo() {
+    var j = JSON.stringify(S.st);
+    var c = LAB.COMBOS.filter(function (x) { return JSON.stringify(x.st) === j; })[0];
+    return c ? c.key : null;
+  }
+  /* one row per socket (hat, neck, face, back); apply(acc) rebuilds with the new set */
+  function accControls(sec, cur, apply) {
+    var a = LAB.accBySlot(G.C);
+    cur = cur || {};
+    LAB.ACC_SLOTS.forEach(function (slot) {
+      var opts = [{ value: '', label: 'none' }].concat(a[slot].map(function (id) { return { value: id, label: id.replace('acc_', '') }; }));
+      sec.appendChild(el('div', { class: 'row' }, [el('label', { text: slot }),
+        seg(opts, cur[slot] || '', function (v) {
+          var acc = {};
+          for (var k in cur) if (cur[k]) acc[k] = cur[k];
+          if (v) acc[slot] = v; else delete acc[slot];
+          apply(acc);
+        })]));
+    });
+  }
+  function clipControls(sec) {
+    var row = el('div', { class: 'row' }, [el('label', { text: 'Clip' })]);
+    row.appendChild(selectBox('clipSel', LAB.CLIPS.map(function (c) { return { value: c, label: c }; }), S.clip, function (v) {
+      S.clip = v; S.playAll = false;
+      if (R.view) R.view.entries.forEach(function (en) { en.clipT = 0; });
+      updateURL();
+    }, 'Clip'));
+    row.appendChild(toggle('Play all', function () { return S.playAll; }, function (v) { S.playAll = v; R.playT = 0; }));
+    sec.appendChild(row);
+    var sp = el('input', { type: 'range', min: '0.25', max: '2', step: '0.05', value: String(S.speed), 'aria-label': 'Clip speed' });
+    sp.addEventListener('input', function () { S.speed = +sp.value; });
+    var it = el('input', { type: 'range', min: '0', max: '1.5', step: '0.05', value: String(S.intensity), 'aria-label': 'Clip intensity' });
+    it.addEventListener('input', function () { S.intensity = +it.value; });
+    sec.appendChild(el('div', { class: 'row' }, [el('label', { text: 'Speed' }), sp]));
+    sec.appendChild(el('div', { class: 'row' }, [el('label', { text: 'Intensity' }), it]));
+  }
+  function styleControls(sec, en) {
+    var id = en.id, it = G.C.item(id), opts = LAB.styleOptions(id, G.C), own = en.pe && en.pe.via === 'make' && it && it.slot;
+    if (!opts.length) return;
+    if (opts[0].slot.indexOf('acc.') === 0) {
+      accControls(sec, en.st && en.st.acc, function (acc) { S.st = S.st || {}; S.st.acc = acc; updateURL(); rebuild(); });
+      return;
+    }
+    /* a cosmetic with its own model (a kart, a ball) switches item; slots on a base item restyle it */
+    if (own) {
+      var mine = opts.filter(function (o) { return o.slot === it.slot; })[0];
+      if (mine) sec.appendChild(el('div', { class: 'row' }, [el('label', { text: mine.label }),
+        selectBox(null, mine.options.map(function (x) { return { value: x, label: x }; }), id, function (v) { S.item = v; S.st = null; updateURL(); rebuild(); }, mine.label)]));
+      return;
+    }
+    var st = en.st || {};
+    opts.forEach(function (o) {
+      if (o.multi) {
+        var row = el('div', { class: 'row' }, [el('label', { text: o.label })]);
+        o.options.forEach(function (d) {
+          row.appendChild(toggle(d.replace('detail_', ''), function () { return !!(st.details && st.details[d]); }, function (v) {
+            var next = {}, cur = (S.st && S.st.details) || st.details || {};
+            for (var k in cur) if (cur[k]) next[k] = true;
+            if (v) next[d] = true; else delete next[d];
+            S.st = S.st || {}; S.st.details = next; updateURL(); rebuild();
+          }));
+        });
+        sec.appendChild(row);
+      } else {
+        sec.appendChild(el('div', { class: 'row' }, [el('label', { text: o.label }),
+          selectBox(null, o.options.map(function (x) { return { value: x, label: x }; }), st[o.slot] || (G.C.DEFAULTS[o.slot] || ''), function (v) {
+            S.st = S.st || {}; S.st[o.slot] = v; updateURL(); rebuild();
+          }, o.label)]));
+      }
+    });
+  }
+
+  /* ---------------- stats ---------------- */
+  function readStats() {
+    var v = R.view;
+    if (v && v.kind === 'mount') {
+      var info = safe(function () { return v.stage.info ? v.stage.info() : null; }) || {};
+      var li = info.lease || info.renderer || (G.SL3D.info().lease) || {};
+      return { calls: li.calls, tris: li.tris, programs: li.programs, geometries: li.geometries, textures: li.textures, fps: li.fps, work: li.workMs, px: li.pixelRatio, source: 'mount' };
+    }
+    var r = R.renderer;
+    if (!r) return null;
+    return { calls: R.info.calls, tris: R.info.tris, programs: r.info.programs ? r.info.programs.length : 0,
+             geometries: r.info.memory.geometries, textures: r.info.memory.textures, fps: Math.round(meter.fps() * 10) / 10,
+             work: Math.round(workAvg * 100) / 100, px: r.getPixelRatio(), source: 'lab' };
+  }
+  function renderStats() {
+    if (!G.SL3D) return;
+    var st = readStats(), sec = clear($('secStats'));
+    sec.appendChild(el('h2', { text: 'Stats' }));
+    if (!st) { sec.appendChild(el('p', { class: 'small', text: 'No renderer.' })); return; }
+    var scope = R.view ? R.view.scope : 'info';
+    var rows = LAB.budgetRows(st, budgetForStats(), scope === 'item' ? 'info' : scope);
+    var tb = el('table', { class: 'stats' });
+    rows.forEach(function (r) {
+      tb.appendChild(el('tr', { class: r.level }, [
+        el('td', {}, [el('span', { class: 'lv ' + r.level }), r.label]),
+        el('td', { class: 'v', text: r.value == null ? '—' : String(r.value) }),
+        el('td', { class: 'v small', text: r.limit ? (r.key === 'fps' ? '≥ ' : '≤ ') + r.limit : '' })
+      ]));
+    });
+    sec.appendChild(tb);
+    var b = budgetForStats();
+    sec.appendChild(el('div', { class: 'small', text: 'Work ' + (st.work != null ? st.work + ' ms' : '—') + ' · pixel ratio ' + (st.px || '—') +
+      ' · outlines ' + (wantOutlines() ? 'on' : 'off') + ' · shadows ' + (wantShadows() ? 'on' : 'off') }));
+    sec.appendChild(el('div', { class: 'small', text: 'Budget: ' + (b === G.SL3D.budget ? 'SL3D.budget' : 'SLTier.budget(' + S.tier + ')') + ' · scope ' + scope +
+      (scope === 'info' || scope === 'item' ? ' (QA scene: only programs judged)' : scope === 'game' ? ' (game budgets)' : ' (island budgets)') +
+      (st.source === 'lab' ? ' · incl. lab fx pools' : ' · shared lease') }));
+    if (R.view && R.view.item && R.view.item.template) {
+      var tp = R.view.item.template, look = G.L.LOOK[R.view.item.modelId] || {};
+      sec.appendChild(el('div', { class: 'small' + (look.tris && tp.tris > look.tris ? ' over' : ''), text: 'Item: ' + tp.tris + ' / ' + (look.tris || '—') + ' tris (look budget, ' + S.tier + ')' }));
+    }
+  }
+  /* ---------------- files, missing ids, issues ---------------- */
+  function renderFiles() {
+    R.issuesDirty = false;
+    var sec = clear($('secFiles'));
+    sec.appendChild(el('h2', { text: 'Files & issues' }));
+    var files = el('div', { class: 'files small mono' });
+    Object.keys(bootStatus).forEach(function (f) { files.appendChild(el('div', { text: (bootStatus[f] ? '✓ ' : '✗ ') + f })); });
+    var loaded = (G.SL3D && G.SL3D.loaded) || {};
+    Object.keys(loaded).forEach(function (f) {
+      var v = loaded[f];
+      files.appendChild(el('div', { text: (v === true ? '✓ ' : v === 'present' ? '• ' : '– ') + f.replace(/^\.\.\//, 'world/').replace(/^(?!world\/)/, 'island3d/') + (v === false ? ' (not built)' : '') }));
+    });
+    sec.appendChild(files);
+    if (!G.SL3D) return;
+    var info = safe(function () { return G.SL3D.info(); }) || {};
+    sec.appendChild(el('div', { class: 'small', text: 'APIs: ' + ((info.apis || []).join(', ') || 'none yet') + ' · env: ' + (window.SLIslandEnv ? 'SLIslandEnv ✓' : '–') +
+      ' · mount: ' + (window.SLIsland3D && window.SLIsland3D.mount ? '✓' : '–') + ' · models: ' + Object.keys(G.SL3D.models).length }));
+    var miss = G.SL3D.missing || [];
+    sec.appendChild(el('div', { class: 'small', text: 'SL3D.missing (' + miss.length + '): placeholder models' }));
+    var mr = el('div', { class: 'row' });
+    miss.slice(0, 60).forEach(function (id) {
+      mr.appendChild(el('button', { type: 'button', class: 'chip sm', text: id, onclick: function () { S.item = id; S.st = null; setMode('item'); } }));
+    });
+    sec.appendChild(mr);
+    var issues = (G.SL3D.issues || []).map(function (t) { return 'stage: ' + t; })
+      .concat((info.kitIssues || []).map(function (t) { return 'kit: ' + t; }))
+      .concat(R.issues.map(function (t) { return 'lab: ' + t; }));
+    if (issues.length) {
+      var ul = el('ul', { class: 'list mono' });
+      issues.slice(-40).forEach(function (t) { ul.appendChild(el('li', { class: /threw|failed|missing|over|>/.test(t) ? 'warn' : '', text: t })); });
+      sec.appendChild(ul);
+    } else sec.appendChild(el('p', { class: 'small', text: 'No issues logged.' }));
+  }
+
+  /* ================================================================
+     TOOLS: capture, context loss, fallback simulations, memory cycle
+     ================================================================ */
+  function labShot(opts) {
+    opts = opts || {};
+    var type = opts.type || 'image/png';
+    if (R.view && R.view.kind === 'mount') {
+      var c = $('mountHost').querySelector('canvas');
+      try { return c ? c.toDataURL(type, opts.quality) : null; } catch (e) { return null; }   /* best effort: the stage's buffer may already be cleared */
+    }
+    if (!R.renderer || !R.scene) return null;
+    R.renderer.render(R.scene, R.camera);
+    var src = R.renderer.domElement;
+    if (opts.bg === false) return src.toDataURL(type, opts.quality);
+    var cv = document.createElement('canvas');
+    cv.width = src.width; cv.height = src.height;
+    var g = cv.getContext('2d'), pre = G.L.presetAt(S.show, S.member), grd = g.createLinearGradient(0, 0, 0, cv.height);
+    grd.addColorStop(0, pre.skyTop); grd.addColorStop(0.55, pre.skyMid); grd.addColorStop(1, pre.skyHorizon);
+    g.fillStyle = grd; g.fillRect(0, 0, cv.width, cv.height);
+    g.drawImage(src, 0, 0);
+    return cv.toDataURL(type, opts.quality);
+  }
+  window.labShot = labShot;
+  function glOf() {
+    var c = R.renderer ? R.renderer.domElement : $('mountHost').querySelector('canvas');
+    if (!c) return null;
+    var gl = null;
+    try { gl = c.getContext('webgl2'); } catch (e) {}
+    return gl ? gl.getExtension('WEBGL_lose_context') : null;
+  }
+  function loseContext(twice) {
+    var ext = glOf();
+    if (!ext) { labIssue('WEBGL_lose_context is not available'); renderFiles(); return; }
+    ext.loseContext();
+    setTimeout(function () {
+      safe(function () { ext.restoreContext(); });
+      if (twice) setTimeout(function () { safe(function () { ext.loseContext(); }); setTimeout(function () { safe(function () { ext.restoreContext(); }); }, 900); }, 1500);
+    }, 900);
+  }
+  function onLost(e) {
+    if (e && e.preventDefault) e.preventDefault();
+    R.lostCount++;
+    showMsg('Context lost (' + R.lostCount + ')', R.lostCount >= 2
+      ? ['Second loss this session: the app would switch to 2D and remember it (localStorage slIsland3D).', 'Waiting for webglcontextrestored…']
+      : ['The app stops, waits for webglcontextrestored, then disposes and remounts.']);
+  }
+  function onRestored() {
+    cue('context restored');
+    R.fatal = false;
+    setTimeout(function () { hideMsg(); rebuild(); }, 100);
+  }
+  function memNow() {
+    var r = R.renderer;
+    if (r) return { geometries: r.info.memory.geometries, textures: r.info.memory.textures };
+    var L = safe(function () { return G.SL3D.lease('lab-probe', {}); }, 'probe lease');
+    if (!L) return null;
+    var m = { geometries: L.renderer.info.memory.geometries, textures: L.renderer.info.memory.textures };
+    L.release();
+    return m;
+  }
+  function renderOnce() { if (R.renderer && R.scene) R.renderer.render(R.scene, R.camera); }
+  function memoryCycle(n) {
+    n = n || 20;
+    var out = $('memOut');
+    return new Promise(function (resolve) {
+      var mount = R.view && R.view.kind === 'mount', i = 0, base = null, kit0 = null;
+      function kitStats() { var k = safe(function () { return G.SL3D.info().kit; }) || {}; return JSON.stringify({ templates: k.templates, materials: k.materials, batches: k.batches, pools: k.pools }); }
+      function once() { if (mount) { disposeView(); disposeRenderer(); R.view = mountIsland(); } else { rebuild(); renderOnce(); } }
+      once();
+      if (mount) { disposeView(); disposeRenderer(); }
+      base = memNow(); kit0 = kitStats();
+      if (mount) R.view = mountIsland();
+      function step() {
+        if (i++ < n) {
+          if (out) out.textContent = 'cycle ' + i + ' / ' + n + '…';
+          once();
+          setTimeout(step, 30);
+          return;
+        }
+        if (mount) { disposeView(); disposeRenderer(); }
+        var after = memNow(), kit1 = kitStats();
+        if (mount) R.view = mountIsland();
+        var verdict = LAB.memoryVerdict(base, after);
+        verdict.kitBefore = kit0; verdict.kitAfter = kit1; verdict.kitOk = kit0 === kit1;
+        if (out) out.textContent = (verdict.ok && verdict.kitOk ? '✓ PASS' : '✗ LEAK?') + ' after ' + n + ' cycles · ' +
+          verdict.rows.map(function (r) { return r.key + ' ' + r.base + '→' + r.after; }).join(' · ') + ' · kit ' + (verdict.kitOk ? 'stable' : kit0 + ' → ' + kit1);
+        if (mount) { buildModePanel(); }
+        resolve(verdict);
+      }
+      setTimeout(step, 30);
+    });
+  }
+  function buildToolsPanel() {
+    var sec = clear($('secTools'));
+    sec.appendChild(el('h2', { text: 'Tools' }));
+    var shotBox = el('div');
+    sec.appendChild(el('div', { class: 'row' }, [
+      el('button', { type: 'button', class: 'btn primary', text: '📸 Capture', onclick: function () {
+        var url = labShot();
+        clear(shotBox);
+        if (!url) { shotBox.appendChild(el('p', { class: 'small', text: 'Nothing to capture.' })); return; }
+        shotBox.appendChild(el('img', { class: 'shot', src: url, alt: 'Lab capture' }));
+        shotBox.appendChild(el('a', { href: url, download: 'island3d-lab-' + S.mode + '-' + S.tier + '.png', class: 'small', text: 'Save PNG' }));
+      } }),
+      el('button', { type: 'button', class: 'btn secondary', text: '♻️ Memory ×20', onclick: function () { memoryCycle(20); } })
+    ]));
+    sec.appendChild(el('div', { id: 'memOut', class: 'small mono' }));
+    sec.appendChild(el('div', { class: 'row' }, [
+      el('button', { type: 'button', class: 'chip sm', text: 'Lose context', onclick: function () { loseContext(false); } }),
+      el('button', { type: 'button', class: 'chip sm', text: 'Lose twice', onclick: function () { loseContext(true); } })
+    ]));
+    var simRow = el('div', { class: 'row' }, [el('label', { text: 'Fallback' })]);
+    [['no3d', 'CDN / WebGL fail'], ['slNo3D', 'slNo3D = 1']].forEach(function (s) {
+      simRow.appendChild(el('button', { type: 'button', class: 'chip sm', text: s[1], onclick: function () { S.sim = s[0]; updateURL(); location.reload(); } }));
+    });
+    sec.appendChild(simRow);
+    sec.appendChild(shotBox);
+    sec.appendChild(el('p', { class: 'small', text: 'window.labShot({bg, type}) → data URL · window.lab for automation.' }));
+  }
+
+  /* ---------------- automation surface ---------------- */
+  window.lab = {
+    ready: readyP, state: S,
+    setMode: function (m) { setMode(m); },
+    set: function (key, value) {
+      if (key === 'tier') { setTier(value); return; }
+      if (key === 'show') { applyShow(value); var r = $('showRange'); if (r) r.value = String(S.show); updateURL(); return; }
+      S[key] = value;
+      updateURL();
+      if (key === 'wire') applyWire(); else if (key !== 'labels' && key !== 'sound' && key !== 'spin' && key !== 'idle' && key !== 'timeScale') rebuild();
+      buildViewPanel();
+    },
+    item: function (id, st) { S.item = id; S.st = st || null; setMode('item'); },
+    act: function (name, key) {
+      var v = R.view, en = v && (key ? v.entries.filter(function (e) { return e.key === key || e.uid === key; })[0] : (v.item || R.selected || v.entries[0]));
+      if (v && v.kind === 'mount') { safe(function () { v.stage.act(key, name); }); return; }
+      startAct(en, name);
+    },
+    stats: function () { var s = readStats(); if (s) s.budget = LAB.budgetRows(s, budgetForStats(), R.view ? R.view.scope : 'info'); return s; },
+    entries: function () { return R.view ? R.view.entries.map(function (en) { return { key: en.key, id: en.id, placeholder: !!en.placeholder, fallback: !!en.fallback, tris: en.template ? en.template.tris : null }; }) : []; },
+    info: function () { return G.SL3D ? G.SL3D.info() : null; },
+    issues: function () { return R.issues.slice(); },
+    memoryCycle: memoryCycle, loseContext: loseContext, shot: labShot, rebuild: function () { rebuild(); }
+  };
+
+  boot();
+}());
+</script>
+</body>
+</html>

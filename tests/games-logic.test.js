@@ -9,55 +9,77 @@ const C = require('../world/world-core.js');
 const api = { sound() {}, reduced: true };
 const STEP = 1 / 120;
 
-/* ---------------- pet obstacle course ---------------- */
-test('course: every seeded layout is completable with zero bumps (autopilot, 3 variants x 150 seeds)', () => {
+/* ---------------- pet obstacle course (Debut Run) ----------------
+   The full rules suite lives in tests/game-runner.test.js. These are the
+   original course tests, updated for the beat-grid redesign. */
+test('course: every daily chart is completable on the beat with zero contacts (safe autopilot, 4 variants x 25 days)', () => {
   for (const variant of ['course_meadow', 'course_beach', 'course_snow', 'course_candy']) {
-    for (let seed = 1; seed <= 150; seed++) {
-      const r = Course.newRound(api, variant, { seed });
+    for (let d = 1; d <= 25; d++) {
+      const day = '2026-11-' + String(d).padStart(2, '0');
+      const r = Course.newRound(api, variant, { day, fan: false });
       let t = 0;
       while (!r.done && t < 200) { r.autopilot(); r.step(STEP, {}); t += STEP; }
-      assert.equal(r.done, true, `${variant} seed ${seed} did not finish`);
-      assert.equal(r.state.hits, 0, `${variant} seed ${seed}: autopilot was bumped`);
-      assert.ok(t >= 55 && t <= 95, `round length ${t.toFixed(1)}s outside 60-90s target`);
+      assert.equal(r.done, true, `${variant} ${day} did not finish`);
+      assert.equal(r.state.curtain, false, `${variant} ${day}: curtain call`);
+      assert.equal(r.state.bumps + r.state.splashes + r.state.bonks, 0, `${variant} ${day}: autopilot touched a prop`);
+      assert.ok(t >= 69 && t <= 72, `round length ${t.toFixed(1)}s outside 69-72s`);
       assert.ok(C.validResult('course', r.result()), 'result passes core validation');
     }
   }
 });
 
-test('course: layouts vary between rounds', () => {
-  const a = Course.buildCourse(11).obs.map(o => o.kind + o.x).join(',');
-  const b = Course.buildCourse(12).obs.map(o => o.kind + o.x).join(',');
-  assert.notEqual(a, b);
+test('course: layouts vary between days (and between courses)', () => {
+  const sig = seed => Course.buildCourse(seed).obs.map(o => o.kind + o.x).join(',');
+  assert.notEqual(sig(Course.seedFor('2026-10-02', 'course_meadow')), sig(Course.seedFor('2026-10-03', 'course_meadow')));
+  assert.notEqual(sig(Course.seedFor('2026-10-02', 'course_meadow')), sig(Course.seedFor('2026-10-02', 'course_snow')));
+  assert.equal(sig(Course.seedFor('2026-10-02', 'course_meadow')), sig(Course.seedFor('2026-10-02', 'course_meadow')), 'same day, same chart');
 });
 
-test('course: a child who never jumps still finishes (bumps only slow you)', () => {
-  const r = Course.newRound(api, 'course_meadow', { seed: 5 });
+/* REPLACES 'a child who never jumps still finishes (bumps only slow you)'.
+   The parent asked for real consequences: now bumps cost hearts, and losing them all
+   brings a kind CURTAIN CALL that keeps whatever was earned. (Flag for the parent.) */
+test('course: a child who never jumps is curtain-called (real consequences, no free ride)', () => {
+  const r = Course.newRound(api, 'course_meadow', { seed: 5, fan: false });
   let t = 0;
   while (!r.done && t < 300) { r.step(STEP, {}); t += STEP; }
   assert.equal(r.done, true);
-  assert.ok(r.state.hits > 0);
-  assert.ok(t < 150, 'still finishes in reasonable time: ' + t.toFixed(0) + 's');
+  assert.equal(r.state.curtain, true, 'curtain call');
+  assert.ok(r.state.bumps >= 3);
+  assert.ok(t <= 35, 'curtain call after ' + t.toFixed(1) + 's');
+  assert.ok(r.state.progress < 0.30, 'progress ' + (r.state.progress * 100).toFixed(0) + '%');
+  assert.ok(C.validResult('course', r.result()));
+  assert.equal(r.result().score, 0);
+  const f = Course.newRound(api, 'course_meadow', { seed: 5, fan: true });
+  t = 0;
+  while (!f.done && t < 300) { f.step(STEP, {}); t += STEP; }
+  assert.equal(f.state.curtain, true, 'Fan support is still curtain-called');
+  assert.ok(f.state.progress < 0.35, 'Fan support progress ' + (f.state.progress * 100).toFixed(0) + '%');
 });
 
 test('course: double jump works and buffered jumps fire on landing', () => {
-  const r = Course.newRound(api, 'course_meadow', { seed: 3 });
+  const r = Course.newRound(api, 'course_meadow', { seed: 3, fan: false });
   r.input('jump', true); r.step(STEP, {});
   assert.equal(r.state.onGround, false);
   for (let i = 0; i < 20; i++) r.step(STEP, {});
   r.input('jump', true);                               /* double jump */
   assert.equal(r.state.airJumps, 0);
   assert.ok(r.state.vy < 0);
+  while (-r.state.y > 20 || r.state.vy < 0) r.step(STEP, {});
+  r.input('jump', true);                               /* pressed just before landing */
+  assert.ok(r.state.buffer > 0);
+  for (let i = 0; i < 12 && r.state.vy >= 0; i++) r.step(STEP, {});
+  assert.ok(r.state.vy < 0 && !r.state.onGround, 'the buffered jump fired on touchdown');
 });
 
 test('course: frame-rate independent (fixed step gives identical results at 30 and 144 fps)', () => {
   function runAt(fps) {
-    const r = Course.newRound(api, 'course_meadow', { seed: 9 });
+    const r = Course.newRound(api, 'course_meadow', { seed: 9, fan: false });
     let acc = 0, t = 0;
     while (!r.done && t < 200) {
       const dt = 1 / fps; t += dt; acc += dt;
-      while (acc >= STEP) { r.autopilot(); r.step(STEP, {}); acc -= STEP; }
+      while (acc >= STEP) { r.autopilot(); r.step(STEP, {}); acc -= STEP; if (r.done) break; }
     }
-    return r.state.treats + ':' + r.state.hits;
+    return r.state.treats + ':' + r.state.bumps + ':' + r.result().score + ':' + r.state.lag;
   }
   assert.equal(runAt(30), runAt(144));
 });

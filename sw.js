@@ -70,14 +70,21 @@ self.addEventListener('fetch', (event) => {
   const sameOrigin = url.origin === self.location.origin;
 
   if (isNavigation) {
+    /* Only the app's own page is the offline shell. Other pages on this origin
+       (control.html, parked.html, the 3D lab) are cached under their own URL,
+       so opening them can never replace the cached app. */
+    const scopePath = new URL(self.registration.scope).pathname;
+    const isShell = url.pathname === scopePath || url.pathname === scopePath + 'index.html';
     event.respondWith(
       fetch(req)
         .then((res) => {
-          const copy = res.clone();
-          caches.open(CACHE_VERSION).then((c) => c.put('./index.html', copy));
+          if (res && res.ok) {
+            const copy = res.clone();
+            caches.open(CACHE_VERSION).then((c) => c.put(isShell ? './index.html' : req, copy));
+          }
           return res;
         })
-        .catch(() => caches.match('./index.html'))
+        .catch(() => (isShell ? caches.match('./index.html') : caches.match(req)))
     );
     return;
   }

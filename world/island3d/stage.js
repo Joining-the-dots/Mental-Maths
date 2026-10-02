@@ -250,7 +250,9 @@
       var K = SL3D.kit(t);
       var rs = resolveSt(id, st, catalogDefaults());
       var tpl = K.templates.get(id, K.stateKey(id, rs), t, rs);
-      var obj = K.instantiate(tpl, { outlines: SL3D.quality.outlines });
+      /* models with a textured part (e.g. the PET COURSE banner) hand over their material */
+      var mdl = SL3D.models[id];
+      var obj = K.instantiate(tpl, { outlines: SL3D.quality.outlines, material: mdl && mdl.material ? mdl.material : undefined });
       obj.userData.model = SL3D.models[id] || null;
       return obj;
     }

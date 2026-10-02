@@ -896,11 +896,14 @@
 
     /* ---------------- grid / catalogue hooks ---------------- */
     var gridBaseY = typeof opts.baseY === 'function' ? opts.baseY : null;
-    function baseY(x, y, fp) {
-      var f = gridBaseY;
-      if (!f && root.SLGrid3D && typeof root.SLGrid3D.baseY === 'function') f = root.SLGrid3D.baseY;
-      if (!f) return 0;
-      try { var v = f(x, y, fp); return isFinite(v) ? Number(v) : 0; } catch (e) { return 0; }
+    /* ground height under a placed item. A custom hook gets (x, y, fp, id);
+       the default uses grid3d, whose signature is baseY(id, x, y). */
+    function baseY(x, y, fp, id) {
+      try {
+        var v = gridBaseY ? gridBaseY(x, y, fp, id)
+          : (root.SLGrid3D && typeof root.SLGrid3D.baseY === 'function' && id) ? root.SLGrid3D.baseY(id, x, y) : 0;
+        return isFinite(v) ? Number(v) : 0;
+      } catch (e) { return 0; }
     }
     function itemFp(id) {
       var C = root.SLWorldCore;
@@ -1211,7 +1214,7 @@
       else {
         var x = place.x != null ? place.x : rec.x, y = place.y != null ? place.y : rec.y;
         rec.x = x; rec.y = y;
-        var by = place.baseY != null ? place.baseY : baseY(x, y, fp);
+        var by = place.baseY != null ? place.baseY : baseY(x, y, fp, this.template.id);
         rec.pos.set(x + fp[0] / 2 - 8, by, y + fp[1] / 2 - 5);
       }
       if (jitter) { rec.jYaw = (jitter.yaw || 0) * DEG; rec.scale = jitter.scale || 1; }

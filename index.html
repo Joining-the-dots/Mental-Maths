@@ -4,6 +4,14 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover" />
 <title>Conway Family Learning Lab — Live V4.52</title>
+<!-- My Island 3D: Three.js (MIT) pinned from jsDelivr; loaded lazily with import('three')
+     only when the island opens. The service worker caches it for offline use. -->
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.min.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+} }
+</script>
 
 <!-- PWA -->
 <link rel="manifest" href="manifest.json">
@@ -31800,6 +31808,27 @@ window.SL_WORLD_VER = '1';
    island ledger so it can be kept or cleared when testing ends.
    Set to false (and deploy) to switch real prices back on. */
 window.SL_WORLD_TRIAL = true;
+/* 3D loader: resolves to the THREE namespace, or null when 3D isn't possible
+   (no WebGL, library didn't load in time, or localStorage.slNo3D === '1'),
+   in which case My Island and its games use their 2D versions. */
+(function () {
+  var p = null;
+  window.slLoad3D = function () {
+    if (p) return p;
+    p = new Promise(function (resolve) {
+      try { if (localStorage.getItem('slNo3D') === '1') return resolve(null); } catch (e) {}
+      var ok = false;
+      try { var c = document.createElement('canvas'); ok = !!(c.getContext('webgl2') || c.getContext('webgl')); } catch (e) {}
+      if (!ok) return resolve(null);
+      var done = false, timer = setTimeout(function () { if (!done) { done = true; resolve(null); } }, 15000);
+      var imp;
+      try { imp = new Function('return import("three")')(); } catch (e) { imp = Promise.reject(e); }
+      imp.then(function (T) { if (!done) { done = true; clearTimeout(timer); resolve(T); } })
+        .catch(function () { if (!done) { done = true; clearTimeout(timer); resolve(null); } });
+    });
+    return p;
+  };
+})();
 (function () {
   'use strict';
   var loading = null;

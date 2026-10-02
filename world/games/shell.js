@@ -64,13 +64,15 @@
                 star · shield · whistle · save · skid · cheer · tada
      Everything respects the app's mute. */
   var SCALE = [523, 587, 659, 784, 880, 1047, 1175, 1319, 1568, 1760];
+  var SAMPLE_FILES = { right: 1, wrong: 1, fanfare: 1, sting: 1, chip: 1, coins: 1, unlock: 1, applause: 1, heartbeat: 1 };
   function makeSound(cfg) {
     return function (name, vol, step) {
       try {
         if (cfg.muted && cfg.muted()) return;
         if (name === 'correct' || name === 'wrong' || name === 'unlock' || name === 'fanfare' || name === 'tick') { if (typeof playSfx === 'function') playSfx(name); return; }
         if (name === 'cheer') name = 'applause';
-        if (typeof slSample === 'function' && slSample(name, vol == null ? 0.8 : vol)) return;
+        /* only real sample files go to slSample — anything else would 404 on audio/sfx/<name>.mp3 */
+        if (SAMPLE_FILES[name] && typeof slSample === 'function' && slSample(name, vol == null ? 0.8 : vol)) return;
         if (typeof getAudioCtx === 'function' && typeof _beep === 'function') {
           var ctx = getAudioCtx(); if (!ctx) return;
           var t = ctx.currentTime, v = vol == null ? 1 : Math.max(0.1, Math.min(1.5, vol));

@@ -1,0 +1,37 @@
+[
+ {
+  "name": "island_day",
+  "track": "island_day",
+  "file": "island_day.mp3",
+  "bpm": 100,
+  "bars": 16
+ },
+ {
+  "name": "island_showtime",
+  "track": "island_showtime",
+  "file": "island_showtime.mp3",
+  "bpm": 118,
+  "bars": 16
+ },
+ {
+  "name": "shop",
+  "track": "shop",
+  "file": "shop.mp3",
+  "bpm": 92,
+  "bars": 16
+ },
+ {
+  "name": "penalty",
+  "track": "penalty",
+  "file": "penalty.mp3",
+  "bpm": 112,
+  "bars": 16
+ },
+ {
+  "name": "kart",
+  "track": "kart",
+  "file": "kart.mp3",
+  "bpm": 140,
+  "bars": 32
+ }
+]

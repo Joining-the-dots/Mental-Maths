@@ -1,0 +1,2645 @@
+/* ================================================================
+   My Island 3D — the scene controller (island chunk 10; classic script).
+   Adds mount() to the existing window.SLIsland3D object that stage.js
+   created (never replaces it). In Node, module.exports is the PURE layer
+   (view diffing, pick priority, ray/box maths, labels) for tests.
+
+   SLIsland3D.mount({reduced, user: {name, color, avatar}, on: {tapItem(uid),
+     tapPet(petId), tapAvatar(), tapLand(landId), tapCell(x, y), dragStart(uid),
+     dragCell(x, y), dragEnd(), ready(), fail(reason)}, srList = true}) → stage
+   stage (docs/island3d/CONTRACTS.md §5; island-architecture.json → integrationWithRewardsWorld)
+     attach(el)            re-parent the persistent div.slw-3d into el (#slwStage); cheap, idempotent
+     sync(view)            view = {placed, style, unlocked, pets, avatar, mode, selectedUid, placing,
+                           lit, world, anim: {unlock, dropUid, styleDebut}}: diffs add / move / remove /
+                           restyle (one ItemBatch per (id, stateKey)), lit lamps, mode, selection,
+                           placement visuals, actors, the keyboard list; shadow refresh only on change
+     act(uid, name) → Promise<bool>   CATALOG act ('launch' push-in + spot aim, 'home', 'homeClose',
+                           'bounce', 'splash', 'swing', 'bubbles', 'spin', 'wave', 'glow'); one live
+                           act per uid (a new one supersedes it: the old promise resolves false)
+     emote(target, kind)   'pet:<id>' | 'me' (avatar wave + finger-heart); kind heart | note | star
+     setLit(uid, on)       the lamp flicker act (the view's lit map is the source of truth)
+     unlockLand(region) → Promise     the land rises (+ crane, splash rings, sparkles, applause)
+     debut(uid) → Promise · storeFx(uid, trayEl?) → Promise
+     showtime(on, {encoreMs}?)        Day ↔ Showtime (env + rim + rigs + music context + orbit);
+                           with encoreMs: an ENCORE (Showtime for encoreMs, then back, with a dance break)
+     danceNow()            the 8-count dance break (actors) + the push-in on the house
+     setAnchors([{el, uid | pet | me | region, dy (u), dyPx}])   HTML labels projected every
+                           camera change (≤ 15 Hz while things move); wrapped in .slw-tag3d
+     focusItem(key | null) · resetView() · frameItem(uid) · placement(state | null)
+     setCovered(on) · suspend() · resume() · setReduced(on) · setUser(user) · info() · dispose()
+   Pointer: tap = 8 px / 500 ms; long-press 450 ms frames an item (+ name bubble); an edit-mode
+   drag > 10 px on an item calls on.dragStart(uid), then on.dragCell / on.dragEnd; in place mode
+   the ghost can be dragged the same way. Pick priority: pets/avatar > items > locked land
+   (env.lockedAt) > cells. Camera: camera.js (window.SLIslandCamera).
+
+   SIBLINGS (wave C, feature-detected; built-in fallbacks keep the island whole without them):
+     actors  SL3D.makeActors(host) | SLActors.create(K, SL3D, host) | SLIslandActors.create(…)
+             {sync(v), update(dt, t, ctx) → busy, pick(origin, dir) → {target, t}, emote(target, kind),
+              perform(kind, uid) → lead s, active(), dance(o) → s, anchor(target, out) → out|null,
+              setShow(k), setMode(m), setReduced(on), setUser(u), setQuality(q), dispose()}
+     fx3d    SL3D.makeFx(host) | SLFx3D.create(K, SL3D, host) | SLIslandFx.create(…)
+             {emit(kind, pos, n, opts), halo(key, on, pos, sizeU, token), decal(key, on, pos, token),
+              update(dt, t) → busy, setShow(k), setReduced(on), setQuality(q), clear(), dispose()}
+     edit3d  SL3D.makeEdit(host) | SLEdit3D.create(K, SL3D, host) | SLIslandEdit.create(…)
+             {setState({mode, land, placing, ghost: {id, st, stateKey, template, material}}),
+              update(dt, t) → busy, ghostBox() → {min, max} | null, setReduced(on), dispose()}
+     A sibling whose call throws is dropped for the built-in fallback (logged in QA mode).
+
+   THE ANIMATION HANDLE a (one per placed copy, reused every frame — CONTRACTS §5):
+     uid id t dt phase rand() reduced beat bar bpm show lit stateKey st template batch object
+     music (the SLMusic.clock() snapshot while a loop plays, false when music is off, null
+     without SLMusic) pathD · copyGeometry(part) basePositions(part) pivot(name).set(rot, pos, scale)
+     state(key, v) halo(name, on, sizeU, token) decal(on, token) emit(kind, anchor | localPos, n, opts)
+     sfx(name, vol, step) (panned by x) pets.{active(), perform(kind, uid)} shake(amp, dur) squish()
+     pivot('root') / pivot('sway') (no sway pivot) is captured and composed with the controller's
+     squish / drop-in / debut / store, so a swaying tree still squishes when tapped.
+   ================================================================ */
+(function (root, factory) {
+  var hasDom = typeof window !== 'undefined' && typeof document !== 'undefined' && !!document.createElement;
+  var api = factory(root, hasDom);
+  if (typeof module === 'object' && module.exports) module.exports = api;
+}(typeof self !== 'undefined' ? self : typeof globalThis !== 'undefined' ? globalThis : this, function (root, HAS_DOM) {
+  'use strict';
+
+  var VERSION = 1;
+  var DEG = Math.PI / 180;
+  var MODES = { play: 1, edit: 1, place: 1 };
+  var OCCLUDE_U = 0.6;          /* a pet still wins a tap unless an item box is this much nearer */
+  var DANCE_EVERY_BARS = 16, DANCE_BPM = 118, DANCE_COUNTS = 8;
+  var ANCHOR_HZ = 15;
+  var EMOTES = ['heart', 'note', 'star'];
+
+  /* ================================================================
+     PURE HELPERS (exported for Node tests)
+     ================================================================ */
+  function normMode(m) { return MODES[m] ? m : 'play'; }
+  function batchKey(id, sk) { return id + '#' + (sk == null ? '' : sk); }
+  function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+
+  /* the placed list → what changed since the previous records.
+     prev: Map uid → {id, x, y, sk}; next: [{uid, id, x, y, sk}]
+     → {add: [n], move: [n], restyle: [n], remove: [uid], same: [uid]} (first copy of a uid wins) */
+  function diffPlaced(prev, next) {
+    var out = { add: [], move: [], restyle: [], remove: [], same: [] }, seen = {};
+    for (var i = 0; i < next.length; i++) {
+      var n = next[i];
+      if (!n || seen[n.uid]) continue;
+      seen[n.uid] = 1;
+      var p = prev && (typeof prev.get === 'function' ? prev.get(n.uid) : prev[n.uid]);
+      if (!p) out.add.push(n);
+      else if (p.id !== n.id || p.sk !== n.sk) out.restyle.push(n);
+      else if (p.x !== n.x || p.y !== n.y) out.move.push(n);
+      else out.same.push(n.uid);
+    }
+    if (prev) {
+      var keys = typeof prev.keys === 'function' ? Array.from(prev.keys()) : Object.keys(prev);
+      keys.forEach(function (uid) { if (!seen[uid]) out.remove.push(uid); });
+    }
+    return out;
+  }
+  /* lit memory changes for the given uids → [{uid, on}] */
+  function litChanges(prev, lit, uids) {
+    var out = [];
+    prev = prev || {}; lit = lit || {};
+    for (var i = 0; i < uids.length; i++) {
+      var u = uids[i], a = !!prev[u], b = !!lit[u];
+      if (a !== b) out.push({ uid: u, on: b });
+    }
+    return out;
+  }
+  /* slab test: ray (o, d) against an axis-aligned box {min: [3], max: [3]} → entry t ≥ 0, or -1 */
+  function rayBox(o, d, min, max) {
+    var t0 = 0, t1 = Infinity, ax = ['x', 'y', 'z'];
+    for (var i = 0; i < 3; i++) {
+      var ov = o[ax[i]], dv = d[ax[i]], lo = min[i], hi = max[i];
+      if (Math.abs(dv) < 1e-12) { if (ov < lo || ov > hi) return -1; continue; }
+      var a = (lo - ov) / dv, b = (hi - ov) / dv;
+      if (a > b) { var s = a; a = b; b = s; }
+      if (a > t0) t0 = a;
+      if (b < t1) t1 = b;
+      if (t0 > t1) return -1;
+    }
+    return t0;
+  }
+  /* pick priority (island-architecture → hit volumes and picking):
+     place mode: the ghost, then cells. Otherwise pets/avatar (play only, unless an item box is
+     clearly nearer) > the nearest item > land cells > the locked hologram > sea cells > sea.
+     h = {actor: {t, target}, item: {t, uid}, ghost: t, cell: {c, r, land}, land: region, sea: point} */
+  function choosePick(mode, h) {
+    mode = normMode(mode);
+    h = h || {};
+    if (mode === 'place') {
+      if (h.ghost != null && h.ghost >= 0) return { kind: 'ghost' };
+      if (h.cell) return { kind: 'cell', c: h.cell.c, r: h.cell.r };
+      return { kind: 'none' };
+    }
+    if (mode === 'play' && h.actor && (!h.item || h.actor.t <= h.item.t + OCCLUDE_U)) return { kind: 'actor', target: h.actor.target };
+    if (h.item) return { kind: 'item', uid: h.item.uid };
+    if (h.cell && h.cell.land) return { kind: 'cell', c: h.cell.c, r: h.cell.r };
+    if (h.land) return { kind: 'land', region: h.land };
+    if (h.cell) return { kind: 'cell', c: h.cell.c, r: h.cell.r };
+    if (h.sea) return { kind: 'sea' };
+    return { kind: 'none' };
+  }
+  /* the cell an item's origin lands on while it is dragged by a grabbed cell, clamped to the grid */
+  function dragTarget(cell, grab, fp, cols, rows) {
+    fp = fp || [1, 1]; grab = grab || { c: 0, r: 0 };
+    cols = cols || 16; rows = rows || 10;
+    return { x: clamp(cell.c - grab.c, 0, cols - fp[0]), y: clamp(cell.r - grab.r, 0, rows - fp[1]) };
+  }
+  /* the keyboard list's labels: today's aria-labels from rewards-world */
+  function itemLabel(it, mode, selected) {
+    if (!it) return '';
+    if (normMode(mode) !== 'play') return it.name + (selected ? ' (selected)' : '') + ' — select to move it';
+    return it.name + (it.act === 'launch' ? ' — tap to play' : it.act ? ' — tap to play with it' : '');
+  }
+  function petLabel(C, p) {
+    var it = C && C.item ? C.item(p.id) : null;
+    return (p.name || 'Pet') + ' the ' + (it ? it.name.toLowerCase() : 'pet') + (p.active ? ' (runs your obstacle course)' : '');
+  }
+  /* the next dance break bar: every 16 bars while Showtime is on (-1 = not scheduled) */
+  function nextDance(bar, scheduled, every) {
+    every = every || DANCE_EVERY_BARS;
+    if (scheduled < 0) return { due: false, next: bar + every };
+    if (bar >= scheduled) return { due: true, next: bar + every };
+    return { due: false, next: scheduled };
+  }
+  /* CATALOG act → the act name a model gets (glow toggles from the lit memory) */
+  function modelAct(name, litOn) {
+    if (name === 'glow') return litOn ? 'glowOff' : 'glowOn';
+    return name;
+  }
+  /* screen position of NDC (CSS px) */
+  function toScreen(nx, ny, w, h, out) {
+    out = out || {};
+    out.x = (nx + 1) / 2 * w; out.y = (1 - ny) / 2 * h;
+    return out;
+  }
+
+  /* ================================================================
+     BROWSER (installed at the end of this factory, once every table below exists)
+     ================================================================ */
+  function install() {
+    var IS = root.SLIsland3D || (root.SLIsland3D = {});
+    if (IS.mount && IS.mount.__island3d) return;
+    IS.mount = mount;
+    IS.mount.__island3d = VERSION;
+    IS.sceneVersion = VERSION;
+  }
+
+  function perfNow() { return (root.performance && root.performance.now) ? root.performance.now() : Date.now(); }
+  function errText(e) { return e && e.message ? e.message : String(e); }
+  function Pr() { return typeof Promise === 'function' ? Promise : null; }
+  function resolved(v) { var P = Pr(); return P ? P.resolve(v) : null; }
+  function deferred() {
+    var P = Pr(), d = { promise: null, resolve: function () {} };
+    if (P) d.promise = new P(function (res) { d.resolve = res; });
+    return d;
+  }
+  function el(tag, cls, attrs) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (attrs) for (var k in attrs) if (Object.prototype.hasOwnProperty.call(attrs, k)) e.setAttribute(k, attrs[k]);
+    return e;
+  }
+
+  /* ================================================================
+     mount(opts) → stage
+     ================================================================ */
+  function mount(opts) {
+    opts = opts || {};
+    var on = opts.on || {};
+    var SL3D = root.SL3D;
+    var dead = false, failed = null, failTold = false, issues = [];
+    var timers = [];
+
+    function qa() { return !!(SL3D && SL3D.qa); }
+    function issue(msg) {
+      if (issues.length < 60) issues.push(String(msg));
+      if (qa() && root.console) root.console.warn('[island3d] ' + msg);
+    }
+    function tell(name) {
+      var f = on[name];
+      if (typeof f !== 'function') return undefined;
+      try { return f.apply(null, Array.prototype.slice.call(arguments, 1)); } catch (e) { issue('on.' + name + ' threw: ' + errText(e)); return undefined; }
+    }
+    function later(fn, ms) {
+      var id = setTimeout(function () {
+        var i = timers.indexOf(id);
+        if (i >= 0) timers.splice(i, 1);
+        if (!dead) fn();
+      }, Math.max(0, ms | 0));
+      timers.push(id);
+      return id;
+    }
+    function cancelLater(id) { var i = timers.indexOf(id); if (i >= 0) { timers.splice(i, 1); clearTimeout(id); } }
+
+    var stage = {};
+    function fail(reason) {
+      if (dead || failed) return;
+      failed = String(reason || 'unknown');
+      issue('fail: ' + failed);
+      if (!failTold) { failTold = true; setTimeout(function () { tell('fail', failed); }, 0); }
+    }
+    /* wrap a public method: any throw is a silent 2D fallback (never a toast) */
+    function guard(name, fn, dflt) {
+      return function () {
+        if (dead || failed) return typeof dflt === 'function' ? dflt() : dflt;
+        try { return fn.apply(null, arguments); } catch (e) { fail(name + ': ' + errText(e)); return typeof dflt === 'function' ? dflt() : dflt; }
+      };
+    }
+    var noP = function () { return resolved(false); };
+
+    if (!SL3D || !SL3D.ready || !SL3D.THREE || typeof SL3D.kit !== 'function') {
+      fail('3D runtime not ready');
+      return stubStage(stage, function () { dead = true; });
+    }
+
+    /* ---------------- modules ---------------- */
+    var T = SL3D.THREE, tier = SL3D.tier, K = SL3D.kit(tier);
+    var C = root.SLWorldCore, L = root.SLIslandLook, Gr = root.SLGrid3D, Mo = root.SLMotion;
+    var CamApi = root.SLIslandCamera, Snd = root.SLSound, Mus = root.SLMusic;
+    if (!C || !Gr) { fail('SLWorldCore / SLGrid3D missing'); return stubStage(stage, function () { dead = true; }); }
+
+    var reduced = !!opts.reduced;
+    var user = normUser(opts.user);
+    var optR = { reduced: reduced };          /* SLMotion sample options (reused) */
+
+    /* ---------------- state ---------------- */
+    var lease = null, scene = null, camera = null, env = null, rig = null, controls = null;
+    var container = null, canvas = null, anchorsEl = null, ringEl = null, camctlEl = null, srEl = null;
+    var itemsRoot = null, actorsRoot = null, fxRoot = null, editRoot = null;
+    var recs = new Map(), recList = [], live = [], batches = new Map(), batchList = [];
+    var lastView = null, mode = 'play', selectedUid = null, placing = null, focusKey = null;
+    var litMem = {}, envUnlocked = ['home'], landKeys = null, landSig = '', firstSync = true;
+    var pendingRise = null, risen = {}, lastDrop = '', placedList = [];
+    var clockT = 0, frameNo = 0, cssW = 0, cssH = 0, touch = false;
+    var beat = { pos: 0, bpm: 100, frac: 0, bar: 0, clk: null, polledAt: -1, clkAt: 0, music: null };
+    var showK = 0, showDirty = true, userShow = false, encore = null, nextDanceBar = -1, dance = null;
+    var readyFired = false, compileState = 0, compileFrames = 0, readyTimer = 0;
+    var suspended = false, covered = false, lost = false, revoked = false, launchedUid = null;
+    var anchorList = [], anchorsDirty = true, anchorClock = 0, lastCamVersion = -1, bubble = null;
+    var touchAction = '', cullDirty = true, emoteSeen = { target: '', t: -1 };
+    var drag = null, grabCell = null, newTemplates = false, srSig = '', unsubQ = null;
+    var sound = Snd && typeof Snd.make === 'function' ? safeMake(function () { return Snd.make({}); }) : null;
+    var riseFx = null;
+
+    /* scratch (frame loop: no allocation) */
+    var _v = new T.Vector3(), _v2 = new T.Vector3(), _ro = new T.Vector3(), _rd = new T.Vector3();
+    var _q = new T.Quaternion(), _e = new T.Euler(), _p = new T.Vector3(), _s = new T.Vector3();
+    var _frustum = new T.Frustum(), _pm = new T.Matrix4(), _sph = new T.Sphere();
+    var _sq = {}, _dr = {}, _db = {}, _st = {};
+
+    function safeMake(fn) { try { return fn(); } catch (e) { issue('sound: ' + errText(e)); return null; } }
+    function normUser(u) {
+      u = u || {};
+      return { name: u.name || '', color: typeof u.color === 'string' ? u.color : null, avatar: u.avatar || u.emoji || '🙂' };
+    }
+
+    /* ---------------- sound ---------------- */
+    var quiet = 0;                            /* > 0: sounds and particles are suppressed (catch-up updates) */
+    function sfx(name, vol, step, x) {
+      if (!sound || !name || quiet > 0) return;
+      var pan = 0;
+      if (typeof x === 'number' && Snd.panFor) pan = Snd.panFor(x + 8, 16);
+      try { sound(name, vol == null ? 1 : vol, step, pan); } catch (e) { issue('sfx ' + name + ': ' + errText(e)); }
+    }
+    function musicContext(ctx) {
+      if (!Mus || typeof Mus.island !== 'function') return;
+      try { Mus.island(ctx); } catch (e) { issue('music: ' + errText(e)); }
+    }
+
+    /* ================================================================
+       DOM: the persistent container (re-parented by attach, never rebuilt)
+       ================================================================ */
+    function buildDom() {
+      container = el('div', 'slw-3d');
+      container.style.position = 'absolute';
+      container.style.inset = '0';
+      container.style.overflow = 'hidden';
+      anchorsEl = el('div', 'slw-anchors');
+      ringEl = el('div', 'slw-focusring', { 'aria-hidden': 'true' });
+      ringEl.style.display = 'none';
+      camctlEl = el('div', 'slw-camctl', { role: 'group', 'aria-label': 'Island camera' });
+      [['left', '⟲', 'Turn the island left'], ['right', '⟳', 'Turn the island right'],
+       ['in', '＋', 'Zoom in'], ['out', '－', 'Zoom out'], ['reset', '⌂', 'Reset the view']].forEach(function (b) {
+        var btn = el('button', 'slw-cam-' + b[0], { type: 'button', 'aria-label': b[2], 'data-cam': b[0], title: b[2] });
+        btn.textContent = b[1];
+        camctlEl.appendChild(btn);
+      });
+      camctlEl.addEventListener('click', onCamClick);
+      camctlEl.addEventListener('keydown', onCamKey);
+      if (opts.srList !== false) {
+        srEl = el('ul', 'slw-sr-list', { 'aria-label': 'Things on your island' });
+        srEl.addEventListener('click', onSrClick);
+        srEl.addEventListener('focusin', onSrFocus);
+        srEl.addEventListener('focusout', onSrBlur);
+      }
+      container.appendChild(anchorsEl);
+      container.appendChild(ringEl);
+      container.appendChild(camctlEl);
+      if (srEl) container.appendChild(srEl);
+    }
+    function placeCanvas() {
+      if (!lease || !container) return;
+      canvas = lease.canvas;
+      canvas.className = 'slw-3dcanvas';
+      canvas.style.cssText = 'position:absolute;left:0;top:0;width:100%;height:100%;display:block;outline:none;';
+      canvas.style.opacity = readyFired ? '1' : '0';
+      canvas.setAttribute('aria-hidden', 'true');
+      touchAction = '';
+      if (canvas.parentNode !== container) container.insertBefore(canvas, container.firstChild);
+      applyTouchAction();
+    }
+    function applyTouchAction() {
+      if (!canvas) return;
+      var want = mode !== 'play' || (rig && rig.zoomedIn()) ? 'none' : 'pan-y';
+      if (want !== touchAction) { touchAction = want; canvas.style.touchAction = want; }
+    }
+    function onCamClick(e) {
+      var b = e.target && e.target.closest ? e.target.closest('[data-cam]') : null;
+      if (!b || !rig || dead) return;
+      rig.command(b.getAttribute('data-cam'));
+      afterCamera();
+      wake();
+    }
+    function onCamKey(e) {
+      if (!controls || dead) return;
+      if (mode === 'place' && /^(Arrow|Enter|Escape)/.test(e.key || '')) return;   /* rewards-world's placeKeys own these */
+      if (controls.key(e)) e.preventDefault();
+    }
+    function syncCamButtons() {
+      if (!camctlEl) return;
+      var lock = mode !== 'play';
+      ['left', 'right'].forEach(function (k) {
+        var b = camctlEl.querySelector('[data-cam="' + k + '"]');
+        if (b) b.disabled = lock;
+      });
+    }
+
+    /* ================================================================
+       BUILD: scene graph, env, systems (the lease needs the scene + camera first)
+       ================================================================ */
+    function buildScene() {
+      scene = new T.Scene();
+      scene.name = 'island';
+      camera = new T.PerspectiveCamera(30, 16 / 9, 0.5, 200);
+      itemsRoot = new T.Group(); itemsRoot.name = 'items';
+      actorsRoot = new T.Group(); actorsRoot.name = 'actors';
+      fxRoot = new T.Group(); fxRoot.name = 'fx';
+      editRoot = new T.Group(); editRoot.name = 'edit';
+      scene.add(itemsRoot, actorsRoot, fxRoot, editRoot);
+    }
+    function buildEnv() {
+      var Env = root.SLIslandEnv;
+      if (!Env || typeof Env.create !== 'function') throw new Error('env.js missing');
+      env = Env.create(K, SL3D, {
+        scene: scene, renderer: lease ? lease.renderer : null, unlocked: envUnlocked,
+        world: lastView && lastView.world ? lastView.world : { placed: placedList },
+        show: showK, member: user.color, reduced: reduced
+      });
+      scene.add(env.group);
+    }
+
+    /* ---------------- sibling systems (external or built-in) ---------------- */
+    var SYS = {
+      actors: { slots: [['SL3D', 'makeActors'], ['SLActors', 'create'], ['SLIslandActors', 'create']], make: function (h) { return new MiniActors(h); } },
+      fx: { slots: [['SL3D', 'makeFx'], ['SL3D', 'makeFx3D'], ['SLFx3D', 'create'], ['SLIslandFx', 'create']], make: function (h) { return new MiniFx(h); } },
+      edit: { slots: [['SL3D', 'makeEdit'], ['SL3D', 'makeEdit3D'], ['SLEdit3D', 'create'], ['SLIslandEdit', 'create']], make: function (h) { return new MiniEdit(h); } }
+    };
+    var sys = { actors: null, fx: null, edit: null };      /* {obj, external, name} */
+    function hostFor(kind) {
+      var g = kind === 'actors' ? actorsRoot : kind === 'fx' ? fxRoot : editRoot;
+      return {
+        kind: kind, K: K, SL3D: SL3D, THREE: T, tier: tier, scene: scene, group: g, camera: camera,
+        renderer: lease ? lease.renderer : null, budget: SL3D.budget, quality: SL3D.quality,
+        reduced: reduced, user: user, grid: Gr, motion: Mo, core: C, look: L,
+        member: function () { return user.color; },
+        emit: function (k, pos, n, o) { fxEmit(k, pos, n, o); },
+        sfx: function (name, vol, step, x) { sfx(name, vol, step, x); },
+        itemPoint: function (uid, anchor, out) { return itemPoint(uid, anchor, out); },
+        itemInfo: function (uid) { var r = recs.get(uid); return r ? { uid: r.uid, id: r.id, x: r.x, y: r.y, fp: r.fp } : null; },
+        show: function () { return showK; },
+        beat: function () { return beat; },
+        mode: function () { return mode; },
+        templateFor: templateFor
+      };
+    }
+    function buildSystem(kind) {
+      var spec = SYS[kind], h = hostFor(kind), obj = null, name = null;
+      for (var i = 0; i < spec.slots.length && !obj; i++) {
+        var s = spec.slots[i], owner = s[0] === 'SL3D' ? SL3D : root[s[0]], f = owner && owner[s[1]];
+        if (typeof f !== 'function') continue;
+        try { obj = s[0] === 'SL3D' ? f(h) : f.call(owner, K, SL3D, h); name = s[0] + '.' + s[1]; } catch (e) { issue(kind + ' ' + s.join('.') + ' threw: ' + errText(e)); obj = null; }
+        if (obj && typeof obj !== 'object') obj = null;
+      }
+      if (obj) { sys[kind] = { obj: obj, external: true, name: name }; return; }
+      try { sys[kind] = { obj: spec.make(h), external: false, name: 'built-in' }; }
+      catch (e) { issue(kind + ' fallback failed: ' + errText(e)); sys[kind] = null; }
+    }
+    function buildSystems() { buildSystem('fx'); buildSystem('actors'); buildSystem('edit'); }
+    /* call a system method; an external sibling that throws is replaced by the fallback */
+    function xcall(kind, method, a, b, c, d, e) {
+      var s = sys[kind];
+      if (!s || !s.obj || typeof s.obj[method] !== 'function') return undefined;
+      try { return s.obj[method](a, b, c, d, e); } catch (err) {
+        issue(kind + '.' + method + ' threw: ' + errText(err));
+        if (s.external) {
+          try { if (typeof s.obj.dispose === 'function') s.obj.dispose(); } catch (er2) {}
+          sys[kind] = null;
+          try { sys[kind] = { obj: SYS[kind].make(hostFor(kind)), external: false, name: 'built-in' }; } catch (er3) { issue(kind + ' fallback failed: ' + errText(er3)); }
+          if (kind === 'actors' && lastView) syncActors(lastView);
+          if (kind === 'edit') applyEdit();
+        }
+        return undefined;
+      }
+    }
+    function disposeSystems() {
+      ['edit', 'actors', 'fx'].forEach(function (k) {
+        var s = sys[k];
+        if (s && s.obj && typeof s.obj.dispose === 'function') { try { s.obj.dispose(); } catch (e) { issue(k + ' dispose: ' + errText(e)); } }
+        sys[k] = null;
+      });
+    }
+
+    /* ---------------- FX helpers (all positions are copied) ---------------- */
+    function fxEmit(kind, pos, n, o) {
+      if (!pos || quiet > 0) return;
+      xcall('fx', 'emit', kind, { x: +pos.x || 0, y: +pos.y || 0, z: +pos.z || 0 }, n == null ? undefined : n, o ? shallow(o) : undefined);
+    }
+    function shallow(o) { var c = {}; for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) c[k] = o[k]; return c; }
+
+    /* ================================================================
+       LEASE + LOOP
+       ================================================================ */
+    function takeLease() {
+      lease = SL3D.lease('island', {
+        scene: scene, camera: camera, reduced: reduced,
+        frame: frame,
+        onResize: function (w, h) { onResize(w, h); },
+        onLost: function () { lost = true; },
+        onRestored: function () { lost = false; rebuildAll(); },
+        onFail: function (reason) { fail(reason || 'lease'); },
+        onRevoke: function (L, why) { revoked = true; if (why === 'dispose') fail('renderer disposed'); },
+        onResume: function () { revoked = false; onResumeLease(); }
+      });
+      if (!lease) throw new Error('no renderer lease');
+    }
+    function onResumeLease() {
+      placeCanvas();
+      if (env && typeof env.attach === 'function') env.attach(lease.renderer);
+      if (container && container.parentNode) lease.observe(container);
+      if (rig) rig.apply(camera);
+      anchorsDirty = true;
+      wake();
+    }
+    function onResize(w, h) {
+      cssW = w; cssH = h;
+      if (rig) { rig.resize(w, h); rig.update(0); rig.apply(camera); }
+      anchorsDirty = true; cullDirty = true;
+    }
+    function wake() { if (lease && !dead) { try { lease.invalidate(); } catch (e) {} } }
+
+    /* the beat clock: SLMusic.clock() polled at 4 Hz and extrapolated; otherwise an internal
+       clock at the island tempo (100 by day, 118 at Showtime) */
+    function updateBeat(dt) {
+      if (Mus && typeof Mus.clock === 'function') {
+        if (beat.polledAt < 0 || clockT - beat.polledAt >= 0.25) {
+          try { beat.clk = Mus.clock(); } catch (e) { beat.clk = null; }
+          beat.polledAt = clockT; beat.clkAt = perfNow();
+        }
+        var k = beat.clk;
+        if (k && isFinite(k.beat) && k.bpm > 0) {
+          beat.bpm = k.bpm;
+          beat.pos = k.beat + (perfNow() - beat.clkAt) / 1000 * k.bpm / 60;
+          beat.music = k.playing ? k : false;
+        } else { beat.bpm = showOn() ? DANCE_BPM : 100; beat.pos += dt * beat.bpm / 60; beat.music = false; }
+      } else {
+        beat.bpm = showOn() ? DANCE_BPM : 100;
+        beat.pos += dt * beat.bpm / 60;
+        beat.music = null;
+      }
+      beat.frac = beat.pos - Math.floor(beat.pos);
+      beat.bar = Math.floor(beat.pos / 4);
+    }
+    function showOn() { return userShow || !!encore; }
+
+    function fill(rec, dt) {
+      var a = rec.a;
+      a.t = clockT; a.dt = dt; a.beat = beat.frac; a.bar = beat.bar; a.bpm = beat.bpm;
+      a.show = showK; a.lit = litMem[rec.uid] ? 1 : 0; a.reduced = reduced; a.music = beat.music;
+      a.pathD = rec.pathD;
+    }
+
+    function frame(dt, t) {
+      if (dead || failed) return false;
+      frameNo++;
+      clockT += dt;
+      var busy = false;
+      if (compileState === 2) { compileFrames++; if (compileFrames >= 2) fireReady(); }
+      updateBeat(dt);
+      /* environment + the Day ↔ Showtime mix */
+      if (env) { if (env.update(dt, clockT)) busy = true; if (env.show !== showK) { showK = env.show; showDirty = true; } }
+      /* camera */
+      if (rig) {
+        if (rig.update(dt)) { rig.apply(camera); busy = true; }
+        if (rig.version !== lastCamVersion) { lastCamVersion = rig.version; anchorsDirty = true; cullDirty = true; }
+        applyTouchAction();
+      }
+      if (cullDirty) cullRecs();
+      /* selection pulse 0.018 ↔ 0.03 u at 1.5 Hz */
+      if (selectedUid && recs.has(selectedUid)) {
+        K.setSelPulse(reduced ? 0.5 : 0.5 + 0.5 * Math.sin(clockT * 9.42477796));
+        if (!reduced) busy = true;
+      }
+      /* idles */
+      var i, rec;
+      for (i = 0; i < recList.length; i++) {
+        rec = recList[i];
+        if (!rec.idleOn || rec.badIdle || rec.hidden) continue;
+        if (reduced) { if (!rec.idlePending) continue; }
+        else if (!rec.inView && !rec.act) continue;
+        rec.idlePending = false;
+        fill(rec, dt);
+        var r;
+        try { r = rec.model.idle(rec.a); } catch (e) { modelError(rec, 'idle', e); continue; }
+        if (r !== false) busy = true;
+      }
+      /* show handlers whenever the mix moves */
+      if (showDirty) {
+        showDirty = false;
+        for (i = 0; i < recList.length; i++) callShow(recList[i], dt);
+        xcall('actors', 'setShow', showK);
+        xcall('fx', 'setShow', showK);
+        busy = true;
+      }
+      /* live acts, controller anims, root composition */
+      for (i = live.length - 1; i >= 0; i--) {
+        rec = live[i];
+        if (rec.dead) { live[i] = live[live.length - 1]; live.length--; continue; }
+        if (stepLive(rec, dt)) busy = true;
+        if (rec.dead || (!rec.act && !rec.animOn && !rec.rootDirty)) { rec.inLive = false; live[i] = live[live.length - 1]; live.length--; }
+      }
+      for (i = 0; i < batchList.length; i++) batchList[i].batch.commit();
+      /* siblings */
+      var ctx = frameCtx(dt);
+      if (sys.actors && xcall('actors', 'update', dt, clockT, ctx)) busy = true;
+      if (sys.edit && xcall('edit', 'update', dt, clockT, ctx)) busy = true;
+      if (sys.fx && xcall('fx', 'update', dt, clockT, ctx)) busy = true;
+      if (riseFx) { stepRiseFx(dt); busy = true; }
+      /* Showtime dance breaks every 16 bars */
+      scheduleDance();
+      if (dance && clockT >= dance.until) endDance();
+      if (dance) busy = true;                       /* its end is measured in frames */
+      /* labels */
+      anchorClock += dt;
+      if (anchorsDirty || (busy && anchorClock >= 1 / ANCHOR_HZ)) projectAnchors();
+      if (pendingRise && clockT - pendingRise.at > 2.5) applyPendingRise();
+      return busy || !reduced;
+    }
+    var FCTX = { show: 0, beat: 0, beatPos: 0, bar: 0, bpm: 100, reduced: false, mode: 'play', camera: null, music: null, dt: 0 };
+    function frameCtx(dt) {
+      FCTX.show = showK; FCTX.beat = beat.frac; FCTX.bar = beat.bar; FCTX.bpm = beat.bpm; FCTX.beatPos = beat.pos;
+      FCTX.reduced = reduced; FCTX.mode = mode; FCTX.camera = camera; FCTX.music = beat.music; FCTX.dt = dt;
+      return FCTX;
+    }
+    function modelError(rec, what, e) {
+      rec.bad = (rec.bad || 0) + 1;
+      issue(rec.id + '.' + what + ' threw: ' + errText(e));
+      if (what === 'idle' && rec.bad >= 3) rec.badIdle = true;
+      if (what === 'show' && rec.bad >= 3) rec.badShow = true;
+    }
+    function callShow(rec, dt) {
+      if (!rec.model || typeof rec.model.show !== 'function' || rec.badShow) return;
+      fill(rec, dt || 0);
+      try { rec.model.show(rec.a, showK); } catch (e) { modelError(rec, 'show', e); }
+    }
+    /* ticking culls copies outside the view (acts always run) */
+    function cullRecs() {
+      cullDirty = false;
+      if (!camera) return;
+      _pm.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+      _frustum.setFromProjectionMatrix(_pm);
+      for (var i = 0; i < recList.length; i++) {
+        var r = recList[i];
+        _sph.center.set(r.wx, r.wy + r.h * 0.5, r.wz);
+        _sph.radius = r.rad;
+        r.inView = _frustum.intersectsSphere(_sph);
+      }
+    }
+
+    /* ================================================================
+       RECORDS — one per placed copy
+       ================================================================ */
+    function animSlot() { return { t: -1, dur: 0, cues: null, ci: 0, silent: false }; }
+    function templateFor(id, st) {
+      var rs = resolveStyle(id, st), sk = K.stateKey(id, rs);
+      return { tpl: K.templates.get(id, sk, tier, rs), stateKey: sk, st: rs, material: matHook(id) };
+    }
+    function resolveStyle(id, style) {
+      if (L && typeof L.resolveStyle === 'function') { try { return L.resolveStyle(id, style || {}); } catch (e) {} }
+      var s = style || {};
+      if (id === 'house_cottage') return { wall: s.wall || 'wall_cream', roof: s.roof || 'roof_red', door: s.door || 'door_blue', details: s.details || {} };
+      if (id === 'att_course') return { course: s.course || 'course_meadow' };
+      if (id === 'att_pitch') return { ball: s.ball || 'ball_classic', stadium: s.stadium || 'stadium_day' };
+      if (id === 'att_kart') return { kart: s.kart || 'kart_red' };
+      return {};
+    }
+    var matHooks = {};
+    function matHook(id) {
+      if (Object.prototype.hasOwnProperty.call(matHooks, id)) return matHooks[id];
+      var m = SL3D.models[id], h;
+      if (m && typeof m.material === 'function') {
+        h = function (key, part) { try { return m.material(key, part) || null; } catch (e) { issue(id + '.material threw: ' + errText(e)); return null; } };
+      }
+      matHooks[id] = h;
+      return h;
+    }
+    function batchFor(id, sk, st) {
+      var key = batchKey(id, sk), b = batches.get(key);
+      if (b) return b;
+      var tpl = K.templates.get(id, sk, tier, st);
+      var batch = K.batch(tpl, { material: matHook(id) });
+      itemsRoot.add(batch.group);
+      b = { key: key, id: id, sk: sk, tpl: tpl, batch: batch, n: 0 };
+      batches.set(key, b); batchList.push(b);
+      newTemplates = true;
+      return b;
+    }
+    function releaseBatch(b) {
+      b.n--;
+      if (b.n > 0) return;
+      batches.delete(b.key);
+      var i = batchList.indexOf(b);
+      if (i >= 0) batchList.splice(i, 1);
+      try { b.batch.dispose(); } catch (e) { issue('batch dispose: ' + errText(e)); }
+    }
+    function idleOnFor(model, sk) {
+      if (!model || typeof model.idle !== 'function') return false;
+      if (typeof model.animated === 'function') { try { return !!model.animated(sk); } catch (e) { return true; } }
+      return true;
+    }
+    function placeRec(rec) {
+      var w = rec.batch.worldPos(rec.uid, _v);
+      rec.wx = w.x; rec.wy = w.y; rec.wz = w.z;
+      var hb = null;
+      try { hb = Gr.hitBox(rec.id, rec.x, rec.y); } catch (e) { hb = null; }
+      if (!hb) { var fp = rec.fp; hb = { min: [rec.wx - fp[0] / 2, rec.wy, rec.wz - fp[1] / 2], max: [rec.wx + fp[0] / 2, rec.wy + 0.8, rec.wz + fp[1] / 2] }; }
+      rec.hit = hb;
+      rec.h = Math.max(0.4, hb.max[1] - hb.min[1]);
+      rec.rad = 0.5 * Math.sqrt((hb.max[0] - hb.min[0]) * (hb.max[0] - hb.min[0]) + rec.h * rec.h + (hb.max[2] - hb.min[2]) * (hb.max[2] - hb.min[2])) + 0.3;
+      rec.inView = true;
+      cullDirty = true;
+    }
+    function makeHandle(rec) {
+      var proxy = { name: '', set: function (rot, pos, scale) { pivotSet(rec, proxy.name, rot, pos, scale); return proxy; } };
+      var seed = Mo ? Mo.hash(String(rec.uid)) : 1;
+      var rnd = Gr && Gr.rng ? Gr.rng(seed) : Math.random;
+      var a = {
+        uid: rec.uid, id: rec.id, t: clockT, dt: 0, phase: Mo ? Mo.phaseOf(rec.uid) : 0, rand: rnd,
+        reduced: reduced, beat: 0, bar: 0, bpm: 100, show: showK, lit: 0,
+        stateKey: rec.sk, st: rec.st, template: rec.tpl, batch: rec.batch, object: null, music: null, pathD: rec.pathD,
+        copyGeometry: function (part) { return rec.batch ? rec.batch.copyGeometry(rec.uid, part) : null; },
+        basePositions: function (part) { return rec.batch ? rec.batch.basePositions(part) : null; },
+        pivot: function (name) { proxy.name = name; return proxy; },
+        state: function (key, v) { if (rec.batch && !rec.dead) rec.batch.setState(rec.uid, key, v); },
+        halo: function (name, onOff, size, token) { haloFor(rec, name, onOff, size, token); },
+        decal: function (onOff, token) { decalFor(rec, onOff, token); },
+        emit: function (kind, where, n, o) { emitFor(rec, kind, where, n, o); },
+        sfx: function (name, vol, step) { sfx(name, vol, step, rec.wx); },
+        pets: petsApi,
+        shake: function (amp, dur) { if (!reduced && rig) rig.shake(amp, dur); },
+        squish: function () { startAnim(rec, 'squish', true); }
+      };
+      return a;
+    }
+    var petsApi = {
+      active: function () { return !!xcall('actors', 'active'); },
+      perform: function (kind, uid) {
+        var r = xcall('actors', 'perform', kind, uid);
+        if (typeof r === 'number') return r;
+        if (r && typeof r === 'object') return typeof r.lead === 'number' ? r.lead : (typeof r.dur === 'number' ? r.dur : 0);
+        return r ? 1.2 : 0;
+      }
+    };
+    function rebindHandle(rec) {
+      var a = rec.a;
+      a.stateKey = rec.sk; a.st = rec.st; a.template = rec.tpl; a.batch = rec.batch;
+    }
+    /* pivot('root') / pivot('sway' without a sway pivot): captured, composed at the end of the frame */
+    function pivotSet(rec, name, rot, pos, scale) {
+      if (rec.dead || !rec.batch) return;
+      var tp = rec.tpl && rec.tpl.pivots;
+      if (name === 'root' || (name === 'sway' && !(tp && tp.sway))) {
+        var m = rec.rootModel;
+        m.rx = rot ? +rot[0] || 0 : 0; m.ry = rot ? +rot[1] || 0 : 0; m.rz = rot ? +rot[2] || 0 : 0;
+        m.px = pos ? +pos[0] || 0 : 0; m.py = pos ? +pos[1] || 0 : 0; m.pz = pos ? +pos[2] || 0 : 0;
+        if (scale == null) { m.sx = m.sy = m.sz = 1; }
+        else if (typeof scale === 'number') { m.sx = m.sy = m.sz = scale; }
+        else { m.sx = scale[0] == null ? 1 : +scale[0]; m.sy = scale[1] == null ? 1 : +scale[1]; m.sz = scale[2] == null ? 1 : +scale[2]; }
+        rec.rootDirty = true;
+        addLive(rec);
+        return;
+      }
+      rec.batch.setPivot(rec.uid, name, rot, pos, scale);
+    }
+    function addLive(rec) { if (!rec.inLive && !rec.dead) { rec.inLive = true; live.push(rec); } }
+
+    function addRec(n) {
+      var it = C.item(n.id), fp = (it && it.fp) || [1, 1];
+      var b = batchFor(n.id, n.sk, n.st);
+      var j = Gr.jitter ? Gr.jitter(n.uid, n.id) : { yaw: 0, yawDeg: 0, scale: 1 };
+      b.batch.add(n.uid, { x: n.x, y: n.y, fp: fp }, { jitter: { yaw: j.yawDeg, scale: j.scale } });
+      b.n++;
+      var model = SL3D.models[n.id] || null;
+      var rec = {
+        uid: n.uid, id: n.id, it: it, x: n.x, y: n.y, fp: fp, st: n.st, sk: n.sk, b: b, batch: b.batch, tpl: b.tpl, model: model,
+        jyaw: j.yaw || 0, jscale: j.scale || 1, wx: 0, wy: 0, wz: 0, hit: null, h: 1, rad: 1, inView: true,
+        a: null, act: null, anims: { squish: animSlot(), drop: animSlot(), debut: animSlot(), store: animSlot() }, animOn: 0,
+        rootModel: { rx: 0, ry: 0, rz: 0, px: 0, py: 0, pz: 0, sx: 1, sy: 1, sz: 1 }, rootDirty: false, rootOn: false, inLive: false,
+        idleOn: idleOnFor(model, n.sk), idlePending: true, hidden: false, storing: false, removeAfter: false,
+        halos: {}, decalOn: null, pathD: undefined, bad: 0, badIdle: false, badShow: false, dead: false, debutP: null, storeP: null
+      };
+      placeRec(rec);
+      rec.a = makeHandle(rec);
+      recs.set(rec.uid, rec);
+      recList.push(rec);
+      callShow(rec, 0);
+      if (litMem[rec.uid]) snapLit(rec);
+      return rec;
+    }
+    function moveRec(rec, n) {
+      rec.x = n.x; rec.y = n.y;
+      rec.batch.move(rec.uid, n.x, n.y);
+      placeRec(rec);
+      refreshAttachments(rec);
+      rec.idlePending = true;
+    }
+    function restyleRec(rec, n) {
+      cancelAct(rec, false);
+      var old = rec.b, it = C.item(n.id);
+      old.batch.remove(rec.uid);
+      releaseBatch(old);
+      var b = batchFor(n.id, n.sk, n.st);
+      b.batch.add(rec.uid, { x: n.x, y: n.y, fp: (it && it.fp) || rec.fp }, { jitter: { yaw: rec.jyaw / DEG, scale: rec.jscale } });
+      b.n++;
+      rec.id = n.id; rec.it = it; rec.x = n.x; rec.y = n.y; rec.st = n.st; rec.sk = n.sk;
+      rec.b = b; rec.batch = b.batch; rec.tpl = b.tpl; rec.model = SL3D.models[n.id] || null;
+      rec.idleOn = idleOnFor(rec.model, n.sk); rec.idlePending = true; rec.badIdle = rec.badShow = false; rec.bad = 0;
+      if (rec.hidden) rec.batch.hide(rec.uid);
+      rebindHandle(rec);
+      placeRec(rec);
+      if (rec.rootOn || rec.animOn) { rec.rootDirty = true; addLive(rec); }
+      refreshAttachments(rec);
+      callShow(rec, 0);
+      if (litMem[rec.uid]) snapLit(rec);
+      if (selectedUid === rec.uid) rec.batch.setHighlight(rec.uid, 2);
+      else if (focusKey === 'u:' + rec.uid) rec.batch.setHighlight(rec.uid, 1);
+      if (env) env.invalidateShadows();
+      /* the restyle debut sparkle */
+      if (readyFired) emitFor(rec, 'sparkle', 'top', reduced ? 6 : 16);
+    }
+    function removeRec(rec) {
+      if (rec.dead) return;
+      cancelAct(rec, false);
+      Object.keys(rec.halos).forEach(function (name) { if (rec.halos[name] && rec.halos[name].on) xcall('fx', 'halo', rec.uid + ':' + name, false); });
+      if (rec.decalOn) xcall('fx', 'decal', 'u:' + rec.uid, false);
+      rec.dead = true;
+      try { rec.batch.remove(rec.uid); } catch (e) {}
+      releaseBatch(rec.b);
+      recs.delete(rec.uid);
+      var i = recList.indexOf(rec);
+      if (i >= 0) recList.splice(i, 1);
+      if (selectedUid === rec.uid) selectedUid = null;
+      if (focusKey === 'u:' + rec.uid) focusItem(null);
+      if (rec.storeP) { rec.storeP.resolve(true); rec.storeP = null; }
+      if (rec.debutP) { rec.debutP.resolve(false); rec.debutP = null; }
+    }
+    function setHidden(rec, on) {
+      on = !!on;
+      if (rec.hidden === on) return;
+      rec.hidden = on;
+      if (on) rec.batch.hide(rec.uid); else rec.batch.show(rec.uid);
+    }
+    /* halos / decal follow a moved copy */
+    function refreshAttachments(rec) {
+      Object.keys(rec.halos).forEach(function (name) {
+        var h = rec.halos[name];
+        if (h && h.on) haloFor(rec, name, true, h.size, h.token, true);
+      });
+      if (rec.decalOn) decalFor(rec, true, rec.decalOn, true);
+    }
+    /* world position of an item anchor (or a pivot origin when the template has no such anchor) */
+    function anchorOf(rec, name, out) {
+      var tpl = rec.tpl;
+      if (name && tpl && !tpl.anchors[name] && tpl.pivots && tpl.pivots[name]) {
+        var o = tpl.pivots[name].origin;
+        return localToWorld(rec, o[0], o[1], o[2], out);
+      }
+      return rec.batch.anchorWorld(rec.uid, name || 'top', out);
+    }
+    function localToWorld(rec, x, y, z, out) {
+      var c = Math.cos(rec.jyaw), s = Math.sin(rec.jyaw), k = rec.jscale;
+      out.x = rec.wx + (x * c + z * s) * k;
+      out.y = rec.wy + y * k;
+      out.z = rec.wz + (-x * s + z * c) * k;
+      return out;
+    }
+    function itemPoint(uid, anchor, out) {
+      var rec = recs.get(uid);
+      if (!rec) return null;
+      return anchorOf(rec, anchor || 'top', out || new T.Vector3());
+    }
+    function emitFor(rec, kind, where, n, o) {
+      if (rec.dead) return;
+      if (typeof where === 'string' || where == null) anchorOf(rec, where || 'top', _v2);
+      else if (Array.isArray(where)) localToWorld(rec, +where[0] || 0, +where[1] || 0, +where[2] || 0, _v2);
+      else if (typeof where === 'object') localToWorld(rec, +where.x || 0, +where.y || 0, +where.z || 0, _v2);
+      else anchorOf(rec, 'top', _v2);
+      fxEmit(kind, _v2, n, o);
+    }
+    function haloFor(rec, name, onOff, size, token, force) {
+      if (rec.dead) return;
+      name = String(name || 'glow');
+      var cur = rec.halos[name];
+      onOff = !!onOff;
+      if (!force && cur && cur.on === onOff && cur.size === size && cur.token === token) return;
+      rec.halos[name] = { on: onOff, size: size, token: token };
+      if (onOff) { anchorOf(rec, name, _v2); xcall('fx', 'halo', rec.uid + ':' + name, true, { x: _v2.x, y: _v2.y, z: _v2.z }, size || 0.9, token || 'Lamp Halo'); }
+      else xcall('fx', 'halo', rec.uid + ':' + name, false);
+    }
+    function decalFor(rec, onOff, token, force) {
+      if (rec.dead) return;
+      var want = onOff ? (token || 'Lamp Warm') : null;
+      if (!force && want === rec.decalOn) return;
+      rec.decalOn = want;
+      if (want) xcall('fx', 'decal', 'u:' + rec.uid, true, { x: rec.wx, y: rec.wy + 0.02, z: rec.wz }, want);
+      else xcall('fx', 'decal', 'u:' + rec.uid, false);
+    }
+
+    /* ---------------- controller anims: squish, drop-in, debut, store ---------------- */
+    var ANIM_ACT = { squish: 'squish', drop: 'dropIn', debut: 'debut', store: 'store' };
+    var ANIM_KEYS = ['squish', 'drop', 'debut', 'store'];
+    function startAnim(rec, which, silent) {
+      if (!rec || rec.dead || !Mo) return 0;
+      var s = rec.anims[which], name = ANIM_ACT[which];
+      s.t = 0; s.ci = 0; s.silent = !!silent;
+      s.dur = Mo.durOf(name, optR) || 0.0001;
+      s.cues = Mo.cues(name, optR);
+      rec.animOn |= 1;
+      rec.rootDirty = true;
+      addLive(rec);
+      return s.dur;
+    }
+    function fireCues(rec, s, which) {
+      while (s.cues && s.ci < s.cues.length && s.cues[s.ci].t <= s.t) {
+        var c = s.cues[s.ci++];
+        if (c.sfx && !s.silent) sfx(c.sfx, c.vol, c.step, rec.wx);
+        if (c.emit) {
+          if (which === 'drop') { _v2.set(rec.wx, rec.wy + 0.03, rec.wz); fxEmit(c.emit, _v2, c.n, { r: Math.max(rec.fp[0], rec.fp[1]) * 0.45 }); }
+          else emitFor(rec, c.emit, 'top', c.n);
+        }
+      }
+    }
+    function stepLive(rec, dt) {
+      var busy = false, k;
+      /* the model act */
+      var e = rec.act;
+      if (e) {
+        e.t += dt;
+        fill(rec, dt);
+        var alive = false;
+        try { alive = e.act.update(rec.a, e.t) !== false; } catch (err) { modelError(rec, 'act', err); alive = false; }
+        if (!alive || e.t > e.dur + 2) finishAct(rec, e, true);
+        busy = true;
+      }
+      /* controller anims */
+      var an = rec.anims, any = 0;
+      for (var i = 0; i < ANIM_KEYS.length; i++) {
+        k = ANIM_KEYS[i];
+        var s = an[k];
+        if (s.t < 0) continue;
+        s.t += dt;
+        fireCues(rec, s, k);
+        if (s.t >= s.dur) { s.t = -1; animEnded(rec, k); } else any = 1;
+        if (rec.dead) return busy;
+      }
+      rec.animOn = any;
+      if (any) busy = true;
+      /* compose the root pivot (only when something changed it) */
+      if (rec.rootDirty || any) {
+        composeRoot(rec);
+        rec.rootDirty = false;
+      }
+      return busy;
+    }
+    function animEnded(rec, which) {
+      rec.rootDirty = true;
+      if (which === 'drop' || which === 'debut') { if (env) env.invalidateShadows(); }
+      if (which === 'debut' && rec.debutP) { rec.debutP.resolve(true); rec.debutP = null; }
+      if (which === 'store') {
+        rec.storing = false;
+        if (rec.storeP) { rec.storeP.resolve(true); rec.storeP = null; }
+        if (rec.removeAfter) { removeRec(rec); if (env) env.invalidateShadows(); }
+        else setHidden(rec, true);       /* hidden until the next sync removes (or restores) it */
+      }
+    }
+    function composeRoot(rec) {
+      if (rec.dead) return;
+      var m = rec.rootModel, an = rec.anims;
+      var sy = 1, sxz = 1, dy = 0, yaw = 0, s = 1;
+      if (an.squish.t >= 0) { Mo.sample('squish', an.squish.t, _sq, optR); sy *= _sq.sy; sxz *= _sq.sxz; }
+      if (an.drop.t >= 0) { Mo.sample('dropIn', an.drop.t, _dr, optR); dy += _dr.dy; sy *= _dr.sy; sxz *= _dr.sxz; }
+      if (an.debut.t >= 0) { Mo.sample('debut', an.debut.t, _db, optR); yaw += _db.deg; s *= _db.s; }
+      if (an.store.t >= 0) { Mo.sample('store', an.store.t, _st, optR); s *= Math.max(0.0001, _st.s); }
+      var ident = m.rx === 0 && m.ry === 0 && m.rz === 0 && m.px === 0 && m.py === 0 && m.pz === 0 && m.sx === 1 && m.sy === 1 && m.sz === 1;
+      var any = !ident || sy !== 1 || sxz !== 1 || dy !== 0 || yaw !== 0 || s !== 1;
+      if (!any && !rec.rootOn) return;
+      var mat = rec.batch.pivot(rec.uid, 'root');
+      if (!any) { mat.identity(); rec.rootOn = false; return; }
+      _e.set(m.rx * DEG, (m.ry + yaw) * DEG, m.rz * DEG, 'XYZ');
+      _q.setFromEuler(_e);
+      _p.set(m.px, m.py + dy, m.pz);
+      _s.set(m.sx * sxz * s, m.sy * sy * s, m.sz * sxz * s);
+      mat.compose(_p, _q, _s);
+      rec.rootOn = true;
+    }
+
+    /* ---------------- model acts: one live act per uid ---------------- */
+    function runAct(rec, name) {
+      cancelAct(rec, false);
+      var model = rec.model, act = null;
+      fill(rec, 0);
+      if (model && typeof model.act === 'function') {
+        try { act = model.act(rec.a, name); } catch (e) { modelError(rec, 'act', e); act = null; }
+      }
+      if (!act || typeof act.update !== 'function') return resolved(false);
+      var d = deferred(), dur = isFinite(act.dur) && act.dur > 0 ? act.dur : 3;
+      var entry = { act: act, name: name, t: 0, dur: dur, d: d, timer: 0 };
+      rec.act = entry;
+      armActTimer(rec, entry);
+      addLive(rec);
+      wake();
+      return d.promise;
+    }
+    /* a guard for acts whose frames never come: while the island is paused (a sheet, a game,
+       a hidden tab) the act simply waits; otherwise it is jumped to its end pose, quietly */
+    function armActTimer(rec, entry) {
+      entry.timer = later(function () {
+        if (rec.act !== entry) return;
+        if (covered || suspended || revoked || lost) { armActTimer(rec, entry); return; }
+        quiet++;
+        try { fill(rec, 0); entry.act.update(rec.a, entry.dur + 1e-3); } catch (e) { modelError(rec, 'act', e); }
+        quiet--;
+        finishAct(rec, entry, true);
+      }, (entry.dur + 0.6) * 1000);
+    }
+    function finishAct(rec, entry, ok) {
+      if (rec.act !== entry) return;
+      rec.act = null;
+      cancelLater(entry.timer);
+      entry.d.resolve(ok !== false);
+    }
+    function cancelAct(rec, ok) {
+      var e = rec.act;
+      if (!e) return;
+      rec.act = null;
+      cancelLater(e.timer);
+      try { if (typeof e.act.cancel === 'function') e.act.cancel(rec.a); } catch (err) { issue(rec.id + '.cancel threw: ' + errText(err)); }
+      e.d.resolve(!!ok);
+    }
+
+    /* ---------------- lamps ---------------- */
+    function snapLit(rec) {
+      var m = rec.model;
+      fill(rec, 0);
+      if (m && typeof m.lit === 'function') { try { m.lit(rec.a, !!litMem[rec.uid]); } catch (e) { modelError(rec, 'lit', e); } }
+      rec.idlePending = true;
+      addLive(rec);
+      wake();
+    }
+    function setLitInternal(uid, onOff, animate) {
+      onOff = onOff ? 1 : 0;
+      if ((litMem[uid] ? 1 : 0) === onOff) return resolved(true);
+      if (onOff) litMem[uid] = 1; else delete litMem[uid];
+      var rec = recs.get(uid);
+      if (!rec) return resolved(true);
+      rec.a.lit = onOff;
+      if (animate && readyFired && rec.model && typeof rec.model.act === 'function') return runAct(rec, onOff ? 'glowOn' : 'glowOff');
+      snapLit(rec);
+      return resolved(true);
+    }
+
+    /* ================================================================
+       SYNC(view)
+       ================================================================ */
+    function syncView(view) {
+      view = view || {};
+      lastView = view;
+      var anim = view.anim || {};
+      var newMode = normMode(view.mode);
+      /* land (a region whose unlock is about to rise is held back until unlockLand runs) */
+      var unlocked = Array.isArray(view.unlocked) && view.unlocked.length ? view.unlocked.slice() : ['home'];
+      if (anim.unlock && unlocked.indexOf(anim.unlock) >= 0 && !risen[anim.unlock] && envUnlocked.indexOf(anim.unlock) < 0 && !firstSync) {
+        if (!pendingRise || pendingRise.region !== anim.unlock) pendingRise = { region: anim.unlock, at: clockT };
+      }
+      if (pendingRise && unlocked.indexOf(pendingRise.region) < 0) pendingRise = null;
+      var envLand = unlocked.filter(function (r) { return !(pendingRise && r === pendingRise.region); });
+      /* the placed list: known, placeable ids only */
+      var style = view.style || {};
+      var list = [], next = [];
+      (Array.isArray(view.placed) ? view.placed : []).forEach(function (p) {
+        if (!p || p.uid == null) return;
+        var it = C.item(p.id);
+        if (!it || (typeof C.isPlaceable === 'function' && !C.isPlaceable(it))) return;
+        list.push(p);
+        var st = resolveStyle(p.id, style);
+        next.push({ uid: p.uid, id: p.id, x: p.x | 0, y: p.y | 0, st: st, sk: K.stateKey(p.id, st) });
+      });
+      placedList = list;
+      var world = view.world && Array.isArray(view.world.placed) ? view.world : { placed: list };
+      /* environment: re-bakes only when the land or layout really changed */
+      var sigL = envLand.slice().sort().join(',');
+      if (env) env.setLand(envLand, world);
+      if (sigL !== landSig) {
+        var firstLand = !landSig;
+        landSig = sigL;
+        envUnlocked = envLand;
+        landKeys = Gr.landFrom(envLand);
+        if (rig) rig.setLand(landKeys, { instant: firstLand || reduced });
+      }
+      /* items */
+      var d = diffPlaced(recs, next), pathChanged = false;
+      d.remove.forEach(function (uid) {
+        var rec = recs.get(uid);
+        if (!rec) return;
+        if (rec.id && rec.it && rec.it.kind === 'path') pathChanged = true;
+        if (rec.storing) { rec.removeAfter = true; return; }
+        removeRec(rec);
+      });
+      d.restyle.forEach(function (n) { var rec = recs.get(n.uid); if (rec) restyleRec(rec, n); });
+      d.move.forEach(function (n) {
+        var rec = recs.get(n.uid);
+        if (!rec) return;
+        if (rec.it && rec.it.kind === 'path') pathChanged = true;
+        moveRec(rec, n);
+      });
+      d.add.forEach(function (n) {
+        var rec = addRec(n);
+        if (rec.it && rec.it.kind === 'path') pathChanged = true;
+      });
+      /* a stored copy that came back (undo) */
+      d.same.forEach(function (uid) {
+        var rec = recs.get(uid);
+        if (rec && rec.hidden && !(placing && placing.uid === uid)) { rec.removeAfter = false; setHidden(rec, false); }
+      });
+      if (pathChanged || firstSync) updatePaths();
+      /* the drop-in (placement / move confirmed), once per placement */
+      if (anim.dropUid != null) {
+        var dr = recs.get(anim.dropUid);
+        var dk = dr ? dr.uid + '@' + dr.x + ',' + dr.y : '';
+        if (dr && dk !== lastDrop) { lastDrop = dk; setHidden(dr, false); startAnim(dr, 'drop'); }
+      }
+      /* lamps (the view's lit map is the truth) */
+      var vlit = view.lit || {};
+      var ch = litChanges(litMem, vlit, recList.map(function (r) { return r.uid; }));
+      ch.forEach(function (c) { setLitInternal(c.uid, c.on, !firstSync); });
+      Object.keys(litMem).forEach(function (uid) { if (!recs.has(uid)) delete litMem[uid]; });
+      /* mode, selection, placement */
+      setMode(newMode);
+      setSelected(view.selectedUid != null && recs.has(view.selectedUid) ? view.selectedUid : null);
+      placementState(view.placing || null);
+      /* actors */
+      syncActors(view);
+      /* the keyboard list */
+      buildSrList(view);
+      /* reduced motion: idle once after each sync */
+      for (var i = 0; i < recList.length; i++) recList[i].idlePending = true;
+      if (newTemplates && readyFired && lease) { newTemplates = false; lease.compile(scene, camera); }
+      firstSync = false;
+      anchorsDirty = true;
+      maybeReady();
+      wake();
+    }
+    function updatePaths() {
+      var nets = [];
+      try { nets = Gr.pathNetworks ? Gr.pathNetworks(placedList) : []; } catch (e) { nets = []; }
+      var dmap = {};
+      nets.forEach(function (net) { net.cells.forEach(function (c) { dmap[c.uid] = c.d; }); });
+      recList.forEach(function (r) { if (r.it && r.it.kind === 'path') { r.pathD = dmap[r.uid]; r.a.pathD = r.pathD; } });
+    }
+    function syncActors(view) {
+      var pets = Array.isArray(view.pets) ? view.pets.filter(function (p) { return p && p.id; }) : [];
+      var av = view.avatar === false ? null : normUser(view.avatar && typeof view.avatar === 'object' ? {
+        name: view.avatar.name || user.name, color: view.avatar.color || user.color, avatar: view.avatar.avatar || view.avatar.emoji || user.avatar
+      } : user);
+      xcall('actors', 'sync', {
+        pets: pets, avatar: av, user: user, placed: placedList, unlocked: envUnlocked, land: landKeys,
+        world: view.world && Array.isArray(view.world.placed) ? view.world : { placed: placedList }, mode: mode, reduced: reduced
+      });
+    }
+    function setMode(m) {
+      if (m === mode && !firstSync) return;
+      mode = m;
+      /* an edit-mode drag turns into place mode mid-gesture: keep the gesture and the zoom */
+      if (rig) rig.setMode(m, { keepZoom: !!drag });
+      xcall('actors', 'setMode', m);
+      syncCamButtons();
+      applyTouchAction();
+      if (m !== 'play') hideBubble();
+    }
+    function setSelected(uid) {
+      if (uid === selectedUid) return;
+      var prev = selectedUid && recs.get(selectedUid);
+      if (prev) prev.batch.setHighlight(prev.uid, focusKey === 'u:' + prev.uid ? 1 : 0);
+      if (prev && tier === 'LOW') decalFor(prev, false);
+      selectedUid = uid;
+      var rec = uid && recs.get(uid);
+      if (rec) {
+        rec.batch.setHighlight(uid, 2);
+        if (tier === 'LOW') decalFor(rec, true, 'Star Gold');      /* LOW has no hulls: a gold light pool instead */
+      } else K.setSelPulse(0);
+    }
+
+    /* ---------------- placement visuals ---------------- */
+    function placementState(state) {
+      var prevUid = placing && placing.uid;
+      placing = state && state.id ? state : null;
+      if (prevUid && (!placing || placing.uid !== prevUid)) {
+        var pr = recs.get(prevUid);
+        if (pr && !pr.storing) setHidden(pr, false);
+      }
+      if (placing && placing.uid != null) { var r = recs.get(placing.uid); if (r) setHidden(r, true); }
+      applyEdit();
+      if (placing && rig && rig.phone() && !drag) {         /* keep the ghost in the central 60% */
+        var pv = null;
+        try { pv = Gr.pivot(placing.id, placing.x | 0, placing.y | 0); } catch (e) { pv = null; }
+        if (pv) rig.keepInView(pv, 0.6);
+      }
+    }
+    function applyEdit() {
+      var ghost = null;
+      if (placing) {
+        var tf = templateFor(placing.id, lastView ? lastView.style : {});
+        ghost = { id: placing.id, st: tf.st, stateKey: tf.stateKey, template: tf.tpl, material: tf.material };
+      }
+      xcall('edit', 'setState', { mode: mode, land: landKeys, unlocked: envUnlocked, placing: placing, ghost: ghost, selectedUid: selectedUid });
+    }
+
+    /* ================================================================
+       PICKING + POINTER
+       ================================================================ */
+    var PICK = { kind: 'none', uid: null, target: null, region: null, c: -1, r: -1, x: 0, y: 0, z: 0, has: false };
+    function rayAt(x, y) {
+      if (!camera || !(cssW > 0 && cssH > 0)) return false;
+      var nx = x / cssW * 2 - 1, ny = -(y / cssH * 2 - 1);
+      camera.updateMatrixWorld();
+      _ro.setFromMatrixPosition(camera.matrixWorld);
+      _rd.set(nx, ny, 0.5).unproject(camera).sub(_ro).normalize();
+      return true;
+    }
+    function pick(x, y) {
+      PICK.kind = 'none'; PICK.uid = null; PICK.target = null; PICK.region = null; PICK.c = PICK.r = -1; PICK.has = false;
+      if (!rayAt(x, y)) return PICK;
+      var h = { actor: null, item: null, ghost: -1, cell: null, land: null, sea: null };
+      if (mode === 'place' && placing) {
+        var gb = xcall('edit', 'ghostBox');
+        if (!gb) { try { gb = Gr.hitBox(placing.id, placing.x | 0, placing.y | 0); gb = { min: [gb.min[0], gb.min[1] + 0.25, gb.min[2]], max: [gb.max[0], gb.max[1] + 0.25, gb.max[2]] }; } catch (e) { gb = null; } }
+        if (gb) h.ghost = rayBox(_ro, _rd, gb.min, gb.max);
+      }
+      if (mode === 'play') {
+        var ah = xcall('actors', 'pick', _ro, _rd);
+        if (ah && ah.target) h.actor = { t: typeof ah.t === 'number' ? ah.t : 0, target: ah.target };
+      }
+      if (mode !== 'place') {
+        var best = Infinity, bu = null;
+        for (var i = 0; i < recList.length; i++) {
+          var r = recList[i];
+          if (r.hidden || r.storing || !r.hit) continue;
+          var t = rayBox(_ro, _rd, r.hit.min, r.hit.max);
+          if (t >= 0 && t < best) { best = t; bu = r.uid; }
+        }
+        if (bu != null) h.item = { t: best, uid: bu };
+      }
+      var cell = null;
+      try { cell = Gr.rayToCell(_ro, _rd, landKeys || Gr.landFrom(envUnlocked)); } catch (e) { cell = null; }
+      if (cell) h.cell = { c: cell.c, r: cell.r, land: !!cell.land };
+      var sea = Gr.rayPlane(_ro, _rd, Gr.SEA_Y);
+      if (sea) {
+        h.sea = sea;
+        if (mode !== 'place' && env && typeof env.lockedAt === 'function' && !(cell && cell.land)) h.land = env.lockedAt(sea.x, sea.z);
+      }
+      var res = choosePick(mode, h);
+      PICK.kind = res.kind; PICK.has = res.kind !== 'none';
+      if (res.kind === 'item') PICK.uid = res.uid;
+      else if (res.kind === 'actor') PICK.target = res.target;
+      else if (res.kind === 'land') PICK.region = res.region;
+      else if (res.kind === 'cell') { PICK.c = res.c; PICK.r = res.r; }
+      var gp = cell ? cell : sea;
+      if (gp) { PICK.x = gp.x; PICK.y = gp.y; PICK.z = gp.z; }
+      return PICK;
+    }
+    function landIdOf(region) { var R = C.REGIONS && C.REGIONS[region]; return R && R.unlock ? R.unlock : null; }
+
+    function onPress(x, y) {
+      if (dead || failed) return null;
+      hideBubble();
+      drag = null;
+      var p = pick(x, y);
+      if (mode === 'edit' && p.kind === 'item') { drag = { kind: 'item', uid: p.uid, cell: null }; return 'item'; }
+      if (mode === 'place' && p.kind === 'ghost') { drag = { kind: 'ghost', uid: placing && placing.uid, cell: null }; return 'ghost'; }
+      return null;
+    }
+    function onTap(x, y, count) {
+      if (dead || failed) return;
+      var p = pick(x, y);
+      wake();
+      if (mode === 'place') {
+        if (p.kind === 'ghost' && placing) tell('tapCell', placing.x | 0, placing.y | 0);
+        else if (p.kind === 'cell') tell('tapCell', p.c, p.r);
+        return;
+      }
+      switch (p.kind) {
+        case 'actor': tapActor(p.target); break;
+        case 'item': tapItemUid(p.uid); break;
+        case 'land': { var lid = landIdOf(p.region); if (lid) { sfx('pop', 0.6); tell('tapLand', lid); } break; }
+        case 'cell':
+          if (count === 2 && mode === 'play' && rig) { rig.focusOn({ x: p.x, z: p.z }, { zoom: Math.min(rig.zoomMax(), rig.goal.zoom * 1.4) }); afterCamera(); }
+          if (mode !== 'play') tell('tapCell', p.c, p.r);
+          break;
+        case 'sea':
+          if (count === 2 && mode === 'play' && rig) { rig.focusOn({ x: p.x, z: p.z }, { zoom: Math.min(rig.zoomMax(), rig.goal.zoom * 1.4) }); afterCamera(); }
+          break;
+      }
+    }
+    function tapItemUid(uid) {
+      var rec = recs.get(uid);
+      if (!rec) return;
+      startAnim(rec, 'squish', false);          /* the universal squish + 'pop' */
+      tell('tapItem', uid);
+    }
+    function tapActor(target) {
+      if (!target) return;
+      if (target === 'me' || target === 'avatar') { localEmote('me', 'heart'); tell('tapAvatar'); return; }
+      var id = String(target).replace(/^pet:/, '');
+      localEmote('pet:' + id, null);
+      tell('tapPet', id);
+    }
+    function onLongPress(x, y) {
+      if (dead || mode === 'place') return;
+      var p = pick(x, y);
+      if (p.kind === 'item') { frameItem(p.uid); showBubble('u:' + p.uid, nameOf(p.uid)); }
+      else if (p.kind === 'actor' && p.target) {
+        var a = actorPoint(p.target, _v2);
+        if (a && rig) { rig.focusOn({ x: a.x, z: a.z }, { zoom: Math.min(rig.zoomMax(), 1.6) }); afterCamera(); }
+      }
+    }
+    function nameOf(uid) { var r = recs.get(uid); return r && r.it ? r.it.name : ''; }
+    function cellUnder(x, y) {
+      if (!rayAt(x, y)) return null;
+      var cell = null;
+      try { cell = Gr.rayToCell(_ro, _rd, landKeys || {}); } catch (e) { cell = null; }
+      if (cell) return { c: cell.c, r: cell.r };
+      var g = Gr.rayPlane(_ro, _rd, 0);
+      if (!g) return null;
+      var w = Gr.worldToCell(g.x, g.z);
+      return { c: clamp(w.c, 0, Gr.COLS - 1), r: clamp(w.r, 0, Gr.ROWS - 1) };
+    }
+    function onDragStart(x, y, x0, y0) {
+      if (!drag) return;
+      /* the grabbed point keeps its offset from the item's origin cell, so nothing jumps at
+         the start (a tall item is often grabbed by its top, over a cell behind it) */
+      var start = cellUnder(x0, y0);
+      if (drag.kind === 'item') {
+        var rec = recs.get(drag.uid);
+        if (!rec) { drag = null; return; }
+        grabCell = start ? { c: start.c - rec.x, r: start.r - rec.y } : { c: 0, r: 0 };
+        drag.fp = rec.fp; drag.x = rec.x; drag.y = rec.y;
+        tell('dragStart', drag.uid);
+      } else {
+        var fp = (C.item(placing && placing.id) || {}).fp || [1, 1];
+        var px = placing ? placing.x | 0 : 0, py = placing ? placing.y | 0 : 0;
+        grabCell = start ? { c: start.c - px, r: start.r - py } : { c: 0, r: 0 };
+        drag.fp = fp; drag.x = px; drag.y = py;
+      }
+      drag.started = true; drag.sent = true;      /* rewards-world already holds the start cell */
+      sfx('pop', 0.5);
+      onDrag(x, y);
+    }
+    function onDrag(x, y) {
+      if (!drag) return;
+      var cell = cellUnder(x, y);
+      if (!cell) return;
+      var tgt = dragTarget(cell, grabCell, drag.fp, Gr.COLS, Gr.ROWS);
+      if (tgt.x === drag.x && tgt.y === drag.y && drag.sent) return;
+      drag.x = tgt.x; drag.y = tgt.y; drag.sent = true;
+      tell('dragCell', tgt.x, tgt.y);
+      wake();
+    }
+    /* rewards-world re-validates on dragEnd: a valid cell confirms, an invalid one stays in place mode */
+    function onDragEnd() {
+      if (!drag) return;
+      var started = drag.started;
+      drag = null; grabCell = null;
+      if (started) tell('dragEnd');
+    }
+    function afterCamera() { hideBubble(); anchorsDirty = true; wake(); }
+
+    /* ---------------- emotes ---------------- */
+    function localEmote(target, kind) {
+      if (target === 'avatar' || target === 'you') target = 'me';
+      var now = perfNow();
+      if (emoteSeen.target === target && now - emoteSeen.t < 350) return;      /* the canvas tap already did it */
+      emoteSeen.target = target; emoteSeen.t = now;
+      if (target === 'me') { xcall('actors', 'emote', 'me', kind || 'heart'); return; }
+      var rec = recs.get(target.replace(/^u:/, ''));
+      if (rec) { emitFor(rec, kind || 'heart', 'top', 1); return; }      /* an item: a sprite over it */
+      if (target.indexOf('pet:') !== 0) target = 'pet:' + target;
+      xcall('actors', 'emote', target, kind || EMOTES[(frameNo + target.length) % EMOTES.length]);
+    }
+    function actorPoint(target, out) {
+      var r = xcall('actors', 'anchor', target, out);
+      return r && isFinite(r.x) ? r : null;
+    }
+
+    /* ================================================================
+       ANCHORS, FOCUS RING, NAME BUBBLE
+       ================================================================ */
+    function keyOf(a) {
+      if (!a) return null;
+      if (a.uid != null) return 'u:' + a.uid;
+      if (a.pet) return 'pet:' + a.pet;
+      if (a.me) return 'me';
+      if (a.region) return 'region:' + a.region;
+      if (a.key) return String(a.key);
+      return null;
+    }
+    var signCache = {};
+    function worldOfKey(key, out) {
+      if (!key) return null;
+      if (key.indexOf('u:') === 0) { var rec = recs.get(key.slice(2)); if (!rec || rec.hidden) return null; return anchorOf(rec, 'top', out); }
+      if (key.indexOf('pet:') === 0 || key === 'me') return actorPoint(key, out);
+      if (key.indexOf('region:') === 0) {
+        var rg = key.slice(7);
+        if (!signCache[rg]) { try { signCache[rg] = Gr.signAnchor(rg); } catch (e) { signCache[rg] = null; } }
+        var s = signCache[rg];
+        if (!s) return null;
+        out.set(s.x, s.y, s.z);
+        return out;
+      }
+      return null;
+    }
+    function setAnchors(list) {
+      clearAnchors();
+      var groups = {}, order = [];
+      (Array.isArray(list) ? list : []).forEach(function (a) {
+        if (!a || !a.el || !a.el.nodeType) return;
+        var key = keyOf(a);
+        if (!key) return;
+        if (!groups[key]) { groups[key] = { key: key, dy: 0, dyPx: 0, els: [] }; order.push(key); }
+        var g = groups[key];
+        if (typeof a.dy === 'number') g.dy = Math.max(g.dy, a.dy);
+        if (typeof a.dyPx === 'number') g.dyPx = a.dyPx;
+        g.els.push(a.el);
+      });
+      order.forEach(function (k) {
+        var g = groups[k], wrap;
+        if (g.els.length === 1 && g.els[0].classList && g.els[0].classList.contains('slw-tag3d')) wrap = g.els[0];
+        else { wrap = el('div', 'slw-tag3d'); g.els.forEach(function (e) { wrap.appendChild(e); }); }
+        wrap.style.visibility = 'hidden';
+        anchorsEl.appendChild(wrap);
+        anchorList.push({ key: k, wrap: wrap, dy: g.dy, dyPx: g.dyPx, x: -1e9, y: -1e9, vis: false });
+      });
+      anchorsDirty = true;
+      projectAnchors();
+    }
+    function clearAnchors() {
+      anchorList.forEach(function (a) { if (a.wrap.parentNode === anchorsEl) anchorsEl.removeChild(a.wrap); });
+      anchorList.length = 0;
+    }
+    var _scr2 = { x: 0, y: 0 };
+    function screenOf(wp) {
+      _v.copy(wp).project(camera);
+      if (_v.z < -1 || _v.z > 1) return null;
+      return toScreen(_v.x, _v.y, cssW, cssH, _scr2);
+    }
+    function placeTag(a, wp) {
+      var s = wp ? screenOf(wp) : null;
+      if (!s) { if (a.vis) { a.wrap.style.visibility = 'hidden'; a.vis = false; } return; }
+      var x = Math.round(s.x * 2) / 2, y = Math.round((s.y + (a.dyPx || 0)) * 2) / 2;
+      if (!a.vis) { a.wrap.style.visibility = ''; a.vis = true; }
+      if (Math.abs(x - a.x) >= 0.5 || Math.abs(y - a.y) >= 0.5) {
+        a.x = x; a.y = y;
+        a.wrap.style.transform = 'translate3d(' + x + 'px,' + y + 'px,0)';
+      }
+    }
+    function projectAnchors() {
+      anchorsDirty = false; anchorClock = 0;
+      if (!camera || !(cssW > 0)) return;
+      for (var i = 0; i < anchorList.length; i++) {
+        var a = anchorList[i], wp = worldOfKey(a.key, _v2);
+        if (wp && a.dy) wp.y += a.dy;
+        placeTag(a, wp);
+      }
+      if (bubble) {
+        if (clockT > bubble.until) hideBubble();
+        else { var bp = worldOfKey(bubble.key, _v2); if (bp) bp.y += 0.25 + bubble.lift; placeTag(bubble, bp); }
+      }
+      placeRing();
+    }
+    function showBubble(key, text) {
+      if (!text) return;
+      hideBubble();
+      var wrap = el('div', 'slw-tag3d slw-bubble3d', { role: 'status' });
+      var nm = el('span', 'nm');
+      nm.textContent = text;
+      wrap.appendChild(nm);
+      wrap.style.visibility = 'hidden';
+      anchorsEl.appendChild(wrap);
+      var lift = 0;
+      for (var i = 0; i < anchorList.length; i++) if (anchorList[i].key === key) lift = 0.35;   /* above ▶ PLAY / ✋ */
+      bubble = { key: key, wrap: wrap, until: clockT + 2.5, lift: lift, dy: 0, dyPx: 0, x: -1e9, y: -1e9, vis: false };
+      later(function () { if (bubble && bubble.wrap === wrap) hideBubble(); }, 2600);
+      anchorsDirty = true;
+      wake();
+    }
+    function hideBubble() {
+      if (!bubble) return;
+      if (bubble.wrap.parentNode) bubble.wrap.parentNode.removeChild(bubble.wrap);
+      bubble = null;
+    }
+    /* the #FFD23F keyboard focus ring around the projected hit box (or a disc for actors / signs) */
+    var _corner = null;
+    function placeRing() {
+      if (!ringEl) return;
+      if (!focusKey) { if (ringEl.style.display !== 'none') ringEl.style.display = 'none'; return; }
+      var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity, n = 0;
+      if (focusKey.indexOf('u:') === 0) {
+        var rec = recs.get(focusKey.slice(2));
+        if (rec && rec.hit && !rec.hidden) {
+          if (!_corner) _corner = new T.Vector3();
+          for (var i = 0; i < 8; i++) {
+            _corner.set(i & 1 ? rec.hit.max[0] : rec.hit.min[0], i & 2 ? rec.hit.max[1] : rec.hit.min[1], i & 4 ? rec.hit.max[2] : rec.hit.min[2]);
+            var s = screenOf(_corner);
+            if (!s) continue;
+            n++;
+            if (s.x < minX) minX = s.x; if (s.x > maxX) maxX = s.x; if (s.y < minY) minY = s.y; if (s.y > maxY) maxY = s.y;
+          }
+        }
+      } else {
+        var wp = worldOfKey(focusKey, _v2);
+        if (wp) {
+          wp.y -= focusKey === 'me' || focusKey.indexOf('pet:') === 0 ? 0.35 : 0;
+          var c = screenOf(wp);
+          if (c) { n = 1; minX = c.x - 30; maxX = c.x + 30; minY = c.y - 30; maxY = c.y + 30; }
+        }
+      }
+      if (!n) { ringEl.style.display = 'none'; return; }
+      var pad = 6;
+      ringEl.style.display = '';
+      ringEl.style.width = Math.max(28, maxX - minX + pad * 2) + 'px';
+      ringEl.style.height = Math.max(28, maxY - minY + pad * 2) + 'px';
+      ringEl.style.transform = 'translate3d(' + Math.round(minX - pad) + 'px,' + Math.round(minY - pad) + 'px,0)';
+    }
+    function focusItem(key) {
+      if (key != null && key !== '' && !/^(u:|pet:|region:|me$)/.test(String(key))) key = 'u:' + key;
+      key = key || null;
+      var prev = focusKey && focusKey.indexOf('u:') === 0 ? recs.get(focusKey.slice(2)) : null;
+      if (prev && prev.uid !== selectedUid) prev.batch.setHighlight(prev.uid, 0);
+      focusKey = key;
+      var rec = key && key.indexOf('u:') === 0 ? recs.get(key.slice(2)) : null;
+      if (rec && rec.uid !== selectedUid) rec.batch.setHighlight(rec.uid, 1);
+      anchorsDirty = true;
+      projectAnchors();
+      wake();
+    }
+    function frameItem(uid) {
+      var rec = recs.get(uid);
+      if (!rec || !rig) return;
+      rig.focusOn({ x: rec.wx, z: rec.wz }, { zoom: Math.min(rig.zoomMax(), Math.max(1.5, rig.goal.zoom)) });
+      afterCamera();
+    }
+
+    /* ---------------- the keyboard list ---------------- */
+    function buildSrList(view) {
+      if (!srEl) return;
+      var items = [];
+      var sorted = recList.slice().sort(function (a, b) { return a.y - b.y || a.x - b.x; });
+      sorted.forEach(function (r) {
+        if (!r.it) return;
+        if (mode === 'play' && !r.it.act) return;
+        items.push({ key: 'u:' + r.uid, label: itemLabel(r.it, mode, r.uid === selectedUid) });
+      });
+      if (mode === 'play') {
+        (Array.isArray(view.pets) ? view.pets : []).forEach(function (p) { if (p && p.id) items.push({ key: 'pet:' + p.id, label: petLabel(C, p) }); });
+        var hasHouse = placedList.some(function (p) { return p.id === 'house_cottage'; });
+        if (hasHouse && view.avatar !== false) items.push({ key: 'me', label: 'That’s you!' });
+      }
+      if (mode !== 'place' && C.REGIONS) {
+        Object.keys(C.REGIONS).forEach(function (rk) {
+          var R = C.REGIONS[rk];
+          if (!R.unlock || envUnlocked.indexOf(rk) >= 0 || (pendingRise && pendingRise.region === rk)) return;
+          items.push({ key: 'region:' + rk, label: '🔒 ' + R.name + ' — see how to unlock it' });
+        });
+      }
+      var sig = mode + '|' + items.map(function (i) { return i.key + '=' + i.label; }).join('|');
+      if (sig === srSig) return;
+      srSig = sig;
+      var hadFocus = document.activeElement && srEl.contains(document.activeElement) ? document.activeElement.getAttribute('data-k') : null;
+      while (srEl.firstChild) srEl.removeChild(srEl.firstChild);
+      items.forEach(function (i) {
+        var li = el('li'), b = el('button', null, { type: 'button', 'data-k': i.key, 'aria-label': i.label });
+        b.textContent = i.label;
+        li.appendChild(b);
+        srEl.appendChild(li);
+      });
+      if (hadFocus) { var again = srEl.querySelector('[data-k="' + cssEsc(hadFocus) + '"]'); if (again) again.focus(); }
+    }
+    function cssEsc(s) { return String(s).replace(/["\\]/g, '\\$&'); }
+    function srKey(e) { var b = e.target && e.target.closest ? e.target.closest('[data-k]') : null; return b ? b.getAttribute('data-k') : null; }
+    function onSrClick(e) {
+      var k = srKey(e);
+      if (!k || dead) return;
+      activateKey(k);
+    }
+    function onSrFocus(e) { var k = srKey(e); if (k) focusItem(k); }
+    function onSrBlur(e) {
+      if (e.relatedTarget && srEl.contains(e.relatedTarget)) return;
+      focusItem(null);
+    }
+    /* Enter / Space on a list button: the same path as a canvas tap */
+    function activateKey(k) {
+      wake();
+      if (k.indexOf('u:') === 0) {
+        var uid = k.slice(2);
+        if (mode === 'place') return;
+        tapItemUid(uid);
+      } else if (k === 'me') tapActor('me');
+      else if (k.indexOf('pet:') === 0) tapActor(k);
+      else if (k.indexOf('region:') === 0) { var lid = landIdOf(k.slice(7)); if (lid) tell('tapLand', lid); }
+    }
+
+    /* ================================================================
+       SEQUENCES: launch, unlock, debut, store, Showtime, encore, dance
+       ================================================================ */
+    function act(uid, name) {
+      var rec = recs.get(uid);
+      if (!rec) return resolved(false);
+      name = String(name || '');
+      wake();
+      if (name === 'glow') return setLitInternal(uid, !litMem[uid], true);
+      if (name === 'launch') return launchAct(rec);
+      /* 'homeClose' supersedes a held 'home' act: the model closes the door from its pose */
+      return runAct(rec, modelAct(name, !!litMem[uid]));
+    }
+    function launchAct(rec) {
+      var spot = anchorOf(rec, 'spot', new T.Vector3());
+      var pt = { x: rec.wx, y: rec.wy, z: rec.wz };
+      if (spot && isFinite(spot.x)) { pt.x = (spot.x + rec.wx) / 2; pt.z = (spot.z + rec.wz) / 2; }
+      if (env && showK > 0.5 && typeof env.aim === 'function') env.aim({ x: rec.wx, y: rec.wy, z: rec.wz }, { instant: reduced });
+      launchedUid = rec.uid;
+      var pa = runAct(rec, 'launch');
+      var pc = rig ? rig.pushIn(pt) : null;
+      var d = deferred(), done = false;
+      function finish() { if (done) return; done = true; d.resolve(true); }
+      var P = Pr();
+      if (P) P.all([pa || resolved(true), pc || resolved(true)]).then(finish, finish);
+      later(finish, reduced ? 120 : 1100);       /* frames may be paused: never block the game */
+      /* no game took over (a time-limit sheet, a cancelled launch): ease the push-in back */
+      later(function () {
+        if (launchedUid !== rec.uid || suspended || revoked) return;
+        launchedUid = null;
+        if (rig) rig.releaseMove('push');
+        if (env && typeof env.aim === 'function') env.aim(null);
+        wake();
+      }, 4000);
+      return d.promise;
+    }
+    function unlockLand(region) {
+      if (!env || !C.REGION_CELLS || !C.REGION_CELLS[region] || region === 'home') return resolved(false);
+      var d = deferred(), done = false;
+      function finish(ok) { if (done) return; done = true; d.resolve(ok !== false); }
+      if (pendingRise && pendingRise.region === region) pendingRise = null;
+      risen[region] = true;
+      if (envUnlocked.indexOf(region) < 0) envUnlocked = envUnlocked.concat([region]);
+      var h = null;
+      try { h = env.riseRegion(region, { reduced: reduced }); } catch (e) { issue('riseRegion: ' + errText(e)); h = null; }
+      landKeys = Gr.landFrom(envUnlocked);
+      landSig = envUnlocked.slice().sort().join(',');
+      if (rig) rig.setLand(landKeys, { instant: reduced });
+      var rb = Gr.regionBounds(region);
+      if (rig) rig.crane({ x: rb.cx, y: 0, z: rb.cz });
+      sfx('whoosh', 0.8);
+      var dur = h && h.dur ? h.dur : 0.4;
+      riseFx = { t: 0, cells: h && h.cells ? h.cells : [], i: 0, dur: dur, done: false, fw: 0, cx: rb.cx, cz: rb.cz };
+      if (lastView) { syncActors(lastView); applyEdit(); buildSrList(lastView); }
+      var wait = reduced ? 450 : (dur + 0.9) * 1000;
+      if (h && h.promise && typeof h.promise.then === 'function') h.promise.then(function () { later(function () { finish(true); }, reduced ? 200 : 700); });
+      later(function () { finish(true); }, wait + 2500);
+      later(function () { if (!done && (suspended || covered)) finish(true); }, wait);
+      wake();
+      return d.promise;
+    }
+    /* splash rings as each cell surfaces, sparkles, then 3 firework rings and applause */
+    function stepRiseFx(dt) {
+      var r = riseFx;
+      r.t += dt;
+      while (r.i < r.cells.length && r.cells[r.i].delay <= r.t) {
+        var c = r.cells[r.i++];
+        _v2.set(c.x, Gr.SEA_Y + 0.03, c.z);
+        fxEmit(reduced ? 'sparkle' : 'splash', _v2, 1);
+        if (r.i % 3 === 0) { _v2.y = (c.y || 0) + 0.25; fxEmit('sparkle', _v2, reduced ? 2 : 4); }
+      }
+      if (!r.done && r.t >= r.dur) {
+        r.done = true;
+        sfx('applause', 0.9);
+        if (env) env.invalidateShadows();
+      }
+      if (r.done && !reduced && r.fw < 3 && r.t >= r.dur + r.fw * 0.25) {
+        _v2.set(r.cx + (r.fw - 1) * 1.6, 3.2 + (r.fw % 2) * 0.6, r.cz - 0.5);
+        fxEmit('firework', _v2, 18);
+        r.fw++;
+      }
+      if (r.done && (reduced || r.fw >= 3)) riseFx = null;
+    }
+    function applyPendingRise() {
+      var region = pendingRise.region;
+      pendingRise = null;
+      if (envUnlocked.indexOf(region) < 0) envUnlocked = envUnlocked.concat([region]);
+      if (env) env.setLand(envUnlocked, lastView && lastView.world && Array.isArray(lastView.world.placed) ? lastView.world : { placed: placedList });
+      landKeys = Gr.landFrom(envUnlocked);
+      landSig = envUnlocked.slice().sort().join(',');
+      if (rig) rig.setLand(landKeys, {});
+      if (lastView) { syncActors(lastView); buildSrList(lastView); }
+    }
+    function debut(uid) {
+      var rec = recs.get(uid);
+      if (!rec) return resolved(false);
+      if (rec.debutP) { rec.debutP.resolve(false); rec.debutP = null; }
+      var d = deferred();
+      rec.debutP = d;
+      setHidden(rec, false);
+      var dur = startAnim(rec, 'debut', false);
+      later(function () { if (rec.debutP === d) { rec.debutP = null; d.resolve(true); } }, (dur + 0.6) * 1000);
+      wake();
+      return d.promise;
+    }
+    function storeFx(uid, trayEl) {
+      var rec = recs.get(uid);
+      if (!rec) return resolved(false);
+      cancelAct(rec, false);
+      if (rec.storeP) rec.storeP.resolve(false);
+      var d = deferred();
+      rec.storeP = d;
+      rec.storing = true;
+      var dur = startAnim(rec, 'store', false);
+      /* the sparkle flies toward the tray */
+      var from = anchorOf(rec, 'top', new T.Vector3()), to = trayPoint(trayEl);
+      if (to) xcall('fx', 'emit', 'flight', { x: from.x, y: from.y, z: from.z }, 1, { to: { x: to.x, y: to.y, z: to.z }, dur: reduced ? 0.3 : 0.5, delay: reduced ? 0 : 0.25 });
+      later(function () {
+        if (rec.storeP === d) { rec.storeP = null; d.resolve(true); }
+        if (!rec.dead && rec.storing) { rec.storing = false; if (rec.removeAfter) removeRec(rec); else setHidden(rec, true); }
+      }, (dur + 0.8) * 1000);
+      if (selectedUid === uid) setSelected(null);
+      wake();
+      return d.promise;
+    }
+    /* a point in front of the camera under the tray element (screen → world at 6 u) */
+    function trayPoint(trayEl) {
+      if (!camera || !container || !(cssW > 0)) return null;
+      var x = cssW / 2, y = cssH;
+      try {
+        if (trayEl && trayEl.getBoundingClientRect) {
+          var r = trayEl.getBoundingClientRect(), c = container.getBoundingClientRect();
+          x = r.left + r.width / 2 - c.left; y = clamp(r.top + r.height / 2 - c.top, -cssH * 0.2, cssH * 1.2);
+        }
+      } catch (e) {}
+      if (!rayAt(x, y)) return null;
+      return { x: _ro.x + _rd.x * 6, y: _ro.y + _rd.y * 6, z: _ro.z + _rd.z * 6 };
+    }
+
+    function showtime(onOff, o) {
+      o = o || {};
+      wake();
+      if (o.encoreMs > 0) {
+        if (userShow) { later(danceNow, reduced ? 200 : 1200); return resolved(true); }
+        if (encore) cancelLater(encore.timer);
+        var first = !encore;
+        encore = { timer: later(endEncore, Math.max(1000, +o.encoreMs)) };
+        if (first) {
+          if (env) env.showtime(true, { reduced: reduced });
+          if (rig) rig.showOrbit(true);
+          musicContext('island_showtime');
+          sfx('sting', 0.8); sfx('whoosh', 0.7);
+          xcall('actors', 'setShowtime', true);
+        }
+        later(danceNow, reduced ? 300 : 1800);
+        return resolved(true);
+      }
+      onOff = !!onOff;
+      if (encore) { cancelLater(encore.timer); encore = null; }
+      userShow = onOff;
+      nextDanceBar = -1;
+      if (env) env.showtime(onOff, { reduced: reduced });
+      if (rig) rig.showOrbit(onOff);
+      musicContext(onOff ? 'island_showtime' : 'island_day');
+      xcall('actors', 'setShowtime', onOff);
+      if (!onOff && env && typeof env.aim === 'function') env.aim(null);
+      return resolved(true);
+    }
+    function endEncore() {
+      if (!encore) return;
+      encore = null;
+      if (userShow) return;
+      if (env) env.showtime(false, { reduced: reduced });
+      if (rig) rig.showOrbit(false);
+      musicContext('island_day');
+      xcall('actors', 'setShowtime', false);
+      sfx('chip', 0.6);
+      wake();
+    }
+    function scheduleDance() {
+      if (!showOn() || showK < 0.98) { if (!showOn()) nextDanceBar = -1; return; }
+      if (dance || mode !== 'play' || covered || suspended) return;
+      var nd = nextDance(beat.bar, nextDanceBar, DANCE_EVERY_BARS);
+      nextDanceBar = nd.next;
+      if (nd.due) danceNow();
+    }
+    function housePoint() {
+      for (var i = 0; i < recList.length; i++) if (recList[i].id === 'house_cottage') { var r = recList[i]; return { x: r.wx, y: r.wy, z: r.wz + 1 }; }
+      return { x: 0, y: 0, z: 0 };
+    }
+    function danceNow() {
+      if (dead || dance || mode !== 'play') return;
+      var sec = DANCE_COUNTS * 60 / DANCE_BPM;
+      var total = xcall('actors', 'dance', { bpm: DANCE_BPM, counts: DANCE_COUNTS, reduced: reduced });
+      total = typeof total === 'number' && total > 0 ? total : sec + (reduced ? 0 : 2);
+      var hp = housePoint();
+      dance = { until: clockT + total, x: hp.x, y: hp.y, z: hp.z };
+      if (rig && !reduced) rig.dance(hp, Math.max(0, total - 1.6));
+      wake();
+    }
+    function endDance() {
+      var dn = dance;
+      dance = null;
+      _v2.set(dn.x, dn.y + 1.2, dn.z);
+      fxEmit('sparkle', _v2, reduced ? 8 : 24);
+      sfx('cheer', 0.8);
+    }
+
+    /* ================================================================
+       LIFECYCLE
+       ================================================================ */
+    function maybeReady() {
+      if (readyFired || compileState || dead) return;
+      compileState = 1;
+      if (rig) { rig.update(0); rig.apply(camera); }
+      var p = lease ? lease.compile(scene, camera) : null;
+      var go = function () { if (!dead && compileState === 1) { compileState = 2; compileFrames = 0; wake(); } };
+      if (p && typeof p.then === 'function') p.then(go, go); else go();
+      readyTimer = later(function () { if (!readyFired && !covered && !suspended) fireReady(); }, 1500);
+    }
+    function fireReady() {
+      if (readyFired || dead) return;
+      readyFired = true; compileState = 3;
+      cancelLater(readyTimer);
+      if (canvas) canvas.style.opacity = '1';
+      if (container) container.classList.add('is-ready');
+      if (rig && !reduced) rig.reveal();
+      musicContext(userShow ? 'island_showtime' : 'island_day');
+      tell('ready');
+      wake();
+    }
+    var observed = false;
+    function attach(target) {
+      if (!target || !container) return stage;
+      if (container.parentNode !== target) target.appendChild(container);
+      if (lease && !observed) { lease.observe(container); observed = true; }   /* the observers follow the element */
+      measure();
+      anchorsDirty = true;
+      wake();
+      return stage;
+    }
+    function measure() {
+      if (!container) return;
+      var w = container.clientWidth | 0, h = container.clientHeight | 0;
+      try { touch = !!(root.matchMedia && root.matchMedia('(pointer: coarse)').matches) || (root.navigator && root.navigator.maxTouchPoints > 0); } catch (e) { touch = false; }
+      if (rig) rig.setTouch(touch);
+      if (w > 0 && h > 0 && (w !== cssW || h !== cssH) && lease) lease.resize(w, h);
+    }
+    function setCovered(v) {
+      covered = !!v;
+      if (lease) lease.setCovered(covered);
+      if (covered && controls) controls.cancel();
+      if (!covered) wake();
+    }
+    function suspend() {
+      suspended = true;
+      if (controls) controls.cancel();
+      hideBubble();
+      if (lease) { lease.setHidden(true); lease.stop(); }
+    }
+    function resume() {
+      suspended = false;
+      if (lease) { lease.setHidden(false); lease.start(); }
+      if (rig) rig.releaseMove('push');
+      if (env && typeof env.aim === 'function') env.aim(null, { instant: true });
+      launchedUid = null;
+      if (container && container.parentNode && lease) { placeCanvas(); measure(); }
+      anchorsDirty = true;
+      wake();
+    }
+    function setReduced(v) {
+      reduced = !!v;
+      optR.reduced = reduced;
+      if (lease) lease.setReduced(reduced);
+      if (env) env.setReduced(reduced);
+      if (rig) rig.setReduced(reduced);
+      xcall('actors', 'setReduced', reduced);
+      xcall('fx', 'setReduced', reduced);
+      xcall('edit', 'setReduced', reduced);
+      for (var i = 0; i < recList.length; i++) { recList[i].a.reduced = reduced; recList[i].idlePending = true; }
+      wake();
+    }
+    function setUser(u) {
+      user = normUser(u);
+      if (env && typeof env.setMember === 'function') env.setMember(user.color);
+      recList.forEach(function (r) {
+        cancelAct(r, false);
+        var an = r.anims;
+        for (var k in an) an[k].t = -1;
+        r.animOn = 0; r.rootDirty = true; addLive(r);
+      });
+      if (encore) { cancelLater(encore.timer); encore = null; if (!userShow) { if (env) env.showtime(false, { reduced: true }); if (rig) rig.showOrbit(false); } }
+      dance = null;
+      Object.keys(litMem).forEach(function (uid) { setLitInternal(uid, false, false); });
+      litMem = {};
+      xcall('actors', 'setUser', user);
+      focusItem(null);
+      hideBubble();
+      wake();
+    }
+    function info() {
+      var out = {
+        version: VERSION, tier: tier, mode: mode, ready: readyFired, failed: failed, reduced: reduced,
+        items: recs.size, batches: batches.size, live: live.length, acts: recList.filter(function (r) { return !!r.act; }).length,
+        show: Math.round(showK * 1000) / 1000, showtime: userShow, encore: !!encore, dancing: !!dance,
+        suspended: suspended, covered: covered, lost: lost, revoked: revoked,
+        systems: { actors: sys.actors ? sys.actors.name : null, fx: sys.fx ? sys.fx.name : null, edit: sys.edit ? sys.edit.name : null },
+        camera: rig ? rig.info() : null, beat: { bpm: beat.bpm, bar: beat.bar, music: !!beat.music }, issues: issues.slice()
+      };
+      try { if (env) out.env = env.info(); } catch (e) {}
+      try { if (lease) out.lease = lease.info(); } catch (e) {}
+      out.actors = xcall('actors', 'info') || null;
+      out.fx = xcall('fx', 'info') || null;
+      return out;
+    }
+
+    /* full GPU rebuild after a context restore: dispose and remount from the current view */
+    function rebuildAll() {
+      if (dead) return;
+      try {
+        var v = lastView;
+        teardownContent();
+        buildEnv();
+        buildSystems();
+        envUnlocked = ['home']; landSig = ''; firstSync = true; srSig = '';
+        if (v) syncView(v);
+        if (userShow && env) env.setShow(1);
+        anchorsDirty = true;
+        wake();
+      } catch (e) { fail('remount: ' + errText(e)); }
+    }
+    function teardownContent() {
+      recList.slice().forEach(function (r) { cancelAct(r, false); r.dead = true; });
+      recList.length = 0; recs.clear(); live.length = 0;
+      batchList.slice().forEach(function (b) { try { b.batch.dispose(); } catch (e) {} });
+      batchList.length = 0; batches.clear();
+      disposeSystems();
+      if (env) { try { env.dispose(); } catch (e) { issue('env dispose: ' + errText(e)); } env = null; }
+      riseFx = null; dance = null;
+    }
+    function dispose() {
+      if (dead) return;
+      teardownContent();
+      dead = true;
+      timers.slice().forEach(function (id) { clearTimeout(id); });
+      timers.length = 0;
+      if (unsubQ) { try { unsubQ(); } catch (e) {} unsubQ = null; }
+      if (controls) { controls.dispose(); controls = null; }
+      if (rig) { rig.dispose(); rig = null; }
+      clearAnchors();
+      hideBubble();
+      if (camctlEl) { camctlEl.removeEventListener('click', onCamClick); camctlEl.removeEventListener('keydown', onCamKey); }
+      if (srEl) { srEl.removeEventListener('click', onSrClick); srEl.removeEventListener('focusin', onSrFocus); srEl.removeEventListener('focusout', onSrBlur); }
+      if (lease) { try { lease.release(); } catch (e) {} lease = null; }
+      if (scene) { scene.clear(); scene = null; }
+      if (container && container.parentNode) container.parentNode.removeChild(container);
+      container = canvas = anchorsEl = ringEl = camctlEl = srEl = null;
+    }
+
+    /* ================================================================
+       BOOT
+       ================================================================ */
+    try {
+      buildDom();
+      buildScene();
+      takeLease();
+      buildEnv();
+      buildSystems();
+      placeCanvas();
+      if (!CamApi || typeof CamApi.Rig !== 'function') throw new Error('camera.js missing');
+      rig = new CamApi.Rig({ grid: Gr, motion: Mo, reduced: reduced, land: ['home'], aspect: 16 / 9 });
+      rig.update(0); rig.apply(camera);
+      controls = CamApi.Controls(canvas, rig, {
+        press: onPress, tap: onTap, longPress: onLongPress, dragStart: onDragStart, drag: onDrag, dragEnd: onDragEnd,
+        camera: afterCamera, input: function () { if (lease) lease.input(); },
+        error: function (e) { issue('pointer: ' + errText(e)); }
+      });
+      if (typeof SL3D.onQuality === 'function') {
+        unsubQ = SL3D.onQuality(function (q) {
+          xcall('fx', 'setQuality', q);
+          xcall('actors', 'setQuality', q);
+          xcall('edit', 'setQuality', q);
+        });
+      }
+      lease.start();
+    } catch (e) {
+      fail('mount: ' + errText(e));
+    }
+
+    /* ---------------- the public stage ---------------- */
+    stage.attach = guard('attach', attach, function () { return stage; });
+    stage.sync = guard('sync', function (v) { syncView(v); return stage; }, function () { return stage; });
+    stage.act = guard('act', act, noP);
+    stage.emote = guard('emote', function (target, kind) { if (target != null) localEmote(String(target), kind || null); wake(); });
+    stage.setLit = guard('setLit', function (uid, v) { return setLitInternal(uid, v, true); }, noP);
+    stage.unlockLand = guard('unlockLand', unlockLand, noP);
+    stage.debut = guard('debut', debut, noP);
+    stage.storeFx = guard('storeFx', storeFx, noP);
+    stage.showtime = guard('showtime', showtime, noP);
+    stage.danceNow = guard('danceNow', function () { danceNow(); });
+    stage.setAnchors = guard('setAnchors', function (list) { setAnchors(list); });
+    stage.focusItem = guard('focusItem', function (key) { focusItem(key); });
+    stage.resetView = guard('resetView', function () { if (rig) { rig.reset(reduced); afterCamera(); } });
+    stage.frameItem = guard('frameItem', function (uid) { frameItem(uid); showBubble('u:' + uid, nameOf(uid)); });
+    stage.placement = guard('placement', function (s) { placementState(s || null); wake(); });
+    stage.setCovered = guard('setCovered', setCovered);
+    stage.suspend = guard('suspend', suspend);
+    stage.resume = guard('resume', resume);
+    stage.setReduced = guard('setReduced', setReduced);
+    stage.setUser = guard('setUser', setUser);
+    stage.info = function () { try { return info(); } catch (e) { return { failed: failed || errText(e) }; } };
+    stage.dispose = function () { try { dispose(); } catch (e) { dead = true; } };
+    Object.defineProperty(stage, 'element', { get: function () { return container; } });
+    Object.defineProperty(stage, 'failed', { get: function () { return failed; } });
+    return stage;
+  }
+
+  /* a stage that does nothing (3D unavailable): every call is safe */
+  function stubStage(stage, kill) {
+    var noP = function () { return resolved(false); }, self = function () { return stage; }, nop = function () {};
+    ['act', 'setLit', 'unlockLand', 'debut', 'storeFx', 'showtime'].forEach(function (k) { stage[k] = noP; });
+    ['attach', 'sync'].forEach(function (k) { stage[k] = self; });
+    ['emote', 'danceNow', 'setAnchors', 'focusItem', 'resetView', 'frameItem', 'placement', 'setCovered', 'suspend', 'resume', 'setReduced', 'setUser'].forEach(function (k) { stage[k] = nop; });
+    stage.info = function () { return { failed: true }; };
+    stage.dispose = function () { kill(); };
+    return stage;
+  }
+
+  /* ================================================================
+     BUILT-IN FALLBACK: FX — pooled sprites (sparkle atlas), halos, ground decals
+     ================================================================ */
+  var FX_PRESETS = {
+    sparkle: { n: 8, life: [0.55, 0.95], speed: [0.6, 1.4], up: 0.9, g: -1.2, size: [0.12, 0.2], cells: ['sparkle', 'star', 'diamond'], cols: ['Star Gold', 'Cloud White', 'Neon Pink', 'Holo Blue'], spin: 2 },
+    glint: { n: 1, life: [0.45, 0.6], speed: [0, 0.05], up: 0, g: 0, size: [0.16, 0.22], cells: ['sparkle'], cols: ['Gold Light'], spin: 1.5 },
+    heart: { n: 1, life: [1.0, 1.2], speed: [0.05, 0.15], up: 0.65, g: 0, size: [0.22, 0.26], cells: ['heart'], cols: ['Neon Pink', 'Bubblegum'], wobble: 0.08 },
+    note: { n: 1, life: [1.0, 1.2], speed: [0.05, 0.15], up: 0.65, g: 0, size: [0.2, 0.24], cells: ['note'], cols: ['Neon Violet', 'Neon Cyan'], wobble: 0.08 },
+    star: { n: 1, life: [1.0, 1.2], speed: [0.05, 0.15], up: 0.65, g: 0, size: [0.22, 0.26], cells: ['star'], cols: ['Star Gold'], wobble: 0.08 },
+    dust: { n: 6, life: [0.4, 0.55], speed: [0.6, 0.9], up: 0.12, g: 0, size: [0.14, 0.2], grow: 1.6, cells: ['puff'], cols: ['Cloud White', 'Pebble'], ring: true, drag: 3 },
+    bubble: { n: 4, life: [1.8, 2.6], speed: [0.05, 0.2], up: 0.75, g: 0, size: [0.1, 0.18], cells: ['bubble'], cols: ['Holo Pink', 'Holo Blue', 'Holo Mint', 'Holo Lemon'], wobble: 0.12, track: true },
+    splash: { n: 1, life: [0.55, 0.7], speed: [0, 0], up: 0, g: 0, size: [0.25, 0.3], grow: 3, cells: ['ring'], cols: ['Foam'] },
+    sparkleRing: { n: 12, life: [0.7, 0.85], speed: [1.0, 1.2], up: 0.2, g: 0, size: [0.12, 0.16], cells: ['sparkle'], cols: ['Star Gold', 'Neon Cyan', 'Neon Pink'], ring: true, drag: 1.5 },
+    firework: { n: 18, life: [0.9, 1.3], speed: [1.4, 2.0], up: 0, g: -1.6, size: [0.14, 0.2], cells: ['sparkle', 'star'], cols: ['Neon Pink', 'Neon Cyan', 'Neon Violet', 'Star Gold'], sphere: true, drag: 1.2 },
+    confetti: { n: 24, life: [2.0, 2.8], speed: [1.5, 2.6], up: 2.2, g: -3, size: [0.1, 0.16], cells: ['rect', 'heart', 'star', 'curl'], cols: ['Neon Pink', 'Neon Cyan', 'Star Gold', 'Neon Violet', 'Neon Lime'], member: 0.4, spin: 6, drag: 1.4 },
+    exhaust: { n: 1, life: [0.5, 0.7], speed: [0.2, 0.35], up: 0.25, g: 0, size: [0.12, 0.16], grow: 1.8, cells: ['puff'], cols: ['Holo Pink', 'Holo Blue', 'Holo Lemon'] },
+    petal: { n: 1, life: [2.6, 3.4], speed: [0.05, 0.15], up: -0.25, g: 0, size: [0.07, 0.1], cells: ['petal'], cols: ['Holo Pink'], wobble: 0.25, spin: 1.2 },
+    snow: { n: 1, life: [1.4, 2.0], speed: [0.02, 0.08], up: 0.05, g: 0, size: [0.07, 0.11], cells: ['snow'], cols: ['Cloud White'], wobble: 0.06 },
+    flight: { n: 1, life: [0.5, 0.5], speed: [0, 0], up: 0, g: 0, size: [0.26, 0.26], cells: ['sparkle'], cols: ['Star Gold'], spin: 4 }
+  };
+  FX_PRESETS.emote = FX_PRESETS.heart;
+  function MiniFx(h) {
+    var K = h.K, T = h.THREE, budget = h.budget || {};
+    this.h = h; this.K = K; this.T = T;
+    this.reduced = !!h.reduced;
+    this.cap = Math.max(32, Math.min(512, budget.particles || 256));
+    this.scale = (h.quality && h.quality.particleScale) || 1;
+    this.pool = K.billboards({ capacity: this.cap, texture: 'sparkles', additive: true, name: 'fx:sprites' });
+    this.halos = K.billboards({ capacity: 48, texture: 'halo', additive: true, show: true, name: 'fx:halos', renderOrder: 4 });
+    h.group.add(this.pool.mesh, this.halos.mesh);
+    var N = this.cap;
+    this.px = new Float32Array(N); this.py = new Float32Array(N); this.pz = new Float32Array(N);
+    this.vx = new Float32Array(N); this.vy = new Float32Array(N); this.vz = new Float32Array(N);
+    this.age = new Float32Array(N); this.life = new Float32Array(N); this.size = new Float32Array(N);
+    this.grow = new Float32Array(N); this.g = new Float32Array(N); this.drag = new Float32Array(N);
+    this.rot = new Float32Array(N); this.spin = new Float32Array(N); this.wob = new Float32Array(N);
+    this.cell = new Uint8Array(N); this.slot = new Int16Array(N); this.mode = new Uint8Array(N);
+    this.seed = new Uint32Array(N); this.delay = new Float32Array(N);
+    this.ox = new Float32Array(N); this.oy = new Float32Array(N); this.oz = new Float32Array(N);
+    this.tx = new Float32Array(N); this.ty = new Float32Array(N); this.tz = new Float32Array(N);
+    this.n = 0;
+    this.haloKeys = {};
+    /* ground light pools */
+    var dGeo = new T.PlaneGeometry(1, 1);
+    dGeo.rotateX(-Math.PI / 2);
+    this.dGeo = dGeo;
+    this.dMat = new T.MeshBasicMaterial({ map: K.tex.halo(), transparent: true, opacity: 0.35, blending: T.AdditiveBlending, depthWrite: false, toneMapped: false });
+    this.decals = new T.InstancedMesh(dGeo, this.dMat, 24);
+    this.decals.instanceColor = new T.InstancedBufferAttribute(new Float32Array(24 * 3).fill(1), 3);
+    this.decals.count = 0; this.decals.frustumCulled = false; this.decals.renderOrder = 1; this.decals.name = 'fx:decals';
+    this.decalKeys = []; this.decalPos = [];
+    h.group.add(this.decals);
+    this._m = new T.Matrix4(); this._c = new T.Color(); this._b = { bubble: {} }; this._pop = { x: 0, y: 0, z: 0 };
+    this.colCache = {};
+  }
+  var FP = MiniFx.prototype;
+  FP._rand = function () { return Math.random(); };
+  FP._col = function (tok) {
+    var K = this.K;
+    if (tok === '@member') {
+      var hx = this.h.member && this.h.member();
+      if (hx) { if (!this.colCache[hx]) this.colCache[hx] = K.rgb(hx); return this.colCache[hx]; }
+      tok = 'Bubblegum';
+    }
+    if (typeof tok === 'string' && /^#[0-9a-f]{3,6}$/i.test(tok)) { if (!this.colCache[tok]) this.colCache[tok] = K.rgb(tok); return this.colCache[tok]; }
+    return tok;
+  };
+  FP.emit = function (kind, pos, n, o) {
+    o = o || {};
+    var P = FX_PRESETS[kind] || FX_PRESETS.sparkle, ATL = this.K.ATLAS || {};
+    if (kind === 'emote') P = FX_PRESETS[['heart', 'note', 'star'][Math.floor(this._rand() * 3)]];
+    var count = Math.max(1, Math.round((n == null ? P.n : n) * (kind === 'confetti' || kind === 'firework' ? this.scale : 1)));
+    if (o.max && count > o.max) count = o.max;
+    var red = this.reduced, M = this.h.motion;
+    for (var i = 0; i < count; i++) {
+      var s = this.pool.alloc();
+      if (s < 0) return;
+      var k = this.n++;
+      var a = this._rand() * Math.PI * 2, el = P.sphere ? (this._rand() - 0.5) * Math.PI : 0;
+      var sp = P.speed[0] + this._rand() * (P.speed[1] - P.speed[0]);
+      var ringR = o.r || 0;
+      if (P.ring) a = (i / count) * Math.PI * 2 + this._rand() * 0.3;
+      this.slot[k] = s;
+      this.px[k] = pos.x + (P.ring ? Math.cos(a) * ringR * 0.5 : 0);
+      this.py[k] = pos.y;
+      this.pz[k] = pos.z + (P.ring ? Math.sin(a) * ringR * 0.5 : 0);
+      this.vx[k] = red ? 0 : Math.cos(a) * Math.cos(el) * sp;
+      this.vz[k] = red ? 0 : Math.sin(a) * Math.cos(el) * sp;
+      this.vy[k] = red ? 0 : (P.sphere ? Math.sin(el) * sp : 0) + P.up * (0.7 + 0.6 * this._rand());
+      this.age[k] = 0;
+      this.life[k] = red ? 0.4 : P.life[0] + this._rand() * (P.life[1] - P.life[0]);
+      this.size[k] = (o.size || (P.size[0] + this._rand() * (P.size[1] - P.size[0])));
+      this.grow[k] = red ? 1 : (P.grow || 1);
+      this.g[k] = red ? 0 : P.g; this.drag[k] = P.drag || 0;
+      this.rot[k] = this._rand() * Math.PI * 2; this.spin[k] = red ? 0 : (P.spin || 0) * (this._rand() - 0.5) * 2;
+      this.wob[k] = red ? 0 : (P.wobble || 0);
+      var cellName = o.cell || P.cells[Math.floor(this._rand() * P.cells.length)];
+      this.cell[k] = ATL[cellName] != null ? ATL[cellName] : 0;
+      this.mode[k] = kind === 'flight' && o.to ? 2 : (P.track && o.seed != null && M && typeof M.bubbleTrack === 'function' ? 1 : 0);
+      this.seed[k] = (o.seed != null ? (o.seed >>> 0) + i * 2654435761 : 0) >>> 0;
+      this.delay[k] = o.delay || 0;
+      this.ox[k] = pos.x; this.oy[k] = pos.y; this.oz[k] = pos.z;
+      if (this.mode[k] === 1) this.life[k] = 3;          /* SLMotion.bubbleTrack decides when it pops */
+      if (this.mode[k] === 2) { this.tx[k] = o.to.x; this.ty[k] = o.to.y; this.tz[k] = o.to.z; this.life[k] = (o.dur || 0.5) + this.delay[k]; }
+      var tok = o.token || o.color || (P.member && this._rand() < P.member ? '@member' : P.cols[Math.floor(this._rand() * P.cols.length)]);
+      this.pool.set(s, this.px[k], this.py[k], this.pz[k], 0, this._col(tok), 0, this.cell[k], this.rot[k]);
+    }
+  };
+  FP.update = function (dt) {
+    var M = this.h.motion, i = 0, b = this._b.bubble;
+    while (i < this.n) {
+      var age = this.age[i] + dt;
+      if (age >= this.life[i]) {
+        this.pool.free(this.slot[i]);
+        var j = --this.n;
+        if (i !== j) this._copy(j, i);
+        continue;
+      }
+      this.age[i] = age;
+      var u = age / this.life[i], x, y, z;
+      if (this.mode[i] === 1) {
+        M.bubbleTrack(age, this.seed[i], b);
+        if (b.popped) {                                    /* pop with a little sparkle */
+          this._pop.x = this.px[i]; this._pop.y = this.py[i]; this._pop.z = this.pz[i];
+          this.age[i] = this.life[i];
+          if (!this.reduced) this.emit('glint', this._pop, 1);
+          continue;
+        }
+        x = this.ox[i] + b.x; y = this.oy[i] + b.y; z = this.oz[i] + b.z;
+        this.px[i] = x; this.py[i] = y; this.pz[i] = z;
+        this.pool.set(this.slot[i], x, y, z, b.r > 0 ? b.r * 2.6 : this.size[i], null, Math.min(1, b.a * 2), this.cell[i], 0);
+        i++;
+        continue;
+      }
+      if (this.mode[i] === 2) {
+        var f = Math.max(0, Math.min(1, (age - this.delay[i]) / Math.max(0.01, this.life[i] - this.delay[i])));
+        var e = 1 - (1 - f) * (1 - f);
+        x = this.ox[i] + (this.tx[i] - this.ox[i]) * e; y = this.oy[i] + (this.ty[i] - this.oy[i]) * e + Math.sin(Math.PI * f) * 0.6; z = this.oz[i] + (this.tz[i] - this.oz[i]) * e;
+        this.rot[i] += this.spin[i] * dt;
+        this.pool.set(this.slot[i], x, y, z, this.size[i] * (1 - 0.5 * f), null, age < this.delay[i] ? 0 : 1, this.cell[i], this.rot[i]);
+        i++;
+        continue;
+      }
+      var dr = this.drag[i] ? Math.exp(-this.drag[i] * dt) : 1;
+      this.vx[i] *= dr; this.vz[i] *= dr; this.vy[i] = this.vy[i] * dr + this.g[i] * dt;
+      this.px[i] += this.vx[i] * dt; this.py[i] += this.vy[i] * dt; this.pz[i] += this.vz[i] * dt;
+      this.rot[i] += this.spin[i] * dt;
+      x = this.px[i]; y = this.py[i]; z = this.pz[i];
+      if (this.wob[i]) { x += Math.sin(age * 5 + i) * this.wob[i]; z += Math.cos(age * 4 + i * 1.7) * this.wob[i] * 0.6; }
+      var alpha = u < 0.08 ? u / 0.08 : u > 0.65 ? (1 - u) / 0.35 : 1;
+      var size = this.size[i] * (1 + (this.grow[i] - 1) * u);
+      this.pool.set(this.slot[i], x, y, z, size, null, alpha, this.cell[i], this.rot[i]);
+      i++;
+    }
+    this.pool.commit();
+    this.halos.commit();
+    return this.n > 0;
+  };
+  var FX_FIELDS = ['px', 'py', 'pz', 'vx', 'vy', 'vz', 'age', 'life', 'size', 'grow', 'g', 'drag', 'rot', 'spin', 'wob',
+    'cell', 'slot', 'mode', 'seed', 'delay', 'ox', 'oy', 'oz', 'tx', 'ty', 'tz'];
+  FP._copy = function (j, i) {
+    for (var k = 0; k < FX_FIELDS.length; k++) this[FX_FIELDS[k]][i] = this[FX_FIELDS[k]][j];
+  };
+  FP.halo = function (key, onOff, pos, size, token) {
+    var s = this.haloKeys[key];
+    if (!onOff) { if (s != null) { this.halos.free(s); delete this.haloKeys[key]; } return; }
+    if (s == null) { s = this.halos.alloc(); if (s < 0) return; this.haloKeys[key] = s; }
+    this.halos.set(s, pos.x, pos.y, pos.z, size || 0.9, this._col(token || 'Lamp Halo'), 0.9, 0, 0);
+  };
+  FP.decal = function (key, onOff, pos, token) {
+    var i = this.decalKeys.indexOf(key), D = this.decals;
+    if (!onOff) {
+      if (i < 0) return;
+      var last = this.decalKeys.length - 1;
+      if (i !== last) {
+        this.decalKeys[i] = this.decalKeys[last]; this.decalPos[i] = this.decalPos[last];
+        D.getMatrixAt(last, this._m); D.setMatrixAt(i, this._m);
+        D.getColorAt(last, this._c); D.setColorAt(i, this._c);
+      }
+      this.decalKeys.length = last; this.decalPos.length = last;
+      D.count = last;
+      D.instanceMatrix.needsUpdate = true; D.instanceColor.needsUpdate = true;
+      return;
+    }
+    if (i < 0) { if (this.decalKeys.length >= 24) return; i = this.decalKeys.length; this.decalKeys.push(key); this.decalPos.push(null); }
+    var r = 1.4;
+    this._m.makeScale(r, 1, r).setPosition(pos.x, pos.y + 0.015, pos.z);
+    D.setMatrixAt(i, this._m);
+    var c = this._col(token || 'Lamp Warm');
+    this._c.copy(c && c.isColor ? c : this.K.col(c));
+    D.setColorAt(i, this._c);
+    D.count = this.decalKeys.length;
+    D.instanceMatrix.needsUpdate = true; D.instanceColor.needsUpdate = true;
+  };
+  FP.info = function () { return { particles: this.n, cap: this.cap, halos: Object.keys(this.haloKeys).length, decals: this.decalKeys.length }; };
+  FP.setReduced = function (on) { this.reduced = !!on; };
+  FP.setQuality = function (q) { if (q && q.particleScale) this.scale = q.particleScale; };
+  FP.clear = function () {
+    for (var i = 0; i < this.n; i++) this.pool.free(this.slot[i]);
+    this.n = 0;
+    this.pool.commit();
+  };
+  FP.dispose = function () {
+    this.pool.dispose(); this.halos.dispose();
+    if (this.decals.parent) this.decals.parent.remove(this.decals);
+    this.decals.dispose(); this.dGeo.dispose(); this.dMat.dispose();
+    this.n = 0;
+  };
+
+  /* ================================================================
+     BUILT-IN FALLBACK: EDIT — rounded cell overlay + the lifted, wobbling ghost
+     ================================================================ */
+  var CELL_VERT = [
+    'attribute vec3 aEdge;',
+    'attribute vec4 aStyle;',
+    'varying vec2 vUv;',
+    'varying vec3 vFill;',
+    'varying vec3 vEdge;',
+    'varying vec4 vStyle;',
+    'void main() {',
+    '  vUv = uv;',
+    '#ifdef USE_INSTANCING_COLOR',
+    '  vFill = instanceColor;',
+    '#else',
+    '  vFill = vec3(1.0);',
+    '#endif',
+    '  vEdge = aEdge; vStyle = aStyle;',
+    '  gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0);',
+    '}'
+  ].join('\n');
+  var CELL_FRAG = [
+    'uniform float uTime;',
+    'varying vec2 vUv;',
+    'varying vec3 vFill;',
+    'varying vec3 vEdge;',
+    'varying vec4 vStyle;',
+    'float sdRound(vec2 p, vec2 b, float r) { vec2 q = abs(p) - b + r; return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r; }',
+    'void main() {',
+    '  vec2 p = vUv - 0.5;',
+    '  float d = sdRound(p, vec2(0.46), 0.12);',
+    '  if (d > 0.0) discard;',
+    '  float edge = 1.0 - smoothstep(0.03, 0.05, -d);',
+    '  float dash = 1.0;',
+    '  if (vStyle.z > 0.5) { float s = abs(p.x) > abs(p.y) ? p.y : p.x; dash = step(0.45, fract(s * 6.0 + 0.25)); }',
+    '  float pulse = vStyle.w > 0.5 ? 0.72 + 0.28 * sin(uTime * 9.42478) : 1.0;',   /* 1.5 Hz */
+    '  float a = mix(vStyle.x, vStyle.y * dash, edge) * pulse;',
+    '  if (a < 0.01) discard;',
+    '  gl_FragColor = vec4(mix(vFill, vEdge, edge), a);',
+    '  #include <colorspace_fragment>',
+    '}'
+  ].join('\n');
+  function MiniEdit(h) {
+    var K = h.K, T = h.THREE;
+    this.h = h; this.K = K; this.T = T;
+    this.reduced = !!h.reduced;
+    var CAP = 160;
+    this.cap = CAP;
+    var geo = new T.PlaneGeometry(0.98, 0.98);
+    geo.rotateX(-Math.PI / 2);
+    this.edge = new T.InstancedBufferAttribute(new Float32Array(CAP * 3), 3);
+    this.style = new T.InstancedBufferAttribute(new Float32Array(CAP * 4), 4);
+    geo.setAttribute('aEdge', this.edge);
+    geo.setAttribute('aStyle', this.style);
+    this.geo = geo;
+    this.uni = { uTime: { value: 0 } };
+    this.mat = new T.ShaderMaterial({
+      uniforms: this.uni, vertexShader: CELL_VERT, fragmentShader: CELL_FRAG,
+      transparent: true, depthWrite: false, toneMapped: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2
+    });
+    this.cells = new T.InstancedMesh(geo, this.mat, CAP);
+    this.cells.instanceColor = new T.InstancedBufferAttribute(new Float32Array(CAP * 3).fill(1), 3);
+    this.cells.count = 0; this.cells.frustumCulled = false; this.cells.renderOrder = 3; this.cells.name = 'edit:cells';
+    this.cells.visible = false;
+    h.group.add(this.cells);
+    this.ghost = null; this.ghostKey = ''; this.ghostBoxV = null; this.ghostMats = [];
+    this.blob = K.blobs(1); this.blob.mesh.visible = false; h.group.add(this.blob.mesh);
+    this.ok = true; this.t = 0; this.pulsing = false; this.wobbled = true;
+    this._m = new T.Matrix4(); this._c = new T.Color(); this._q = new T.Quaternion(); this._e = new T.Euler(); this._p = new T.Vector3(); this._s = new T.Vector3(1, 1, 1);
+    this.cols = {};
+  }
+  var EP = MiniEdit.prototype;
+  EP._colOf = function (tok) { if (!this.cols[tok]) this.cols[tok] = this.K.col(tok); return this.cols[tok]; };
+  EP._cell = function (i, c, r, y, fill, fillA, edge, edgeA, dashed, pulse) {
+    this._m.makeTranslation(c - 7.5, y, r - 4.5);
+    this.cells.setMatrixAt(i, this._m);
+    this.cells.setColorAt(i, this._colOf(fill));
+    var e = this._colOf(edge);
+    this.edge.array[i * 3] = e.r; this.edge.array[i * 3 + 1] = e.g; this.edge.array[i * 3 + 2] = e.b;
+    var s = this.style.array;
+    s[i * 4] = fillA; s[i * 4 + 1] = edgeA; s[i * 4 + 2] = dashed ? 1 : 0; s[i * 4 + 3] = pulse ? 1 : 0;
+  };
+  EP.setState = function (s) {
+    s = s || {};
+    var G = this.h.grid, C = this.h.core, L = this.h.look, E = (L && L.EDIT) || {};
+    var mode = s.mode === 'edit' || s.mode === 'place' ? s.mode : 'play';
+    var land = s.land || {}, keys = Object.keys(land), pl = s.placing, n = 0, i;
+    var gridA = (E.grid && E.grid.opacity) || 0.55;
+    var special = {};
+    if (mode === 'place' && pl) {
+      var it = C.item(pl.id) || {};
+      var cells = Array.isArray(pl.cells) && pl.cells.length ? pl.cells : (C.fpCells ? C.fpCells(it, pl.x | 0, pl.y | 0) : []);
+      var ent = Array.isArray(pl.entrance) ? pl.entrance : (C.entranceCells ? C.entranceCells(it, pl.x | 0, pl.y | 0) : []);
+      ent.forEach(function (k) { special[k] = 'ent'; });
+      cells.forEach(function (k) { special[k] = pl.ok ? 'ok' : 'bad'; });
+    }
+    if (mode !== 'play') {
+      for (i = 0; i < keys.length && n < this.cap; i++) {
+        if (special[keys[i]]) continue;
+        var p = G.parseKey(keys[i]);
+        this._cell(n++, p.c, p.r, G.surfaceY(p.c, p.r) + 0.012, 'Cloud White', 0, 'Cloud White', gridA, true, false);
+      }
+      var self = this;
+      Object.keys(special).forEach(function (k) {
+        if (n >= self.cap) return;
+        var q = G.parseKey(k);
+        if (!G.inGrid(q.c, q.r)) return;
+        var y = (land[k] ? G.surfaceY(q.c, q.r) : 0) + 0.016;
+        var kind = special[k];
+        if (kind === 'ok') self._cell(n++, q.c, q.r, y, (E.valid && E.valid.token) || 'Success', (E.valid && E.valid.opacity) || 0.45, (E.valid && E.valid.edge) || 'Neon Cyan', 0.95, false, false);
+        else if (kind === 'bad') self._cell(n++, q.c, q.r, y, (E.invalid && E.invalid.token) || 'Error', (E.invalid && E.invalid.opacity) || 0.42, (E.invalid && E.invalid.token) || 'Error', 0.9, false, true);
+        else self._cell(n++, q.c, q.r, y, (E.entrance && E.entrance.token) || 'Star Gold', (E.entrance && E.entrance.opacity) || 0.25, (E.entrance && E.entrance.token) || 'Star Gold', 0.7, false, false);
+      });
+    }
+    this.pulsing = mode === 'place' && !!pl && !pl.ok;
+    this.cells.count = n;
+    this.cells.visible = n > 0;
+    this.cells.instanceMatrix.needsUpdate = true;
+    if (this.cells.instanceColor) this.cells.instanceColor.needsUpdate = true;
+    this.edge.needsUpdate = true; this.style.needsUpdate = true;
+    this._ghost(mode === 'place' ? s.ghost : null, pl);
+  };
+  EP._ghost = function (g, pl) {
+    var K = this.K, G = this.h.grid, E = (this.h.look && this.h.look.EDIT && this.h.look.EDIT.ghost) || {};
+    var key = g && pl ? g.id + '#' + g.stateKey : '';
+    if (key !== this.ghostKey) {
+      if (this.ghost) { this.ghost.dispose(); this.ghost = null; }
+      this.ghostKey = key;
+      if (key && g.template) {
+        var mats = this.ghostMats, patch = { transparent: true, opacity: E.opacity || 0.85, depthWrite: false };
+        this.ghost = K.batch(g.template, {
+          outlines: false, castShadow: false,
+          material: function (matKey) {
+            if (/^glow:/.test(matKey) || /^outline/.test(matKey)) return null;
+            var v = K.variant(matKey, 'ghost', patch);
+            if (mats.indexOf(v) < 0) mats.push(v);
+            return v;
+          }
+        });
+        this.h.group.add(this.ghost.group);
+      }
+    }
+    if (!this.ghost || !pl) { this.blob.mesh.visible = false; this.ghostBoxV = null; return; }
+    var it = this.h.core.item(pl.id) || {}, fp = it.fp || [1, 1], x = pl.x | 0, y = pl.y | 0;
+    var lift = E.lift || 0.25, by = 0;
+    try { by = G.baseY(pl.id, x, y); } catch (e) { by = 0; }
+    this.ghost.add('ghost', { x: x, y: y, fp: fp, baseY: by + lift });
+    this.ghost.commit();
+    this.ok = !!pl.ok;
+    var op = this.ok ? (E.opacity || 0.85) : (E.invalidOpacity || 0.5);
+    for (var i = 0; i < this.ghostMats.length; i++) this.ghostMats[i].opacity = op;
+    var cx = x + fp[0] / 2 - 8, cz = y + fp[1] / 2 - 5, sh = E.shadow || 0.7;
+    this.blob.set(0, cx, by, cz, fp[0] * 0.9 * sh, fp[1] * 0.9 * sh);
+    this.blob.mesh.count = 1; this.blob.mesh.visible = true;
+    this.blob.commit();
+    var hb = null;
+    try { hb = G.hitBox(pl.id, x, y); } catch (e) { hb = null; }
+    this.ghostBoxV = hb ? { min: [hb.min[0], hb.min[1] + lift, hb.min[2]], max: [hb.max[0], hb.max[1] + lift, hb.max[2]] } : null;
+  };
+  EP.ghostBox = function () { return this.ghostBoxV; };
+  EP.update = function (dt) {
+    if (!this.reduced) this.t += dt;               /* reduced motion: no pulse, no wobble */
+    this.uni.uTime.value = this.t;
+    var busy = !this.reduced && this.pulsing && this.cells.visible;
+    if (!this.ghost || !this.ghost.has('ghost')) return busy;
+    if (this.reduced && !this.wobbled) return busy;
+    var E = (this.h.look && this.h.look.EDIT && this.h.look.EDIT.ghost) || {};
+    var deg = this.reduced ? 0 : (E.wobbleDeg || 4) * Math.sin(this.t * Math.PI * 2 * (E.wobbleRate || 3));
+    var m = this.ghost.pivot('ghost', 'root');
+    this._e.set(0, 0, deg * Math.PI / 180, 'XYZ');
+    this._q.setFromEuler(this._e);
+    this._p.set(0, 0, 0);
+    m.compose(this._p, this._q, this._s);
+    this.ghost.commit();
+    this.wobbled = !this.reduced;              /* one last level write after reduced motion turns on */
+    return !this.reduced || busy;
+  };
+  EP.setReduced = function (on) { this.reduced = !!on; };
+  EP.dispose = function () {
+    if (this.ghost) { this.ghost.dispose(); this.ghost = null; }
+    this.blob.dispose();
+    if (this.cells.parent) this.cells.parent.remove(this.cells);
+    this.cells.dispose(); this.geo.dispose(); this.mat.dispose();
+  };
+
+  /* ================================================================
+     BUILT-IN FALLBACK: ACTORS — pet rigs and the avatar standing at free
+     cells near the house (no wandering: that is actors.js / pets-brain.js)
+     ================================================================ */
+  function MiniActors(h) {
+    this.h = h; this.K = h.K; this.T = h.THREE; this.SL3D = h.SL3D;
+    this.reduced = !!h.reduced;
+    this.pets = []; this.avatar = null; this.mode = 'play'; this.showK = 0; this.showtime = false;
+    this.t = 0; this.danceT = -1; this.danceDur = 0;
+    this.blobs = this.K.blobs(8);
+    h.group.add(this.blobs.mesh);
+    this._v = new this.T.Vector3();
+    this.user = h.user || {};
+    this.camPos = new this.T.Vector3();
+  }
+  var AP = MiniActors.prototype;
+  function accSig(acc) { acc = acc || {}; return ['hat', 'neck', 'face', 'back'].map(function (k) { return acc[k] || '-'; }).join('|'); }
+  AP._freeCells = function (v) {
+    var C = this.h.core, G = this.h.grid, land = v.land || G.landFrom(v.unlocked || ['home']);
+    var occ = {}, res = {};
+    try { var o = C.occupancy({ placed: v.placed || [] }); occ = o.occ || {}; res = o.reserved || {}; } catch (e) { occ = {}; }
+    var spot = G.avatarSpot ? G.avatarSpot(v.placed || []) : null;
+    var origin = spot ? { c: spot.c, r: spot.r } : { c: 7, r: 5 };
+    var out = Object.keys(land).filter(function (k) {
+      if (occ[k] && occ[k].layer !== 'ground') return false;
+      if (spot && k === spot.c + ',' + spot.r) return false;
+      return true;
+    }).map(function (k) { var p = G.parseKey(k); p.key = k; p.d = Math.abs(p.c - origin.c) + Math.abs(p.r - origin.r) + (res[k] ? 3 : 0); return p; });
+    out.sort(function (a, b) { return a.d - b.d || a.r - b.r || a.c - b.c; });
+    return out;
+  };
+  AP.sync = function (v) {
+    v = v || {};
+    var SL3D = this.SL3D, G = this.h.grid, tier = this.h.tier, self = this;
+    this.mode = v.mode || this.mode;
+    /* the avatar on the left entrance cell of the house */
+    var spot = G.avatarSpot ? G.avatarSpot(v.placed || []) : null, av = v.avatar;
+    var avSig = av ? (av.color || '') + '|' + (av.avatar || '') : '';
+    if (this.avatar && (!spot || !av || this.avatar.sig !== avSig)) { this.avatar.rig.dispose(); this.avatar = null; }
+    if (!this.avatar && spot && av && typeof SL3D.makeAvatar === 'function') {
+      try {
+        var rig = SL3D.makeAvatar({ color: av.color, emoji: av.avatar }, tier);
+        this.h.group.add(rig.root);
+        this.avatar = { rig: rig, sig: avSig, x: 0, y: 0, z: 0, waveT: -1, heartAt: -1 };
+      } catch (e) { this.avatar = null; }
+    }
+    if (this.avatar && spot) { this.avatar.x = spot.x - 0.18; this.avatar.y = spot.y; this.avatar.z = spot.z; }
+    /* pets */
+    var want = (v.pets || []).filter(function (p) { return p && /^pet_/.test(p.id); });
+    this.pets = this.pets.filter(function (p) {
+      var keep = want.some(function (w) { return w.id === p.id && accSig(w.acc) === p.accSig; });
+      if (!keep) p.rig.dispose();
+      return keep;
+    });
+    var free = this._freeCells(v), used = {};
+    this.pets.forEach(function (p) { if (free.some(function (f) { return f.key === p.cell; })) used[p.cell] = 1; else p.cell = null; });
+    want.forEach(function (w, i) {
+      var p = null;
+      for (var j = 0; j < self.pets.length; j++) if (self.pets[j].id === w.id) p = self.pets[j];
+      if (!p && typeof SL3D.makeRig === 'function') {
+        try {
+          var rg = SL3D.makeRig(w.id, w.acc || {}, tier);
+          self.h.group.add(rg.root);
+          p = { id: w.id, rig: rg, accSig: accSig(w.acc), cell: null, x: 0, y: 0, z: 0, yaw: 0, hopT: -1, active: false, perf: null, phase: (i * 0.37) % 1 };
+          self.pets.push(p);
+        } catch (e) { p = null; }
+      }
+      if (!p) return;
+      p.active = !!w.active; p.name = w.name;
+      if (!p.cell) {
+        var pick = null;
+        for (var k = i * 2; k < free.length && !pick; k++) if (!used[free[k].key]) pick = free[k];
+        for (var k2 = 0; k2 < free.length && !pick; k2++) if (!used[free[k2].key]) pick = free[k2];
+        if (pick) { used[pick.key] = 1; p.cell = pick.key; }
+      }
+      if (p.cell) {
+        var q = G.parseKey(p.cell), ctr = G.cellCenter(q.c, q.r);
+        p.x = ctr.x; p.y = G.surfaceY(q.c, q.r); p.z = ctr.z;
+        p.yaw = ((q.c * 13 + q.r * 7) % 9 - 4) * 6;
+      }
+    });
+  };
+  AP.update = function (dt, t, ctx) {
+    this.t += dt;
+    var red = this.reduced, k = 0, cam = ctx && ctx.camera;
+    if (cam) this.camPos.setFromMatrixPosition(cam.matrixWorld);
+    var dancing = this.danceT >= 0;
+    if (dancing) { this.danceT += dt; if (this.danceT >= this.danceDur) { this.danceT = -1; dancing = false; } }
+    var opt = { reduced: red, bpm: 118, speed: 0, rate: 1 };
+    for (var i = 0; i < this.pets.length; i++) {
+      var p = this.pets[i], r = p.rig, y = p.y, yaw = p.yaw, pitch = 0;
+      if (p.perf) {
+        var pf = p.perf;
+        pf.t += dt;
+        var M = this.h.motion, o = pf.out;
+        if (pf.t < pf.lead) {
+          var u = pf.t / pf.lead;
+          r.root.position.set(p.x + (pf.tx - p.x) * u, p.y + (pf.ty - p.y) * u + 0.25 * Math.sin(Math.PI * u), p.z + (pf.tz - p.z) * u);
+          r.play('hop', (pf.t % 0.45), opt);
+        } else if (M && pf.t < pf.end) {
+          M.sample('bounce', pf.t, o, { lead: pf.lead, reduced: red });
+          r.root.position.set(pf.tx, pf.ty + Math.max(0, o.petY || 0), pf.tz);
+          r.play('jump', 0.1, opt);
+          r.root.rotation.set((o.flip || 0) * Math.PI * 2, 0, 0);
+          k = 1;
+          continue;
+        } else if (pf.t < pf.end + 0.6) {
+          var w = (pf.t - pf.end) / 0.6;
+          r.root.rotation.set(0, 0, 0);
+          r.root.position.set(pf.tx + (p.x - pf.tx) * w, p.y + (pf.ty - p.y) * (1 - w) + 0.25 * Math.sin(Math.PI * w), pf.tz + (p.z - pf.tz) * w);
+          r.play('hop', pf.t % 0.45, opt);
+        } else { p.perf = null; r.root.rotation.set(0, 0, 0); }
+        k = 1;
+        if (p.perf) continue;
+      }
+      var clip = 'idle', ct = this.t + p.phase * 4;
+      if (dancing) { clip = 'dance'; ct = this.danceT; }
+      else if (this.mode !== 'play') clip = 'sit';
+      else if (p.hopT >= 0) { p.hopT += dt; clip = 'hop'; ct = p.hopT; if (p.hopT > 0.45) p.hopT = -1; }
+      if (cam && (dancing || this.mode === 'play')) {
+        var face = Math.atan2(this.camPos.x - p.x, this.camPos.z - p.z) / Math.PI * 180;
+        yaw = dancing ? face : face + p.yaw;            /* roughly toward the viewer, never in lockstep */
+      }
+      r.play(clip, ct, opt);
+      r.root.position.set(p.x, y, p.z);
+      r.root.rotation.set(pitch, yaw * Math.PI / 180, 0);
+      if (typeof r.setShow === 'function') r.setShow(this.showK);
+      if (!red || dancing || p.hopT >= 0) k = 1;
+    }
+    var A = this.avatar;
+    if (A) {
+      var ac = 'idle', at = this.t;
+      if (dancing) { ac = 'dance'; at = this.danceT; }
+      else if (A.waveT >= 0) { A.waveT += dt; ac = A.waveT < 0.9 ? 'wave' : 'cheer'; at = A.waveT; if (A.waveT >= 0.9 && A.heartAt < 0) { A.heartAt = this.t; this._v.set(A.x, A.y + 1.15, A.z + 0.1); this.h.emit('heart', this._v, 1, { token: 'Neon Pink' }); this.h.sfx('pop', 0.8, 0, A.x); } if (A.waveT > 1.5) A.waveT = -1; }
+      A.rig.play(ac, at, opt);
+      A.rig.root.position.set(A.x, A.y, A.z);
+      if (cam) A.rig.root.rotation.set(0, Math.atan2(this.camPos.x - A.x, this.camPos.z - A.z) * 0.6, 0);
+      if (typeof A.rig.setWand === 'function') A.rig.setWand(this.showK > 0.5 || dancing);
+      if (typeof A.rig.setShow === 'function') A.rig.setShow(this.showK);
+      if (!red || A.waveT >= 0) k = 1;
+    }
+    /* blob shadows */
+    var n = 0, B = this.blobs;
+    for (var j = 0; j < this.pets.length && n < 7; j++) {
+      var pp = this.pets[j], rp = pp.rig.root.position, lift = Math.max(0, rp.y - pp.y), s = 0.42 * Math.max(0.5, 1 - lift * 0.6);
+      B.set(n++, rp.x, pp.y, rp.z, s, s * 0.8);
+    }
+    if (A && n < 8) B.set(n++, A.x, A.y, A.z, 0.5, 0.42);
+    B.mesh.count = n;
+    B.commit();
+    return !!k;
+  };
+  AP.pick = function (o, d) {
+    var best = Infinity, tgt = null, i, R = (this.h.grid && this.h.grid.PET_HIT_R) || 0.4;
+    function sphere(x, y, z, r) {
+      var ox = o.x - x, oy = o.y - y, oz = o.z - z, b = ox * d.x + oy * d.y + oz * d.z, c = ox * ox + oy * oy + oz * oz - r * r, disc = b * b - c;
+      if (disc < 0) return -1;
+      var t = -b - Math.sqrt(disc);
+      return t >= 0 ? t : (-b + Math.sqrt(disc) >= 0 ? 0 : -1);
+    }
+    for (i = 0; i < this.pets.length; i++) {
+      var p = this.pets[i].rig.root.position, t = sphere(p.x, p.y + 0.3, p.z, R);
+      if (t >= 0 && t < best) { best = t; tgt = 'pet:' + this.pets[i].id; }
+    }
+    if (this.avatar) {
+      var ta = sphere(this.avatar.x, this.avatar.y + 0.45, this.avatar.z, 0.45);
+      if (ta >= 0 && ta < best) { best = ta; tgt = 'me'; }
+    }
+    return tgt ? { target: tgt, t: best } : null;
+  };
+  AP.anchor = function (target, out) {
+    out = out || new this.T.Vector3();
+    if (target === 'me' || target === 'avatar') {
+      if (!this.avatar) return null;
+      return out.set(this.avatar.x, this.avatar.y + 1.15, this.avatar.z);
+    }
+    var id = String(target).replace(/^pet:/, '');
+    for (var i = 0; i < this.pets.length; i++) if (this.pets[i].id === id) { var p = this.pets[i].rig.root.position; return out.set(p.x, p.y + 0.85, p.z); }
+    return null;
+  };
+  AP.emote = function (target, kind) {
+    if (target === 'me' || target === 'avatar') {
+      if (this.avatar) { this.avatar.waveT = 0; this.avatar.heartAt = -1; }
+      return;
+    }
+    var id = String(target).replace(/^pet:/, '');
+    for (var i = 0; i < this.pets.length; i++) {
+      var p = this.pets[i];
+      if (p.id !== id) continue;
+      p.hopT = 0;
+      var pos = p.rig.root.position;
+      this._v.set(pos.x + 0.12, pos.y + 0.8, pos.z + 0.1);
+      this.h.emit(kind || 'emote', this._v, 1);
+      if (id === 'pet_dragon') { this._v.y += 0.05; this.h.emit('sparkle', this._v, 6); }
+    }
+  };
+  AP.active = function () { return this.pets.some(function (p) { return p.active; }) || this.pets.length > 0; };
+  /* the trampoline: the active pet hops over, bounces with SLMotion 'bounce', hops back */
+  AP.perform = function (kind, uid) {
+    if (kind !== 'trampoline' || this.reduced) return 0;
+    var p = null, i;
+    for (i = 0; i < this.pets.length; i++) if (this.pets[i].active) p = this.pets[i];
+    if (!p) p = this.pets[0];
+    if (!p) return 0;
+    var seat = this.h.itemPoint(uid, 'seat', new this.T.Vector3()) || this.h.itemPoint(uid, 'top', new this.T.Vector3());
+    if (!seat) return 0;
+    var M = this.h.motion, B = (M && M.BOUNCE) || { length: 2.2, maxLead: 1.2 };
+    var dist = Math.hypot(seat.x - p.x, seat.z - p.z), lead = Math.max(0.4, Math.min(B.maxLead || 1.2, dist / 1.6));
+    p.perf = { t: 0, lead: lead, end: lead + (B.length || 2.2), tx: seat.x, ty: seat.y, tz: seat.z, out: {} };
+    return lead;
+  };
+  AP.dance = function (o) {
+    o = o || {};
+    var sec = (o.counts || 8) * 60 / (o.bpm || 118);
+    this.danceT = 0; this.danceDur = this.reduced ? 1.2 : sec;
+    return this.danceDur + 0.2;
+  };
+  AP.info = function () {
+    return { pets: this.pets.map(function (p) { return { id: p.id, cell: p.cell, active: p.active }; }), avatar: !!this.avatar, dancing: this.danceT >= 0 };
+  };
+  AP.setShow = function (k) { this.showK = k; };
+  AP.setShowtime = function (on) { this.showtime = !!on; };
+  AP.setMode = function (m) { this.mode = m; };
+  AP.setReduced = function (on) { this.reduced = !!on; };
+  AP.setUser = function (u) { this.user = u || {}; };
+  AP.dispose = function () {
+    this.pets.forEach(function (p) { p.rig.dispose(); });
+    this.pets = [];
+    if (this.avatar) { this.avatar.rig.dispose(); this.avatar = null; }
+    this.blobs.dispose();
+  };
+
+  /* ---------------- install + the pure exports ---------------- */
+  if (HAS_DOM) install();
+
+  return {
+    VERSION: VERSION, OCCLUDE_U: OCCLUDE_U, DANCE_EVERY_BARS: DANCE_EVERY_BARS, DANCE_BPM: DANCE_BPM,
+    normMode: normMode, batchKey: batchKey, diffPlaced: diffPlaced, litChanges: litChanges, rayBox: rayBox,
+    choosePick: choosePick, dragTarget: dragTarget, itemLabel: itemLabel, petLabel: petLabel,
+    nextDance: nextDance, modelAct: modelAct, toScreen: toScreen, FX_PRESETS: FX_PRESETS
+  };
+}));

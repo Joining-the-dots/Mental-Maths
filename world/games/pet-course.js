@@ -1363,13 +1363,46 @@
     var gone = false;
     return { update: function (round, phase) { h.update(round, phase); }, dispose: function () { if (!gone) { gone = true; hudLive--; } h.dispose(); } };
   }
+  /* the beat game's own 🎵 (world/music.js gameToggle): default ON, so the song — the level —
+     plays even when the child turned the island music off; null when SLMusic can't say */
+  function musicApi() { return HAS_WIN && window.SLMusic && typeof window.SLMusic.gameEnabled === 'function' ? window.SLMusic : null; }
+  /* the cfg the shell is showing right now (menu → tutorial → rounds), so the tutorial cards
+     can match this child's Fan support */
+  var shownCfg = null;
+  /* what Fan support does, in full (an option-level note, for a shell that shows one) */
+  var FAN_NOTE = 'Fan support: ' + T.FAN_HEARTS + ' hearts instead of ' + T.HEARTS + ', your hearts refill and you get a free bubble shield at every Stage Door, and glow rings show when to jump.';
   function menuOptions(cfg) {
-    var on = fanFor(cfg);
-    return [{ id: 'fan', label: '🎟️ Fan support', value: on, options: [{ value: true, label: 'ON' }, { value: false, label: 'OFF' }] }];
+    if (cfg && !cfg.demo) shownCfg = cfg;
+    var on = fanFor(cfg), out = [
+      /* the label itself says what it does: today's shell shows option notes only for locked chips */
+      { id: 'fan', label: '🎟️ Fan support — ' + T.FAN_HEARTS + ' hearts + a free shield at each door', value: on,
+        note: FAN_NOTE, options: [{ value: true, label: 'ON' }, { value: false, label: 'OFF' }] }
+    ];
+    var mus = musicApi();
+    if (mus) {
+      var mOn = true;
+      try { mOn = !!mus.gameEnabled('course'); } catch (e) { mOn = true; }
+      out.push({ id: 'music', label: '🎵 Music (jump on the beat!)', value: mOn, options: [{ value: true, label: 'ON' }, { value: false, label: 'OFF' }] });
+    }
+    return out;
   }
   function setOption(cfg, id, value) {
+    if (id === 'music') { var mus = musicApi(); if (mus) { try { mus.setGameEnabled('course', !!value); } catch (e) { /* not saved */ } } return; }
     if (id !== 'fan') return;
     var m = sess(cfg); m.fan = !!value; m.manual = true;
+  }
+  /* the How-to-play cards for this child: the heart count is the one their run will have, and
+     Fan support (ON for a very first run) gets its own card */
+  function tutorialFor(cfg) {
+    var fan = fanFor(cfg), n = fan ? T.FAN_HEARTS : T.HEARTS;
+    var cards = [
+      ['👆', 'Tap or Space to jump. Tap again in the air to double jump.'],
+      ['⬇️', 'LED gate ahead? Hold ⬇ SLIDE to slip under it.'],
+      ['💔', 'Bumps cost a heart and spill treats. Lose all ' + n + ' and the show ends!'],
+      ['💗', 'Bounce on pink cushions. Jump on the beat for PERFECT!']
+    ];
+    if (fan) cards.push(['🎟️', 'Fan support is ON: ' + n + ' hearts, a refill and a free bubble shield at every Stage Door, and glow rings that show when to jump. Turn it off in the menu any time.']);
+    return cards;
   }
   function pbText(rec) {
     if (!rec || rec.score == null) return '';
@@ -1380,12 +1413,12 @@
 
   var def = {
     key: 'course', title: 'Debut Run', emoji: '🐾', LW: LW, LH: LH, defaultVariant: 'course_meadow',
-    tutorial: [
-      ['👆', 'Tap or Space to jump. Tap again in the air to double jump.'],
-      ['⬇️', 'LED gate ahead? Hold ⬇ SLIDE to slip under it.'],
-      ['💔', 'Bumps cost a heart and spill treats. Lose all 3 and the show ends!'],
-      ['💗', 'Bounce on pink cushions. Jump on the beat for PERFECT!']
-    ],
+    /* the shell reads def.tutorial when it shows the cards (always after the menu, which hands us
+       its cfg): a getter, so the cards match THIS child's run — 5 hearts and a Fan support card
+       on a very first run, 3 hearts otherwise. tutorialFor(cfg) is the same, for a shell that
+       passes cfg itself. */
+    get tutorial() { return tutorialFor(shownCfg); },
+    tutorialFor: tutorialFor,
     controls: [{ id: 'slide', label: '⬇ SLIDE', side: 'left', aria: 'Slide' }, { id: 'jump', label: '⬆ JUMP', side: 'right', wide: true, aria: 'Jump' }],
     keys: { ' ': 'jump', 'ArrowUp': 'jump', 'w': 'jump', 'W': 'jump', 'Enter': 'jump', 'ArrowDown': 'slide', 's': 'slide', 'S': 'slide' },
     tapAction: 'jump',

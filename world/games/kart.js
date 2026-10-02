@@ -23,25 +23,38 @@
   var OPT_KEY = 'slKart:v1:', MODES = ['race', 'solo'], CAMS = ['chase', 'stage', 'map'];
   function pbMs(cfg, variant) { var r = cfg && cfg.pb && cfg.pb['kart:' + variant]; return r && r.ms != null ? r.ms : null; }
   function hasKartPb(cfg) { return Object.keys((cfg && cfg.pb) || {}).some(function (k) { return k.indexOf('kart:') === 0 && cfg.pb[k] && cfg.pb[k].ms != null; }); }
+  /* this page session's copy of each profile's options, for when localStorage is blocked */
+  var memo = {};
   function loadOpts(cfg) {
     cfg = cfg || {};
     if (cfg.kartOpts) return cfg.kartOpts;
-    var stored = null;
-    if (cfg.profileKey != null) { try { stored = JSON.parse(localStorage.getItem(OPT_KEY + cfg.profileKey) || 'null'); } catch (e) { stored = null; } }
-    /* Easy Drive defaults on for a profile that has never set a kart time */
-    var o = { mode: 'race', cls: 0, easy: cfg.profileKey != null ? !hasKartPb(cfg) : false, cam: 'chase' };
-    if (stored && typeof stored === 'object') {
+    var stored = null, key = cfg.profileKey;
+    if (key != null) {
+      var raw, readable = true;
+      try { raw = localStorage.getItem(OPT_KEY + key); } catch (e) { readable = false; }
+      if (readable) { try { stored = JSON.parse(raw || 'null'); } catch (e) { stored = null; } }
+      else stored = memo[key] || null;
+    }
+    /* Easy Drive defaults on for a profile that has never set a kart time … */
+    var o = { mode: 'race', cls: 0, easy: key != null ? !hasKartPb(cfg) : false, cam: 'chase' };
+    var valid = !!stored && typeof stored === 'object';
+    if (valid) {
       if (MODES.indexOf(stored.mode) >= 0) o.mode = stored.mode;
       if (stored.cls === 0 || stored.cls === 1 || stored.cls === 2) o.cls = stored.cls;
       if (typeof stored.easy === 'boolean') o.easy = stored.easy;
       if (CAMS.indexOf(stored.cam) >= 0) o.cam = stored.cam;
     }
+    /* … and from then on it is the child's last choice (spec-kart MENU OPTIONS): the default is
+       saved the first time it is read, so finishing race 1 (which sets a kart time) never turns
+       Easy Drive off behind their back — only the menu chip does */
+    if (key != null && !(valid && typeof stored.easy === 'boolean')) { saveOpts(cfg, o); return o; }
     cfg.kartOpts = o;
     return o;
   }
   function saveOpts(cfg, o) {
     cfg.kartOpts = o;
     if (cfg.profileKey == null) return;
+    memo[cfg.profileKey] = { mode: o.mode, cls: o.cls, easy: o.easy, cam: o.cam };
     try { localStorage.setItem(OPT_KEY + cfg.profileKey, JSON.stringify(o)); } catch (e) {}
   }
   /* the chosen class, or Trainee while it is still locked on this track */
@@ -54,9 +67,23 @@
     cfg.onSelectVariant = function (vid) { cfg.variant = vid; if (orig) return orig.apply(this, arguments); };
     cfg._kartVarHook = true;
   }
+  /* Does this launch show the 3D view (so the menu offers the Camera row)? The shell renders the
+     FIRST menu before it mounts the view, so the answer can't wait for the view's canvas:
+       cfg.view3d true / false — set by kart-3d.js once its view is up / gone (or failed);
+       otherwise — the shell's own can3d() test: WebGL2 + the 3D loader, and 3D not switched off
+       for this device or session. A load that later fails sets cfg.view3d = false (or
+       'slNo3dGame'), so the next menu drops the row again. */
+  function expect3d(cfg) {
+    if (!cfg || cfg.demo || !def.view3d) return false;
+    if (typeof window === 'undefined') return false;
+    try { if (localStorage.getItem('slNo3D') === '1' || sessionStorage.getItem('slNo3dGame') === '1') return false; } catch (e) { /* storage blocked: no opinion */ }
+    return typeof window.WebGL2RenderingContext !== 'undefined' && typeof window.slLoad3D === 'function';
+  }
   function view3dOn(cfg) {
     if (cfg && cfg.view3d === true) return true;
-    try { return typeof document !== 'undefined' && !!document.querySelector('.slg .slg-gl'); } catch (e) { return false; }
+    if (cfg && cfg.view3d === false) return false;
+    try { if (typeof document !== 'undefined' && document.querySelector('.slg .slg-gl')) return true; } catch (e) { /* no DOM */ }
+    return expect3d(cfg);
   }
 
   /* ---------- engine purr: one original synth voice for the player kart ---------- */

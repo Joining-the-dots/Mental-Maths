@@ -850,7 +850,7 @@ var APP_LABELS = { maths:'🔢 Maths', spell:'🪄 Spelling', flags:'🏳️ Fla
     if (mins && [10, 15, 20, 30, 45, 60, 90, 120].indexOf(mins) < 0) h += '<option value="' + mins + '" selected>' + mins + ' minutes</option>';
     h += '</select> <button class="btn-act" data-arcsave="' + esc(code) + '">Save</button>' +
       '<div class="muted" style="margin-top:4px;">Learning is never limited — only the island games. Kids get a 1-minute warning; at the limit they can finish the round they’re in (at most 2 extra minutes), then games wait until midnight. ' +
-      'Resets at midnight ' + esc(tz) + '. Applies to children signed in to this family; a signed-out device can’t see the family setting.</div></div>';
+      'Resets at midnight ' + esc(tz) + '. Once a child’s device has picked this up (they were signed in once after you saved), it keeps applying there — signed out, offline, or on another player on that device. A device that has never been signed in to the family has no limit. Island ⭐ are the same ⭐ as the 🎁 Shop’s real prizes.</div></div>';
     if (kids.length) {
       h += '<div style="margin-top:8px;"><b>Today</b>: ';
       h += kids.map(function (d) {

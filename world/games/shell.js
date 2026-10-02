@@ -34,7 +34,7 @@
       '.slg-pad{width:clamp(64px,13vmin,104px);height:clamp(64px,13vmin,104px);border-radius:50%;border:3px solid rgba(255,255,255,.55);background:rgba(255,255,255,.18);color:#fff;font:inherit;font-weight:800;font-size:clamp(14px,3vmin,22px);touch-action:none;cursor:pointer;}',
       '.slg-pad.wide{width:clamp(110px,22vmin,170px);border-radius:999px;}',
       '.slg-pad.on{background:rgba(255,210,63,.6);border-color:#ffd23f;}',
-      '.slg-scr{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;background:rgba(19,12,46,.86);text-align:center;padding:18px;z-index:5;overflow:auto;}',
+      '.slg-scr{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;background:rgba(19,12,46,.94);text-align:center;padding:18px;z-index:5;overflow:auto;}',
       '.slg-scr h2{margin:0;font-size:clamp(26px,5vw,40px);line-height:1.1;}',
       '.slg-scr p{margin:0;max-width:560px;font-size:17px;color:#e3dcff;font-family:system-ui,sans-serif;font-weight:600;}',
       '.slg-scr .row{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;}',
@@ -192,7 +192,7 @@
         phase = 'results'; stopLoop(); renderTouch(false); setBanner(null);
         if (cfg.arcade) cfg.arcade.flush();
         var res = round.result();
-        var sc = setScreen('<h2>' + esc(round.summaryTitle ? round.summaryTitle() : 'Finished!') + '</h2><div class="slg-big">' + esc(round.summaryBig()) + '</div><p>' + esc(round.summaryText ? round.summaryText() : '') + '</p><div id="slgPbSlot" style="min-height:40px;"></div><p style="font-size:13px;opacity:.75;margin:0 0 8px;">🎮 Game scores are just for fun — they never use up your ⭐.</p>' +
+        var sc = setScreen('<h2>' + esc(round.summaryTitle ? round.summaryTitle() : 'Finished!') + '</h2><div class="slg-big">' + esc(round.summaryBig()) + '</div><p>' + esc(round.summaryText ? round.summaryText() : '') + '</p><div id="slgPbSlot" style="min-height:40px;"></div><p style="font-size:13px;opacity:.75;margin:0 0 8px;">🎮 Game scores don’t earn or spend ⭐ — learning earns ⭐.</p>' +
           '<div class="row"><button class="slg-b go" type="button" id="slgAgain">↻ Play again</button>' +
           ((cfg.ownedVariants || []).length > 1 ? '<button class="slg-b" type="button" id="slgMenu">🗺️ Change course</button>' : '') +
           '<button class="slg-b alt" type="button" id="slgHome">🏝️ Back to my island</button></div>');
@@ -213,13 +213,20 @@
           }).catch(function () {});
         }
         var st = cfg.arcade && cfg.arcade.status();
-        if (st && st.exhausted) { var again = sc.querySelector('#slgAgain'); again.textContent = '⏱️ Time’s up for today'; again.disabled = true; again.classList.remove('go'); }
+        var again = sc.querySelector('#slgAgain');
+        if (st && st.exhausted) { again.textContent = '⏱️ Time’s up for today'; again.disabled = true; again.dataset.stay = '1'; again.classList.remove('go'); }
+        /* a finger still tapping the game mustn't hit Play again / Exit by accident */
+        sc.querySelectorAll('button').forEach(function (b) { if (!b.disabled) { b.disabled = true; setTimeout(function () { if (!b.dataset.stay) b.disabled = false; }, 650); } });
       }
       function pause() {
         if (phase !== 'playing' && phase !== 'countdown') return;
         var was = phase; phase = 'paused'; stopLoop(); held = {}; renderTouchHeld();
         var sc = setScreen('<div style="font-size:54px;">⏸</div><h2>Paused</h2><p>Take your time.</p><div class="row"><button class="slg-b go" type="button" id="slgResume">▶ Resume</button><button class="slg-b" type="button" id="slgRestart">↻ Restart</button><button class="slg-b alt" type="button" id="slgQuit">🏝️ Exit</button></div>');
-        sc.querySelector('#slgResume').addEventListener('click', function () { setScreen(null); phase = was; startLoop(); });
+        sc.querySelector('#slgResume').addEventListener('click', function () {
+          setScreen(null);
+          if (was === 'playing') { phase = 'countdown'; countT = Math.max(countT, 2); } else phase = was;
+          startLoop();
+        });
         sc.querySelector('#slgRestart').addEventListener('click', beginRound);
         sc.querySelector('#slgQuit').addEventListener('click', exit);
       }
@@ -258,7 +265,8 @@
           if (st && st.limited) {
             if (st.exhausted && !graceNote) { graceNote = true; setBanner('⏱️ Time’s up after this round — finish it off!'); }
             else if (!st.exhausted && st.warn && !banner) setBanner('⏱️ About 1 minute of game time left today');
-            if (st.usedSec >= hardStop) { round.forceEnd(); }
+            var ceiling = Math.min(hardStop, st.hardStopAtUsed != null ? st.hardStopAtUsed : Infinity);
+            if (st.usedSec >= ceiling) { round.forceEnd(); }
           }
         }
         if (round.done) finishRound();
@@ -296,9 +304,9 @@
         if (e.key === 'Escape' || e.key === 'p' || e.key === 'P') { if (phase === 'playing' || phase === 'countdown') { e.preventDefault(); pause(); } return; }
         var id = keyMap[e.key];
         if (!id) return;
+        if (phase !== 'playing' && phase !== 'countdown') return;   /* let Enter/Space press the focused button */
         e.preventDefault();
-        if (phase !== 'playing') return;
-        if (!held[id]) { held[id] = true; if (round && round.input) round.input(id, true); renderTouchHeld(); }
+        if (!held[id]) { held[id] = true; if (phase === 'playing' && round && round.input) round.input(id, true); renderTouchHeld(); }
       }, sig);
       window.addEventListener('keyup', function (e) {
         var id = keyMap[e.key]; if (!id) return;
@@ -324,7 +332,7 @@
         def.controls.forEach(function (c) {
           var b = el('button', 'slg-pad' + (c.wide ? ' wide' : ''), c.label);
           b.type = 'button'; b.dataset.ctl = c.id; b.setAttribute('aria-label', c.aria || c.label);
-          function down(e) { e.preventDefault(); try { b.setPointerCapture(e.pointerId); } catch (er) {} if (phase !== 'playing') return; held[c.id] = true; if (round && round.input) round.input(c.id, true); renderTouchHeld(); }
+          function down(e) { e.preventDefault(); try { b.setPointerCapture(e.pointerId); } catch (er) {} if (phase !== 'playing' && phase !== 'countdown') return; held[c.id] = true; if (phase === 'playing' && round && round.input) round.input(c.id, true); renderTouchHeld(); }
           function up(e) { e.preventDefault(); if (held[c.id]) { held[c.id] = false; if (round && round.input) round.input(c.id, false); renderTouchHeld(); } }
           b.addEventListener('pointerdown', down, sig);
           b.addEventListener('pointerup', up, sig);
@@ -395,7 +403,7 @@
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         round.render(ctx);
         if (t < (opts.seconds || 7) && !round.done && !stopped) raf = requestAnimationFrame(loop);
-        else { ctx.fillStyle = 'rgba(19,12,46,.6)'; ctx.fillRect(0, 0, def.LW, def.LH); ctx.fillStyle = '#fff'; ctx.font = '800 40px "Baloo 2", sans-serif'; ctx.textAlign = 'center'; ctx.fillText('Buy it to play!', def.LW / 2, def.LH / 2); }
+        else { ctx.fillStyle = 'rgba(19,12,46,.6)'; ctx.fillRect(0, 0, def.LW, def.LH); ctx.fillStyle = '#fff'; ctx.font = '800 40px "Baloo 2", sans-serif'; ctx.textAlign = 'center'; ctx.fillText(opts.endText || 'Buy it to play!', def.LW / 2, def.LH / 2); }
       }
       return function stop() { stopped = true; if (raf) cancelAnimationFrame(raf); };
     }

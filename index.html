@@ -9026,6 +9026,8 @@ function setActiveApp(name) {
   if (onepctEl) onepctEl.classList.toggle('hidden', name !== 'onepct');
   const worldEl = document.getElementById('worldView');
   if (worldEl) worldEl.classList.toggle('hidden', name !== 'world');
+  /* leaving the island: drop any half-done placement (its keys) and park the pets */
+  if (name !== 'world' && window.SLWorld && window.SLWorld.onHide) { try { window.SLWorld.onHide(); } catch (e) {} }
   if (isMaths) {
     setMathsTab(getMathsTab());
   } else {

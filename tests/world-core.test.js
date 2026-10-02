@@ -431,3 +431,60 @@ test('merge: personal bests and arcade minutes come from both sides, whichever i
   assert.equal(m.world.pb['course:course_meadow'].score, 900, 'guest-only PB kept');
   assert.deepEqual(m.world.arcade.days, { '2026-10-01': 300, '2026-10-02': 60 });
 });
+
+/* ---- regressions from the independent review (2026-10-02) ---- */
+test('save that silently fails: live memory is rolled back, and the retry charges once', () => {
+  /* the real app adapter mirrors the write into live memory, then saveState() swallows storage errors */
+  const live = { activeUser: 'Mia', users: { Mia: kid(900) } };
+  let disk = JSON.stringify(live), diskWorks = false;
+  const adapter = () => {
+    let prev = null;
+    return {
+      read: () => JSON.parse(disk),
+      write: (st) => { prev = {}; for (const k of Object.keys(st)) { prev[k] = live[k]; live[k] = st[k]; } if (diskWorks) disk = JSON.stringify(live); },
+      rollback: () => { if (!prev) return; for (const k of Object.keys(prev)) live[k] = prev[k]; prev = null; }
+    };
+  };
+  const t = tx();
+  const r1 = C.transactPurchase(adapter(), 'Mia', 'fountain', { tx: t });
+  assert.equal(r1.code, 'not_saved');
+  assert.equal(live.users.Mia.points, 900, 'memory not left showing the debit');
+  assert.equal(C.owns(live.users.Mia.world, 'fountain'), false, 'memory not left owning the item');
+  diskWorks = true;
+  const r2 = C.transactPurchase(adapter(), 'Mia', 'fountain', { tx: t });   /* "Try again" reuses the tx */
+  assert.equal(r2.ok, true);
+  assert.equal(JSON.parse(disk).users.Mia.points, 400);
+  assert.equal(live.users.Mia.points, 400);
+});
+
+test('merge: a one-off item bought on BOTH forks is kept once and paid for once', () => {
+  const base = kid(1000);
+  const n = JSON.parse(JSON.stringify(base)), g = JSON.parse(JSON.stringify(base));
+  C.purchase(n, 'pet_kitten', { tx: 'tx_fork_n_kitten', ms: Date.parse('2026-10-02T10:00:00Z') });
+  C.purchase(g, 'pet_kitten', { tx: 'tx_fork_g_kitten', ms: Date.parse('2026-10-02T11:00:00Z') });
+  const m = C.mergeWorlds(n, g);
+  assert.equal(m.points, 400);
+  assert.equal(m.world.owned.pet_kitten, 1);
+  assert.equal(m.world.ledger.filter(e => e.item === 'pet_kitten').length, 1);
+  assert.equal(C.mergeWorlds({ points: m.points, world: m.world }, g).points, 400, 'stable on re-merge');
+});
+
+test('goals: a locked item can never be the savings goal (points at the prerequisite instead)', () => {
+  const u = kid(5000);
+  const r = C.setGoal(u, 'track_beach');
+  assert.equal(r.ok, false); assert.equal(r.code, 'locked'); assert.equal(r.needs, 'att_kart');
+  assert.equal(C.setGoal(u, 'att_kart').ok, true);
+  /* an old save that already has a locked goal never claims "you can buy it" */
+  u.world.goal = 'track_beach';
+  assert.equal(C.goalProgress(u).ready, false);
+});
+
+test('pet names: the curly apostrophe tablets type is accepted', () => {
+  assert.deepEqual(C.validatePetName('Mia’s pup'), { ok: true, name: "Mia's pup" });
+});
+
+test('arcade: the status carries its hard-stop ceiling so a limit that arrives mid-round still ends it', () => {
+  const st = C.arcadeStatus({ dailyMinutes: 10, tz: 'Europe/London' }, 0);
+  assert.equal(st.hardStopAtUsed, 600 + C.ARCADE.graceMaxSec);
+  assert.equal(C.arcadeStatus(null, 0).hardStopAtUsed, Infinity);
+});

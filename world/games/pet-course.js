@@ -146,7 +146,7 @@
       summaryTitle: function () { return s.dist >= course.length ? '🏁 Finished!' : 'Round over'; },
       /* 'score', never 'pts' — arcade scores must not look like reward points */
       summaryBig: function () { return 'Score ' + String(round.score()).replace(/\B(?=(\d{3})+(?!\d))/g, ','); },
-      summaryText: function () { return '🦴 ' + s.treats + ' treats · 🌟 ' + s.stars + ' stars · ' + (s.hits ? s.hits + ' bump' + (s.hits > 1 ? 's' : '') : 'no bumps — perfect run! (+600)'); },
+      summaryText: function () { return '🦴 ' + s.treats + ' treats · 🌟 ' + s.stars + ' stars · ' + (s.hits ? s.hits + ' bump' + (s.hits > 1 ? 's' : '') : 'no bumps — perfect run! (+600 score)'); },
       /* autopilot: used for the shop preview and the fairness tests */
       autoHeld: {},
       autopilot: function () { var a = autopilotWants(s, course); if (a) round.input('jump', true); },

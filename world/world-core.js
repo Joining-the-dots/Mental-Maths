@@ -239,7 +239,8 @@
   var BAD_WORDS = ['poo', 'poop', 'wee', 'bum', 'butt', 'fart', 'damn', 'hell', 'crap', 'shit', 'fuck', 'piss', 'arse', 'ass', 'dick', 'cock', 'tit', 'tits', 'bitch', 'bastard', 'willy', 'sex', 'kill', 'stupid', 'idiot', 'dumb', 'hate', 'loser'];
   var BAD_INSIDE = ['fuck', 'shit', 'bitch', 'bastard', 'fart', 'poop'];
   function validatePetName(raw) {
-    var s = String(raw == null ? '' : raw).replace(/\s+/g, ' ').trim();
+    /* tablets type a curly ’ by default — treat it as a plain apostrophe */
+    var s = String(raw == null ? '' : raw).replace(/[‘’ʼ]/g, "'").replace(/\s+/g, ' ').trim();
     if (!s) return { ok: false, reason: 'Give your pet a name first.' };
     if (s.length > 14) return { ok: false, reason: 'Names can be up to 14 letters long.' };
     if (!/^[A-Za-zÀ-ÖØ-öø-ÿ][A-Za-zÀ-ÖØ-öø-ÿ' -]*$/.test(s)) return { ok: false, reason: 'Use letters only (spaces, - and ’ are fine too).' };
@@ -495,11 +496,14 @@
     ensureWorld(u);
     var res = mutate(u);
     if (!res || !res.ok || res.replay) return res;
-    try { store.write(st); } catch (e) { return { ok: false, code: 'write_failed', reason: 'Couldn’t save — nothing was spent. Please try again.' }; }
+    /* a store that mirrors writes into live memory must offer rollback(): a save
+       that fails or doesn't read back leaves memory exactly as it was */
+    function undo() { try { if (store.rollback) store.rollback(); } catch (e) {} }
+    try { store.write(st); } catch (e) { undo(); return { ok: false, code: 'write_failed', reason: 'Couldn’t save — nothing was spent. Please try again.' }; }
     var back;
     try { back = store.read(); } catch (e) { back = null; }
     var bu = back && back.users && back.users[userName];
-    if (!bu || !verify(bu)) return { ok: false, code: 'not_saved', reason: 'Couldn’t save — nothing was spent. Please try again.' };
+    if (!bu || !verify(bu)) { undo(); return { ok: false, code: 'not_saved', reason: 'Couldn’t save — nothing was spent. Please try again.' }; }
     res.state = st;
     return res;
   }
@@ -514,6 +518,9 @@
     if (id === null) { w.goal = null; w.goalNotified = null; touch(w, ms); return { ok: true }; }
     if (!it || it.retired || it.starter || it.included) return { ok: false };
     if (!isRepeatable(it) && owns(w, id)) return { ok: false, reason: 'You already own this.' };
+    /* a goal must be buyable once saved for — a locked item can't be the goal */
+    var missing = (it.requires || []).filter(function (r) { return !owns(w, r); });
+    if (missing.length) return { ok: false, code: 'locked', needs: missing[0], reason: 'You need the ' + (item(missing[0]) || {}).name + ' first.' };
     w.goal = id; w.goalNotified = null; touch(w, ms);
     return { ok: true };
   }
@@ -521,7 +528,8 @@
     var w = ensureWorld(u), it = w.goal ? item(w.goal) : null;
     if (!it) return null;
     var bal = isInt(u.points) ? u.points : 0;
-    return { id: it.id, name: it.name, price: it.price, have: bal, pct: it.price ? Math.min(100, Math.floor(bal * 100 / it.price)) : 100, ready: bal >= it.price, need: Math.max(0, it.price - bal) };
+    var locked = (it.requires || []).some(function (r) { return !owns(w, r); });   /* old saves only */
+    return { id: it.id, name: it.name, price: it.price, have: bal, pct: it.price ? Math.min(100, Math.floor(bal * 100 / it.price)) : 100, ready: !locked && bal >= it.price, locked: locked, need: Math.max(0, it.price - bal) };
   }
 
   /* ---------------- normalise: no impossible states survive a load ---------------- */
@@ -620,9 +628,9 @@
   /* cfg = families/{code}.arcade = {dailyMinutes, tz} (owner-written) */
   function arcadeStatus(cfg, usedSec) {
     var mins = cfg && isInt(cfg.dailyMinutes) && cfg.dailyMinutes > 0 ? cfg.dailyMinutes : null;
-    if (!mins) return { limited: false, usedSec: usedSec, leftSec: Infinity, exhausted: false, warn: false };
+    if (!mins) return { limited: false, usedSec: usedSec, leftSec: Infinity, exhausted: false, warn: false, hardStopAtUsed: Infinity };
     var limitSec = mins * 60, left = Math.max(0, limitSec - usedSec);
-    return { limited: true, limitSec: limitSec, usedSec: usedSec, leftSec: left, exhausted: left <= 0, warn: left > 0 && left <= ARCADE.warnSec };
+    return { limited: true, limitSec: limitSec, usedSec: usedSec, leftSec: left, exhausted: left <= 0, warn: left > 0 && left <= ARCADE.warnSec, hardStopAtUsed: limitSec + ARCADE.graceMaxSec };
   }
   /* Called when a round wants to start. A round may only START with time
      left; once started it may finish, but never beyond limit + graceMaxSec
@@ -670,17 +678,22 @@
     /* a side without a world simply spent nothing here */
     var nw = ensureWorld({ world: nU.world ? JSON.parse(JSON.stringify(nU.world)) : emptyWorld() });
     var gw = ensureWorld({ world: gU.world ? JSON.parse(JSON.stringify(gU.world)) : emptyWorld() });
-    var byTx = {}, spentUnion = 0;
-    nw.ledger.concat(gw.ledger).forEach(function (e) {
-      if (!e || !e.tx || byTx[e.tx]) return;
-      byTx[e.tx] = e;
+    var byTx = {};
+    nw.ledger.concat(gw.ledger).forEach(function (e) { if (e && e.tx && !byTx[e.tx]) byTx[e.tx] = e; });
+    /* a one-off item bought on BOTH forks is kept once and paid for once (earliest row wins) */
+    var rows = Object.keys(byTx).map(function (k) { return byTx[k]; }).sort(function (a, b) { return (a.at || '') < (b.at || '') ? -1 : (a.at || '') > (b.at || '') ? 1 : (a.tx < b.tx ? -1 : 1); });
+    var seenUnique = {}, spentUnion = 0;
+    rows = rows.filter(function (e) {
+      var it = item(e.item);
+      if (it && !isRepeatable(it)) { if (seenUnique[e.item]) return false; seenUnique[e.item] = 1; }
       spentUnion += isInt(e.price) ? e.price : 0;
+      return true;
     });
     /* a trimmed ledger (synced copies keep the last 1000 rows) can under-count */
     spentUnion = Math.max(spentUnion, nw.spent || 0, gw.spent || 0);
     var baseSrc = !nU.world ? gw : !gU.world ? nw : ((nw.updatedAt || '') >= (gw.updatedAt || '') ? nw : gw);
     var base = JSON.parse(JSON.stringify(baseSrc));
-    base.ledger = Object.keys(byTx).map(function (k) { return byTx[k]; }).sort(function (a, b) { return (a.at || '') < (b.at || '') ? -1 : 1; });
+    base.ledger = rows;
     base.owned = {};
     [nw, gw].forEach(function (src) { Object.keys(src.owned || {}).forEach(function (id) { base.owned[id] = Math.max(base.owned[id] || 0, src.owned[id] || 0); }); });
     /* repeatable copies: count purchases in the union ledger + starter copies */

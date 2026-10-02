@@ -31,11 +31,20 @@
 
   /* ---------------- commit protocol (lock + fresh read + verify) ---------------- */
   function adapter() {
+    var prev = null;
     return {
       read: function () { return JSON.parse(localStorage.getItem(STORAGE_KEY)); },
       write: function (st) {
-        Object.keys(st).forEach(function (k) { state[k] = st[k]; });
+        /* saveState() swallows storage errors, so remember what memory held:
+           if the read-back can't find the change, rollback() puts it all back */
+        prev = {};
+        Object.keys(st).forEach(function (k) { prev[k] = state[k]; state[k] = st[k]; });
         saveState();
+      },
+      rollback: function () {
+        if (!prev) return;
+        Object.keys(prev).forEach(function (k) { state[k] = prev[k]; });
+        prev = null;
       }
     };
   }
@@ -82,7 +91,10 @@
   var pendingTx = {};                    /* itemId -> tx kept for retries */
   var buying = false, confirming = false;
   var petTimers = [];
-  var serverOffset = 0, serverOffsetKnown = false;
+  /* "now" for the game-time day: server time (HTTP Date header) or the clock at
+     load, carried forward by the monotonic performance clock — so changing the
+     device clock while the app is open can't jump to a fresh day */
+  var timeAnchor = { at: Date.now(), perf: (window.performance && performance.now) ? performance.now() : 0, server: false };
 
   /* ---------------- styles ---------------- */
   function injectCss() {
@@ -119,6 +131,7 @@
       '.slw-dot{position:absolute;right:8%;top:30%;width:clamp(14px,1.8vw,22px);height:clamp(14px,1.8vw,22px);border-radius:50%;background:#fff;border:2px solid #6c5ce7;display:flex;align-items:center;justify-content:center;font-size:clamp(8px,1vw,12px);pointer-events:none;}',
       '.slw-new{position:absolute;left:50%;top:-4%;transform:translateX(-50%);background:#ff5c8a;color:#fff;font-weight:800;font-size:clamp(9px,1.1vw,12px);border-radius:999px;padding:1px 8px;pointer-events:none;animation:slwPulse 1.4s infinite;}',
       '.slw-new.base{top:auto;bottom:2%;}',
+      '@media (pointer: coarse){.slw-kbhint{display:none;}}',
       '@keyframes slwPulse{0%,100%{transform:translateX(-50%) scale(1);}50%{transform:translateX(-50%) scale(1.08);}}',
       '.slw-sign{position:absolute;transform:translate(-50%,-50%);background:rgba(40,34,70,.85);color:#fff;border:2px solid rgba(255,255,255,.6);border-radius:14px;padding:6px 10px;font:inherit;font-weight:800;font-size:clamp(10px,1.3vw,14px);cursor:pointer;z-index:900;text-align:center;line-height:1.2;}',
       '.slw-pet{position:absolute;z-index:500;width:' + pct(90, STAGE_W) + ';cursor:pointer;background:none;border:none;padding:0;transition-property:left,top;transition-timing-function:linear;}',
@@ -179,7 +192,7 @@
       '.chip.own{background:#e5f6ea;color:#1e7d3f;}.chip.lock{background:#efeaf9;color:#5a4fd0;}.chip.rep{background:#fff3d9;color:#8a6100;}.chip.uni{background:#e8f4ff;color:#1f5f9e;}',
       '.slw-card .row{display:flex;gap:6px;margin-top:auto;}',
       '.slw-buy{flex:1;border:none;border-radius:12px;padding:9px 8px;font:inherit;font-weight:800;font-size:14px;cursor:pointer;background:linear-gradient(135deg,#2ecc71,#27ae60);color:#fff;min-height:42px;}',
-      '.slw-buy[disabled]{background:#e4e0ee;color:#8a84a3;cursor:not-allowed;}',
+      '.slw-buy[disabled]{background:#e4e0ee;color:#4f4870;cursor:not-allowed;}',
       '.slw-goalbtn{border:2px solid #ffd166;background:#fffaf0;border-radius:12px;padding:6px 9px;font:inherit;font-weight:800;cursor:pointer;min-height:42px;}',
       '.slw-goalbtn.on{background:#ffd166;}',
       '.slw-need{font-size:12px;font-weight:800;color:#8a6100;}',
@@ -207,7 +220,7 @@
       '.slw-game h3{margin:0;font-family:"Baloo 2",sans-serif;font-size:20px;}',
       '.slw-game .pb{font-size:13px;font-weight:700;opacity:.9;}',
       '.slw-game .slw-btn{margin-top:auto;background:#fff;border-color:#fff;color:#2c2550;}',
-      '.slw-game.locked{background:#9a95b3 !important;}',
+      '.slw-game.locked{background:#5f5a7a !important;}',
       '.slw-time{background:#fff8e1;border:2px solid #ffd166;border-radius:12px;padding:8px 12px;font-size:13.5px;font-weight:700;color:#6b5a22;margin-bottom:10px;}',
       '.slw-loading{padding:40px;text-align:center;font-weight:800;color:#6c5ce7;}',
       '@media (max-width:640px){.slw-pts{font-size:16px;padding:6px 12px;}.slw-btn{padding:7px 9px;font-size:13px;}.slw-learn{font-size:14px;padding:8px 12px;}}',
@@ -384,7 +397,7 @@
       b.type = 'button'; b.className = 'slw-pet';
       b.setAttribute('aria-label', p.name + ' the ' + C.item(p.id).name.toLowerCase() + (w.activePet === p.id ? ' (runs your obstacle course)' : ''));
       var frame = 0;
-      b.innerHTML = '<span class="nm">' + esc(p.name) + (w.activePet === p.id ? ' ⭐' : '') + '</span>' + ART.pet(p.id, { acc: p.acc, frame: 0 });
+      b.innerHTML = '<span class="nm">' + esc(p.name) + (w.activePet === p.id ? ' 🏅' : '') + '</span>' + ART.pet(p.id, { acc: p.acc, frame: 0 });
       var cell = free[(i * 7 + 3) % free.length].split(',');
       var pos = { x: +cell[0], y: +cell[1] };
       function zFor(y) { return 10 + (Math.round(y) + 1) * 10 + 5; }
@@ -424,7 +437,7 @@
         pos = { x: tx, y: ty };
         petTimers.push(setTimeout(wander, dur * 1000 + 1500 + Math.random() * 3500));
       }
-      petTimers.push(setTimeout(wander, 800 + i * 900));
+      if (!reduced) petTimers.push(setTimeout(wander, 800 + i * 900));
     });
   }
 
@@ -492,7 +505,7 @@
         (chk.ok ? 'Tap a square to move it, then tap ✅' : '⚠️ ' + esc(chk.reason)) + '</div>' +
         '<button class="slw-btn on big" type="button" id="slwPlaceOk"' + (chk.ok ? '' : ' disabled') + '>✅ Put ' + esc(it.name.toLowerCase()) + ' here</button>' +
         '<button class="slw-btn big" type="button" id="slwPlaceCancel">' + (placing.uid ? '✖ Cancel move' : '📦 Keep it for later') + '</button>' +
-        '<span style="font-size:12px;color:#7c8696;font-weight:700;">Keyboard: arrows move · Enter places · Esc cancels</span></div>';
+        '<span class="slw-kbhint" style="font-size:12px;color:#7c8696;font-weight:700;">Keyboard: arrows move · Enter places · Esc cancels</span></div>';
       $('#slwPlaceOk', bar).addEventListener('click', confirmPlacement);
       $('#slwPlaceCancel', bar).addEventListener('click', cancelPlacement);
       return;
@@ -562,9 +575,13 @@
       });
     });
   }
+  function islandOnScreen() {
+    var wv = document.getElementById('worldView');
+    return !!(wv && !wv.classList.contains('hidden') && !document.querySelector('.slw-ov,.slw-cele,.slg'));
+  }
   function placeKeys(e) {
     if (mode !== 'place' || !placing) return;
-    if (document.querySelector('.slw-ov')) return;
+    if (!islandOnScreen()) return;   /* never steal keys from maths, games or dialogs */
     var k = e.key, moved = true;
     if (k === 'ArrowLeft') placing.x = Math.max(0, placing.x - 1);
     else if (k === 'ArrowRight') placing.x = Math.min(COLS - 1, placing.x + 1);
@@ -628,9 +645,18 @@
     ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-modal', 'true');
     ov.setAttribute('data-sl-modal', '1');   /* the app's own pop-ups (Daily 30 etc.) wait for this */
     ov.innerHTML = '<div class="slw-sheet' + (opts.small ? ' small' : '') + '"><button class="slw-x" type="button" aria-label="Close">✕</button>' + inner + '</div>';
+    var opener = document.activeElement;
+    var h2 = ov.querySelector('h2'); if (h2) { h2.id = h2.id || ('slwH' + (++ovSeq)); ov.setAttribute('aria-labelledby', h2.id); }
     document.body.appendChild(ov);
-    function close() { ov.remove(); document.removeEventListener('keydown', onKey); if (opts.onClose) opts.onClose(); }
-    function onKey(e) { if (e.key === 'Escape') close(); }
+    function close() {
+      ov.remove(); document.removeEventListener('keydown', onKey); if (opts.onClose) opts.onClose();
+      try { if (opener && document.body.contains(opener) && opener.focus) opener.focus(); } catch (e) {}
+    }
+    function onKey(e) {
+      if (e.key !== 'Escape') return;
+      var all = document.querySelectorAll('.slw-ov');
+      if (all[all.length - 1] === ov && !document.querySelector('.slw-cele')) close();   /* one Esc = one dialog */
+    }
     ov.addEventListener('click', function (e) { if (e.target === ov) close(); });
     $('.slw-x', ov).addEventListener('click', close);
     document.addEventListener('keydown', onKey);
@@ -639,6 +665,7 @@
     ov._close = close;
     return ov;
   }
+  var ovSeq = 0;
   function closeAllOverlays() { document.querySelectorAll('.slw-ov,.slw-cele').forEach(function (o) { if (o._close) o._close(); else o.remove(); }); }
   function toast(msg, action) {
     var old = document.querySelector('.slw-toast'); if (old) old.remove();
@@ -675,7 +702,7 @@
   function openShop(cat) {
     if (cat) shopCat = cat;
     var u = me();
-    var ov = overlay('<h2>🛍️ Island Shop</h2><div style="font-weight:800;color:#6b5a22;">You have ⭐ <span id="slwShopPts">' + fmt(u.points) + '</span> to spend · earn more by learning 📚</div><div class="slw-cats" id="slwCats"></div><div class="slw-err" id="slwShopErr" role="alert"></div><div class="slw-grid" id="slwShopGrid"></div>');
+    var ov = overlay('<h2>🛍️ Island Shop</h2><div style="font-weight:800;color:#6b5a22;">You have ⭐ <span id="slwShopPts">' + fmt(u.points) + '</span> to spend · earn more by learning 📚 · same ⭐ as the 🎁 Shop</div><div class="slw-cats" id="slwCats"></div><div class="slw-err" id="slwShopErr" role="alert"></div><div class="slw-grid" id="slwShopGrid"></div>');
     function paint() {
       var u2 = me();
       $('#slwShopPts', ov).textContent = fmt(u2.points);
@@ -719,8 +746,12 @@
       if (r.ok) { var fw = C.ensureWorld(u); fw.goalPrice = it ? it.price : null; fw.goalName = it ? it.name : null; }
       return r;
     }).then(function (res) {
-      if (res && res.ok) { toast(target ? '🎯 New goal: ' + it.name + '!' : 'Goal cleared.'); draw(); }
-      else if (res && res.reason) toast(res.reason);
+      if (res && res.ok) { toast(target ? '🎯 New goal: ' + it.name + '!' : 'Goal cleared.'); draw(); return; }
+      if (res && res.code === 'locked' && res.needs && W().goal !== res.needs) {
+        var pre = C.item(res.needs);
+        return toggleGoal(res.needs).then(function () { toast('🎯 First you need the ' + pre.name + ' — that’s your goal now!'); });
+      }
+      if (res && res.reason) toast(res.reason);
     });
   }
   function useOwned(it) {
@@ -758,7 +789,8 @@
       '<div class="slw-err" id="slwItemErr" role="alert"></div>' +
       '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
         (s.state === 'owned'
-          ? ((it.kind === 'style' || it.kind === 'cosmetic' || it.kind === 'variant') ? '<button class="slw-buy" type="button" id="slwUse">Use it</button>' : '')
+          ? ((it.kind === 'style' || it.kind === 'cosmetic' || it.kind === 'variant') ? '<button class="slw-buy" type="button" id="slwUse">Use it</button>' : '') +
+            (it.kind === 'attraction' && it.game ? '<button class="slw-buy" type="button" id="slwPlayNow">▶ Play</button>' : '')
           : '<button class="slw-buy" type="button" id="slwBuyNow"' + (s.state !== 'affordable' ? ' disabled' : '') + '>' + (s.state === 'affordable' ? 'Buy for ⭐ ' + fmt(it.price) : s.state === 'locked' ? '🔒 Locked' : 'Not enough ⭐ yet') + '</button>' +
             '<button class="slw-goalbtn' + (w.goal === id ? ' on' : '') + '" type="button" id="slwGoalNow">🎯 ' + (w.goal === id ? 'My goal ✓' : 'Make it my goal') + '</button>') +
         (demoGame ? '<button class="slw-btn" type="button" id="slwDemo">▶ Watch a preview</button>' : '') +
@@ -767,13 +799,14 @@
     if (bn) bn.addEventListener('click', function () { buyFlow(it, bn, $('#slwItemErr', ov), function (ok) { if (ok) ov._close(); }); });
     var gn = $('#slwGoalNow', ov); if (gn) gn.addEventListener('click', function () { toggleGoal(id).then(function () { ov._close(); }); });
     var un = $('#slwUse', ov); if (un) un.addEventListener('click', function () { useOwned(it); ov._close(); });
+    var pn = $('#slwPlayNow', ov); if (pn) pn.addEventListener('click', function () { ov._close(); closeAllOverlays(); launch(it.game); });
     var dm = $('#slwDemo', ov);
     if (dm) dm.addEventListener('click', function () {
       dm.disabled = true;
       loadGame(demoGame).then(function () {
         var host = $('#slwBig', ov); if (!host) return;
         host.innerHTML = '';
-        var stop = window.SLGames[demoGame].demo(host, { variant: it.kind === 'variant' ? it.id : null, world: W(), seconds: 7 });
+        var stop = window.SLGames[demoGame].demo(host, { variant: it.kind === 'variant' ? it.id : null, world: W(), seconds: 7, endText: s.state === 'owned' ? 'It’s yours — play it on your island!' : 'Buy it to play!' });
         var prevClose = ov._close;
         ov._close = function () { try { stop(); } catch (e) {} prevClose(); };
         setTimeout(function () { dm.disabled = false; }, 7500);
@@ -815,6 +848,7 @@
     if (it.price >= C.ECONOMY.confirmAt) {
       var c = overlay('<h2>Buy ' + esc(it.name) + '?</h2><div class="big" style="width:140px;margin:8px auto;">' + ART.icon(it.id, artState(W())) + '</div>' +
         '<p style="font-weight:700;">It costs <b>⭐ ' + fmt(it.price) + '</b>. You’ll have <b>⭐ ' + fmt((u.points || 0) - it.price) + '</b> left.</p>' +
+        '<p style="font-size:13px;font-weight:700;color:#6b6390;margin-top:-4px;">These are the same ⭐ you save for real prizes in the 🎁 Shop.</p>' +
         '<div style="display:flex;gap:8px;justify-content:center;"><button class="slw-btn big" type="button" id="slwNo">Not yet</button><button class="slw-buy" type="button" id="slwYes" style="flex:0 0 auto;padding:10px 22px;">Yes, buy it!</button></div>', { small: true, onClose: function () { confirming = false; } });
       confirming = true;
       $('#slwNo', c).addEventListener('click', function () { c._close(); });
@@ -876,7 +910,10 @@
     if (o.sfx) sample(o.sfx, 0.8);
     try { if (!reduced && typeof popConfetti === 'function') { popConfetti(); setTimeout(popConfetti, 300); } } catch (e) {}
     function close() { cel.remove(); document.removeEventListener('keydown', onKey); }
-    function onKey(e) { if (e.key === 'Escape' || e.key === 'Enter') close(); }
+    function onKey(e) {
+      if (e.key === 'Escape') close();
+      else if (e.key === 'Enter' && !(document.activeElement && cel.contains(document.activeElement) && document.activeElement.tagName === 'BUTTON')) close();
+    }
     document.addEventListener('keydown', onKey);
     cel._close = close;
     cel.querySelectorAll('[data-b]').forEach(function (b) {
@@ -919,7 +956,7 @@
       var it = C.item(p.id);
       html += '<div class="slw-card" style="margin-bottom:10px;"><div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">' +
         '<div style="width:120px;">' + ART.pet(p.id, { acc: p.acc }) + '</div>' +
-        '<div style="flex:1;min-width:200px;"><div class="nm">' + esc(p.name) + ' <span style="font-weight:700;color:#7c8696;">the ' + esc(it.name.toLowerCase()) + '</span>' + (w.activePet === p.id ? ' ⭐' : '') + '</div>' +
+        '<div style="flex:1;min-width:200px;"><div class="nm">' + esc(p.name) + ' <span style="font-weight:700;color:#7c8696;">the ' + esc(it.name.toLowerCase()) + '</span>' + (w.activePet === p.id ? ' 🏅' : '') + '</div>' +
         '<label style="font-size:12px;font-weight:800;color:#4a3f75;">New name <input data-name="' + p.id + '" maxlength="14" value="' + esc(p.name) + '" style="font:inherit;padding:6px 8px;border:2px solid #d9d2ee;border-radius:10px;width:140px;"></label> ' +
         '<button class="slw-btn" type="button" data-rename="' + p.id + '">Save name</button> ' +
         (w.activePet === p.id ? '' : '<button class="slw-btn" type="button" data-active="' + p.id + '">⭐ Run the course</button>') +
@@ -970,7 +1007,7 @@
     var slides = [
       ['🏝️', 'This is your island!', 'It’s all yours — with a home, a pet and an obstacle course to play.'],
       ['📚 ➜ ⭐', 'Learn to earn', 'Every time you practise maths, spelling or flags, you earn ⭐ points.'],
-      ['⭐ ➜ 🌴', 'Make it amazing', 'Spend ⭐ in the shop on trees, pets, a football pitch, a kart track and more.']
+      ['⭐ ➜ 🌴', 'Make it amazing', 'Spend ⭐ on trees, pets, a football pitch, a kart track and more. They’re the same ⭐ as the 🎁 Shop’s real prizes — so choose what you’d love most!']
     ];
     var i = 0;
     var ov = overlay('<div class="slw-intro"><div class="card" style="margin:0 auto;" id="slwIntro"></div></div>', { small: true, onClose: finish });
@@ -999,42 +1036,60 @@
 
   /* ---------------- arcade time (parent limit) ---------------- */
   var qaArcade = null;   /* QA mode only: can IMPOSE a test limit, never lift a family one */
+  var CFG_KEY = 'slArcadeCfg';
+  function cleanCfg(a) {
+    if (!a || typeof a !== 'object') return null;
+    var m = +a.dailyMinutes;
+    return { dailyMinutes: (m > 0 && m <= 1440) ? Math.round(m) : 0, tz: typeof a.tz === 'string' ? a.tz.slice(0, 64) : 'Europe/London', setAt: +a.setAt || 0 };
+  }
   function familyArcadeCfg() {
-    var real = null;
+    var live = null, u = me();
     try {
       var cs = window.cloudState;
-      var u = me();
-      if (cs && cs.doc && cs.doc.familyCode && u && cs.boundName === u.name) {
-        var a = window.slFamilyCfg && window.slFamilyCfg.arcade;
-        real = a && typeof a === 'object' ? a : null;
-      }
-    } catch (e) { real = null; }
-    return real || qaArcade;
+      if (cs && cs.doc && cs.doc.familyCode && u && cs.boundName === u.name) live = cleanCfg(window.slFamilyCfg && window.slFamilyCfg.arcade);
+    } catch (e) { live = null; }
+    var dev = null; try { dev = cleanCfg(JSON.parse(localStorage.getItem(CFG_KEY) || 'null')); } catch (e) {}
+    var prof = null; try { prof = cleanCfg(u && u.world && u.world.arcadeCfg); } catch (e) {}
+    if (live) {
+      /* remember the parent's latest setting; only a newer owner setting replaces it */
+      if (!dev || live.setAt >= dev.setAt) { try { localStorage.setItem(CFG_KEY, JSON.stringify(live)); } catch (e) {} dev = live; }
+      if (u && u.world && (!prof || live.setAt > prof.setAt || live.dailyMinutes !== prof.dailyMinutes)) { u.world.arcadeCfg = live; try { saveState(); } catch (e) {} }
+      return live.dailyMinutes ? live : qaArcade;
+    }
+    /* signed out / offline / another profile on this device: the newest remembered setting applies */
+    var best = [prof, dev].filter(Boolean).sort(function (a, b) { return b.setAt - a.setAt; })[0];
+    if (best && best.dailyMinutes) return best;
+    return qaArcade;
   }
-  function nowMs() { return Date.now() + (serverOffsetKnown ? serverOffset : 0); }
+  function perfNow() { return (window.performance && performance.now) ? performance.now() : Date.now(); }
+  function nowMs() { return timeAnchor.at + (perfNow() - timeAnchor.perf); }
+  var measuring = false;
   function measureServerTime() {
-    if (serverOffsetKnown) return;
+    if (measuring) return;
+    measuring = true;
     try {
-      var t0 = Date.now();
-      fetch(location.pathname + '?t=' + t0, { method: 'HEAD', cache: 'no-store' }).then(function (r) {
+      var p0 = perfNow();
+      fetch(location.pathname + '?t=' + Date.now(), { method: 'HEAD', cache: 'no-store' }).then(function (r) {
+        measuring = false;
         var d = r.headers.get('Date'); if (!d) return;
         var srv = Date.parse(d); if (!isFinite(srv)) return;
-        var t1 = Date.now();
-        serverOffset = srv + 500 - (t0 + t1) / 2;      /* Date header has 1 s resolution */
-        serverOffsetKnown = true;
-      }).catch(function () {});
-    } catch (e) {}
+        var p1 = perfNow();
+        timeAnchor = { at: srv + 500, perf: (p0 + p1) / 2, server: true };   /* Date header has 1 s resolution */
+      }).catch(function () { measuring = false; });
+    } catch (e) { measuring = false; }
   }
-  function localKey(cfg) {
-    var cs = window.cloudState;
-    return 'slArcade:' + ((cs && cs.doc && cs.doc.familyCode) || 'local') + ':' + String(state.activeUser || '').toLowerCase();
-  }
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) measureServerTime(); });
+  function localKey() { return 'slArcade:' + String(state.activeUser || '').toLowerCase(); }
   function arcadeState() {
     var cfg = familyArcadeCfg();
     var tz = (cfg && cfg.tz) || 'Europe/London';
     var day = C.dayKey(nowMs(), tz);
-    var w = W(), used = C.arcadeUsed(w, day);
-    try { var lk = JSON.parse(localStorage.getItem(localKey()) || 'null'); if (lk && lk.d === day && lk.s > used) used = lk.s; } catch (e) {}
+    var w = W(), lk = null;
+    try { lk = JSON.parse(localStorage.getItem(localKey()) || 'null'); } catch (e) {}
+    var latest = Object.keys((w && w.arcade && w.arcade.days) || {}).concat(lk && lk.d ? [lk.d] : []).sort().pop();
+    if (latest && day < latest) day = latest;
+    var used = C.arcadeUsed(w, day);
+    if (lk && lk.d === day && lk.s > used) used = lk.s;
     return { cfg: cfg, day: day, used: used, status: C.arcadeStatus(cfg, used) };
   }
   var sinceMirror = 0;
@@ -1080,7 +1135,7 @@
     Object.keys(w.pb).forEach(function (k) {
       if (k.indexOf(game + ':') !== 0) return;
       var rec = w.pb[k], vid = k.split(':')[1], it = C.item(vid);
-      out.push((it ? it.name : 'Best') + ': ' + (rec.ms != null ? (rec.ms / 1000).toFixed(2) + 's' : fmt(rec.score)));
+      out.push((it ? it.name : 'Best') + ': ' + (rec.ms != null ? (rec.ms / 1000).toFixed(2) + 's' : 'score ' + fmt(rec.score)));
     });
     return out.length ? '🏆 ' + out.join(' · ') : 'No best yet — set one!';
   }
@@ -1103,6 +1158,7 @@
     /* ownership gate — every entry point (island, menu, URL) comes through here */
     if (!C.owns(w, G.att)) { openItem(G.att); return; }
     if (running) return;
+    if (placing) { placing = null; document.removeEventListener('keydown', placeKeys); mode = 'play'; draw(); }
     var st = arcadeState();
     if (C.roundGate(st.status).allowed === false) {
       var ov = overlay('<h2>⏱️ That’s all the game time for today</h2><p style="font-weight:700;">Your grown-up set ' + Math.round(st.status.limitSec / 60) + ' minutes of island games a day. Your games are still yours — come back tomorrow!</p><button class="slw-btn big on" type="button" id="slwToLearn">📚 Learning is open — let’s go</button>', { small: true });
@@ -1150,6 +1206,14 @@
     });
   }
 
+  /* ---------------- leaving the island tab ---------------- */
+  function onHide() {
+    if (placing) { placing = null; document.removeEventListener('keydown', placeKeys); }
+    mode = 'play'; selectedUid = null;
+    stopPets();
+    renderedFor = null;
+  }
+
   /* ---------------- profile switches / external changes ---------------- */
   function onUserChanged() {
     if (!root || !document.getElementById('worldView') || document.getElementById('worldView').classList.contains('hidden')) { renderedFor = null; return; }
@@ -1170,13 +1234,14 @@
     render: render,
     onUserChanged: onUserChanged,
     onPointsChanged: onPointsChanged,
+    onHide: onHide,
     renderedFor: function () { return renderedFor; },
     launch: launch,
     openShop: openShop,
     openItem: openItem,
     _qa: function () {
       try { if (localStorage.getItem('slQaMode') !== '1') return null; } catch (e) { return null; }
-      return { C: C, commit: commit, commitPurchase: commitPurchase, arcadeState: arcadeState, arcadeTick: arcadeTick, state: function () { return { mode: mode, placing: placing, selectedUid: selectedUid, running: running }; }, setServerOffset: function (ms) { serverOffset = ms; serverOffsetKnown = true; }, setArcadeCfg: function (cfg) { qaArcade = cfg || null; } };
+      return { C: C, commit: commit, commitPurchase: commitPurchase, arcadeState: arcadeState, arcadeTick: arcadeTick, state: function () { return { mode: mode, placing: placing, selectedUid: selectedUid, running: running }; }, setServerOffset: function (ms) { timeAnchor = { at: Date.now() + ms, perf: perfNow(), server: true }; }, setArcadeCfg: function (cfg) { qaArcade = cfg || null; } };
     }
   };
 })();

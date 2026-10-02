@@ -13,7 +13,9 @@
   var Shell = (typeof window !== 'undefined') ? window.SLGameShell : null;
   var LW = 960, LH = 540;
   var POST_L = 250, POST_R = 710, BAR = 150, LINE = 340, MID = 480;
-  var AIM_X0 = 196, AIM_X1 = 764, AIM_Y0 = 108, AIM_Y1 = 332;
+  var AIM_X0 = 222, AIM_X1 = 738, AIM_Y0 = 126, AIM_Y1 = 332;
+  /* even-speed back-and-forth (a sine wave lingers at its ends, which are misses) */
+  function tri(ph) { var f = ((ph / (Math.PI * 2)) % 1 + 1) % 1; return f < 0.5 ? f * 4 - 1 : 3 - f * 4; }
   var SHOTS = 8;
   var REACH = {
     stay:  { x0: MID - 88, x1: MID + 88, y0: 172 },
@@ -65,11 +67,11 @@
           if (s.readyT > 0.9) s.phase = 'aimX';
         } else if (s.phase === 'aimX') {
           s.sweepX += dt * sp * Math.PI * 2;
-          s.ax = (AIM_X0 + AIM_X1) / 2 + Math.sin(s.sweepX) * (AIM_X1 - AIM_X0) / 2;
+          s.ax = (AIM_X0 + AIM_X1) / 2 + tri(s.sweepX) * (AIM_X1 - AIM_X0) / 2;
           s.lean = Math.min(1, s.lean + dt * 1.2);
         } else if (s.phase === 'aimY') {
           s.sweepY += dt * sp * 1.1 * Math.PI * 2;
-          s.ay = (AIM_Y0 + AIM_Y1) / 2 + Math.cos(s.sweepY) * (AIM_Y1 - AIM_Y0) / 2;
+          s.ay = (AIM_Y0 + AIM_Y1) / 2 + tri(s.sweepY + Math.PI / 2) * (AIM_Y1 - AIM_Y0) / 2;
           s.lean = Math.min(1, s.lean + dt * 1.2);
         } else if (s.phase === 'flight') {
           s.flight += dt / 0.62;
@@ -102,7 +104,7 @@
       result: function () { return { score: s.score, extra: s.goals }; },
       summaryTitle: function () { return s.goals >= 6 ? '🏆 Superstar striker!' : s.goals >= 4 ? '⚽ Great shooting!' : 'Good effort!'; },
       summaryBig: function () { return s.goals + ' / ' + SHOTS + ' goals'; },
-      summaryText: function () { return 'Score ' + s.score + (s.corners ? ' · ' + s.corners + ' top-corner screamer' + (s.corners > 1 ? 's' : '') + ' (+50 each)' : '') + ' · Tip: watch which way the keeper leans!'; },
+      summaryText: function () { return 'Score ' + s.score + (s.corners ? ' · ' + s.corners + ' top-corner screamer' + (s.corners > 1 ? 's' : '') + ' (+50 score each)' : '') + ' · Tip: watch which way the keeper leans!'; },
       autoHeld: {},
       autopilot: function () {
         /* preview: aim for a corner away from the keeper's lean */
@@ -148,7 +150,7 @@
     ctx.beginPath(); ctx.moveTo(POST_L, LINE); ctx.lineTo(POST_L, BAR); ctx.lineTo(POST_R, BAR); ctx.lineTo(POST_R, LINE); ctx.stroke();
     ctx.lineCap = 'butt';
     /* keeper */
-    var leanX = (s.dive === 'left' ? -1 : s.dive === 'right' ? 1 : 0) * 12 * s.lean;
+    var leanX = (s.dive === 'left' ? -1 : s.dive === 'right' ? 1 : 0) * 30 * s.lean;
     var kx = MID + leanX, ky = LINE, rot = 0;
     if (s.phase === 'flight' || s.phase === 'result') {
       var k = s.phase === 'result' ? 1 : s.keeperT;

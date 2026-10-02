@@ -169,7 +169,7 @@
       hud: function () { return 'Lap ' + Math.min(LAPN, pr.lap + 1) + '/' + LAPN + '  ⏱ ' + fmt(s.t * 1000); },
       result: function () { return pr.finished ? { finished: true, ms: Math.round(s.t * 1000) } : null; },
       summaryTitle: function () { return pr.finished ? '🏁 Race complete!' : 'Race stopped'; },
-      summaryBig: function () { return pr.finished ? fmt(s.t * 1000) : 'DNF'; },
+      summaryBig: function () { return pr.finished ? fmt(s.t * 1000) : 'Not finished'; },
       summaryText: function () { return pr.finished ? 'Laps: ' + pr.laps.map(function (l) { return fmt(l * 1000); }).join(' · ') + (s.wall ? ' · ' + s.wall + ' wall bump' + (s.wall > 1 ? 's' : '') : ' · no wall bumps!') : 'Finish all ' + LAPN + ' laps to set a time.'; },
       autoHeld: {},
       autopilot: function () {
@@ -273,8 +273,8 @@
     ctx.restore();
     ctx.restore();
     /* minimap */
-    var mw = 190, mh = Math.round(190 * WH / WW), mx = LW - mw - 12, my = 12, sx = mw / WW;
-    ctx.fillStyle = 'rgba(19,12,46,0.55)'; ctx.fillRect(mx - 6, my - 6, mw + 12, mh + 12);
+    var mw = 150, mh = Math.round(150 * WH / WW), mx = LW - mw - 12, my = 12, sx = mw / WW;
+    ctx.fillStyle = 'rgba(19,12,46,0.38)'; ctx.fillRect(mx - 6, my - 6, mw + 12, mh + 12);
     ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.lineWidth = 4; ctx.beginPath();
     track.pts.forEach(function (p, i) { if (i) ctx.lineTo(mx + p[0] * sx, my + p[1] * sx); else ctx.moveTo(mx + p[0] * sx, my + p[1] * sx); }); ctx.closePath(); ctx.stroke();
     var p0m = track.pts[0]; ctx.fillStyle = '#fff'; ctx.fillRect(mx + p0m[0] * sx - 3, my + p0m[1] * sx - 3, 6, 6);

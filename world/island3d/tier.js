@@ -125,7 +125,18 @@
      (at most one step per 2 s) along LADDER. A steady ~33 ms cadence with low
      variance and cheap work is a 30 Hz cap (iOS Low Power Mode), not slowness.
      After every step is taken, frame rates under 20 fps sustained for
-     fallbackHoldMs give the 'fallback' verdict (the caller switches to 2D). */
+     fallbackHoldMs give the 'fallback' verdict (the caller switches to 2D).
+     Only SUSTAINED slowness counts:
+     - warm-up: the first warmupMs after every reset (a loop (re)start, a 60↔30
+       switch, a step) is not measured — that is where one-off work lands
+       (uploads, shader links, a rebuild after a context restore, the program
+       recompile a step itself causes);
+     - hitches: a frame whose interval or work is over hitchMs is a one-off stall
+       (GC, a compile, a tab switch) and is skipped, unless the stalls run back to
+       back for hitchSustainMs (then the device really is that slow and they count);
+     - the 2 s hold (and the fallback hold) starts at the first slow verdict, never
+       backdated over the window, so a few long frames in a short first window
+       cannot satisfy it on their own. */
   function AdaptiveQuality(opts) {
     opts = opts || {};
     var N = opts.window || 120;
@@ -135,17 +146,20 @@
     var fallbackFps = opts.fallbackFps || 20;
     var fallbackHoldMs = opts.fallbackHoldMs != null ? opts.fallbackHoldMs : 3000;
     var minSamples = opts.minSamples || 30;
+    var warmupMs = opts.warmupMs != null ? opts.warmupMs : 500;
+    var hitchMs = opts.hitchMs != null ? opts.hitchMs : 250;
+    var hitchSustainMs = opts.hitchSustainMs != null ? opts.hitchSustainMs : 1000;
     var ladder = (opts.ladder || LADDER).slice();
     var skip = opts.skip || [];          /* steps that are already "off" on this tier (e.g. LOW has no shadows) */
 
     var work = new Float64Array(N), intv = new Float64Array(N);
-    var head = 0, count = 0, sumW = 0, sumI = 0, sumI2 = 0, firstAt = -1, judged = false;
+    var head = 0, count = 0, sumW = 0, sumI = 0, sumI2 = 0, firstAt = -1, startAt = -1, hitchRun = 0, hitches = 0;
     var slowSince = -1, lowSince = -1, lastStepAt = -Infinity;
     var taken = [], failed = false, lowPower = false;
     ladder.forEach(function (s) { if (skip.indexOf(s) >= 0) taken.push(s); });
 
     function reset() {
-      head = 0; count = 0; sumW = 0; sumI = 0; sumI2 = 0; firstAt = -1; judged = false;
+      head = 0; count = 0; sumW = 0; sumI = 0; sumI2 = 0; firstAt = -1; startAt = -1; hitchRun = 0;
       slowSince = -1; lowSince = -1; lowPower = false;
     }
     function push(w, i, now) {
@@ -163,7 +177,7 @@
       var v = count ? Math.max(0, sumI2 / count - ai * ai) : 0;
       return {
         samples: count, avgWork: aw, avgInterval: ai, sdInterval: Math.sqrt(v),
-        fps: ai > 0 ? 1000 / ai : 0, lowPower: lowPower,
+        fps: ai > 0 ? 1000 / ai : 0, lowPower: lowPower, hitches: hitches,
         steps: taken.slice(), level: taken.length, done: taken.length >= ladder.length, failed: failed
       };
     }
@@ -173,6 +187,12 @@
     function sample(workMs, intervalMs, nowMs, targetMs) {
       if (failed) return null;
       if (!(intervalMs > 0) || intervalMs > 1000 || !(workMs >= 0)) { reset(); return null; }   /* a pause, not a frame */
+      if (startAt < 0) startAt = nowMs;
+      if (nowMs - startAt < warmupMs) return null;                       /* warm-up after a (re)start */
+      if (intervalMs > hitchMs || workMs > hitchMs) {
+        hitchRun += intervalMs;
+        if (hitchRun < hitchSustainMs) { hitches++; return null; }        /* a one-off stall, not the frame rate */
+      } else hitchRun = 0;
       push(workMs, intervalMs, nowMs);
       var enough = count >= minSamples || (count >= 6 && nowMs - firstAt >= holdMs);
       if (!enough) return null;
@@ -185,13 +205,11 @@
       var intLimit = Math.max(slowMs, target * 1.35);
       var slow = aw > slowMs || (ai > intLimit && !lowPower);
 
-      var first = !judged;
-      judged = true;
       if (taken.length < ladder.length) {
         if (!slow) { slowSince = -1; return null; }
-        /* the first verdict on a fresh window covers the whole window, so the slowness
-           started with its first frame; later verdicts start the clock now */
-        if (slowSince < 0) slowSince = first ? firstAt : nowMs;
+        /* the hold clock starts at this verdict: the average must STAY slow for holdMs
+           while fresh frames roll in (a short first window is easily skewed) */
+        if (slowSince < 0) slowSince = nowMs;
         if (nowMs - slowSince >= holdMs && nowMs - lastStepAt >= stepGapMs) {
           var step = null;
           for (var li = 0; li < ladder.length && step === null; li++) if (taken.indexOf(ladder[li]) < 0) step = ladder[li];
@@ -206,7 +224,7 @@
       var limit = 1000 / fallbackFps;
       var veryslow = ai > limit || aw > limit;
       if (!veryslow) { lowSince = -1; return null; }
-      if (lowSince < 0) lowSince = first ? firstAt : nowMs;
+      if (lowSince < 0) lowSince = nowMs;
       if (nowMs - lowSince >= fallbackHoldMs) {
         failed = true;
         return { type: 'fallback', why: 'performance' };

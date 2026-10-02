@@ -489,11 +489,16 @@
     r.setClearColor(0x000000, 0);
     r.autoClear = true;
     r.toneMappingExposure = dayPreset().exposure || 1;
-    var g = { r: r, canvas: c, onLost: null };
+    var g = { r: r, canvas: c, onLost: null, away: !!document.hidden };
     g.onLost = function () {
       if (gpu !== g) return;
-      lostCount++; stats.lost++;
-      log('photocard context lost (' + lostCount + ' this session)');
+      stats.lost++;
+      /* Safari drops a backgrounded page's contexts: a loss after the page was hidden is
+         routine (the next render makes a fresh renderer). Only losses while the page
+         stayed visible since this renderer was made count toward switching off. */
+      var routine = g.away || !!document.hidden;
+      if (!routine) lostCount++;
+      log('photocard context lost (' + (routine ? 'after the page was hidden' : lostCount + ' this session') + ')');
       dropGpu(false);
       if (lostCount >= 2) { off = true; failQueue(); failTurntables('context'); }
       else wake();
@@ -1468,6 +1473,7 @@
 
   /* ---------------- page lifecycle ---------------- */
   document.addEventListener('visibilitychange', function () {
+    if (document.hidden && gpu) gpu.away = true;              /* a later loss of this context is routine */
     if (!document.hidden && (tts.length || renderQ.length)) { tts.forEach(function (t) { t.dirty = true; t.lastNow = -1; }); wake(); }
   });
   root.addEventListener('pagehide', function () {

@@ -269,6 +269,126 @@
     };
   }
 
+  /* ================================================================
+     3D STAGE ADAPTER — the island is drawn by world/island3d/* when the
+     device can (docs/island3d/CONTRACTS.md §5); this file stays the owner
+     of state, rules, commits, HTML and sound decisions. Every call into
+     the stage is guarded: any failure drops silently back to the 2D island.
+     ================================================================ */
+  var stage3d = null, use3D = null, booting3d = false, coverCount = 0, anim3d = {}, dispose3dTimer = 0;
+  var showtimeOn = (function () { try { return localStorage.getItem('slwShowtime') === '1'; } catch (e) { return false; } })();
+  function s3(method) {
+    if (!stage3d || typeof stage3d[method] !== 'function') return undefined;
+    try { return stage3d[method].apply(stage3d, Array.prototype.slice.call(arguments, 1)); }
+    catch (e) { disable3D('call:' + method); return undefined; }
+  }
+  function disable3D(reason) {
+    var st = stage3d; stage3d = null; use3D = false;
+    if (st) { try { st.dispose(); } catch (e) {} }
+    try { if (window.SLIsland3D && SLIsland3D.remember2D && /perf|lost/.test(String(reason || ''))) SLIsland3D.remember2D(reason); } catch (e) {}
+    if (root && document.getElementById('slwStage')) draw();
+  }
+  function userInfo() { var u = me() || {}; return { name: u.name || '', color: u.color || '#6C5CE7', avatar: u.avatar || '🙂' }; }
+  function maybeBoot3D() {
+    if (stage3d || booting3d || use3D === false) return;
+    try { if (localStorage.getItem('slNo3D') === '1') { use3D = false; return; } } catch (e) {}
+    if (typeof WebGL2RenderingContext === 'undefined') { use3D = false; return; }
+    booting3d = true;
+    var v = '?v=' + (window.SL_WORLD_VER || '1');
+    try { if (localStorage.getItem('slQaMode') === '1') v += '&qa=' + Date.now(); } catch (e) {}
+    loadScript('world/island3d/stage.js' + v).then(function () {
+      if (!window.SLIsland3D || typeof SLIsland3D.boot !== 'function') return false;
+      if (SLIsland3D.remembered && SLIsland3D.remembered(window.SL_WORLD_VER)) return false;
+      return SLIsland3D.boot({ ver: window.SL_WORLD_VER, deadlineMs: 8000 });
+    }).then(function (ok) {
+      booting3d = false;
+      if (!ok || typeof SLIsland3D.mount !== 'function') { use3D = false; return; }
+      if (!root || renderedFor == null || stage3d) return;          /* the island closed meanwhile */
+      stage3d = SLIsland3D.mount({ reduced: reduced, user: userInfo(), on: {
+        tapItem: function (uid) { tapItem(uid, null); },
+        tapPet: function (petId) {
+          s3('emote', 'pet:' + petId, 'heart');
+          try { if (window.SLSound) SLSound.make({ muted: function () { var u = me(); return !!(u && u.muted); } }).pet(petId, 0.8); } catch (e) {}
+        },
+        tapAvatar: function () { s3('emote', 'me', 'wave'); },
+        tapLand: function (landId) { if (mode === 'play') openItem(landId); },
+        tapCell: function (x, y) { if (mode === 'place') placeAtCell(x, y); },
+        dragStart: function (uid) {
+          if (mode !== 'edit') return;
+          var p = W().placed.filter(function (q) { return q.uid === uid; })[0];
+          if (p && C.isPlaceable(C.item(p.id))) startPlacement(p.id, p.uid, false);
+        },
+        dragCell: function (x, y) { if (mode === 'place' && placing && (placing.x !== x || placing.y !== y)) { placing.x = x; placing.y = y; drawPlacement(); drawBar(); } },
+        dragEnd: function () { if (mode === 'place' && placing && C.canPlace(W(), placing.id, placing.x, placing.y, placing.uid).ok) confirmPlacement(); },
+        ready: function () { var wrap = root && root.querySelector('.slw-stagewrap'); if (wrap) wrap.classList.add('slw-is3d'); },
+        fail: function (reason) { disable3D(reason || 'fail'); }
+      } });
+      if (!stage3d) { use3D = false; return; }
+      use3D = true;
+      if (showtimeOn) s3('showtime', true);
+      draw();
+    }).catch(function () { booting3d = false; use3D = false; });
+  }
+  /* the view model the 3D stage renders (cheap; built after every commit) */
+  function islandView() {
+    var w = W(), u = me() || {};
+    var a = anim3d; anim3d = {};
+    return {
+      world: w,
+      placed: w.placed.filter(function (p) { return !!C.item(p.id); }),
+      style: artState(w),
+      unlocked: C.unlockedRegions(w),
+      pets: w.pets.filter(function (p) { return C.owns(w, p.id); }).map(function (p) { return { id: p.id, name: p.name, acc: p.acc || {}, active: w.activePet === p.id }; }),
+      avatar: { color: u.color || '#6C5CE7', emoji: u.avatar || '🙂', name: u.name || '' },
+      mode: mode, selectedUid: selectedUid,
+      placing: placing ? { id: placing.id, uid: placing.uid, x: placing.x, y: placing.y, ok: C.canPlace(w, placing.id, placing.x, placing.y, placing.uid).ok, st: artState(w) } : null,
+      lit: lit, newUids: window._slwNew || {}, anim: a, showtime: showtimeOn
+    };
+  }
+  /* HTML labels that float over the 3D items (same markup and classes as 2D) */
+  function anchors3D() {
+    var w = W(), list = [];
+    if (mode === 'play') {
+      w.placed.forEach(function (p) {
+        var it = C.item(p.id); if (!it) return;
+        var inner = '';
+        if (it.act === 'launch') inner += '<span class="slw-tag play">▶ PLAY</span>';
+        else if (it.act && it.act !== 'home') inner += '<span class="slw-dot" aria-hidden="true">✋</span>';
+        if (window._slwNew && window._slwNew[p.uid]) inner += '<span class="slw-new">NEW!</span>';
+        if (!inner) return;
+        var el = document.createElement('div'); el.className = 'slw-tag3d'; el.innerHTML = inner;
+        list.push({ el: el, uid: p.uid });
+      });
+    }
+    var unlocked = {}; C.unlockedRegions(w).forEach(function (k) { unlocked[k] = 1; });
+    Object.keys(C.REGIONS).forEach(function (rk) {
+      var R = C.REGIONS[rk]; if (!R.unlock || unlocked[rk]) return;
+      var it = C.item(R.unlock);
+      var el = document.createElement('div'); el.className = 'slw-tag3d';
+      el.innerHTML = '<button type="button" class="slw-sign" data-land="' + it.id + '">🔒 ' + esc(R.name) + (trial() ? '<br>FREE' : '<br>⭐ ' + fmt(it.price)) + '</button>';
+      el.querySelector('button').addEventListener('click', function () { openItem(it.id); });
+      list.push({ el: el, region: rk });
+    });
+    return list;
+  }
+  function drawStage3D() {
+    var host = $('#slwStage', root); if (!host) return false;
+    if (s3('attach', host) === undefined && !stage3d) return false;
+    s3('sync', islandView());
+    s3('setAnchors', anchors3D());
+    return !!stage3d;
+  }
+  /* sheets pause the 3D render (the last frame stays behind the backdrop) */
+  function cover(delta) {
+    coverCount = Math.max(0, coverCount + delta);
+    s3('setCovered', coverCount > 0);
+  }
+  /* shop/sheet icons: a 3D photocard when available, the SVG otherwise */
+  function iconHtml(id, st) {
+    return '<span class="slw-pc" data-pc="' + esc(id) + '"' + (st ? ' data-st="' + esc(JSON.stringify(st)) + '"' : '') + '>' + ART.icon(id, st) + '</span>';
+  }
+  function fillPhotocards(el) { if (use3D && window.SLPhotocard && el) { try { SLPhotocard.fill(el); } catch (e) {} } }
+
   /* ---------------- top-level render ---------------- */
   function render() {
     root = document.getElementById('worldView');
@@ -287,10 +407,13 @@
       root.innerHTML = '<div class="slw-loading">Building your island… 🏝️</div>';
       return;
     }
+    if (dispose3dTimer) { clearTimeout(dispose3dTimer); dispose3dTimer = 0; }
     draw();
+    s3('resume');
     maybeIntro();
     checkGoalReached(true);
     measureServerTime();
+    maybeBoot3D();
   }
 
   function draw() {
@@ -299,8 +422,9 @@
     var w = C.ensureWorld(u);
     renderedFor = state.activeUser;
     stopPets();
+    var is3d = !!(use3D && stage3d);
     root.innerHTML =
-      '<div class="slw' + (mode !== 'play' ? ' slw-edit' : '') + '">' +
+      '<div class="slw' + (mode !== 'play' ? ' slw-edit' : '') + (is3d && showtimeOn ? ' showtime' : '') + '">' +
         '<div class="slw-hud">' +
           '<button class="slw-learn" type="button" data-act="learn">📚 Back to learning</button>' +
           '<div class="slw-pts" title="Your spendable points">⭐ <span id="slwPts">' + fmt(u.points) + '</span></div>' +
@@ -310,12 +434,13 @@
             '<button class="slw-btn big" type="button" data-act="games">🎮 Games</button>' +
             '<button class="slw-btn' + (mode === 'edit' ? ' on' : '') + '" type="button" data-act="edit" aria-pressed="' + (mode === 'edit') + '">✏️ ' + (mode === 'edit' ? 'Done' : 'Edit') + '</button>' +
             '<button class="slw-btn" type="button" data-act="pets">🐾 Pets</button>' +
+            (is3d ? '<button class="slw-btn" type="button" data-act="showtime" aria-pressed="' + showtimeOn + '" aria-label="Showtime">' + (showtimeOn ? '🌙✨ Showtime' : '☀️ Day') + '</button>' : '') +
             '<button class="slw-btn" type="button" data-act="music" aria-pressed="' + musicOn() + '" aria-label="Music on or off">' + (musicOn() ? '🎵 On' : '🎵 Off') + '</button>' +
             '<button class="slw-btn" type="button" data-act="sound" aria-label="Sound on or off">' + (u.muted ? '🔇 Off' : '🔊 On') + '</button>' +
             '<button class="slw-btn" type="button" data-act="info" aria-label="How it works">❓</button>' +
           '</div>' +
         '</div>' +
-        '<div class="slw-stagewrap"><div class="slw-stage" id="slwStage"></div></div>' +
+        '<div class="slw-stagewrap' + (is3d ? ' slw-is3d' : '') + '"><div class="slw-stage" id="slwStage"></div></div>' +
         '<div class="slw-pan" aria-hidden="true">👆 Swipe the island sideways to see it all</div>' +
         '<div id="slwBar"></div>' +
         '<div class="slw-legend"><span><i style="background:#ffd23f;color:#4a3200;">▶ PLAY</i> tap to play a game</span>' +
@@ -325,10 +450,10 @@
       '</div>';
     drawStage();
     drawBar();
-    islandMusic('island_day');
-    /* on a phone the island is wider than the screen: start centred on home */
+    islandMusic(is3d && showtimeOn ? 'island_showtime' : 'island_day');
+    /* on a phone the 2D island is wider than the screen: start centred on home */
     var wrap = root.querySelector('.slw-stagewrap');
-    if (wrap && wrap.scrollWidth > wrap.clientWidth + 4) wrap.scrollLeft = (wrap.scrollWidth - wrap.clientWidth) / 2;
+    if (!is3d && wrap && wrap.scrollWidth > wrap.clientWidth + 4) wrap.scrollLeft = (wrap.scrollWidth - wrap.clientWidth) / 2;
     root.querySelectorAll('[data-act]').forEach(function (b) { b.addEventListener('click', onHudAction); });
     var g = root.querySelector('.slw-goal'); if (g) g.addEventListener('click', function () { if (W().goal) openItem(W().goal); else openShop(); });
   }
@@ -345,6 +470,10 @@
 
   /* ---------------- the island ---------------- */
   function drawStage() {
+    if (use3D && stage3d && drawStage3D()) return;
+    drawStage2D();
+  }
+  function drawStage2D() {
     var stage = $('#slwStage', root); if (!stage) return;
     var u = me(), w = C.ensureWorld(u), st = artState(w);
     var unlocked = {}; C.unlockedRegions(w).forEach(function (k) { unlocked[k] = 1; });
@@ -477,6 +606,17 @@
     if (a === 'games') return openGames();
     if (a === 'pets') return openPets();
     if (a === 'info') return openInfo();
+    if (a === 'showtime') {
+      showtimeOn = !showtimeOn;
+      try { localStorage.setItem('slwShowtime', showtimeOn ? '1' : '0'); } catch (er) {}
+      s3('showtime', showtimeOn);
+      islandMusic(showtimeOn ? 'island_showtime' : 'island_day');
+      if (showtimeOn) { sample('sting', 0.6); try { if (window.SLSound) SLSound.make({ muted: function () { var u = me(); return !!(u && u.muted); } })('whoosh'); } catch (er) {} } else sample('chip', 0.5);
+      var slw = root.querySelector('.slw'); if (slw) slw.classList.toggle('showtime', showtimeOn);
+      e.currentTarget.textContent = showtimeOn ? '🌙✨ Showtime' : '☀️ Day';
+      e.currentTarget.setAttribute('aria-pressed', String(showtimeOn));
+      return;
+    }
     if (a === 'music') {
       var onNow = !musicOn();
       try { if (window.SLMusic) SLMusic.setEnabled(onNow); } catch (er) {}
@@ -501,14 +641,29 @@
   }
 
   /* ---------------- tapping objects ---------------- */
-  function onObjectTap(e) {
-    var uid = e.currentTarget.dataset.uid;
+  function onObjectTap(e) { tapItem(e.currentTarget.dataset.uid, e.currentTarget); }
+  function tapItem(uid, el) {
     var w = W(), p = w.placed.filter(function (q) { return q.uid === uid; })[0];
     if (!p) return;
-    var it = C.item(p.id), el = e.currentTarget;
+    var it = C.item(p.id);
     if (mode === 'edit') { selectedUid = uid; drawStage(); drawBar(); return; }
     if (mode === 'place') return;
-    if (window._slwNew && window._slwNew[uid]) { delete window._slwNew[uid]; }
+    if (window._slwNew && window._slwNew[uid]) { delete window._slwNew[uid]; if (use3D && stage3d) s3('setAnchors', anchors3D()); }
+    if (use3D && stage3d) {
+      /* the 3D act plays its own animation and sounds; app-level effects stay here */
+      switch (it.act) {
+        case 'launch': {
+          var go = false, start = function () { if (!go) { go = true; launch(it.game); } };
+          Promise.resolve(s3('act', uid, 'launch')).then(start, start);
+          setTimeout(start, 1200);
+          return;
+        }
+        case 'home': s3('act', uid, 'home'); return openHome(uid);
+        case 'glow': lit[uid] = !lit[uid]; s3('setLit', uid, lit[uid]); sample(lit[uid] ? 'star' : 'chip', 0.5) || sfx('tick'); return;
+        default: if (it.act) s3('act', uid, it.act); return;
+      }
+    }
+    if (!el) return;
     switch (it.act) {
       case 'launch': return launch(it.game);
       case 'home': return openHome();
@@ -585,7 +740,13 @@
     draw();
     if (!uid && !C.findSpot(w, id)) { var m = $('#slwPlaceMsg', root); if (m) m.textContent = '⚠️ Your island is full! Put something away first, or keep it for later.'; }
   }
+  function placeAtCell(nx, ny) {
+    if (!placing) return;
+    if (nx === placing.x && ny === placing.y && C.canPlace(W(), placing.id, nx, ny, placing.uid).ok) return confirmPlacement();
+    placing.x = nx; placing.y = ny; drawPlacement(); drawBar();
+  }
   function drawPlacement() {
+    if (use3D && stage3d) { s3('sync', islandView()); return; }
     var host = $('#slwPlace', root); if (!host || !placing) return;
     var w = W(), it = C.item(placing.id), land = C.landSet(w);
     var o = C.occupancy(w, placing.uid);
@@ -604,11 +765,7 @@
     }
     host.innerHTML = html;
     host.querySelectorAll('[data-cx]').forEach(function (b) {
-      b.addEventListener('click', function () {
-        var nx = +b.dataset.cx, ny = +b.dataset.cy;
-        if (nx === placing.x && ny === placing.y && C.canPlace(W(), placing.id, nx, ny, placing.uid).ok) return confirmPlacement();
-        placing.x = nx; placing.y = ny; drawPlacement(); drawBar();
-      });
+      b.addEventListener('click', function () { placeAtCell(+b.dataset.cx, +b.dataset.cy); });
     });
   }
   function islandOnScreen() {
@@ -643,6 +800,7 @@
       sfx('correct');
       lastUndo = pl.uid ? { type: 'move', uid: pl.uid, id: pl.id, x: pl.ox, y: pl.oy } : { type: 'place', uid: res.uid };
       if (!pl.uid) { window._slwNew = window._slwNew || {}; window._slwNew[res.uid] = 1; }
+      anim3d.dropUid = pl.uid || res.uid;              /* the 3D drop-in plays on the next sync */
       endPlacement(pl.fromBuy ? 'play' : 'edit');
       toast(pl.uid ? 'Moved! ✨' : 'Placed! ✨', { label: '↩ Undo', fn: undo });
     });
@@ -659,6 +817,7 @@
     commit(function (u) { return C.store(u, uid); }).then(function (res) {
       if (!res || !res.ok) { toast('⚠️ ' + ((res && res.reason) || 'Couldn’t put that away.')); return; }
       lastUndo = { type: 'store', id: p.id, x: p.x, y: p.y };
+      s3('storeFx', uid);
       selectedUid = null; draw();
       toast('📦 Put away safely — it’s in your storage.', { label: '↩ Undo', fn: undo });
     });
@@ -684,7 +843,10 @@
     var opener = document.activeElement;
     var h2 = ov.querySelector('h2'); if (h2) { h2.id = h2.id || ('slwH' + (++ovSeq)); ov.setAttribute('aria-labelledby', h2.id); }
     document.body.appendChild(ov);
+    cover(+1);
+    var closed = false;
     function close() {
+      if (!closed) { closed = true; cover(-1); }
       ov.remove(); document.removeEventListener('keydown', onKey); if (opts.onClose) opts.onClose();
       try { if (opener && document.body.contains(opener) && opener.focus) opener.focus(); } catch (e) {}
     }
@@ -702,7 +864,7 @@
     return ov;
   }
   var ovSeq = 0;
-  function closeAllOverlays() { document.querySelectorAll('.slw-ov,.slw-cele').forEach(function (o) { if (o._close) o._close(); else o.remove(); }); }
+  function closeAllOverlays() { document.querySelectorAll('.slw-ov,.slw-cele').forEach(function (o) { if (o._close) o._close(); else o.remove(); }); coverCount = 0; s3('setCovered', false); }
   function toast(msg, action) {
     var old = document.querySelector('.slw-toast'); if (old) old.remove();
     var t = document.createElement('div'); t.className = 'slw-toast'; t.setAttribute('role', 'status');
@@ -912,6 +1074,8 @@
     }
     if (it.kind === 'land') {
       draw();
+      var landCard = function () { celebrate({ title: (isGoal ? '🎯 Goal reached! ' : '🏝️ ') + it.name + ' is open!', sub: 'New land to build on. Tap ✏️ Edit to move things there.', icon: it.id, sfx: 'fanfare' }); };
+      if (use3D && stage3d && it.region) { var shown = false, once = function () { if (!shown) { shown = true; landCard(); } }; Promise.resolve(s3('unlockLand', it.region)).then(once, once); setTimeout(once, 4000); return; }
       celebrate({ title: (isGoal ? '🎯 Goal reached! ' : '🏝️ ') + it.name + ' is open!', sub: 'New land to build on. Tap ✏️ Edit to move things there.', icon: it.id, sfx: 'fanfare' });
       return;
     }
@@ -949,9 +1113,14 @@
       (o.btns || []).map(function (b, i) { return '<button class="slw-btn big" type="button" data-b="' + i + '">' + esc(b.label) + '</button>'; }).join('') +
       '<button class="slw-btn big on" type="button" data-b="x">Yay! 🎉</button></div>';
     document.body.appendChild(cel);
+    cover(+1);
     if (o.sfx) sample(o.sfx, 0.8);
     try { if (!reduced && typeof popConfetti === 'function') { popConfetti(); setTimeout(popConfetti, 300); } } catch (e) {}
-    function close() { cel.remove(); document.removeEventListener('keydown', onKey); }
+    var closedC = false;
+    function close() {
+      cel.remove(); document.removeEventListener('keydown', onKey);
+      if (!closedC) { closedC = true; cover(-1); s3('showtime', true, { encoreMs: 8000 }); }   /* a short encore on the island */
+    }
     function onKey(e) {
       if (e.key === 'Escape') close();
       else if (e.key === 'Enter' && !(document.activeElement && cel.contains(document.activeElement) && document.activeElement.tagName === 'BUTTON')) close();
@@ -1258,10 +1427,12 @@
           arcadeFlush();
           running = null;
           window.slGameBusy = false;
+          s3('resume');
           draw();
         }
       };
       window.slGameBusy = true;
+      s3('suspend');                                     /* the game borrows the 3D renderer */
       window.SLGames[game].start(cfg);
     }).catch(function () {
       running = null;
@@ -1276,6 +1447,10 @@
     mode = 'play'; selectedUid = null;
     stopPets();
     renderedFor = null;
+    /* the 3D stage stops at once; its GPU memory goes after 30 s away */
+    s3('suspend');
+    if (dispose3dTimer) clearTimeout(dispose3dTimer);
+    dispose3dTimer = setTimeout(function () { dispose3dTimer = 0; if (stage3d && renderedFor == null) { var st = stage3d; stage3d = null; use3D = null; try { st.dispose(); } catch (e) {} } }, 30000);
   }
 
   /* ---------------- profile switches / external changes ---------------- */
@@ -1284,6 +1459,8 @@
     closeAllOverlays();
     placing = null; mode = 'play'; selectedUid = null;
     document.removeEventListener('keydown', placeKeys);
+    lit = {};
+    s3('setUser', userInfo());
     render();
   }
   function onPointsChanged() {

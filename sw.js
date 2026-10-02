@@ -47,7 +47,8 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE_VERSION).map((k) => caches.delete(k)))
+      /* keep the 3D photocard icon cache (sl-pc-<LOOK_VERSION>, managed by photocard.js) */
+      Promise.all(keys.filter((k) => k !== CACHE_VERSION && !k.startsWith('sl-pc-')).map((k) => caches.delete(k)))
     )
   );
   self.clients.claim();

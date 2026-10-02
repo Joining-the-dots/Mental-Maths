@@ -1,0 +1,411 @@
+/* node --test tests/   (Node 22+) */
+'use strict';
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const C = require('../world/world-core.js');
+
+function kid(points, extra) {
+  const u = Object.assign({ name: 'Mia', points: points, pointsEarned: points + 500 }, extra || {});
+  C.ensureWorld(u);
+  C.grantStarter(u, Date.parse('2026-10-02T09:00:00Z'));
+  return u;
+}
+let txN = 0;
+const tx = () => 'tx_test_' + (++txN) + '_' + Math.random().toString(36).slice(2, 8);
+
+/* a fake persisted storage shared by several "tabs" */
+function makeStorage(initialState) {
+  let raw = JSON.stringify(initialState);
+  return {
+    get raw() { return raw; },
+    adapterFor(tab) {
+      return {
+        read: () => JSON.parse(raw),
+        write: (st) => { tab.state = st; raw = JSON.stringify(st); }
+      };
+    },
+    breakWrites() { this.adapterFor = (tab) => ({ read: () => JSON.parse(raw), write: () => { throw new Error('quota'); } }); },
+    silentlyDropWrites() { this.adapterFor = (tab) => ({ read: () => JSON.parse(raw), write: () => {} }); }
+  };
+}
+/* a promise mutex standing in for navigator.locks */
+function makeLock() {
+  let chain = Promise.resolve();
+  return (fn) => { const run = chain.then(fn); chain = run.catch(() => {}); return run; };
+}
+
+test('catalogue: stable unique ids, integer prices, valid references', () => {
+  const ids = new Set();
+  for (const it of C.CATALOG) {
+    assert.ok(!ids.has(it.id), 'duplicate id ' + it.id);
+    ids.add(it.id);
+    assert.ok(Number.isInteger(it.price) && it.price >= 0, it.id + ' price');
+    for (const r of (it.requires || [])) assert.ok(C.item(r), it.id + ' requires unknown ' + r);
+    for (const r of (it.includes || [])) assert.ok(C.item(r), it.id + ' includes unknown ' + r);
+    if (C.isPlaceable(it)) assert.ok(Array.isArray(it.fp), it.id + ' needs a footprint');
+  }
+});
+
+test('game unlocks include their first course/arena (no second purchase needed to play)', () => {
+  for (const it of C.CATALOG.filter(i => i.kind === 'attraction')) {
+    const inc = (it.includes || []).map(C.item);
+    const playable = inc.some(i => i.kind === 'variant') || it.game === 'penalty';
+    assert.ok(playable, it.id + ' must include a course/track/arena');
+    if (it.game === 'penalty') assert.ok(inc.some(i => i.slot === 'stadium') && inc.some(i => i.slot === 'ball'));
+  }
+});
+
+test('starter: granted exactly once, free, legal layout, balance untouched', () => {
+  const u = { name: 'Josh', points: 333, pointsEarned: 999 };
+  assert.equal(C.grantStarter(u, 1), true);
+  const placedCount = u.world.placed.length;
+  assert.equal(placedCount, C.STARTER.placed.length, 'every starter object placed');
+  assert.equal(C.grantStarter(u, 2), false);
+  assert.equal(u.world.placed.length, placedCount);
+  assert.equal(u.points, 333);
+  assert.equal(u.pointsEarned, 999);
+  assert.equal(C.owns(u.world, 'att_course'), true);
+  assert.equal(C.owns(u.world, 'pet_puppy'), true);
+  assert.equal(u.world.activePet, 'pet_puppy');
+  /* every starter placement is legal against the others */
+  for (const p of u.world.placed) assert.ok(C.canPlace(u.world, p.id, p.x, p.y, p.uid).ok, p.id + ' illegal');
+});
+
+test('purchase: sufficient points debits exactly, grants ownership, writes ledger', () => {
+  const u = kid(500);
+  const r = C.purchase(u, 'trampoline', { tx: tx() });
+  assert.equal(r.ok, true);
+  assert.equal(u.points, 50);
+  assert.equal(u.pointsEarned, 1000, 'lifetime points never reduced');
+  assert.equal(C.ownedCount(u.world, 'trampoline'), 1);
+  const e = u.world.ledger[u.world.ledger.length - 1];
+  assert.equal(e.item, 'trampoline'); assert.equal(e.price, 450); assert.equal(e.bal, 50);
+  assert.equal(u.world.spent, 450);
+});
+
+test('purchase: exact balance works and leaves zero; one point short fails cleanly', () => {
+  const u = kid(450);
+  assert.equal(C.purchase(u, 'trampoline', { tx: tx() }).ok, true);
+  assert.equal(u.points, 0);
+  const v = kid(449);
+  const r = C.purchase(v, 'trampoline', { tx: tx() });
+  assert.equal(r.ok, false); assert.equal(r.code, 'insufficient'); assert.equal(r.need, 1);
+  assert.equal(v.points, 449); assert.equal(C.ownedCount(v.world, 'trampoline'), 0);
+});
+
+test('purchase: never goes negative even with corrupted balances', () => {
+  const u = kid(100);
+  u.points = 99.7;            /* corrupted non-integer */
+  const r = C.purchase(u, 'flower_tulip', { tx: tx() });
+  assert.equal(r.ok, true);
+  assert.ok(Number.isInteger(u.points) && u.points >= 0);
+  u.points = -5;
+  assert.equal(C.purchase(u, 'flower_tulip', { tx: tx() }).code, 'insufficient');
+});
+
+test('purchase: repeated clicks / retries with the same tx charge once', () => {
+  const u = kid(1000);
+  const t = tx();
+  const a = C.purchase(u, 'fountain', { tx: t });
+  const b = C.purchase(u, 'fountain', { tx: t });
+  const c = C.purchase(u, 'fountain', { tx: t });
+  assert.equal(a.ok, true); assert.equal(b.ok, true); assert.equal(b.replay, true); assert.equal(c.replay, true);
+  assert.equal(u.points, 500);
+  assert.equal(u.world.ledger.filter(e => e.item === 'fountain').length, 1);
+  /* same tx reused for a different item is refused, not double-spent */
+  assert.equal(C.purchase(u, 'swing', { tx: t }).code, 'tx_conflict');
+  assert.equal(u.points, 500);
+});
+
+test('purchase: unique item cannot be bought twice; repeatable decorations stack', () => {
+  const u = kid(2000);
+  assert.equal(C.purchase(u, 'pet_kitten', { tx: tx() }).ok, true);
+  assert.equal(C.purchase(u, 'pet_kitten', { tx: tx() }).code, 'already_owned');
+  const before = C.ownedCount(u.world, 'flower_tulip');
+  C.purchase(u, 'flower_tulip', { tx: tx() }); C.purchase(u, 'flower_tulip', { tx: tx() });
+  assert.equal(C.ownedCount(u.world, 'flower_tulip'), before + 2);
+  assert.equal(C.storedCount(u.world, 'flower_tulip'), 2, 'new copies land in storage');
+});
+
+test('purchase: manipulated item ids, prices and missing tx are rejected', () => {
+  const u = kid(5000);
+  assert.equal(C.purchase(u, 'att_pitch; points=0', { tx: tx() }).code, 'unknown_item');
+  assert.equal(C.purchase(u, '__proto__', { tx: tx() }).code, 'unknown_item');
+  assert.equal(C.purchase(u, 'constructor', { tx: tx() }).code, 'unknown_item');
+  assert.equal(C.purchase(u, 'att_course', { tx: tx() }).code, 'not_for_sale', 'starter items are not sold');
+  assert.equal(C.purchase(u, 'ball_classic', { tx: tx() }).code, 'not_for_sale', 'included items are not sold');
+  /* a caller-supplied price is ignored entirely */
+  const r = C.purchase(u, 'att_pitch', { tx: tx(), price: 1 });
+  assert.equal(r.ok, true); assert.equal(r.price, 1200); assert.equal(u.points, 3800);
+  assert.equal(C.purchase(u, 'tree_oak', {}).code, 'bad_tx');
+  assert.equal(C.purchase(u, 'tree_oak', { tx: '<script>' }).code, 'bad_tx');
+});
+
+test('purchase: prerequisites are enforced and explained', () => {
+  const u = kid(5000);
+  const r = C.purchase(u, 'ball_gold', { tx: tx() });
+  assert.equal(r.code, 'locked'); assert.equal(r.needs, 'att_pitch'); assert.match(r.reason, /Penalty Pitch/);
+  assert.equal(C.itemState(u, 'ball_gold').state, 'locked');
+  assert.equal(C.purchase(u, 'att_pitch', { tx: tx() }).ok, true);
+  assert.equal(C.purchase(u, 'ball_gold', { tx: tx() }).ok, true);
+});
+
+test('attraction purchase is immediately usable: includes granted, auto-placed with clear entrance', () => {
+  const u = kid(3000);
+  const r = C.purchase(u, 'att_kart', { tx: tx() });
+  assert.equal(r.ok, true);
+  assert.ok(C.owns(u.world, 'track_loop') && C.owns(u.world, 'kart_red'));
+  const inst = u.world.placed.find(p => p.id === 'att_kart');
+  assert.ok(inst, 'placed on purchase');
+  assert.ok(C.canPlace(u.world, 'att_kart', inst.x, inst.y, inst.uid).ok);
+  assert.equal(C.selected(u.world, 'kart'), 'kart_red');
+});
+
+test('ledger, balance and ownership stay consistent across many purchases', () => {
+  const u = kid(4000);
+  const start = u.points;
+  ['flower_sun', 'flower_sun', 'tree_palm', 'trampoline', 'acc_crown', 'roof_blue', 'path_wood', 'path_wood'].forEach(id => {
+    assert.equal(C.purchase(u, id, { tx: tx() }).ok, true, id);
+  });
+  const paid = u.world.ledger.filter(e => e.tx !== 'starter').reduce((s, e) => s + e.price, 0);
+  assert.equal(start - u.points, paid);
+  assert.equal(u.world.spent, paid);
+  for (const e of u.world.ledger.filter(e => e.tx !== 'starter')) assert.ok(C.owns(u.world, e.item));
+});
+
+test('commit protocol: one tab, stale memory is ignored, read-back verified', () => {
+  const tabA = { state: null };
+  const st = { activeUser: 'Mia', users: { Mia: kid(800) } };
+  const storage = makeStorage(st);
+  /* a stale in-memory copy thinks Mia has 5000 — storage (truth) says 800 */
+  const res = C.transactPurchase(storage.adapterFor(tabA), 'Mia', 'att_pitch', { tx: tx() });
+  assert.equal(res.code, 'insufficient');
+  const ok = C.transactPurchase(storage.adapterFor(tabA), 'Mia', 'fountain', { tx: tx() });
+  assert.equal(ok.ok, true);
+  assert.equal(JSON.parse(storage.raw).users.Mia.points, 300);
+});
+
+test('commit protocol: profile switched mid-purchase is refused; wrong profile id refused', () => {
+  const st = { activeUser: 'Josh', users: { Mia: kid(900), Josh: kid(10) } };
+  const storage = makeStorage(st);
+  const r = C.transactPurchase(storage.adapterFor({}), 'Mia', 'fountain', { tx: tx() });
+  assert.equal(r.code, 'profile_changed');
+  assert.equal(JSON.parse(storage.raw).users.Mia.points, 900);
+  assert.equal(C.transactPurchase(storage.adapterFor({}), 'Nobody', 'fountain', { tx: tx() }).code, 'no_profile');
+});
+
+test('commit protocol: failed or lost writes never announce success', () => {
+  const st = { activeUser: 'Mia', users: { Mia: kid(900) } };
+  const s1 = makeStorage(st); s1.breakWrites();
+  assert.equal(C.transactPurchase(s1.adapterFor({}), 'Mia', 'fountain', { tx: tx() }).code, 'write_failed');
+  assert.equal(JSON.parse(s1.raw).users.Mia.points, 900);
+  const s2 = makeStorage(st); s2.silentlyDropWrites();
+  assert.equal(C.transactPurchase(s2.adapterFor({}), 'Mia', 'fountain', { tx: tx() }).code, 'not_saved');
+  assert.equal(JSON.parse(s2.raw).users.Mia.points, 900);
+});
+
+test('commit protocol: a committed purchase whose response is lost is recovered by retrying the same tx', () => {
+  const st = { activeUser: 'Mia', users: { Mia: kid(900) } };
+  const storage = makeStorage(st);
+  const t = tx();
+  C.transactPurchase(storage.adapterFor({}), 'Mia', 'fountain', { tx: t });   /* response "lost" */
+  const retry = C.transactPurchase(storage.adapterFor({}), 'Mia', 'fountain', { tx: t });
+  assert.equal(retry.ok, true); assert.equal(retry.replay, true);
+  const saved = JSON.parse(storage.raw).users.Mia;
+  assert.equal(saved.points, 400);
+  assert.equal(saved.world.ledger.filter(e => e.item === 'fountain').length, 1);
+});
+
+test('concurrency: two tabs buying at the same moment never double-spend', async () => {
+  const st = { activeUser: 'Mia', users: { Mia: kid(500) } };
+  const storage = makeStorage(st);
+  const lock = makeLock();
+  const tabA = {}, tabB = {};
+  /* both tabs can afford the fountain alone (500) but not twice */
+  const [a, b] = await Promise.all([
+    lock(() => C.transactPurchase(storage.adapterFor(tabA), 'Mia', 'fountain', { tx: tx() })),
+    lock(() => C.transactPurchase(storage.adapterFor(tabB), 'Mia', 'trampoline', { tx: tx() }))
+  ]);
+  assert.equal(a.ok, true);
+  assert.equal(b.ok, false); assert.equal(b.code, 'insufficient');
+  const saved = JSON.parse(storage.raw).users.Mia;
+  assert.equal(saved.points, 0);
+  assert.equal(C.ownedCount(saved.world, 'trampoline'), 0);
+});
+
+test('concurrency: many interleaved purchases across tabs keep ledger = balance change', async () => {
+  const st = { activeUser: 'Mia', users: { Mia: kid(1000) } };
+  const storage = makeStorage(st);
+  const lock = makeLock();
+  const jobs = [];
+  for (let i = 0; i < 40; i++) jobs.push(lock(() => C.transactPurchase(storage.adapterFor({}), 'Mia', i % 2 ? 'path_wood' : 'flower_tulip', { tx: tx() })));
+  const results = await Promise.all(jobs);
+  const saved = JSON.parse(storage.raw).users.Mia;
+  const paid = saved.world.ledger.filter(e => e.tx !== 'starter').reduce((s, e) => s + e.price, 0);
+  assert.equal(1000 - saved.points, paid);
+  assert.ok(saved.points >= 0);
+  assert.equal(results.filter(r => r.ok).length, saved.world.ledger.filter(e => e.tx !== 'starter').length);
+});
+
+test('placement: boundaries, overlap, entrances, locked land', () => {
+  const u = kid(3000);
+  const w = u.world;
+  assert.equal(C.canPlace(w, 'tree_oak', 0, 0).ok, false, 'sea');
+  assert.equal(C.canPlace(w, 'tree_oak', 14, 4).ok, false, 'Beach Cove is locked');
+  assert.match(C.canPlace(w, 'tree_oak', 6, 2).reason, /already there/, 'on the house');
+  assert.match(C.canPlace(w, 'tree_oak', 6, 4).reason, /doorway/, 'blocking the house door');
+  assert.equal(C.canPlace(w, 'path_stone', 6, 4).ok, true, 'paths may go in a doorway');
+  assert.equal(C.canPlace(w, 'att_pitch', 10, 7).ok, false, 'off the edge');
+  C.purchase(u, 'land_cove', { tx: tx() });
+  assert.equal(C.canPlace(w, 'tree_oak', 14, 4).ok, true, 'unlocked land is usable');
+});
+
+test('placement: place, move, store, re-place without repurchase; house/attractions cannot be stored', () => {
+  const u = kid(500);
+  C.purchase(u, 'tree_blossom', { tx: tx() });
+  const spot = C.findSpot(u.world, 'tree_blossom');
+  const r = C.place(u, 'tree_blossom', spot.x, spot.y);
+  assert.equal(r.ok, true);
+  assert.equal(C.storedCount(u.world, 'tree_blossom'), 0);
+  assert.equal(C.place(u, 'tree_blossom', spot.x, spot.y).ok, false, 'no second copy to place');
+  const spot2 = C.findSpot(u.world, 'tree_blossom', 3, 6);
+  assert.equal(C.place(u, 'tree_blossom', spot2.x, spot2.y, r.uid).ok, true, 'moved');
+  assert.equal(C.store(u, r.uid).ok, true);
+  assert.equal(C.storedCount(u.world, 'tree_blossom'), 1, 'kept in storage, not lost');
+  assert.equal(C.ownedCount(u.world, 'tree_blossom'), 1);
+  const pointsBefore = u.points;
+  assert.equal(C.place(u, 'tree_blossom', spot.x, spot.y).ok, true, 're-placed from storage');
+  assert.equal(u.points, pointsBefore, 'no repurchase');
+  const house = u.world.placed.find(p => p.id === 'house_cottage');
+  assert.equal(C.store(u, house.uid).ok, false);
+});
+
+test('normalize: repairs impossible states without losing purchases', () => {
+  const u = kid(0);
+  const w = u.world;
+  w.owned.flower_tulip = 2;
+  w.placed.push({ uid: 'x1', id: 'flower_tulip', x: 0, y: 0 });            /* in the sea */
+  w.placed.push({ uid: 'x2', id: 'flower_tulip', x: 6, y: 2 });            /* on the house */
+  w.placed.push({ uid: 'x3', id: 'future_item_v9', x: 5, y: 5 });          /* unknown future item */
+  w.owned.trampoline = 7;                                                  /* unique owned 7x */
+  w.sel.roof = 'roof_castle';                                              /* not owned */
+  w.goal = 'att_course';                                                   /* owned starter */
+  C.normalize(u);
+  assert.ok(!w.placed.some(p => p.uid === 'x1' || p.uid === 'x2'), 'illegal placements returned to storage');
+  assert.equal(C.ownedCount(w, 'flower_tulip'), 2, 'ownership kept');
+  assert.ok(w.placed.some(p => p.uid === 'x3'), 'unknown future data is kept, not deleted');
+  assert.equal(w.owned.trampoline, 1);
+  assert.equal(w.sel.roof, undefined);
+  assert.equal(w.goal, null);
+  for (const p of w.placed) if (C.item(p.id)) assert.ok(C.canPlace(w, p.id, p.x, p.y, p.uid).ok);
+});
+
+test('retired items: leave the shop but owners keep them', () => {
+  const u = kid(500);
+  C.purchase(u, 'swing', { tx: tx() });
+  const it = C.item('swing');
+  it.retired = true;
+  try {
+    assert.equal(C.purchase(kid(500), 'swing', { tx: tx() }).code, 'retired');
+    assert.ok(!C.shopItems().some(i => i.id === 'swing'));
+    C.normalize(u);
+    assert.equal(C.owns(u.world, 'swing'), true);
+  } finally { it.retired = false; }
+});
+
+test('savings goal: set, progress, cleared on purchase; owned uniques refused', () => {
+  const u = kid(300);
+  assert.equal(C.setGoal(u, 'att_pitch').ok, true);
+  const g = C.goalProgress(u);
+  assert.equal(g.pct, 25); assert.equal(g.need, 900); assert.equal(g.ready, false);
+  assert.equal(C.setGoal(u, 'att_course').ok, false);
+  u.points = 1200;
+  assert.equal(C.goalProgress(u).ready, true);
+  C.purchase(u, 'att_pitch', { tx: tx() });
+  assert.equal(u.world.goal, null);
+});
+
+test('pet names: friendly validation', () => {
+  assert.equal(C.validatePetName('  Sir   Wiggles ').name, 'Sir Wiggles');
+  assert.equal(C.validatePetName('Zoë').ok, true);
+  assert.equal(C.validatePetName("O'Malley-Jones").ok, true);
+  assert.equal(C.validatePetName('').ok, false);
+  assert.equal(C.validatePetName('A'.repeat(15)).ok, false);
+  assert.equal(C.validatePetName('<b>hi</b>').ok, false);
+  assert.equal(C.validatePetName('R2D2').ok, false);
+  assert.equal(C.validatePetName('Poo').ok, false);
+  assert.equal(C.validatePetName('Mr Fart Face').ok, false);
+  assert.equal(C.validatePetName('Hello').ok, true, 'contains "hell" but is a whole different word');
+  assert.equal(C.validatePetName('Cassie').ok, true, 'contains "ass" inside a name');
+  const u = kid(0);
+  assert.equal(C.renamePet(u, 'pet_puppy', 'Rocket').ok, true);
+  assert.equal(C.petById(u.world, 'pet_puppy').name, 'Rocket');
+  assert.equal(C.renamePet(u, 'pet_dragon', 'Smoky').ok, false, 'not owned');
+});
+
+test('accessories and cosmetics: only owned items equip/select', () => {
+  const u = kid(1000);
+  assert.equal(C.equipAccessory(u, 'pet_puppy', 'acc_crown').ok, false);
+  C.purchase(u, 'acc_crown', { tx: tx() });
+  assert.equal(C.equipAccessory(u, 'pet_puppy', 'acc_crown').on, true);
+  assert.equal(C.equipAccessory(u, 'pet_puppy', 'acc_crown').on, false, 'tap again to take off');
+  assert.equal(C.select(u, 'roof_castle').ok, false);
+  assert.equal(C.selected(u.world, 'roof'), 'roof_red');
+});
+
+test('arcade time: limits, warning, round gate and grace ceiling', () => {
+  const cfg = { dailyMinutes: 10 };
+  assert.equal(C.arcadeStatus(null, 9999).limited, false);
+  assert.equal(C.arcadeStatus({ dailyMinutes: 0 }, 9999).limited, false, '0 = no limit');
+  const s1 = C.arcadeStatus(cfg, 300);
+  assert.equal(s1.leftSec, 300); assert.equal(s1.exhausted, false); assert.equal(s1.warn, false);
+  assert.equal(C.arcadeStatus(cfg, 560).warn, true);
+  const gate = C.roundGate(C.arcadeStatus(cfg, 590));
+  assert.equal(gate.allowed, true);
+  assert.equal(gate.hardStopAtUsed, 600 + C.ARCADE.graceMaxSec, 'finishing overrun is bounded');
+  assert.equal(C.roundGate(C.arcadeStatus(cfg, 600)).allowed, false, 'no new round once used up');
+  assert.equal(C.roundGate(C.arcadeStatus(cfg, 700)).allowed, false, 'restarting during grace is refused');
+});
+
+test('arcade time: day key follows the family timezone, not the device', () => {
+  const t = Date.parse('2026-10-02T23:30:00Z');       /* 00:30 BST in London on the 3rd */
+  assert.equal(C.dayKey(t, 'Europe/London'), '2026-10-03');
+  assert.equal(C.dayKey(t, 'America/New_York'), '2026-10-02');
+  const u = kid(0);
+  C.arcadeAdd(u, '2026-10-02', 125.4);
+  C.arcadeAdd(u, '2026-10-02', 60);
+  assert.equal(C.arcadeUsed(u.world, '2026-10-02'), 185);
+  for (let d = 1; d <= 20; d++) C.arcadeAdd(u, '2026-09-' + String(d).padStart(2, '0'), 10);
+  assert.ok(Object.keys(u.world.arcade.days).length <= C.ARCADE.keepDays, 'old days pruned');
+});
+
+test('personal bests: validated, per game+variant, never touch points', () => {
+  const u = kid(777);
+  const earnedBefore = u.pointsEarned;
+  assert.equal(C.recordResult(u, 'course', 'meadow', { score: 1200 }).isPB, true);
+  assert.equal(C.recordResult(u, 'course', 'meadow', { score: 900 }).isPB, false);
+  assert.equal(C.recordResult(u, 'course', 'beach', { score: 400 }).isPB, true, 'separate per course');
+  assert.equal(C.recordResult(u, 'kart', 'track_loop', { finished: true, ms: 61000 }).isPB, true);
+  assert.equal(C.recordResult(u, 'kart', 'track_loop', { finished: true, ms: 65000 }).isPB, false, 'lower is better');
+  assert.equal(C.recordResult(u, 'kart', 'track_loop', { finished: true, ms: 100 }).ok, false, 'impossible time rejected');
+  assert.equal(C.recordResult(u, 'kart', 'track_loop', { finished: false, ms: 50000 }).ok, false, 'DNF not recorded');
+  assert.equal(C.recordResult(u, 'penalty', 'std', { score: 99999 }).ok, false, 'impossible score rejected');
+  assert.equal(u.points, 777); assert.equal(u.pointsEarned, earnedBefore);
+});
+
+test('merge of two forks: each island purchase is paid exactly once', () => {
+  /* the account bought a fountain (500); the signed-out guest copy bought a kitten (600) */
+  const base = kid(2000);
+  const n = JSON.parse(JSON.stringify(base));
+  const g = JSON.parse(JSON.stringify(base));
+  C.purchase(n, 'fountain', { tx: 'tx_account_1' });
+  g.points += 300;                                  /* guest also earned 300 */
+  C.purchase(g, 'pet_kitten', { tx: 'tx_guest_1' });
+  const m = C.mergeWorlds(n, g);
+  assert.ok(C.owns(m.world, 'fountain') && C.owns(m.world, 'pet_kitten'));
+  assert.equal(m.points, 2000 + 300 - 500 - 600);
+  /* merging the same fork twice is idempotent */
+  const n2 = { points: m.points, world: m.world };
+  const again = C.mergeWorlds(n2, g);
+  assert.equal(again.points, m.points);
+});

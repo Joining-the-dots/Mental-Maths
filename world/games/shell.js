@@ -717,7 +717,8 @@
             v3.resize(r.width, r.height);
             if (v3.setRound) v3.setRound(round, variant);
             playPace.reset(); watch.reset(); lastDrawAt = performance.now(); watchQuality();
-            if (phase === 'playing' || phase === 'countdown') draw(); else startIdle();
+            cfg.view3d = true;
+            if (phase === 'playing' || phase === 'countdown') draw(); else if (phase === 'menu') menu(); else startIdle();
           }).catch(function () { fail3d('create'); });
         } catch (e) { fail3d('create'); }
       }
@@ -740,7 +741,7 @@
 
       var ready = def.preload ? def.preload(cfg) : Promise.resolve();
       setScreen('<p>Loading…</p>');
-      var ready3d = load3d().then(function (m) { v3mod = m; });
+      var ready3d = load3d().then(function (m) { v3mod = m; if (!m) cfg.view3d = false; });
       /* wait for 3D briefly so the menu can open in 3D; a slow load just keeps 2D */
       Promise.all([Promise.resolve(ready), Promise.race([ready3d, new Promise(function (r) { setTimeout(r, 2500); })])]).then(function () {
         if (exited) return;

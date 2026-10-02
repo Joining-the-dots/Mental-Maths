@@ -134,7 +134,7 @@
 
     /* ---- attractions (each includes everything needed to play) ---- */
     { id: 'att_pitch', kind: 'attraction', game: 'penalty', cat: 'games', name: 'Penalty Pitch', price: 1200, fp: [3, 2], entrance: true, act: 'launch', includes: ['ball_classic', 'stadium_day'],
-      desc: 'A football pitch for your island. Unlocks the Penalty Shootout game — forever.' },
+      desc: 'A football pitch for your island. Unlocks the Encore Shootout game — forever.' },
     { id: 'att_kart', kind: 'attraction', game: 'kart', cat: 'games', name: 'Kart Garage', price: 1500, fp: [2, 2], entrance: true, act: 'launch', includes: ['track_loop', 'kart_red'],
       desc: 'A garage and race track entrance. Unlocks the Kart Time Trial game — forever.' },
 

@@ -54,6 +54,8 @@
   /* island music (world/music.js): starts after a tap, obeys mute, only on My Island */
   function musicOn() { try { return !!(window.SLMusic && SLMusic.enabled()); } catch (e) { return false; } }
   function islandMusic(ctxName) {
+    var wv = document.getElementById('worldView');
+    if (!wv || wv.classList.contains('hidden') || running) return;     /* never on learning screens or over a game */
     try { if (window.SLMusic) SLMusic.island(ctxName || 'island_day', { muted: function () { var u = me(); return !!(u && u.muted); } }); } catch (e) {}
   }
 

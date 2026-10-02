@@ -67,7 +67,7 @@
   var CORE_KEYS = ['__stage', 'version', 'THREE', 'addons', 'tier', 'budget', 'quality', 'facts', 'tierWhy', 'models', 'modelCategory',
     'missing', 'ready', 'qa', 'issues', 'loaded', 'kit', 'defineModels', 'defineApi', 'make', 'lease', 'createRenderer',
     'onQuality', 'info', 'dispose', 'log', 'FILES'];
-  var REMEMBER_KEY = 'slIsland3D', TIER_KEY = 'slTier3d', LOST_KEY = 'slGlLost';
+  var REMEMBER_KEY = 'slIsland3D', TIER_KEY = 'slTier3d', PEND_KEY = 'slTier3dPend', LOST_KEY = 'slGlLost';
 
   /* ================================================================
      PURE HELPERS (exported for Node tests)
@@ -124,13 +124,170 @@
     if (a < 0 || b < a) return order[b];
     return null;
   }
+  function normTier(v, order) {
+    order = order || ['LOW', 'MID', 'HIGH'];
+    if (typeof v !== 'string') return null;
+    var t = v.trim().toUpperCase();
+    return order.indexOf(t) >= 0 ? t : null;
+  }
+
+  /* ---------------- the saved measured tier: {tier, at}, re-measured after savedMaxAgeMs ----------------
+     A demotion needs evidence from TWO page sessions: the first session whose own
+     paced loop needed 2 quality steps leaves a pending record {tier, sid, at}; a
+     LATER session that needs them again saves the tier both agree on (the higher of
+     the two). A pending record expires after pendMaxAgeMs, and a long clean run of
+     island frames (cleanMs without a step) drops it as a one-off. */
+  var DAY_MS = 24 * 60 * 60 * 1000;
+  var TIER_POLICY = { savedMaxAgeMs: 30 * DAY_MS, pendMaxAgeMs: 14 * DAY_MS, cleanMs: 180000 };
+  /* raw localStorage value → {tier, at, expired, legacy}; expired → the caller removes it,
+     legacy (a bare 'LOW' from before records were dated) → the caller re-saves it dated */
+  function savedTierFrom(raw, now, maxAgeMs, order) {
+    if (raw == null || raw === '') return { tier: null, at: null, expired: false, legacy: false };
+    var bare = normTier(String(raw), order);
+    if (bare) return { tier: bare, at: null, expired: false, legacy: true };
+    var rec = null;
+    try { rec = JSON.parse(String(raw)); } catch (e) { rec = null; }
+    var t = rec && typeof rec === 'object' ? normTier(rec.tier, order) : null;
+    if (!t) return { tier: null, at: null, expired: true, legacy: false };
+    var at = Number(rec.at);
+    if (rec.at == null || !isFinite(at)) return { tier: t, at: null, expired: false, legacy: true };
+    var max = maxAgeMs > 0 ? maxAgeMs : TIER_POLICY.savedMaxAgeMs;
+    if (now - at > max) return { tier: null, at: at, expired: true, legacy: false };
+    return { tier: t, at: at, expired: false, legacy: false };
+  }
+  function savedTierRaw(tier, now) { return JSON.stringify({ tier: tier, at: now }); }
+  /* a session needed 2 steps (next = the tier below its own). pendRaw: the stored pending
+     record. → {save: tier|null, pend}: pend is a string to store, null to remove it,
+     undefined to leave it */
+  function demotionVerdict(pendRaw, next, sid, now, order, maxAgeMs) {
+    order = order || ['LOW', 'MID', 'HIGH'];
+    var t = normTier(next, order);
+    if (!t) return { save: null, pend: undefined };
+    var p = null;
+    try { p = pendRaw ? JSON.parse(pendRaw) : null; } catch (e) { p = null; }
+    var pt = p && typeof p === 'object' ? normTier(p.tier, order) : null;
+    var at = pt ? Number(p.at) : NaN;
+    var max = maxAgeMs > 0 ? maxAgeMs : TIER_POLICY.pendMaxAgeMs;
+    var fresh = !!pt && isFinite(at) && now - at <= max && at - now <= DAY_MS;
+    if (fresh && String(p.sid) !== String(sid)) {
+      return { save: order.indexOf(pt) > order.indexOf(t) ? pt : t, pend: null };   /* the demotion both agree on */
+    }
+    if (fresh) return { save: null, pend: undefined };                            /* this session already voted */
+    return { save: null, pend: JSON.stringify({ tier: t, sid: String(sid), at: now }) };
+  }
+
+  /* ---------------- context-loss policy ----------------
+     Browsers drop WebGL contexts for routine reasons (Safari when the app is
+     backgrounded, a GPU-process restart) and restore them; the holders rebuild and
+     carry on, so a loss that is RESTORED never counts. A STRIKE is
+       - 'unrestored': no restore within restoreMs of VISIBLE time (the clock is
+         re-armed on every return to visible, and a timer that fires long after it
+         was armed — the page was frozen — is re-armed instead of trusted);
+       - 'thrash': a loss within thrashMs of a restore while the page stayed visible
+         all along (the rebuilt scene keeps killing the GPU);
+       - 'repeat': repeatLosses such visible-since-restore losses within repeatWindowMs.
+     A strike ends 3D for this page session. strikesToRemember strikes within
+     strikeWindowMs (kept across reloads in sessionStorage) are a persistent cause:
+     remember 2D. Times are wall-clock ms (Date.now()). */
+  var CONTEXT_POLICY = {
+    restoreMs: 6000, slackMs: 2000, thrashMs: 10000, repeatLosses: 3, repeatWindowMs: 120000,
+    strikesToRemember: 3, strikeWindowMs: 30 * 60 * 1000
+  };
+  /* the stored strike list (JSON array of times) → the strikes still inside the window.
+     Anything else — including the old plain loss count — is no strikes. */
+  function parseStrikes(raw, now, windowMs) {
+    var list = raw;
+    if (typeof raw === 'string') { try { list = JSON.parse(raw); } catch (e) { list = null; } }
+    if (!Array.isArray(list)) return [];
+    var w = windowMs > 0 ? windowMs : CONTEXT_POLICY.strikeWindowMs;
+    return list.filter(function (t) { return typeof t === 'number' && isFinite(t) && t <= now && now - t < w; });
+  }
+  /* o: {strikes (stored raw or array), now, hidden, …CONTEXT_POLICY overrides}
+     lost(now)   → {act:'ignore'} (already lost) | {act:'wait', armMs} | {act:'fail', why, remember, strikes}
+     restored(now) → {act:'resume'} | {act:'ignore'}
+     visible(hidden, now) → {armMs}   (the caller clears its timer, then arms it when armMs > 0)
+     timeout(now) → {act:'fail', …} | {act:'rearm', armMs} | {act:'ignore'}
+     drop()       the lost renderer was thrown away (nobody held it): not a strike
+     isLost, hidden, stats() → {lost, hidden, losses, restores, strikes} */
+  function ContextLossPolicy(o) {
+    o = o || {};
+    function opt(k) { return o[k] != null ? o[k] : CONTEXT_POLICY[k]; }
+    var restoreMs = opt('restoreMs'), slackMs = opt('slackMs'), thrashMs = opt('thrashMs');
+    var repeatLosses = opt('repeatLosses'), repeatWindowMs = opt('repeatWindowMs');
+    var need = opt('strikesToRemember'), windowMs = opt('strikeWindowMs');
+    var strikes = parseStrikes(o.strikes, o.now != null ? o.now : 0, windowMs);
+    var lost = false, hidden = !!o.hidden, steady = false, restoredAt = -Infinity, armedAt = -1;
+    var losses = 0, restores = 0, visibleLosses = [];
+    function arm(now) {
+      if (lost && !hidden) { armedAt = now; return restoreMs; }
+      armedAt = -1;
+      return 0;
+    }
+    function strike(why, now) {
+      armedAt = -1;
+      strikes = parseStrikes(strikes, now, windowMs);
+      strikes.push(now);
+      return { act: 'fail', why: why, remember: strikes.length >= need, strikes: strikes.slice() };
+    }
+    return {
+      lost: function (now) {
+        if (lost) return { act: 'ignore' };
+        lost = true; losses++;
+        if (!hidden && steady) {
+          if (now - restoredAt < thrashMs) return strike('thrash', now);
+          visibleLosses = visibleLosses.filter(function (t) { return now - t < repeatWindowMs; });
+          visibleLosses.push(now);
+          if (visibleLosses.length >= repeatLosses) return strike('repeat', now);
+        }
+        return { act: 'wait', armMs: arm(now) };
+      },
+      restored: function (now) {
+        armedAt = -1;
+        if (!lost) return { act: 'ignore' };
+        lost = false; restores++;
+        restoredAt = now; steady = !hidden;
+        return { act: 'resume' };
+      },
+      visible: function (isHidden, now) {
+        hidden = !!isHidden;
+        if (hidden) steady = false;              /* a later loss is explained by the time away */
+        return { armMs: arm(now) };
+      },
+      timeout: function (now) {
+        if (!lost || hidden || armedAt < 0) return { act: 'ignore' };
+        var waited = now - armedAt;
+        if (waited + slackMs < restoreMs) return { act: 'ignore' };                     /* a stale timer */
+        if (waited > restoreMs + slackMs) return { act: 'rearm', armMs: arm(now) };      /* the page was frozen */
+        return strike('unrestored', now);
+      },
+      drop: function () { lost = false; armedAt = -1; },
+      get isLost() { return lost; },
+      get hidden() { return hidden; },
+      stats: function () { return { lost: lost, hidden: hidden, losses: losses, restores: restores, strikes: strikes.length }; }
+    };
+  }
+  /* what one holder must hear about the shared context, given what it was told:
+     'lost' | 'restored' | null. The current holder hears at once; a holder stacked
+     under another one hears when the renderer is handed back (its GPU objects — e.g.
+     the island's static shadow map — died with the old context, so it rebuilds then).
+     s: {_ctxLost: told lost and not yet restored, _ctxMissed: a loss happened while it
+     was stacked}. Updates s unless peek. */
+  function contextDue(s, lostNow, peek) {
+    var due = null;
+    if (lostNow) due = s._ctxLost ? null : 'lost';
+    else if (s._ctxLost || s._ctxMissed) due = 'restored';
+    if (due && !peek) { s._ctxLost = due === 'lost'; s._ctxMissed = false; }
+    return due;
+  }
 
   if (HAS_DOM) install();
 
   return {
     VERSION: VERSION, FILES: FILES, ADDONS: ADDONS, MODEL_KINDS: MODEL_KINDS,
     baseFrom: baseFrom, scriptList: scriptList, resolveSt: resolveSt,
-    rememberedFrom: rememberedFrom, tierToSave: tierToSave
+    rememberedFrom: rememberedFrom, tierToSave: tierToSave,
+    TIER_POLICY: TIER_POLICY, savedTierFrom: savedTierFrom, savedTierRaw: savedTierRaw, demotionVerdict: demotionVerdict,
+    CONTEXT_POLICY: CONTEXT_POLICY, parseStrikes: parseStrikes, ContextLossPolicy: ContextLossPolicy, contextDue: contextDue
   };
 
   /* ================================================================
@@ -144,15 +301,20 @@
     var BASE = baseFrom(me, document.baseURI, root.SL_WORLD_VER);
     var perfNow = (root.performance && root.performance.now) ? function () { return root.performance.now(); } : Date.now;
 
-    function ls(op, k, v) {
+    function store(area, op, k, v) {
       try {
-        if (op === 'get') return root.localStorage.getItem(k);
-        if (op === 'set') root.localStorage.setItem(k, v);
-        if (op === 'del') root.localStorage.removeItem(k);
+        var s = root[area];
+        if (op === 'get') return s.getItem(k);
+        if (op === 'set') s.setItem(k, v);
+        if (op === 'del') s.removeItem(k);
       } catch (e) {}
       return null;
     }
+    function ls(op, k, v) { return store('localStorage', op, k, v); }
+    function ss(op, k, v) { return store('sessionStorage', op, k, v); }
     var QA = ls('get', 'slQaMode') === '1';
+    /* this page session (a demotion needs two different ones) */
+    var SESSION = Date.now().toString(36) + '-' + Math.floor(Math.random() * 1e9).toString(36);
 
     /* ---------------- the SL3D registry ---------------- */
     var SL3D = {
@@ -341,10 +503,15 @@
 
     /* ---------------- tier + init ---------------- */
     var aq = null, pacer = null;
-    function readSavedTier() { return root.SLTier.parseTier(ls('get', TIER_KEY)); }
+    function readSavedTier() {
+      var now = Date.now(), r = savedTierFrom(ls('get', TIER_KEY), now, TIER_POLICY.savedMaxAgeMs, root.SLTier.TIERS);
+      if (r.expired) { ls('del', TIER_KEY); log('saved tier expired: measuring again'); }
+      else if (r.legacy && r.tier) ls('set', TIER_KEY, savedTierRaw(r.tier, now));   /* start its expiry clock */
+      return r.tier;
+    }
     function saveTier(t) {
       var v = tierToSave(readSavedTier(), t, root.SLTier.TIERS);
-      if (v) { ls('set', TIER_KEY, v); log('saved tier ' + v); }
+      if (v) { ls('set', TIER_KEY, savedTierRaw(v, Date.now())); log('saved tier ' + v); }
     }
     function qaTier() {
       if (!QA) return null;
@@ -408,8 +575,12 @@
         return r;
       } catch (e) { issue('renderer: ' + errText(e)); return null; }
     }
-    var renderer = null, lost = false, lostCount = 0, restoreTimer = 0, disposing = false;
-    try { lostCount = parseInt(root.sessionStorage.getItem(LOST_KEY), 10) || 0; } catch (e) { lostCount = 0; }
+    /* Context loss (see ContextLossPolicy): a restored loss is routine — the holders
+       rebuild — and only strikes (unrestored after 6 s of visible time, or losses
+       that keep coming back while the page stays visible) end 3D for the session;
+       3 strikes within 30 min remember 2D. parked: the page is hidden by pagehide. */
+    var renderer = null, lost = false, restoreTimer = 0, disposing = false, parked = false;
+    var ctx = ContextLossPolicy({ strikes: ss('get', LOST_KEY), now: Date.now(), hidden: !!document.hidden });
     function shared() {
       if (renderer) return renderer;
       renderer = createRenderer({});
@@ -418,27 +589,77 @@
       renderer.domElement.addEventListener('webglcontextrestored', onRestored, false);
       return renderer;
     }
+    function holders() { return stack.length > 0 || !!current; }
+    function armRestore(ms) {
+      if (restoreTimer) { clearTimeout(restoreTimer); restoreTimer = 0; }
+      if (ms > 0) restoreTimer = setTimeout(onRestoreTimeout, ms);
+    }
+    /* a lost renderer nobody holds is just thrown away: the next lease makes a fresh one */
+    function retire() {
+      var r = renderer;
+      armRestore(0);
+      ctx.drop();
+      lost = false;
+      if (!r) return;
+      renderer = null;
+      var c = r.domElement;
+      c.removeEventListener('webglcontextlost', onLost, false);
+      c.removeEventListener('webglcontextrestored', onRestored, false);
+      try { r.setAnimationLoop(null); } catch (e) {}
+      try { r.dispose(); } catch (e) {}
+      if (c.parentNode) c.parentNode.removeChild(c);
+      log('lost renderer with no holder: dropped');
+    }
+    /* tell one holder what it missed (on a loss, a restore, and whenever it is granted the renderer) */
+    function deliverContext(L) {
+      var due = contextDue(L, lost);
+      if (due === 'lost') { if (L.h.onLost) safe(L.h.onLost, L); }
+      else if (due === 'restored') {
+        try { L.renderer.shadowMap.needsUpdate = true; } catch (e) {}   /* static shadow maps died with the old context */
+        if (L.h.onRestored) safe(L.h.onRestored, L);                    /* the island disposes + remounts here */
+      }
+      return due;
+    }
     function onLost(e) {
       if (e && e.preventDefault) e.preventDefault();          /* allow a restore */
       if (disposing) return;
+      if (!holders()) { retire(); return; }
+      if (sessionFail) { lost = true; return; }               /* 3D is already over: no more strikes to count */
+      var v = ctx.lost(Date.now());
+      if (v.act === 'ignore') return;                         /* already lost */
       lost = true;
-      lostCount++;
-      try { root.sessionStorage.setItem(LOST_KEY, String(lostCount)); } catch (er) {}
+      stack.forEach(function (L) { L._ctxMissed = true; });   /* they hear it when handed the renderer back */
       if (current) current._update();
-      log('WebGL context lost (' + lostCount + ' this session)');
-      if (lostCount >= 2) { remember2D('context'); failAll('context'); return; }
-      if (current && current.h.onLost) safe(current.h.onLost, current);
-      clearTimeout(restoreTimer);
-      restoreTimer = setTimeout(function () { if (lost) failAll('context'); }, 6000);
+      log('WebGL context lost (' + ctx.stats().losses + ' this session' + (v.why ? ', ' + v.why : '') + ')');
+      if (v.act === 'fail') { contextStrike(v); return; }
+      if (current) deliverContext(current);
+      armRestore(v.armMs);
     }
     function onRestored() {
-      clearTimeout(restoreTimer);
+      armRestore(0);
+      if (disposing) return;
+      ctx.restored(Date.now());
       lost = false;
       log('WebGL context restored');
-      if (!current) return;
-      if (current.h.onRestored) safe(current.h.onRestored, current);   /* the island disposes + remounts here */
+      if (sessionFail || !current) return;
+      deliverContext(current);
       if (pacer) pacer.invalidate();
       current._update();
+    }
+    function onRestoreTimeout() {
+      restoreTimer = 0;
+      if (!lost || disposing) return;
+      if (!holders()) { retire(); return; }
+      if (sessionFail) return;
+      var v = ctx.timeout(Date.now());
+      if (v.act === 'rearm') armRestore(v.armMs);
+      else if (v.act === 'fail') { log('WebGL context not restored'); contextStrike(v); }
+    }
+    function contextStrike(v) {
+      armRestore(0);
+      ss('set', LOST_KEY, JSON.stringify(v.strikes));
+      if (v.remember) remember2D('context');                  /* a persistent cause, not a routine loss */
+      failAll('context');
     }
     function failAll(reason) {
       sessionFail = sessionFail || reason;
@@ -446,8 +667,25 @@
       all.forEach(function (L) { L._fail(reason); });
     }
 
-    /* ---------------- adaptive quality ---------------- */
-    function applyStep(step) {
+    /* ---------------- adaptive quality ----------------
+       Steps apply at once (to the island and the games alike). Only steps judged on the
+       stage's own paced loop (the island) are evidence for the saved tier, and a lower
+       tier is saved only once two page sessions each needed 2 steps (demotionVerdict). */
+    var loopSteps = 0, cleanMs = 0, cleanDone = false;
+    function demote(t) {
+      var v = demotionVerdict(ls('get', PEND_KEY), t, SESSION, Date.now(), root.SLTier.TIERS, TIER_POLICY.pendMaxAgeMs);
+      if (v.pend === null) ls('del', PEND_KEY);
+      else if (typeof v.pend === 'string') ls('set', PEND_KEY, v.pend);
+      if (v.save) saveTier(v.save);
+      else log('2 quality steps this session: tier ' + t + ' pending a second session');
+    }
+    /* a long clean run of island frames: an earlier session's pending demotion was a one-off */
+    function noteClean(ms) {
+      if (cleanDone || !SL3D.quality || SL3D.quality.steps.length) return;
+      cleanMs += Math.min(ms, 100);
+      if (cleanMs >= TIER_POLICY.cleanMs) { cleanDone = true; ls('del', PEND_KEY); }
+    }
+    function applyStep(step, src) {
       var q = SL3D.quality;
       if (!q || q.steps.indexOf(step) >= 0) return;
       q.steps.push(step);
@@ -462,14 +700,15 @@
         if (hub) hub.setOutlines(false);
       } else if (step === 'particles') q.particleScale = 0.5;
       else if (step === 'cones') q.cones = false;
-      log('quality step ' + q.steps.length + ': ' + step);
-      if (q.steps.length === 2) saveTier(root.SLTier.lower(SL3D.tier));   /* next session starts cheaper */
+      log('quality step ' + q.steps.length + ': ' + step + ' (' + (src || '?') + ')');
+      if (src === 'loop' && ++loopSteps === 2) demote(root.SLTier.lower(SL3D.tier));   /* a later session may start cheaper */
       if (current && current.h.onQuality) safe(current.h.onQuality, q, step);
       qualityListeners.slice().forEach(function (fn) { safe(fn, q, step); });
     }
-    function judge(act) {
+    /* src: 'loop' (the stage's paced loop) | 'held' (a holder's own frames, e.g. a game) */
+    function judge(act, src) {
       if (!act) return;
-      if (act.type === 'step') applyStep(act.step);
+      if (act.type === 'step') applyStep(act.step, src);
       else if (act.type === 'fallback') {
         log('frames stay under 20 fps after every step: 2D for this device');
         remember2D('performance');
@@ -485,8 +724,14 @@
                   stage renders them after frame), reduced, onResize(w, h), onQuality(q, step),
                   onLost(), onRestored() (dispose + remount), onFail(reason),
                   onRevoke(lease, 'lease'|'dispose') (another holder took the renderer, or the
-                  stage was disposed and this lease is dead), onResume() (handed back:
-                  re-parent lease.canvas, re-apply exposure and clear colour)}
+                  stage was disposed and this lease is dead), onResume(lease, {restored, lost})
+                  (handed back: re-parent lease.canvas, re-apply exposure and clear colour)}
+                 The current holder hears onLost/onRestored at once. A holder stacked under
+                 another one hears them when the renderer is handed back: onResume first
+                 ({restored: true} when the context was lost and restored meanwhile), then
+                 onRestored (the stage also flags the static shadow map for a re-render), or
+                 onLost when it is still lost. A pagehide only parks the loop (the page may
+                 come back from the back/forward cache); it never revokes or fails a lease.
        lease: {renderer, canvas, THREE, tier, budget, quality, scene, camera,
                start(), stop(), observe(el), resize(w, h), setCovered(on), setHidden(on),
                setReduced(on), input(), invalidate(), compile(scene, camera) → Promise,
@@ -515,13 +760,14 @@
       this._covered = false; this._hidden = false; this._offscreen = false; this._looping = false;
       this._reduced = !!h.reduced; this._anim = true; this._last = -1; this._lastSample = -1; this._target = 0;
       this._fps = 0; this._work = 0; this._w = 0; this._h = 0;
+      this._ctxLost = false; this._ctxMissed = false;          /* see contextDue */
       this._el = null; this._io = null; this._ro = null;
       var self = this;
       this._tick = function () { self._frame(); };
     }
     Lease.prototype._update = function () {
       var want = this._granted && this._running && !this._released && !this._failed && !this._covered &&
-        !this._hidden && !this._offscreen && !lost && !document.hidden && current === this;
+        !this._hidden && !this._offscreen && !lost && !parked && !document.hidden && current === this;
       if (want === this._looping) return;
       this._looping = want;
       if (want) {
@@ -558,7 +804,8 @@
       if (interval > 0 && continuous) {
         var fps = 1000 / interval;
         this._fps = this._fps ? this._fps * 0.9 + fps * 0.1 : fps;
-        judge(aq.sample(work, interval, now, target));
+        judge(aq.sample(work, interval, now, target), 'loop');
+        noteClean(interval);
       }
     };
     Lease.prototype._grant = function (resumed) {
@@ -568,7 +815,12 @@
       r.shadowMap.enabled = q.shadows;
       if (this._w > 0 && this._h > 0) r.setSize(this._w, this._h, false);
       if (pacer) { pacer.setReduced(this._reduced); pacer.invalidate(); }
-      if (resumed && this.h.onResume) safe(this.h.onResume, this);
+      if (aq) aq.reset();                                      /* never judge a holder on the previous holder's frames */
+      this._lastSample = -1;
+      if (resumed && this.h.onResume) {
+        safe(this.h.onResume, this, { restored: contextDue(this, lost, true) === 'restored', lost: lost });
+      }
+      deliverContext(this);                                    /* a loss/restore it missed while stacked */
       this._measure();
       this._update();
     };
@@ -644,7 +896,7 @@
       this._lastSample = now;
       if (interval > 0 && aq && current === this && !this._failed) {
         this._fps = this._fps ? this._fps * 0.9 + (1000 / interval) * 0.1 : 1000 / interval;
-        judge(aq.sample(workMs, interval, now, 1000 / 60));
+        judge(aq.sample(workMs, interval, now, 1000 / 60), 'held');
       }
       return this;
     };
@@ -673,6 +925,7 @@
         var i = stack.indexOf(this);
         if (i >= 0) stack.splice(i, 1);
       }
+      if (lost && !holders()) retire();                        /* nobody left to wait for a restore */
     };
     Object.defineProperty(Lease.prototype, 'active', { get: function () { return current === this && this._granted && !this._failed && !this._released; } });
 
@@ -681,7 +934,11 @@
     function listen() {
       if (listening) return;
       listening = true;
+      /* the restore clock runs on visible time only (see ContextLossPolicy) */
+      function syncVisible() { armRestore(ctx.visible(!!document.hidden || parked, Date.now()).armMs); }
+      syncVisible();
       document.addEventListener('visibilitychange', function () {
+        syncVisible();
         if (!current) return;
         if (!document.hidden && pacer) pacer.invalidate();
         current._update();
@@ -690,7 +947,24 @@
       ['pointerdown', 'pointermove', 'wheel', 'keydown', 'touchstart'].forEach(function (t) {
         root.addEventListener(t, onInput, { passive: true, capture: true });
       });
-      root.addEventListener('pagehide', function () { disposeAll(); });   /* free GPU memory; holders get onRevoke(lease, 'dispose') */
+      /* pagehide only PARKS: the page may come back from the back/forward cache, and a
+         dispose here failed the island and every open game to 2D for the rest of the
+         session. Holders keep their leases; the browser frees a discarded page's
+         context itself, and a context it drops while the page is cached comes back
+         through the routine lost → restored path. */
+      root.addEventListener('pagehide', function () {
+        parked = true;
+        syncVisible();
+        if (current) current._update();
+      });
+      root.addEventListener('pageshow', function () {
+        if (!parked) return;
+        parked = false;
+        syncVisible();
+        if (!current) return;
+        if (pacer) pacer.invalidate();
+        current._update();
+      });
     }
 
     /* ---------------- remembered 2D ---------------- */
@@ -709,7 +983,8 @@
     function disposeAll(o) {
       o = o || {};
       disposing = true;
-      clearTimeout(restoreTimer);
+      armRestore(0);
+      ctx.drop();
       var all = stack.concat(current ? [current] : []);
       stack = []; current = null;
       all.forEach(function (L) {
@@ -736,7 +1011,8 @@
     function info() {
       var out = {
         version: VERSION, ready: SL3D.ready, tier: SL3D.tier, why: SL3D.tierWhy, budget: SL3D.budget,
-        quality: SL3D.quality, permanent: permanent, failed: sessionFail, contextLosses: lostCount,
+        quality: SL3D.quality, permanent: permanent, failed: sessionFail,
+        contextLosses: ctx.stats().losses, contextStrikes: ctx.stats().strikes, parked: parked,
         loaded: SL3D.loaded, models: Object.keys(SL3D.models).length, missing: SL3D.missing.slice(),
         apis: Object.keys(apiNames), issues: SL3D.issues.slice(), owner: current ? current.owner : null,
         kit: hub ? hub.stats() : null, kitIssues: hub ? hub.issues.slice() : []

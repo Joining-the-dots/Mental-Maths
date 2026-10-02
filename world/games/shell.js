@@ -145,12 +145,14 @@
     function start(cfg) {
       injectCss();
       var ac = new AbortController(), sig = { signal: ac.signal };
-      var sound = makeSound(cfg);
+      /* one shared sound set when the island has loaded it (adds pet voices etc.) */
+      var sound = (window.SLSound && typeof SLSound.make === 'function') ? SLSound.make(cfg) : makeSound(cfg);
+      var title = def.titleFor ? (function () { try { return def.titleFor(cfg) || def.title; } catch (e) { return def.title; } })() : def.title;
       var reduced = !!cfg.reduced;
       var root = el('div', 'slg');
-      root.setAttribute('role', 'dialog'); root.setAttribute('aria-label', def.title);
+      root.setAttribute('role', 'dialog'); root.setAttribute('aria-label', title);
       root.innerHTML =
-        '<div class="slg-top"><span class="ttl">' + def.emoji + ' ' + esc(def.title) + '</span><span class="hud" id="slgHud" aria-live="off"></span>' +
+        '<div class="slg-top"><span class="ttl">' + def.emoji + ' ' + esc(title) + '</span><span class="hud" id="slgHud" aria-live="off"></span>' +
         '<button class="slg-b" type="button" id="slgSound" aria-label="Sound on or off"></button>' +
         '<button class="slg-b" type="button" id="slgPause" aria-label="Pause">⏸</button>' +
         '<button class="slg-b" type="button" id="slgExit" aria-label="Back to my island">🏝️ Exit</button></div>' +
@@ -249,10 +251,10 @@
             }).join('') + '</div>' + (o.options || []).filter(function (op) { return op.locked && op.note; }).map(function (op) { return '<p class="slg-lock">' + esc(op.note) + '</p>'; }).join('');
           });
         }
-        var sc = setScreen('<div style="font-size:54px;">' + def.emoji + '</div><h2>' + esc(def.title) + '</h2>' + vhtml + ohtml + '<p>' + esc(pbLine()) + '</p>' +
+        var sc = setScreen('<div style="font-size:54px;">' + def.emoji + '</div><h2>' + esc(title) + '</h2>' + vhtml + ohtml + '<p>' + esc(pbLine()) + '</p>' +
           '<div class="row"><button class="slg-b go" type="button" id="slgPlay">▶ Play</button><button class="slg-b" type="button" id="slgHow">❓ How to play</button></div>');
-        sc.querySelectorAll('[data-var]').forEach(function (b) { b.addEventListener('click', function () { variant = b.dataset.var; if (cfg.onSelectVariant) cfg.onSelectVariant(variant); if (v3 && v3.setRound) v3.setRound(null, variant); menu(); }); });
-        sc.querySelectorAll('[data-mvar]').forEach(function (b) { b.addEventListener('click', function () { variant = b.dataset.mvar; try { localStorage.setItem('slgVar:' + def.key, variant); } catch (e) {} if (v3 && v3.setRound) v3.setRound(null, variant); menu(); }); });
+        sc.querySelectorAll('[data-var]').forEach(function (b) { b.addEventListener('click', function () { variant = b.dataset.var; cfg.variant = variant; if (cfg.onSelectVariant) cfg.onSelectVariant(variant); if (v3 && v3.setRound) v3.setRound(null, variant); menu(); }); });
+        sc.querySelectorAll('[data-mvar]').forEach(function (b) { b.addEventListener('click', function () { variant = b.dataset.mvar; cfg.variant = variant; try { localStorage.setItem('slgVar:' + def.key, variant); } catch (e) {} if (v3 && v3.setRound) v3.setRound(null, variant); menu(); }); });
         sc.querySelectorAll('[data-opt]').forEach(function (b) {
           b.addEventListener('click', function () {
             var o = ((def.menuOptions && def.menuOptions(cfg)) || []).filter(function (x) { return x.id === b.dataset.opt; })[0];
@@ -561,6 +563,7 @@
         if (!exited) draw();
       }
       if (def.hud && def.hud.mount) { try { hudObj = def.hud.mount(mid, cfg, api); } catch (e) { hudObj = null; } }
+      if (hudObj) hudEl.style.display = 'none';
 
       var ready = def.preload ? def.preload(cfg) : Promise.resolve();
       setScreen('<p>Loading…</p>');
@@ -575,7 +578,9 @@
       /* QA hook (inert unless localStorage.slQaMode === '1') */
       try {
         if (localStorage.getItem('slQaMode') === '1') {
-          window._slGame = { phase: function () { return phase; }, round: function () { return round; }, advance: function (sec) { var n = Math.round(sec / 0.05); for (var i = 0; i < n; i++) advance(0.05); draw(); }, beginRound: beginRound, pause: pause, exit: exit, held: held, variant: function () { return variant; }, view: function () { return v3 ? '3d' : '2d'; }, v3: function () { return v3; }, force2d: function () { fail3d('qa'); }, hud: function () { return hudObj; } };
+          window._slGame = { phase: function () { return phase; }, round: function () { return round; }, advance: function (sec) { var n = Math.round(sec / 0.05); for (var i = 0; i < n; i++) advance(0.05); draw(); }, beginRound: beginRound, pause: pause, exit: exit, variant: function () { return variant; }, view: function () { return v3 ? '3d' : '2d'; }, v3: function () { return v3; }, force2d: function () { fail3d('qa'); }, hud: function () { return hudObj; } };
+          /* always the live held-input object (beginRound replaces it) */
+          Object.defineProperty(window._slGame, 'held', { get: function () { return held; } });
         }
       } catch (e) {}
       return { exit: exit };

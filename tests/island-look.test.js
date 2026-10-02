@@ -154,10 +154,9 @@ test('look: LOCKED WALL, DOOR and roof pairs match the world-art.js source text'
 });
 
 test('look: LOCKED THEMES match the course THEMES in pet-course.js (colours only)', () => {
-  const a = COURSE_SRC.indexOf('var THEMES = '), b = COURSE_SRC.indexOf('var KINDS');
-  assert.ok(a > 0 && b > a);
-  const block = COURSE_SRC.slice(a + 'var THEMES = '.length, b).trim().replace(/;\s*$/, '');
-  const themes = evalLiteral(block);
+  /* the runner exports its THEMES (rewritten game); compare colours only */
+  const themes = JSON.parse(JSON.stringify(require('../world/games/pet-course.js').THEMES));
+  assert.ok(COURSE_SRC.indexOf('var THEMES = ') > 0, 'pet-course.js still declares THEMES');
   for (const v of Object.values(themes)) delete v.treat;
   assert.deepEqual(lower(L.LOCKED.THEMES), lower(themes));
   assert.deepEqual(Object.keys(L.LOCKED.THEMES).sort(), C.CATALOG.filter((x) => x.slot === 'course').map((x) => x.id).sort());

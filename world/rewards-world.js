@@ -45,6 +45,11 @@
   }
   function TO() { return { trial: trial() }; }
   function iState(u, id) { return C.itemState(u, id, TO()); }
+  /* island music (world/music.js): starts after a tap, obeys mute, only on My Island */
+  function musicOn() { try { return !!(window.SLMusic && SLMusic.enabled()); } catch (e) { return false; } }
+  function islandMusic(ctxName) {
+    try { if (window.SLMusic) SLMusic.island(ctxName || 'island_day', { muted: function () { var u = me(); return !!(u && u.muted); } }); } catch (e) {}
+  }
 
   /* ---------------- commit protocol (lock + fresh read + verify) ---------------- */
   function adapter() {
@@ -305,6 +310,7 @@
             '<button class="slw-btn big" type="button" data-act="games">🎮 Games</button>' +
             '<button class="slw-btn' + (mode === 'edit' ? ' on' : '') + '" type="button" data-act="edit" aria-pressed="' + (mode === 'edit') + '">✏️ ' + (mode === 'edit' ? 'Done' : 'Edit') + '</button>' +
             '<button class="slw-btn" type="button" data-act="pets">🐾 Pets</button>' +
+            '<button class="slw-btn" type="button" data-act="music" aria-pressed="' + musicOn() + '" aria-label="Music on or off">' + (musicOn() ? '🎵 On' : '🎵 Off') + '</button>' +
             '<button class="slw-btn" type="button" data-act="sound" aria-label="Sound on or off">' + (u.muted ? '🔇 Off' : '🔊 On') + '</button>' +
             '<button class="slw-btn" type="button" data-act="info" aria-label="How it works">❓</button>' +
           '</div>' +
@@ -319,6 +325,7 @@
       '</div>';
     drawStage();
     drawBar();
+    islandMusic('island_day');
     /* on a phone the island is wider than the screen: start centred on home */
     var wrap = root.querySelector('.slw-stagewrap');
     if (wrap && wrap.scrollWidth > wrap.clientWidth + 4) wrap.scrollLeft = (wrap.scrollWidth - wrap.clientWidth) / 2;
@@ -470,6 +477,14 @@
     if (a === 'games') return openGames();
     if (a === 'pets') return openPets();
     if (a === 'info') return openInfo();
+    if (a === 'music') {
+      var onNow = !musicOn();
+      try { if (window.SLMusic) SLMusic.setEnabled(onNow); } catch (er) {}
+      if (onNow) islandMusic('island_day');
+      e.currentTarget.textContent = onNow ? '🎵 On' : '🎵 Off';
+      e.currentTarget.setAttribute('aria-pressed', String(onNow));
+      return;
+    }
     if (a === 'sound') {
       var u = me(); u.muted = !u.muted; saveState();
       try { if (typeof renderMuteBtn === 'function') renderMuteBtn(); } catch (er) {}
@@ -716,7 +731,8 @@
     var disabled = s.state === 'locked' || s.state === 'short' || s.state === 'capped' || (s.state === 'owned' && !(it.kind === 'style' || it.kind === 'cosmetic' || it.kind === 'variant'));
     var isGoal = w.goal === it.id;
     var goalBtn = (s.state === 'owned' || trial()) ? '' : '<button type="button" class="slw-goalbtn' + (isGoal ? ' on' : '') + '" data-goal="' + it.id + '" aria-pressed="' + isGoal + '" title="' + (isGoal ? 'This is your goal' : 'Make this my savings goal') + '">🎯</button>';
-    return '<div class="slw-card"><button type="button" class="ic" data-open="' + it.id + '" aria-label="See ' + esc(it.name) + '">' + ART.icon(it.id, artState(w)) + '</button>' +
+    var shine = (window.SLIslandLook && SLIslandLook.shineLevel) ? ' shine-' + SLIslandLook.shineLevel(it.price) : '';
+    return '<div class="slw-card' + shine + '"><button type="button" class="ic" data-open="' + it.id + '" aria-label="See ' + esc(it.name) + '">' + ART.icon(it.id, artState(w)) + '</button>' +
       '<div class="nm">' + esc(it.name) + '</div><div class="ds">' + esc(it.desc) + '</div>' + chip +
       (trial() ? '<div class="pr"><s style="color:#9a94b5;font-weight:700;">⭐ ' + fmt(it.price) + '</s> <span class="slw-free">FREE</span></div>'
         : '<div class="pr">⭐ ' + fmt(it.price) + (rep ? ' <span style="font-size:11px;color:#8a84a3;">each</span>' : '') + '</div>') +
@@ -725,7 +741,8 @@
   function openShop(cat) {
     if (cat) shopCat = cat;
     var u = me();
-    var ov = overlay('<h2>🛍️ Island Shop</h2><div style="font-weight:800;color:#6b5a22;">You have ⭐ <span id="slwShopPts">' + fmt(u.points) + '</span> ' + (trial() ? 'saved for the 🎁 Shop (not used here)' : 'to spend · earn more by learning 📚 · same ⭐ as the 🎁 Shop') + '</div>' + (trial() ? '<div class="slw-trialbar">🧪 Test mode: everything in this shop is <b>free</b> — your ⭐ aren’t used. Try anything you like!</div>' : '') + '<div class="slw-cats" id="slwCats"></div><div class="slw-err" id="slwShopErr" role="alert"></div><div class="slw-grid" id="slwShopGrid"></div>');
+    islandMusic('shop');
+    var ov = overlay('<h2>🛍️ Island Shop</h2><div style="font-weight:800;color:#6b5a22;">You have ⭐ <span id="slwShopPts">' + fmt(u.points) + '</span> ' + (trial() ? 'saved for the 🎁 Shop (not used here)' : 'to spend · earn more by learning 📚 · same ⭐ as the 🎁 Shop') + '</div>' + (trial() ? '<div class="slw-trialbar">🧪 Test mode: everything in this shop is <b>free</b> — your ⭐ aren’t used. Try anything you like!</div>' : '') + '<div class="slw-cats" id="slwCats"></div><div class="slw-err" id="slwShopErr" role="alert"></div><div class="slw-grid" id="slwShopGrid"></div>', { onClose: function () { islandMusic('island_day'); } });
     function paint() {
       var u2 = me();
       $('#slwShopPts', ov).textContent = fmt(u2.points);
@@ -1148,9 +1165,9 @@
   /* deps: extra world/games/ scripts loaded (in order) after shell.js + fx.js and
      before the game file; tutKey: which tutSeen flag the game's tutorial uses */
   var GAMES = {
-    course: { name: 'Pet Obstacle Course', att: 'att_course', file: 'pet-course.js', grad: 'linear-gradient(135deg,#43c66f,#2a9d8f)', emoji: '🐾' },
-    penalty: { name: 'Penalty Shootout', att: 'att_pitch', file: 'penalty.js', grad: 'linear-gradient(135deg,#4a8ff0,#6c5ce7)', emoji: '⚽' },
-    kart: { name: 'Kart Time Trial', att: 'att_kart', file: 'kart.js', grad: 'linear-gradient(135deg,#ff8a3d,#e94b4b)', emoji: '🏎️' }
+    course: { name: 'Debut Run', att: 'att_course', file: 'pet-course.js', deps: ['course-hud.js'], tutKey: 'course_v2', grad: 'linear-gradient(135deg,#43c66f,#2a9d8f)', emoji: '🐾' },
+    penalty: { name: 'Encore Shootout', att: 'att_pitch', file: 'penalty.js', tutKey: 'penalty2', grad: 'linear-gradient(135deg,#4a8ff0,#6c5ce7)', emoji: '⚽' },
+    kart: { name: 'Neon Grand Prix', att: 'att_kart', file: 'kart.js', deps: ['kart-logic.js'], tutKey: 'kart2', grad: 'linear-gradient(135deg,#ff8a3d,#e94b4b)', emoji: '🏎️' }
   };
   var loaded = {};
   function loadScript(src) {
@@ -1176,6 +1193,8 @@
     Object.keys(w.pb).forEach(function (k) {
       if (k.indexOf(game + ':') !== 0) return;
       var rec = w.pb[k], vid = k.split(':')[1], it = C.item(vid);
+      var RIVAL = { std: 'Mochi', rival_bop: 'Bop', rival_glowy: 'Glowy', rival_flip: 'Flip' };
+      if (game === 'penalty' && RIVAL[vid]) it = { name: RIVAL[vid] };
       out.push((it ? it.name : 'Best') + ': ' + (rec.ms != null ? (rec.ms / 1000).toFixed(2) + 's' : 'score ' + fmt(rec.score)));
     });
     return out.length ? '🏆 ' + out.join(' · ') : 'No best yet — set one!';
@@ -1252,6 +1271,7 @@
 
   /* ---------------- leaving the island tab ---------------- */
   function onHide() {
+    try { if (window.SLMusic) SLMusic.stopAll(200); } catch (e) {}   /* never on learning screens */
     if (placing) { placing = null; document.removeEventListener('keydown', placeKeys); }
     mode = 'play'; selectedUid = null;
     stopPets();

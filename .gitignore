@@ -16,3 +16,6 @@ desktop.ini
 
 # Claude Code local files
 .claude/local/
+
+# workflow agent worktrees (local only)
+.claude/worktrees/

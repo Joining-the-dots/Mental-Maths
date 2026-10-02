@@ -33,7 +33,7 @@
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Baloo+2:wght@600;700;800&family=Patrick+Hand&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Baloo+2:wght@600;700;800&family=Patrick+Hand&family=Bagel+Fat+One&display=swap" rel="stylesheet">
 <style>
   /* V48.1 shop product images */
   .shop-item-imgwrap { height:110px; display:flex; align-items:center; justify-content:center; margin-bottom:6px; }
@@ -31845,8 +31845,16 @@ window.SL_WORLD_TRIAL = true;
     if (!loading) {
       var v = '?v=' + window.SL_WORLD_VER;
       try { if (localStorage.getItem('slQaMode') === '1') v += '&qa=' + Date.now(); } catch (e) {}   /* QA only: always fresh */
+      /* Island Encore restyle (loaded once; html-body-scoped rules beat the injected ones) */
+      if (!document.getElementById('slwEncoreCss')) {
+        var lk = document.createElement('link'); lk.id = 'slwEncoreCss'; lk.rel = 'stylesheet'; lk.href = 'world/island-encore.css' + v;
+        document.head.appendChild(lk);
+      }
       loading = loadScript('world/world-core.js' + v)
         .then(function () { return loadScript('world/world-art.js' + v); })
+        .then(function () { return loadScript('world/world-look.js' + v); })
+        .then(function () { return loadScript('world/sound.js' + v); })
+        .then(function () { return loadScript('world/music.js' + v); })
         .then(function () { return loadScript('world/rewards-world.js' + v); })
         .catch(function (e) { loading = null; throw e; });
     }

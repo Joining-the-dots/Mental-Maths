@@ -50,6 +50,13 @@
       '.slg-count{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:clamp(70px,18vw,160px);font-weight:800;color:#ffd23f;text-shadow:0 8px 40px rgba(0,0,0,.5);z-index:3;pointer-events:none;}',
       '.slg-rot{display:none;position:absolute;left:50%;top:14px;transform:translateX(-50%);background:rgba(255,255,255,.12);border:2px dashed rgba(255,255,255,.35);border-radius:999px;padding:6px 14px;font-weight:800;font-size:15px;white-space:nowrap;pointer-events:none;z-index:2;}',
       '@media (orientation: portrait) and (max-width: 760px){.slg-rot{display:block;}}',
+      '.slg-gl{position:absolute;inset:0;width:100%;height:100%;display:block;transition:opacity .3s;}',
+      '.slg-pad[data-st=s1]{border-color:#3DF2FF;box-shadow:0 0 12px #3DF2FF;}.slg-pad[data-st=s2]{border-color:#FF4FB8;box-shadow:0 0 14px #FF4FB8;}',
+      '.slg-pad[data-st=s3]{border-color:#FFD23F;box-shadow:0 0 16px #FFD23F;}.slg-pad[data-st=grey]{border-color:#CFC8DC;opacity:.75;}.slg-pad[data-st=ready]{border-color:#FFD23F;}',
+      '.slg-badges{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;}.slg-badge{border-radius:999px;padding:4px 12px;font-weight:800;font-size:15px;background:rgba(255,255,255,.14);}',
+      '.slg-badge.bronze{background:linear-gradient(135deg,#e8a15b,#b86b2c);}.slg-badge.silver{background:linear-gradient(135deg,#e9edf5,#9aa6bd);color:#2b2140;}.slg-badge.gold{background:linear-gradient(135deg,#ffe89a,#f0c02f);color:#4a3200;}.slg-badge.crown{background:linear-gradient(135deg,#ffb3e6,#b3e5ff,#c9ffe5,#fff3b3);color:#2b2140;}',
+      '.slg-scr.glass{top:auto;height:58%;background:rgba(26,18,64,.72);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);border-radius:22px 22px 0 0;}',
+      '.slg-opt{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;align-items:center;}.slg-opt .lb{font-weight:800;font-size:14px;opacity:.85;}.slg-lock{font-size:13px;opacity:.7;margin:0;}',
       '@media (prefers-reduced-motion: reduce){.slg-pb{animation:none;}}'
     ].join('\n');
     document.head.appendChild(c);
@@ -65,12 +72,14 @@
      Everything respects the app's mute. */
   var SCALE = [523, 587, 659, 784, 880, 1047, 1175, 1319, 1568, 1760];
   var SAMPLE_FILES = { right: 1, wrong: 1, fanfare: 1, sting: 1, chip: 1, coins: 1, unlock: 1, applause: 1, heartbeat: 1 };
+  var DUCK = { fanfare: 1, tada: 1, applause: 1, sting: 1, cheer: 1, unlock: 1 };
   function makeSound(cfg) {
     return function (name, vol, step) {
       try {
         if (cfg.muted && cfg.muted()) return;
         if (name === 'correct' || name === 'wrong' || name === 'unlock' || name === 'fanfare' || name === 'tick') { if (typeof playSfx === 'function') playSfx(name); return; }
         if (name === 'cheer') name = 'applause';
+        if (DUCK[name] && window.SLMusic && typeof SLMusic.duck === 'function') { try { SLMusic.duck(0.4, 350); } catch (e) {} }
         /* only real sample files go to slSample — anything else would 404 on audio/sfx/<name>.mp3 */
         if (SAMPLE_FILES[name] && typeof slSample === 'function' && slSample(name, vol == null ? 0.8 : vol)) return;
         if (typeof getAudioCtx === 'function' && typeof _beep === 'function') {
@@ -103,6 +112,27 @@
     };
   }
 
+  /* ================================================================
+     OPTIONAL HOOKS (see docs/island3d/CONTRACTS.md) — every one defaults to
+     today's behaviour, so a game only opts in to what it uses:
+       def.view3d {src}            ES module exporting create(mid, opts) -> view
+                                   view: {canvas, frame(round, dt, alpha, phase, countT),
+                                          resize(w, h), dispose(), setRound?(round, variant)}
+       def.hud {mount(mid, cfg, api) -> {update(round, phase), dispose()}}
+       def.countIn {beats, bpm, labels[]}   beat count-in instead of 'countdown' seconds
+       def.controlsFor(cfg)        touch pads per config
+       def.menuVariants(cfg)       [{id, name, icon, tip, locked, lockText, medal, best}]
+       def.menuVariantsLabel       e.g. 'rival' ('Change rival')
+       def.menuOptions(cfg)        [{id, label, value, options:[{value, label, locked, note}]}]
+       def.setOption(cfg, id, value)
+       def.pbText(rec, variant, cfg)
+       def.music {track}           with window.SLMusic present
+       def.resultsGlass            results sheet as glass over the 3D scene
+       round.wantEvents/events[]   logic pushes view events only while wantEvents; the shell
+                                   empties events after every draw
+       round.countdown(countT, held, isStart), round.pauseReset(), round.padState(id),
+       round.summaryBadges() -> [{text, kind}], round.onFinish()
+     ================================================================ */
   /* ================================================================
      define(def) -> { start(cfg), demo(host, opts) }
      def: key, title, emoji, LW, LH, tutorial[], controls[], keys{},
@@ -140,6 +170,7 @@
         canvas.height = Math.max(1, Math.round(r.height * dpr));
         var s = Math.min(r.width / def.LW, r.height / def.LH);
         view = { scale: s, ox: (r.width - def.LW * s) / 2, oy: (r.height - def.LH * s) / 2, dpr: dpr };
+        if (v3) { try { v3.resize(r.width, r.height); } catch (e) { fail3d('resize'); } }
         draw();
       }
       var ro = (typeof ResizeObserver !== 'undefined') ? new ResizeObserver(resize) : null;
@@ -150,6 +181,25 @@
       var phase = 'menu';          /* menu | tutorial | countdown | playing | paused | results | timeup */
       var variant = cfg.variant;
       var round = null, raf = 0, last = 0, acc = 0, countT = 0, playSecAcc = 0, hardStop = Infinity, graceNote = false;
+      var lastDt = 0, countIsStart = true, v3 = null, v3mod = null, v3failed = false, idleRaf = 0, idleLast = 0, idleSkip = false, hudObj = null;
+      function countTotal() { return def.countIn ? def.countIn.beats * 60 / def.countIn.bpm : (def.countdown || 0); }
+      function countLabel() {
+        if (!def.countIn) return String(Math.max(1, Math.ceil(countT)));
+        var beat = 60 / def.countIn.bpm, i = Math.min(def.countIn.beats - 1, Math.floor((countTotal() - countT) / beat));
+        return (def.countIn.labels && def.countIn.labels[i]) || String(def.countIn.beats - i);
+      }
+      function mus(method) {
+        var m = api && api.music; if (!m || typeof m[method] !== 'function') return;
+        try { m[method].apply(m, Array.prototype.slice.call(arguments, 1)); } catch (e) {}
+      }
+      /* stored rival/variant choice for games with their own variant list */
+      if (def.menuVariants) {
+        try {
+          var stored = localStorage.getItem('slgVar:' + def.key), list0 = def.menuVariants(cfg) || [];
+          if (stored && list0.some(function (v) { return v.id === stored && !v.locked; })) variant = stored;
+          else if (!list0.some(function (v) { return v.id === variant && !v.locked; }) && list0.length) variant = (list0.filter(function (v) { return !v.locked; })[0] || list0[0]).id;
+        } catch (e) {}
+      }
       var screen = null, banner = null;
       var held = {};
 
@@ -173,28 +223,57 @@
         var key = def.key + ':' + String(variant || 'std');
         var rec = cfg.pb && cfg.pb[key];
         if (!rec) return 'No personal best yet — set one!';
+        if (def.pbText) { try { var t = def.pbText(rec, variant, cfg); if (t) return t; } catch (e) {} }
         return '🏆 Your best: ' + (rec.ms != null ? (rec.ms / 1000).toFixed(2) + ' s' : 'score ' + String(rec.score).replace(/\B(?=(\d{3})+(?!\d))/g, ','));
       }
       function menu() {
         phase = 'menu'; stopLoop(); setBanner(null); renderTouch(false);
-        var vars = (cfg.ownedVariants || []);
-        var vhtml = vars.length > 1 ? '<div class="row">' + vars.map(function (v) { return '<button class="slg-var' + (v.id === variant ? ' on' : '') + '" type="button" data-var="' + esc(v.id) + '">' + esc(v.name) + '</button>'; }).join('') + '</div>' : '';
-        var sc = setScreen('<div style="font-size:54px;">' + def.emoji + '</div><h2>' + esc(def.title) + '</h2>' + vhtml + '<p>' + esc(pbLine()) + '</p>' +
+        mus('menuMode', true);
+        var vhtml = '';
+        if (def.menuVariants) {
+          var mv = def.menuVariants(cfg) || [];
+          vhtml = '<p class="lb" style="font-weight:800;margin:0;">' + esc(def.menuVariantsTitle || 'Choose') + '</p><div class="row">' + mv.map(function (v) {
+            return '<button class="slg-var' + (v.id === variant ? ' on' : '') + '" type="button" data-mvar="' + esc(v.id) + '"' + (v.locked ? ' disabled' : '') + ' title="' + esc(v.tip || '') + '">' +
+              (v.icon ? esc(v.icon) + ' ' : '') + esc(v.name) + (v.medal ? ' ' + esc(v.medal) : '') + (v.locked ? ' 🔒' : '') + '</button>';
+          }).join('') + '</div>' + mv.filter(function (v) { return v.locked && v.lockText; }).map(function (v) { return '<p class="slg-lock">🔒 ' + esc(v.name) + ': ' + esc(v.lockText) + '</p>'; }).join('');
+        } else {
+          var vars = (cfg.ownedVariants || []);
+          vhtml = vars.length > 1 ? '<div class="row">' + vars.map(function (v) { return '<button class="slg-var' + (v.id === variant ? ' on' : '') + '" type="button" data-var="' + esc(v.id) + '">' + esc(v.name) + '</button>'; }).join('') + '</div>' : '';
+        }
+        var ohtml = '';
+        if (def.menuOptions) {
+          (def.menuOptions(cfg) || []).forEach(function (o) {
+            ohtml += '<div class="slg-opt" role="group" aria-label="' + esc(o.label) + '"><span class="lb">' + esc(o.label) + '</span>' + (o.options || []).map(function (op) {
+              var on = op.value === o.value;
+              return '<button class="slg-var' + (on ? ' on' : '') + '" type="button" aria-pressed="' + on + '" data-opt="' + esc(o.id) + '" data-val="' + esc(String(op.value)) + '"' + (op.locked ? ' disabled' : '') + '>' + (op.locked ? '🔒 ' : '') + esc(op.label) + '</button>';
+            }).join('') + '</div>' + (o.options || []).filter(function (op) { return op.locked && op.note; }).map(function (op) { return '<p class="slg-lock">' + esc(op.note) + '</p>'; }).join('');
+          });
+        }
+        var sc = setScreen('<div style="font-size:54px;">' + def.emoji + '</div><h2>' + esc(def.title) + '</h2>' + vhtml + ohtml + '<p>' + esc(pbLine()) + '</p>' +
           '<div class="row"><button class="slg-b go" type="button" id="slgPlay">▶ Play</button><button class="slg-b" type="button" id="slgHow">❓ How to play</button></div>');
-        sc.querySelectorAll('[data-var]').forEach(function (b) { b.addEventListener('click', function () { variant = b.dataset.var; if (cfg.onSelectVariant) cfg.onSelectVariant(variant); menu(); }); });
+        sc.querySelectorAll('[data-var]').forEach(function (b) { b.addEventListener('click', function () { variant = b.dataset.var; if (cfg.onSelectVariant) cfg.onSelectVariant(variant); if (v3 && v3.setRound) v3.setRound(null, variant); menu(); }); });
+        sc.querySelectorAll('[data-mvar]').forEach(function (b) { b.addEventListener('click', function () { variant = b.dataset.mvar; try { localStorage.setItem('slgVar:' + def.key, variant); } catch (e) {} if (v3 && v3.setRound) v3.setRound(null, variant); menu(); }); });
+        sc.querySelectorAll('[data-opt]').forEach(function (b) {
+          b.addEventListener('click', function () {
+            var o = ((def.menuOptions && def.menuOptions(cfg)) || []).filter(function (x) { return x.id === b.dataset.opt; })[0];
+            var op = o && (o.options || []).filter(function (x) { return String(x.value) === b.dataset.val; })[0];
+            if (op && def.setOption) def.setOption(cfg, o.id, op.value);
+            menu();
+          });
+        });
         sc.querySelector('#slgPlay').addEventListener('click', function () { cfg.tutSeen ? beginRound() : tutorial(); });
         sc.querySelector('#slgHow').addEventListener('click', tutorial);
-        drawIdle();
+        if (v3) { if (v3.setRound) v3.setRound(null, variant); startIdle(); } else drawIdle();
       }
       function tutorial() {
-        phase = 'tutorial';
+        phase = 'tutorial'; if (v3) startIdle();
         var sc = setScreen('<h2>How to play</h2><div class="slg-tut">' + def.tutorial.map(function (t) { return '<div><b>' + t[0] + '</b>' + esc(t[1]) + '</div>'; }).join('') + '</div>' +
           '<div class="row"><button class="slg-b go" type="button" id="slgGotIt">Got it — let’s go!</button><button class="slg-b" type="button" id="slgBack">Back</button></div>');
         sc.querySelector('#slgGotIt').addEventListener('click', function () { if (!cfg.tutSeen) { cfg.tutSeen = true; if (cfg.onTutorialSeen) cfg.onTutorialSeen(); } beginRound(); });
         sc.querySelector('#slgBack').addEventListener('click', menu);
       }
       function timeUpScreen(afterRound) {
-        phase = 'timeup'; stopLoop(); setBanner(null); renderTouch(false);
+        phase = 'timeup'; stopLoop(); setBanner(null); renderTouch(false); mus('menuMode', true); if (v3) startIdle();
         var sc = setScreen('<div style="font-size:54px;">⏱️</div><h2>That’s all the game time for today</h2><p>' + (afterRound ? 'Great finish! ' : '') + 'Your games are still yours — come back tomorrow. 📚 Learning is open whenever you like.</p>' +
           '<div class="row"><button class="slg-b go" type="button" id="slgOut">🏝️ Back to my island</button></div>');
         sc.querySelector('#slgOut').addEventListener('click', exit);
@@ -205,23 +284,33 @@
         hardStop = gate.hardStopAtUsed; graceNote = false;
         setScreen(null); setBanner(null);
         round = def.newRound(api, variant, cfg);
+        round.wantEvents = true; if (!round.events) round.events = [];
         held = {};
         renderTouch(true);
-        acc = 0; playSecAcc = 0;
-        if (def.countdown) { phase = 'countdown'; countT = def.countdown; } else phase = 'playing';
+        acc = 0; playSecAcc = 0; countIsStart = true;
+        if (!v3) mount3d();
+        if (v3 && v3.setRound) { try { v3.setRound(round, variant); } catch (e) { fail3d('setRound'); } }
+        if (def.music) mus('play', def.music.track, { countInSec: countTotal() });
+        if (countTotal()) { phase = 'countdown'; countT = countTotal(); } else { phase = 'playing'; mus('menuMode', false); }
         var st = cfg.arcade && cfg.arcade.status();
         if (st && st.limited && st.warn) setBanner('⏱️ About 1 minute of game time left today');
         startLoop();
       }
       function finishRound() {
         if (!round || phase === 'results') return;
+        if (round.onFinish) { try { round.onFinish(); } catch (e) {} }
         phase = 'results'; stopLoop(); renderTouch(false); setBanner(null);
+        mus('menuMode', true);
         if (cfg.arcade) cfg.arcade.flush();
         var res = round.result();
-        var sc = setScreen('<h2>' + esc(round.summaryTitle ? round.summaryTitle() : 'Finished!') + '</h2><div class="slg-big">' + esc(round.summaryBig()) + '</div><p>' + esc(round.summaryText ? round.summaryText() : '') + '</p><div id="slgPbSlot" style="min-height:40px;"></div><p style="font-size:13px;opacity:.75;margin:0 0 8px;">🎮 Game scores don’t earn or spend ⭐ — learning earns ⭐.</p>' +
+        var badges = '';
+        if (round.summaryBadges) { try { badges = '<div class="slg-badges">' + (round.summaryBadges() || []).map(function (b) { return '<span class="slg-badge ' + esc(b.kind || '') + '">' + esc(b.text) + '</span>'; }).join('') + '</div>'; } catch (e) { badges = ''; } }
+        var sc = setScreen('<h2>' + esc(round.summaryTitle ? round.summaryTitle() : 'Finished!') + '</h2><div class="slg-big">' + esc(round.summaryBig()) + '</div><p>' + esc(round.summaryText ? round.summaryText() : '') + '</p>' + badges + '<div id="slgPbSlot" style="min-height:40px;"></div><p style="font-size:13px;opacity:.75;margin:0 0 8px;">🎮 Game scores don’t earn or spend ⭐ — learning earns ⭐.</p>' +
           '<div class="row"><button class="slg-b go" type="button" id="slgAgain">↻ Play again</button>' +
-          ((cfg.ownedVariants || []).length > 1 ? '<button class="slg-b" type="button" id="slgMenu">🗺️ Change course</button>' : '') +
+          (variantChoices() > 1 ? '<button class="slg-b" type="button" id="slgMenu">🗺️ Change ' + esc(def.menuVariantsLabel || 'course') + '</button>' : '') +
           '<button class="slg-b alt" type="button" id="slgHome">🏝️ Back to my island</button></div>');
+        if (v3 && def.resultsGlass) sc.classList.add('glass');
+        if (v3) startIdle();
         sc.querySelector('#slgAgain').addEventListener('click', beginRound);
         var mb = sc.querySelector('#slgMenu'); if (mb) mb.addEventListener('click', menu);
         sc.querySelector('#slgHome').addEventListener('click', exit);
@@ -244,13 +333,21 @@
         /* a finger still tapping the game mustn't hit Play again / Exit by accident */
         sc.querySelectorAll('button').forEach(function (b) { if (!b.disabled) { b.disabled = true; setTimeout(function () { if (!b.dataset.stay) b.disabled = false; }, 650); } });
       }
+      function variantChoices() {
+        if (def.menuVariants) { try { return (def.menuVariants(cfg) || []).filter(function (v) { return !v.locked; }).length; } catch (e) { return 0; } }
+        return (cfg.ownedVariants || []).length;
+      }
       function pause() {
         if (phase !== 'playing' && phase !== 'countdown') return;
+        if (round && round.pauseReset) { try { round.pauseReset(); } catch (e) {} }
+        mus('pause', 200);
         var was = phase; phase = 'paused'; stopLoop(); held = {}; renderTouchHeld();
         var sc = setScreen('<div style="font-size:54px;">⏸</div><h2>Paused</h2><p>Take your time.</p><div class="row"><button class="slg-b go" type="button" id="slgResume">▶ Resume</button><button class="slg-b" type="button" id="slgRestart">↻ Restart</button><button class="slg-b alt" type="button" id="slgQuit">🏝️ Exit</button></div>');
         sc.querySelector('#slgResume').addEventListener('click', function () {
           setScreen(null);
-          if (was === 'playing') { phase = 'countdown'; countT = Math.max(countT, 2); } else phase = was;
+          countIsStart = false;
+          if (was === 'playing') { phase = 'countdown'; countT = def.countIn ? countTotal() : Math.max(countT, 2); } else phase = was;
+          mus('resume', 300);
           startLoop();
         });
         sc.querySelector('#slgRestart').addEventListener('click', beginRound);
@@ -261,12 +358,25 @@
       window.addEventListener('blur', function () { pause(); }, sig);
 
       /* ---------- loop ---------- */
-      function startLoop() { stopLoop(); last = performance.now(); raf = requestAnimationFrame(frame); }
+      function startLoop() { stopLoop(); stopIdle(); last = performance.now(); raf = requestAnimationFrame(frame); }
       function stopLoop() { if (raf) cancelAnimationFrame(raf); raf = 0; }
+      /* menus/results keep the 3D scene alive at ~30 fps (static 2D needs no loop) */
+      function startIdle() { if (!v3 || idleRaf || exited) return; idleLast = performance.now(); idleRaf = requestAnimationFrame(idleFrame); }
+      function stopIdle() { if (idleRaf) cancelAnimationFrame(idleRaf); idleRaf = 0; }
+      function idleFrame(now) {
+        idleRaf = 0;
+        if (!v3 || exited || document.hidden || phase === 'playing' || phase === 'countdown' || phase === 'paused') return;
+        idleSkip = !idleSkip;
+        if (!idleSkip) {
+          var dt = Math.min(MAX_FRAME, Math.max(0, (now - idleLast) / 1000)); idleLast = now;
+          try { v3.frame(round, dt, 0, phase, 0); } catch (e) { fail3d('frame'); return; }
+        }
+        idleRaf = requestAnimationFrame(idleFrame);
+      }
       function frame(now) {
         raf = 0;
         var dt = Math.min(MAX_FRAME, Math.max(0, (now - last) / 1000));
-        last = now;
+        last = now; lastDt = dt;
         advance(dt);
         draw();
         if (phase === 'playing' || phase === 'countdown') raf = requestAnimationFrame(frame);
@@ -274,10 +384,15 @@
       /* exposed for automated QA: advance the simulation by real seconds */
       function advance(dt) {
         if (phase === 'countdown') {
-          var before = Math.ceil(countT);
+          var before = countLabel();
           countT -= dt;
-          if (Math.ceil(countT) !== before && countT > 0) sound('beep');
-          if (countT <= 0) { phase = 'playing'; sound('go'); }
+          if (round && round.countdown) { try { round.countdown(Math.max(0, countT), held, countIsStart); } catch (e) {} }
+          if (countLabel() !== before && countT > 0) sound('beep');
+          if (countT <= 0) {
+            phase = 'playing'; sound('go'); mus('menuMode', false);
+            /* keys/pads held through the count fire as fresh presses at GO */
+            if (round && round.input) Object.keys(held).forEach(function (id) { if (held[id]) round.input(id, true); });
+          }
           return;
         }
         if (phase !== 'playing' || !round) return;
@@ -306,16 +421,26 @@
         ctx.save(); ctx.beginPath(); ctx.rect(0, 0, def.LW, def.LH); ctx.clip();
       }
       function draw() {
-        if (!round) { drawIdle(); return; }
-        begin();
-        round.render(ctx);
-        ctx.restore();
-        if (hudEl && round.hud) hudEl.textContent = round.hud();
+        if (v3) {
+          try { v3.frame(round, lastDt, acc / STEP, phase, countT); }
+          catch (e) { fail3d('frame'); return draw(); }
+        } else {
+          if (!round) { drawIdle(); return; }
+          begin();
+          round.render(ctx);
+          ctx.restore();
+        }
+        if (round && hudEl && round.hud) hudEl.textContent = round.hud();
+        if (hudObj) { try { hudObj.update(round, phase); } catch (e) {} }
+        if (round && round.padState) {
+          touchHost.querySelectorAll('[data-ctl]').forEach(function (b) { var st = round.padState(b.dataset.ctl) || ''; if (b.dataset.st !== st) b.dataset.st = st; });
+        }
         var cnt = mid.querySelector('.slg-count');
         if (phase === 'countdown') {
           if (!cnt) { cnt = el('div', 'slg-count'); mid.appendChild(cnt); }
-          cnt.textContent = Math.max(1, Math.ceil(countT));
+          cnt.textContent = countLabel();
         } else if (cnt) cnt.remove();
+        if (round && round.events && round.events.length) round.events.length = 0;
       }
       function drawIdle() {
         begin();
@@ -353,9 +478,10 @@
       var touchHost = root.querySelector('#slgTouch');
       function renderTouch(show) {
         touchHost.innerHTML = '';
-        if (!show || !def.controls) return;
+        var controls = def.controlsFor ? def.controlsFor(cfg) : def.controls;
+        if (!show || !controls) return;
         var left = el('div', 'grp'), right = el('div', 'grp');
-        def.controls.forEach(function (c) {
+        controls.forEach(function (c) {
           var b = el('button', 'slg-pad' + (c.wide ? ' wide' : ''), c.label);
           b.type = 'button'; b.dataset.ctl = c.id; b.setAttribute('aria-label', c.aria || c.label);
           function down(e) { e.preventDefault(); try { b.setPointerCapture(e.pointerId); } catch (er) {} if (phase !== 'playing' && phase !== 'countdown') return; held[c.id] = true; if (phase === 'playing' && round && round.input) round.input(c.id, true); renderTouchHeld(); }
@@ -375,7 +501,10 @@
       var exited = false;
       function exit() {
         if (exited) return; exited = true;
-        stopLoop();
+        stopLoop(); stopIdle();
+        if (v3) { try { v3.dispose(); } catch (e) {} if (v3.canvas && v3.canvas.parentNode) v3.canvas.parentNode.removeChild(v3.canvas); v3 = null; }
+        if (hudObj) { try { hudObj.dispose(); } catch (e) {} hudObj = null; }
+        mus('stop', 200);
         if (round && round.dispose) round.dispose();
         round = null;
         ac.abort();
@@ -387,14 +516,66 @@
       root.querySelector('#slgExit').addEventListener('click', exit, sig);
 
       var api = { sound: sound, reduced: reduced, LW: def.LW, LH: def.LH };
+      api.music = (window.SLMusic && typeof SLMusic.channel === 'function') ? (function () { try { return SLMusic.channel({ muted: cfg.muted }); } catch (e) { return null; } })() : null;
+
+      /* ---------- optional 3D view (falls back to the 2D canvas silently) ---------- */
+      function can3d() {
+        if (!def.view3d || cfg.demo || v3failed) return false;
+        try { if (localStorage.getItem('slNo3D') === '1' || sessionStorage.getItem('slNo3dGame') === '1') return false; } catch (e) {}
+        return typeof WebGL2RenderingContext !== 'undefined' && typeof window.slLoad3D === 'function';
+      }
+      function load3d() {
+        if (!can3d()) return Promise.resolve(null);
+        var v = window.SL_WORLD_VER || '1';
+        try { if (localStorage.getItem('slQaMode') === '1') v += '&qa=' + Date.now(); } catch (e) {}
+        var url = new URL(def.view3d.src + '?v=' + v, document.baseURI).href;
+        var p = window.slLoad3D().then(function (T) {
+          if (!T) return null;
+          return new Function('u', 'return import(u)')(url).then(function (m) { return (m && m.create) ? { THREE: T, m: m } : null; });
+        });
+        var to = new Promise(function (res) { setTimeout(function () { res(null); }, 8000); });
+        return Promise.race([p, to]).catch(function () { return null; });
+      }
+      function mount3d() {
+        if (v3 || !v3mod || v3failed || exited) return;
+        try {
+          var made = v3mod.m.create(mid, { THREE: v3mod.THREE, cfg: cfg, api: api, def: def, reduced: reduced, onFail: fail3d });
+          Promise.resolve(made).then(function (vw) {
+            if (exited || !vw || !vw.canvas) { if (vw && vw.dispose) try { vw.dispose(); } catch (e) {} return; }
+            v3 = vw;
+            v3.canvas.classList.add('slg-gl');
+            mid.insertBefore(v3.canvas, canvas);
+            canvas.style.opacity = '0';                 /* the 2D canvas stays on top as the tap target */
+            var r = mid.getBoundingClientRect();
+            v3.resize(r.width, r.height);
+            if (v3.setRound) v3.setRound(round, variant);
+            if (phase === 'playing' || phase === 'countdown') draw(); else startIdle();
+          }).catch(function () { fail3d('create'); });
+        } catch (e) { fail3d('create'); }
+      }
+      function fail3d(reason) {
+        v3failed = true; stopIdle();
+        if (v3) { try { v3.dispose(); } catch (e) {} if (v3.canvas && v3.canvas.parentNode) v3.canvas.parentNode.removeChild(v3.canvas); v3 = null; }
+        canvas.style.opacity = '';
+        if (reason !== 'qa') { try { sessionStorage.setItem('slNo3dGame', '1'); } catch (e) {} }
+        if (!exited) draw();
+      }
+      if (def.hud && def.hud.mount) { try { hudObj = def.hud.mount(mid, cfg, api); } catch (e) { hudObj = null; } }
+
       var ready = def.preload ? def.preload(cfg) : Promise.resolve();
       setScreen('<p>Loading…</p>');
-      Promise.resolve(ready).then(function () { if (!exited) { resize(); menu(); } });
+      var ready3d = load3d().then(function (m) { v3mod = m; });
+      /* wait for 3D briefly so the menu can open in 3D; a slow load just keeps 2D */
+      Promise.all([Promise.resolve(ready), Promise.race([ready3d, new Promise(function (r) { setTimeout(r, 2500); })])]).then(function () {
+        if (exited) return;
+        resize(); menu();
+        if (v3mod) mount3d(); else ready3d.then(function () { if (!exited && v3mod && !v3) mount3d(); });
+      });
 
       /* QA hook (inert unless localStorage.slQaMode === '1') */
       try {
         if (localStorage.getItem('slQaMode') === '1') {
-          window._slGame = { phase: function () { return phase; }, round: function () { return round; }, advance: function (sec) { var n = Math.round(sec / 0.05); for (var i = 0; i < n; i++) advance(0.05); draw(); }, beginRound: beginRound, pause: pause, exit: exit, held: held, variant: function () { return variant; } };
+          window._slGame = { phase: function () { return phase; }, round: function () { return round; }, advance: function (sec) { var n = Math.round(sec / 0.05); for (var i = 0; i < n; i++) advance(0.05); draw(); }, beginRound: beginRound, pause: pause, exit: exit, held: held, variant: function () { return variant; }, view: function () { return v3 ? '3d' : '2d'; }, v3: function () { return v3; }, force2d: function () { fail3d('qa'); }, hud: function () { return hudObj; } };
         }
       } catch (e) {}
       return { exit: exit };

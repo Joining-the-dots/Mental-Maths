@@ -1145,6 +1145,8 @@
   function arcadeFlush() { var st = arcadeState(); sinceMirror = 0; arcadeMirror(st.day, st.used); }
 
   /* ---------------- games ---------------- */
+  /* deps: extra world/games/ scripts loaded (in order) after shell.js + fx.js and
+     before the game file; tutKey: which tutSeen flag the game's tutorial uses */
   var GAMES = {
     course: { name: 'Pet Obstacle Course', att: 'att_course', file: 'pet-course.js', grad: 'linear-gradient(135deg,#43c66f,#2a9d8f)', emoji: '🐾' },
     penalty: { name: 'Penalty Shootout', att: 'att_pitch', file: 'penalty.js', grad: 'linear-gradient(135deg,#4a8ff0,#6c5ce7)', emoji: '⚽' },
@@ -1164,9 +1166,10 @@
   function loadGame(game) {
     var v = window.SL_WORLD_VER || '1';
     try { if (localStorage.getItem('slQaMode') === '1') v += '&qa=' + Date.now(); } catch (e) {}
-    return loadScript('world/games/shell.js?v=' + v)
-      .then(function () { return loadScript('world/games/fx.js?v=' + v); })
-      .then(function () { return loadScript('world/games/' + GAMES[game].file + '?v=' + v); });
+    var chain = loadScript('world/games/shell.js?v=' + v)
+      .then(function () { return loadScript('world/games/fx.js?v=' + v); });
+    (GAMES[game].deps || []).forEach(function (d) { chain = chain.then(function () { return loadScript('world/games/' + d + '?v=' + v); }); });
+    return chain.then(function () { return loadScript('world/games/' + GAMES[game].file + '?v=' + v); });
   }
   function pbText(game) {
     var w = W(), out = [];
@@ -1213,7 +1216,10 @@
         ownedVariants: C.CATALOG.filter(function (it) { return it.game === game && it.kind === 'variant' && C.owns(world, it.id); }).map(function (it) { return { id: it.id, name: it.name }; }),
         pet: pet ? { id: pet.id, name: pet.name, acc: pet.acc } : { id: 'pet_puppy', name: 'Buddy', acc: {} },
         ball: C.selected(world, 'ball'), stadium: C.selected(world, 'stadium'), kart: C.selected(world, 'kart'),
-        pb: world.pb, tutSeen: !!world.tutSeen[game], reduced: reduced,
+        pb: world.pb, tutSeen: !!world.tutSeen[G.tutKey || game], reduced: reduced,
+        /* who's playing: name, signature colour and avatar for 3D views, HUDs and results */
+        user: { name: (me() || {}).name || '', color: (me() || {}).color || '#6C5CE7', avatar: (me() || {}).avatar || '🙂' },
+        profileKey: launchedFor, day: arcadeState().day,
         muted: function () { var u = me(); return !!(u && u.muted); },
         toggleMute: function () { var u = me(); if (!u) return false; u.muted = !u.muted; saveState(); try { if (typeof renderMuteBtn === 'function') renderMuteBtn(); } catch (e) {} return u.muted; },
         arcade: {
@@ -1222,7 +1228,7 @@
           tick: function (sec) { return arcadeTick(sec).status; },
           flush: arcadeFlush
         },
-        onTutorialSeen: function () { commit(function (u) { C.ensureWorld(u).tutSeen[game] = true; return { ok: true }; }); },
+        onTutorialSeen: function () { commit(function (u) { C.ensureWorld(u).tutSeen[G.tutKey || game] = true; return { ok: true }; }); },
         onSelectVariant: function (vid) { commit(function (u) { return C.select(u, vid); }); },
         onResult: function (variant, result) {
           /* results go only to the profile that launched the game, and never touch points */

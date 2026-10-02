@@ -1,0 +1,336 @@
+{
+ "name": "Island Encore",
+ "vibe": "By day the island is a pastel toy diorama. At 'Showtime' it becomes a neon stage for idols. Picture collectible vinyl toys standing on a candy-coloured stage set: chunky rounded shapes, soft 3-band cel shading with a glossy rim sheen, a cotton-candy sky and a turquoise sea with a bright foam ring around the island. The K-pop energy comes from how things are staged, never from copying anyone. That means sweeping spotlight beams, marquee bulbs, glow wands in each child's own signature colour, holographic photocard-style shop cards, confetti cannons, pet dance breaks in sync and a bouncy original soundtrack. Colour ratio rule: 70% soft pastels on surfaces, 20% clear mid-saturation colour on items and characters, and 10% neon on emissive accents only, mostly at Showtime. Holding to that ratio is what keeps it stylish to a parent instead of tacky. It needs to be cute enough for a 6-year-old (big-eyed pets, squishy bounces) and cool enough for a 12-year-old (night mode, chrome and holo finishes, kart under-glow, stage-cam camera moves, dance emotes). Everything stays friendly: tumbles are cartoon flips with dizzy sparkles, nothing breaks, and nobody loses badly.",
+ "palette": [
+  {
+   "name": "Ink",
+   "hex": "#3B2F4A",
+   "use": "Outlines (inverted hull), eyes, tyres, coal, small ink details. Same INK as the 2D art."
+  },
+  {
+   "name": "Ink Deep",
+   "hex": "#2B2140",
+   "use": "UI text on light panels (existing --ink)"
+  },
+  {
+   "name": "Cloud White",
+   "hex": "#FFFFFF",
+   "use": "Highlights, petals, sails, icing, sticker borders, eye glints"
+  },
+  {
+   "name": "Grass Top",
+   "hex": "#8EE07A",
+   "use": "Island grass tile tops"
+  },
+  {
+   "name": "Grass Alt",
+   "hex": "#84D872",
+   "use": "Alternate grass tile tint for a faint checker that helps kids read the grid"
+  },
+  {
+   "name": "Grass Side",
+   "hex": "#5FBF55",
+   "use": "Grass slab sides, shaded foliage"
+  },
+  {
+   "name": "Tuft Green",
+   "hex": "#4FA94A",
+   "use": "Grass tufts, mounds under flower patches"
+  },
+  {
+   "name": "Meadow Hill",
+   "hex": "#A6E88A",
+   "use": "Tops of the Meadow Hill region"
+  },
+  {
+   "name": "Sand",
+   "hex": "#F3DC9A",
+   "use": "Sand skirt, beaches, sandcastle tone"
+  },
+  {
+   "name": "Cove Sand",
+   "hex": "#F7E3A6",
+   "use": "Land tops in Beach Cove"
+  },
+  {
+   "name": "Wet Sand",
+   "hex": "#E8C77E",
+   "use": "Waterline ring and tide line"
+  },
+  {
+   "name": "Sea Shallow",
+   "hex": "#7FE3F0",
+   "use": "Water near the shore by day"
+  },
+  {
+   "name": "Sea Deep",
+   "hex": "#2F8FD8",
+   "use": "Open water by day (from 2D)"
+  },
+  {
+   "name": "Foam",
+   "hex": "#F2FCFF",
+   "use": "Shore foam band, wave lines"
+  },
+  {
+   "name": "Sky Day Top",
+   "hex": "#8FD3FF",
+   "use": "Sky dome zenith by day"
+  },
+  {
+   "name": "Sky Day Mid",
+   "hex": "#CDEBFF",
+   "use": "Middle of the sky dome by day"
+  },
+  {
+   "name": "Sky Day Horizon",
+   "hex": "#FFE3F1",
+   "use": "Day horizon and day fog (pastel pink haze)"
+  },
+  {
+   "name": "Sky Night Top",
+   "hex": "#1A1240",
+   "use": "Zenith at Showtime"
+  },
+  {
+   "name": "Sky Night Mid",
+   "hex": "#3B1E6E",
+   "use": "Mid sky and fog at Showtime; glow on the results screen"
+  },
+  {
+   "name": "Sky Night Horizon",
+   "hex": "#FF7AC8",
+   "use": "Dusk glow at the horizon during Showtime"
+  },
+  {
+   "name": "Stage Night",
+   "hex": "#130C2E",
+   "use": "Game shell background (existing)"
+  },
+  {
+   "name": "Neon Pink",
+   "hex": "#FF4FB8",
+   "use": "EMISSIVE ONLY: spotlight 1, NEW! badge, primary neon outline, penalty Y-aim bar"
+  },
+  {
+   "name": "Neon Cyan",
+   "hex": "#3DF2FF",
+   "use": "EMISSIVE ONLY: path chase-light, X-aim reticle, valid-cell edge, glow-star halo, hologram outline on locked land"
+  },
+  {
+   "name": "Neon Violet",
+   "hex": "#A66BFF",
+   "use": "EMISSIVE ONLY: spotlight 3, end of the gradient"
+  },
+  {
+   "name": "Neon Lime",
+   "hex": "#B6FF5C",
+   "use": "EMISSIVE ONLY: lightning sign on the garage, under-glow on the lime kart"
+  },
+  {
+   "name": "Star Gold",
+   "hex": "#FFD23F",
+   "use": "Stars, finials, bulbs, focus ring, countdown. The existing yellow."
+  },
+  {
+   "name": "Coral",
+   "hex": "#FF6B6B",
+   "use": "Flags, kerbs, hurdles, pennants (the 2D accent red)"
+  },
+  {
+   "name": "Splash Blue",
+   "hex": "#4FC3F7",
+   "use": "Towels, scarf, bunting, sprinkles"
+  },
+  {
+   "name": "Leaf Mint",
+   "hex": "#7BD88F",
+   "use": "Checkpoint arch once passed, keeper jersey, bunting"
+  },
+  {
+   "name": "Grape",
+   "hex": "#C38BFF",
+   "use": "Bubble machine, party hat, sprinkles, bunting"
+  },
+  {
+   "name": "Bubblegum",
+   "hex": "#FF8FC8",
+   "use": "Pastel pink UI accent, end of the go-button gradient"
+  },
+  {
+   "name": "Primary Pink",
+   "hex": "#FF5FA2",
+   "use": "Start of the primary CTA gradient (to #A66BFF)"
+  },
+  {
+   "name": "Butter",
+   "hex": "#FFE27A",
+   "use": "Start of the points pill gradient (to #FFB347), warm glows"
+  },
+  {
+   "name": "Lamp Warm",
+   "hex": "#FFE36B",
+   "use": "Glass of a lit lantern or lighthouse"
+  },
+  {
+   "name": "Window Glow",
+   "hex": "#FFE9A8",
+   "use": "House windows at Showtime, warm halo"
+  },
+  {
+   "name": "Bark",
+   "hex": "#9B6B43",
+   "use": "Tree trunks, posts, planters"
+  },
+  {
+   "name": "Plank",
+   "hex": "#C48A52",
+   "use": "Bench. The boardwalk alternates #D69D64 and #C98F58."
+  },
+  {
+   "name": "Pebble",
+   "hex": "#CFC8DC",
+   "use": "Stone path, kart hubs, cool neutral grey"
+  },
+  {
+   "name": "Gold Base",
+   "hex": "#F0C02F",
+   "use": "Mid tone of the GOLD matcap (door_gold, acc_crown, ball_gold, kart_gold, finials)"
+  },
+  {
+   "name": "Gold Light",
+   "hex": "#FFE89A",
+   "use": "Highlight of the GOLD matcap"
+  },
+  {
+   "name": "Gold Deep",
+   "hex": "#C9921A",
+   "use": "Shadow and edge of the GOLD matcap"
+  },
+  {
+   "name": "Chrome",
+   "hex": "#DDE3F0",
+   "use": "Mid tone of the CHROME matcap, kart trims"
+  },
+  {
+   "name": "Iridescent Rim",
+   "hex": "#C7B8FF",
+   "use": "Edge of the CHROME matcap, holo hint"
+  },
+  {
+   "name": "Holo Pink",
+   "hex": "#FFB3E6",
+   "use": "Holo foil gradient stop 1 (cards, PEARL matcap, bubbles)"
+  },
+  {
+   "name": "Holo Blue",
+   "hex": "#B3E5FF",
+   "use": "Holo foil gradient stop 2"
+  },
+  {
+   "name": "Holo Mint",
+   "hex": "#C9FFE5",
+   "use": "Holo foil gradient stop 3"
+  },
+  {
+   "name": "Holo Lemon",
+   "hex": "#FFF3B3",
+   "use": "Holo foil gradient stop 4; colour of unlit marquee bulbs by day"
+  },
+  {
+   "name": "Rim Showtime",
+   "hex": "#FF7AD9",
+   "use": "Toon rim-light colour at Showtime (mixed 60/40 with the child's signature colour)"
+  },
+  {
+   "name": "Blush",
+   "hex": "#FF9DB8",
+   "use": "Pet cheeks at 60% opacity"
+  },
+  {
+   "name": "Success",
+   "hex": "#2ECC71",
+   "use": "Valid placement cell, BUY button (existing semantics)"
+  },
+  {
+   "name": "Error",
+   "hex": "#E74C3C",
+   "use": "Invalid placement cell (existing semantics)"
+  },
+  {
+   "name": "Blob Shadow",
+   "hex": "#3B2F4A",
+   "use": "Fake contact shadows at 22% opacity"
+  }
+ ],
+ "lightingAndMaterials": "RENDERER (three r170): WebGLRenderer({antialias: tier !== 'LOW', alpha: false, stencil: false, powerPreference: 'high-performance'}). Set outputColorSpace = SRGBColorSpace and toneMapping = NeutralToneMapping, because it keeps pastel hues where ACES greys them. Exposure is 1.0 by day and 1.08 at Showtime. Lights are physically correct, which is the r170 default, so the intensities below are the real values to use. Pass every palette hex through new Color('#hex') and three handles sRGB to linear.\n\nDAY PRESET: HemisphereLight(sky #DDF1FF, ground #FFE0EC, intensity 1.9). One DirectionalLight 'sun', #FFF3E0 at 2.4, positioned at (-7, 14, 9) and aimed at (0,0,0). That lights from the front-left, so faces toward the camera are lit and shadows fall back-right, matching the 2D art. No AmbientLight. Fog(#FFE3F1, near 30, far 70). Calibration: the lit grass top should read within ±6% lightness of #8EE07A on screen; tune only the sun intensity to get there.\n\nSHOWTIME PRESET (dusk stage): Hemisphere sky #6B5BD6, ground #2A1840, intensity 0.85. The sun becomes a 'moon': #B9C6FF at 0.9, same direction. Rim colour changes to #FF7AD9, mixed 60/40 with the child's signature colour. All neon materials go to full, halo sprites grow to 1.6× size, the 3 spotlight cones turn on, the star field turns on, and Fog becomes (#3B1E6E, 24, 60). Transition: lerp every colour and intensity over 1.6 s with inOutSine. With reduced motion, crossfade in 0.25 s.\n\nSHADOWS: MID and HIGH tiers only. sun.castShadow on, mapSize 2048 on HIGH and 1024 on MID, PCFShadowMap. The orthographic shadow camera is fitted to the island: left/right -10..10, top/bottom -7..7, near 1, far 40, bias -0.0004, normalBias 0.03. Set renderer.shadowMap.autoUpdate = false and set needsUpdate = true only after a change to layout, house style or day/night. The scene is static, so shadows then cost nothing per frame. Only static items cast shadows, and the ground receives them. Everything that moves (pets, avatar, swing seat, bubbles, confetti) uses a BLOB shadow instead: an instanced plane with a 64² radial texture, #3B2F4A at opacity 0.22, sized 0.9 × footprint, shrinking as the object rises. LOW tier uses blob shadows only.\n\nMATERIAL SET: one factory, cached by palette token, at most 12 shader programs.\n(1) TOON, about 90% of meshes. MeshToonMaterial({color, gradientMap: G}), where G is a 4×1 RedFormat DataTexture with values [110, 165, 215, 255], NearestFilter for min and mag, generateMipmaps false. Add a shared rim patch via onBeforeCompile, inserted before '#include <opaque_fragment>': outgoingLight += uRimColor * pow(1.0 - clamp(dot(normal, geometryViewDir), 0.0, 1.0), 2.5) * uRimStrength. All toon materials share one uniforms object, so a single write switches day and night. Set customProgramCacheKey = () => 'encore-toon' so every colour shares one program. Rim by day: #FFFFFF at strength 0.28. At Showtime: strength 0.55. Rocks use flatShading for a faceted gem look; everything else uses smooth normals.\n(2) NEON. MeshBasicMaterial({color: neon token, toneMapped: false}) so it stays unlit and pops above tone mapping. Each neon tube is a core TubeGeometry (r 0.02, 4 radial segments) plus a 'glow sleeve' (r 0.06, MeshBasic, AdditiveBlending, depthWrite false), with opacity 0 by day and 0.45 at Showtime. By day, neon parts that are switched off show their pastel off-colour through the toon material (e.g. bulbs #FFF3B3).\n(3) HALO sprites, a fake bloom. One 64² CanvasTexture with alpha = (1-r)^2, drawn as instanced billboard quads with AdditiveBlending, depthWrite false and a per-instance tint. Size 0.5–1.2 u; opacity 0.5 by day and 0.9 at Showtime. No post-processing by default. The only optional extra is UnrealBloomPass on HIGH: half resolution, strength 0.55, radius 0.35, threshold 0.9, and only when the device has been measured at ≥ 55 fps.\n(4) PREMIUM METAL. MeshMatcapMaterial with 128² matcaps drawn on canvas at runtime. GOLD: radial #FFF6CC → #FFE89A at 30% → #F0C02F at 60% → #C9921A at 90% → #8A5F10 at the edge, plus a white spec dot at uv (0.35, 0.3). CHROME: #FFFFFF → #DDE3F0 → #9AA3B8, with a #C7B8FF iridescent edge. PEARL/HOLO: conic #FFB3E6 → #B3E5FF → #C9FFE5 → #FFF3B3.\n(5) GLASS/BUBBLE. PEARL matcap, transparent, opacity 0.45, depthWrite false, rendered after opaque objects.\n(6) WATER. One 80×80 plane with a ShaderMaterial. Colour = mix(#7FE3F0, #2F8FD8, smoothstep(0, 2.5, shoreDist)). Foam #F2FCFF where shoreDist < 0.12 + 0.06*sin(t*1.3 + shoreDist*9). Add 6 stylised wave-line bands (#E8F8FF at 0.5) scrolling at 0.04 u/s. shoreDist comes from a 64×40 distance texture baked on the CPU from the land cells; re-bake it when land unlocks. At Showtime: shallow #3C6FD1, deep #1B2A6B, foam #CFC4FF, plus additive pink and cyan streaks where the spot cones meet the water. By day only, add 40 instanced twinkle glints.\n(7) SKY. An inverted sphere (r 90, 24×12 segments) with a ShaderMaterial, fog false and depthWrite false, using a 3-stop vertical gradient. Day: #8FD3FF → #CDEBFF → #FFE3F1. Showtime: #1A1240 → #3B1E6E → #FF7AC8. 4–5 cloud puffs, each 3–5 merged icospheres in white toon with rim, drift at 0.08 u/s. At Showtime, add a star field of 250 Points (120 on LOW), size 2 px with sizeAttenuation false, twinkling slowly in the shader (sin(t*2 + id)).\n(8) SPOTLIGHT CONES, Showtime only. ConeGeometry(1.3, 10, 16, 1, openEnded) with an additive ShaderMaterial, alpha = 0.2 * (1 - vUv.y)^1.4 with soft edges. Colours are Neon Pink, Neon Cyan and Neon Violet. They are mounted on 2 decorative 'stage buoys' in the sea at the back corners and on one point behind the house. They sweep ±25° at 0.12 Hz with phases 120° apart. These are NOT real SpotLights.\n(9) OUTLINE, hero objects on MID and HIGH only. Inverted hull: MeshBasicMaterial(#3B2F4A, side BackSide), with 'transformed += normal * uOutline' added after '#include <begin_vertex>'. uOutline is 0.018 u for buildings and attractions and 0.012 u for pets, avatar and accessories. In edit mode the selected item's hull turns #FFD23F and pulses 0.018↔0.03 u at 1.5 Hz.\n\nEXTRAS: lanterns, mushrooms and the lighthouse, when switched on at Showtime, cast an additive ground decal (radius 0.7, their own colour, opacity 0.35). House windows glow #FFE9A8 (MeshBasic) at Showtime.",
+ "modellingRules": "UNITS AND AXES: 1 grid cell = 1.0 world unit (about 1 m at toy scale), Y up. Grid cell (c, r) has its centre at x = c - 7.5, z = r - 4.5. +z points toward the default camera, so row 9 is nearest, the same as the bottom of the 2D map. A placed item with fp [w, h] at (x, y) pivots on its footprint centre (x + w/2 - 8, 0, y + h/2 - 5), with its base at y = 0 (top of the grass). Models face +z. Sea level is y = -0.32. The grass slab runs from 0 down to -0.35. The sand skirt's top is at -0.12 and it reaches 0.25 beyond the grass. Keep a 0.07 u margin inside each footprint so models fit in 0.86 × 0.86 per cell and neighbours never intersect. Only tree canopies above y = 1.0 may overhang, up to 1.1 u wide.\n\nREFERENCE HEIGHTS (u): path 0.04 | flowers 0.35–0.6 | rose bush 0.6 | rock 0.45 | bench 0.5 | sandcastle 0.7 | snowman 0.95 | umbrella 1.25 | oak 1.6 | apple 1.55 | blossom 1.6 | pine 1.8 | palm 1.9 | lantern 1.4 | mushrooms 0.55 | flag pole 1.9 | bunting 1.0 | windmill 2.2 | lighthouse 2.8 (tallest decor) | trampoline 0.45 | fountain 0.95 | swing 1.4 | bubble machine 0.8 | house 2.3 at the ridge (castle turrets 2.9) | course gate 1.9 | garage 1.4 | pitch stand 0.4 | pets 0.5–0.6 to the top of the head (dragon 0.65) | 'you' avatar 0.95.\n\nSHAPE LANGUAGE ('soft vinyl toy'): about 80% curves, built only from this primitive kit:\n- puff(r) = IcosahedronGeometry(r, 1), or a sphere 12×8\n- bean(r, len) = CapsuleGeometry(r, len, 3, 10)\n- slab(w, h, d) = RoundedBoxGeometry from three/addons, segments 2, radius 0.18 × the smallest side\n- tube(r, h) = CylinderGeometry with 12 radial segments\n- drop(r, h) = LatheGeometry of an 8-point profile with 10 segments (tulips, mushroom caps, round-tipped cones)\n- ring(R, r) = TorusGeometry 16×6\n- star(5 points, rOut, rIn) = ExtrudeGeometry, depth 0.25·rOut, bevel 0.3·depth, bevelSegments 2 (puffy stars)\n- flag(w, h) = PlaneGeometry with 8×1 segments\n- ribbon = TubeGeometry along a CatmullRomCurve3 with 4 radial segments\nProportions are chunky, about 1.2× thicker than real. Heads are big: a pet's head is about 45% of its height. Minimum part thickness is 0.02 u. Ropes are 0.012 u with 4 radial segments, and whiskers are LineSegments.\n\nTRIANGLE BUDGETS: path tile ≤ 120 | flower patch ≤ 350 (instanced petals) | small decor ≤ 500 | trees ≤ 900 | windmill and lighthouse ≤ 1,400 | fun items ≤ 1,200 | house with all details ≤ 3,500 | each attraction ≤ 4,000 (plus ≤ 2,000 for an instanced crowd) | pet ≤ 1,800, plus ≤ 300 per accessory | avatar ≤ 1,500 | game kart ≤ 1,500 plus its driver. On the LOW tier, cut segment counts by 30% (spheres 10×6, cylinders 8).\n\nCOLOUR AND SHADING: use palette tokens only, plus the LOCKED style colours already in world-art.js and the game files (WALL, DOOR, roof pairs, PETCOL, KARTS, BALLS, STADIA, THEME, the course THEMES, the kart TRACKS grass). Each object uses at most 3 tones from one colour family: base, shade (-12% lightness, on undersides and secondary parts) and highlight (+12% lightness, as a dab at the top-left). An item has at most 4 materials. After building, merge parts per material with BufferGeometryUtils.mergeGeometries, giving at most 4 meshes per item.\n\nSTRUCTURE: one factory per id, build(id, state, tier), returns a Group with named pivots that the act handlers drive:\n- 'sway': whole-item idle\n- 'spin': windmill sails, stars\n- 'swing': swing seat\n- 'flag': cloth\n- 'glow': lamp parts and halo\n- 'water': jets\n- 'emitter': bubbles and smoke\n- 'door'\n- 'hat', 'neck', 'face', 'back': pet accessory sockets\n- 'seat': kart driver\nRepeatables (paths, and decor bought in multiples) render as one InstancedMesh per (id, material part). Animated sub-parts such as cloth and sails live in a separate small InstancedMesh that updates every frame. Static instances are never touched after placement.\n\nDETERMINISTIC CHARM: hash each placed uid to a yaw jitter of ±8° and a scale of 0.94–1.06 for organic decor (trees, flowers, bushes, rocks, mushrooms). NEVER jitter the house, attractions, paths or fun items; the grid has to stay tidy and editable.\n\nLOOK TABLE (testable): put per-id look data in a pure data module with no THREE import (e.g. world/world-look.js). It holds height, palette tokens, part list, act pivot names and Showtime behaviour. A Node test can then check that every CATALOG id has a look and that it uses only palette or locked tokens. The THREE builders read from that table.\n\nHIT VOLUMES: every tappable item gets an invisible raycast box of footprint × max(height, 0.8 u) so small fingers hit it. Pets get a 0.8 u sphere. Raycast only against these boxes, never against the meshes.",
+ "itemCategoryNotes": [
+  "ISLAND GROUND / SEA / SKY (applies everywhere): Land is one InstancedMesh of slab(1.02, 0.35, 1.02) grass tiles with tops at y 0, sitting over a second InstancedMesh of slab(1.5, 0.22, 1.5) sand tiles with tops at -0.12. The large overlap melts the cells into one blobby landmass, the same way the 2D art does. Grass tops alternate #8EE07A and #84D872 in a faint checker. Slab sides are #5FBF55. Sand is #F3DC9A with a wet-sand ring of #E8C77E at the waterline. Add 1–2 instanced grass tufts per open cell (3 crossed blade planes, #4FA94A), placed deterministically per cell. Sea, sky, clouds, stars and stage buoys follow the lighting section. The turquoise sea and bright foam ring around the island are the most important first impression, so build and polish them first.",
+  "TREES (tree_oak, tree_pine, tree_apple, tree_blossom, tree_palm). No act. Idle sway on the 'sway' pivot with phase taken from uid: oak, apple and blossom 1.5° every 4.2 s; pine 1° every 5 s; palm 3° every 3.6 s.\n- oak: trunk tube tapering from r 0.12 to 0.08, h 0.7, #9B6B43. Canopy is 3 puffs: r 0.44 in #5CB85C on top, two r 0.36 in #4BA84B lower down. A highlight dab of r 0.16 in #8BD17C sits top-left. Total height 1.6.\n- pine: trunk #8A5D3A, h 0.3, under 3 stacked round-tipped cones of r 0.48, 0.38 and 0.26 in #3F9A5A; the top cone is #69C07C. Height 1.8.\n- apple: the oak canopy plus 6 apples, each puff(0.06) in #E53935 with a white spec dot. Height 1.55.\n- blossom: the oak shape in #F6A7C8, #EC86B0 and #FFD3E6. 3–4 petal quads per tree drift down and respawn (#FFD3E6, at most 40 on the island).\n- palm: trunk is 6 short tubes stepping along a curve in alternating rings of #A5743F and #8A5A2B. 5 drooping flattened-bean fronds in #4FBF63, #45B05A, #5CCC70 and #3FA956, plus 2 coconuts in #8A5A2B. Height 1.9.",
+  "FLOWERS AND PLANTS (flower_tulip, flower_daisy, flower_sun, bush_rose, rock_mossy). Every patch sits on a low mound, slab(0.7, 0.08, 0.5) in #4FAE4C. Idle: flower heads bob ±2% in scale every 2.4 s.\n- tulip: 3 stems (r 0.015, h 0.28–0.38, #3C8A3C). Cups are drop(0.06, 0.1) in #FF5C6C, #FFC93C and #FF7AB8, with one bean leaf.\n- daisy: 5 daisies, each 8 instanced white petals (flattened beans 0.05 long) around a #FFC93C centre, tilted 25° toward the camera.\n- sunflower: 2 flowers, 0.75 and 0.6 u tall, each a #8A5A2B disc of r 0.09 with 12 petals in #FFCF2E. The heads slowly turn toward the sun by day, and at Showtime they swivel to follow the sweeping spotlight. That honours the shop text 'follow the sun'.\n- rose bush: 3 puffs in #3F9A4A and #4CAF50 with 6 layered rose buds in #FF7AA8, #FF5C8A and #FF9DBF.\n- mossy rock: a flat-shaded Dodecahedron (r 0.32, #A9A6B8, scaled 1 / 0.62 / 0.85) with a moss cap: a squashed #6CC26A puff over the top 40%. To match 'friendly', give it two tiny ink dot eyes that blink every 5–9 s, so it reads as a shy rock friend.",
+  "LIGHTS (lantern, mushroom_glow). Act 'glow' toggles them on and off, and the on/off state persists as it does today.\n- lantern: post tube (r 0.04, h 1.05, #4B4F6B) on a slab base. Lamp cage is slab(0.26, 0.3, 0.26); the glass is #CFE0EC when off and #FFE36B MeshBasic when on. Inside is a puffy star bulb (r 0.07), a nod to a glow wand. A 4-sided cone cap. When on: #FFF6A8 halo of 0.9 u, plus a pool of light on the ground at Showtime. Switching on runs 3 gentle flicker steps over 0.25 s (not a strobe) and plays 'star'.\n- mushroom_glow: 3 mushrooms with bean stems in #FFF4E0 and drop caps of r 0.13, 0.17 and 0.10, with white puff spots. Caps are #B06BD8 when off and #6FF3FF neon when on, with a #9FFCFF halo. When on and music is playing, the caps pulse ±12% on each beat.",
+  "FLAGS AND PARTY (flag_pole, bunting). Act 'wave'. At Showtime both pick up tiny neon LED dots along their edges, twinkling at no more than 1.5 Hz.\n- flag_pole: pole tube (r 0.03, h 1.9, #8F8AA6) with a puff finial in GOLD matcap. Cloth is a 0.7×0.45 plane with 8×1 segments, #FF6B6B with a #FFD23F diamond. Idle flutter is a sine wave on the CPU (0.04 u, 2 Hz) that grows toward the free edge. On tap it flutters harder (0.12 u for 1.2 s) and plays 'whoosh'.\n- bunting: 2 posts (r 0.03, h 1.0, #9B6B43) with a sagging ribbon line between them. 5 pennants hang from it in #FF6B6B, #FFD23F, #4FC3F7, #7BD88F and #C38BFF, swinging ±6° with staggered phases. On tap a ripple runs along the line from left to right in 0.6 s.",
+  "GARDEN AND BEACH DECOR (bench, sandcastle, umbrella, snowman).\n- bench: 2 seat planks and 2 back planks, each slab(0.8, 0.06, 0.12) in #C48A52, on #6B5A7A legs. At Showtime an idle pet nearby may hop up and sit.\n- sandcastle: in #F2CD7C. A central keep (tube r 0.18, h 0.45) and 2 towers (r 0.11, h 0.55) with 4-tooth crenels, a #C99A4D door arch, a #FF6B6B flag on a 0.25 u stick, and #FFD3E6 shell dots.\n- umbrella: canopy is an 8-segment cone (r 0.55, h 0.25) with wedges alternating #FF6B6B and #FFFFFF via vertex colours, tilted 8°. Pole #8F8AA6, with a #4FC3F7 towel slab beside it.\n- snowman: puffs of r 0.22 and 0.16 in #FDFDFF (the rim light makes them glow softly). #3B2F4A top hat, a drop() carrot in #FF8A3D, a torus scarf in #FF5C6C with a tail, and ink coal dots. 6 slow snow sparkles drift around him, because he 'never melts'.",
+  "LANDMARKS (windmill, lighthouse).\n- windmill: tapered Lathe tower (#F6EFE2, h 1.5) with a #9B6B43 door and a #FF6B6B cap. 4 lattice sails in #FFFFFF on the 'spin' pivot around a #FF6B6B hub. Idle speed 0.25 rev/s. On tap it spins up to 2.5 rev/s, eases back over 3 s, and plays 'whoosh'. At Showtime each sail tip carries a neon dot (pink, cyan, violet, lime) trailing a short 6-segment light streak, like a light-painting windmill.\n- lighthouse: 2.8 u tapered Lathe tower in #FFFFFF with 2 #FF5C6C bands, an ink torus gallery, a lamp-room slab whose glass goes from #CFE0EC to #FFE36B when lit, and a #FF5C6C cone roof. Act 'glow': when on, 2 additive beam cones (r 0.6, length 6) rotate at 0.3 rev/s. The beam is warm #FFF6A8 by day. At Showtime it cycles Neon Pink → Cyan → Violet every 4 s like a stage spot. The body ALWAYS stays red-and-white, as the shop text says.",
+  "PATHS (path_stone, path_wood, path_flower). Flat tiles 0.03–0.05 u tall that receive shadows but never cast them, drawn as instances.\n- stone: 5 flattened pebbles (puffs scaled to 0.25 in y) in #CFC8DC with a #E6E1EF highlight, laid out like the 2D tile.\n- wood: 5 planks, slab(0.17, 0.04, 0.9), alternating #D69D64 and #C98F58, running front to back, with 2 ink nail dots each.\n- flower stepping stones: 2 oval #D9D3E6 stones with 3 tiny flowers (#FF7AB8, #FFC93C, #FFFFFF) between them.\n- SHOWTIME 'stage runway': every path tile gains an additive Neon Cyan under-glow quad at opacity 0.35. A chase-light wave runs along connected path cells (4-neighbour flood fill) at 2 cells/s, turning the paths into an LED catwalk. Off by day.",
+  "FUN ITEMS (trampoline, fountain, swing, bubbles). Each act lasts at most 3 s (the swing's decay is the exception), can be interrupted, and repeated taps never stack.\n- trampoline: frame is a torus (R 0.42, r 0.05, #4B8FF0). The mat is #2A64C9 with a #7FB3FF highlight ellipse, on 3 ink bean legs. On tap the active pet runs over and does 3 bounces (0.5, 0.75 and 1.0 u high) with a front flip on the last. The mat dips 0.12 u at each contact. Sound: 'boing' 3 times with combo steps 0, 2 and 4 layered on top.\n- fountain: 2-tier Lathe basin in #C9C3D9 (r 0.45 and 0.2) holding #6FD0FF water that ripples gently. Idle: 3 arcing droplet streams (12 instanced drops). On tap a 3 s water show runs: 4 jets rise in sequence (centre, left, right, then all together) like a concert fountain. At Showtime the droplets pick up neon tints. Sounds: 'whoosh', a rising combo, then 'star'.\n- swing ('Tree swing'): an A-frame of #A5743F posts with a leafy top bar of 5 #5CB85C puffs, #8F8AA6 ropes, and an #FF8A3D seat on the 'swing' pivot. Idle ±4°. On tap it swings as a pendulum to ±38° (period 1.6 s), decaying over 4 s, with 'whoosh' at the first 3 high points.\n- bubbles: machine is slab(0.5, 0.32, 0.36) in #C38BFF with a white face circle, plus a wand arm and ring. Idle: 1 bubble every 2 s. On tap 24 PEARL bubbles (r 0.04–0.12, opacity 0.45) float up 1.5–3 u, wobbling, and pop with a sparkle and 'pop' (at most 6 audible, combo stepping up).",
+  "HOUSE BODY, WALLS AND DOORS (house_cottage, wall_cream, wall_pink, wall_mint, wall_sky, wall_lilac, door_blue, door_red, door_green, door_gold). Footprint 2×2. The body is slab(1.6, 1.1, 1.3), set 0.15 u back so a #B8B2C9 step and a door mat fit on the front entrance cell. Wall colours are LOCKED: cream #F7E6C4, pink #F9B7CC, mint #B8ECD6, sky #A9D6F7, lilac #D6BDF2, each with a skirting band 6% darker. 2 windows, slab(0.3, 0.28, 0.04), in #BFE6FF with ink muntins; at Showtime they glow #FFE9A8 for a cosy-at-night look. The arched door is 0.42×0.62 u: blue #3B7DD8, red #D94B4B, green #38A85C, or GOLD matcap with 2 glints every 4 s. Door knob #FFD23F. Tap (act 'home'): the door swings open 70° in 0.3 s, 3 hearts pop, the HTML style picker opens, and the door closes when the picker closes. The house is a hero object, so it gets an outline on MID and HIGH.",
+  "ROOFS (roof_red, roof_blue, roof_thatch, roof_candy, roof_castle). Each roof must give a clearly different silhouette, even at icon size. All except castle share a gable prism: ExtrudeGeometry, ridge at y 2.3, 0.12 u overhang, bevel 0.04.\n- red: #E0574F, with #C4433C on the right slope and 3 raised tile rows.\n- blue: slate #4A6FA5 and #3A5888 with 4 thin slate rows.\n- thatch: a fluffy rounded gable in #E3B24F and #C99634 with a thick half-torus lip and 14 straw-tuft cones along the eaves.\n- candy: #FF8FB8 and #F06D9E with a white icing drip edge (12 half-puffs dripping 0.05–0.12 u), 24 instanced sprinkle beans in #FFD23F, #4FC3F7, #7BD88F, #C38BFF and #FFFFFF, and a #FF5C6C cherry on the ridge.\n- castle: a flat slab roof in #B9B4C9 with 7 crenels. 2 front corner turrets (tube r 0.24, h 2.1, #CDC8DC) carry #6C5CE7 cones with a #FF6B6B pennant on the left and #FFD23F on the right. Dark #4B4F6B arrow slits. Height 2.9.",
+  "HOUSE DETAILS (detail_windowbox, detail_chimney, detail_lights, detail_flag), in any combination.\n- windowbox: a #9B6B43 planter under each window with 3 flowers in #FF5C8A, #FFD23F and #FF7AB8.\n- chimney: #B4675A with a #93524A cap on the right slope. Smoke is 3 #EEF0F6 puffs that rise 0.6 u and grow ×1.8 on a 2.4 s loop; they take a lilac tint at Showtime.\n- lights ('Fairy lights'): a sagging eave line with 11 bulbs, puff 0.035 each, cycling #FFD23F, #FF6B6B, #4FC3F7, #7BD88F and #C38BFF. By day they twinkle softly; at Showtime they turn neon with halos and chase on the music beat, never faster than 2 Hz.\n- flag: a 0.5 u ridge pole with a #FFD23F pennant fluttering. It is hidden when roof_castle is chosen, since the castle has its own pennants (same rule as 2D).",
+  "'YOU' AVATAR (on the island, not a catalog item): a chibi bean about 0.95 u tall. Body is bean(0.18, 0.22) in the child's u.color, their signature colour. Head is a #FFFFFF puff of r 0.24 with the child's u.avatar emoji drawn once into a 128² CanvasTexture on a face disc. Tiny bean arms. Holds an Island Wand at Showtime. Stands front-left of the house door. Idle: bobs 0.02 u at 0.5 Hz and glances at a pet every ~6 s. Tap: waves and does a finger-heart emote (a pink heart sprite plus 'pop'). Never give it a realistic face.",
+  "PETS (pet_puppy, pet_kitten, pet_bunny, pet_dragon). One shared chibi rig, with colours LOCKED to PETCOL:\n- puppy: #E3B077, #B8834F, #F6D9B3, nose #3B2F4A\n- kitten: #F0A35E, #C97834, #FDE2C6, nose #E86A8A\n- bunny: #F4F0EA, #D8CFC4, #FFFFFF, nose #F08AA6\n- dragon: #5FC97A, #3A9A58, #B9F0C6, nose #2E6B40\nRig: horizontal bean(0.17, 0.18) body, puff head of r 0.17, muzzle in the light colour, and 4 bean legs of r 0.045. Big glossy eyes are an ink puff (r 0.03) with an unlit white highlight puff (0.01). Blush discs in #FF9DB8 at 0.6, and a small smile.\n- Puppy: floppy ears in #B8834F; tail wags at 1.5 Hz idle and 4 Hz when happy.\n- Kitten: rounded cone ears with #FDE2C6 inners, whisker lines, a swaying S-tail, pounces when idle.\n- Bunny: long ears with #F6B7C9 inners (one ear flops now and then), a #FFFFFF puff tail, and it moves in 0.18 u hops.\n- Dragon ('tiny friendly'): rounded #3A9A58 spines, #FFD23F horn nubs, soft #B9F0C6 wings flapping at 3 Hz while moving, fluttering 0.12 u above the ground. On tap it puffs rainbow SPARKLES, never fire.\nAll pets walk at 0.9 u/s, turn at 6 rad/s, and do an idle action every 4–8 s (sit, sniff, look at the camera, scratch, roll over). Tap: a happy hop, an emote sparkle (heart, note or star) and the pet's voice. Outline on MID and HIGH.",
+  "ACCESSORIES (acc_partyhat, acc_crown, acc_bow, acc_scarf, acc_shades, acc_cape). Sockets on every pet: 'hat' on top of the head (between the bunny's ears), 'neck', 'face' over the eyes, and 'back'. The same accessories appear in every game.\n- partyhat: a cone (r 0.07, h 0.16) tilted 12°, #C38BFF with 2 #FFD23F stripe bands and a #FF6B6B pompom.\n- crown: an open GOLD-matcap band with 5 rounded points and a #FF5C8A gem; one glint every 3 s.\n- bow: 2 flattened cones and a knot in #FF5C8A with 6 white spot decals (it's described as 'spotty'), with a #FFD23F centre.\n- scarf: a neck torus in #4FC3F7 with #FF6B6B stripes and a dangling tail that swings with movement.\n- shades: 2 rounded #3B2F4A lenses with a white glint stripe. At Showtime the lenses switch to the PEARL holo matcap, the cool-kid moment.\n- cape: #E94B4B cloth, a plane with 6×4 segments, with a gold clasp. A CPU wave grows with speed so it flaps when the pet runs, as the description promises, and it lies flat when idle.",
+  "LAND EXPANSIONS (land_cove, land_meadow).\n- LOCKED look, 'a stage not built yet': a translucent sandbar at sea level (#F6E7BD at 0.5) with a dashed Neon Cyan outline and slow hologram scan lines at opacity 0.25. The existing HTML '🔒 name ⭐ price' sign stays on its outer edge.\n- UNLOCK ('the land rises'): cells pop up from the sea in a wave moving outward from the home shore, 0.05 s apart, each with a 0.35 s outBack. Sparkles and splash rings in the sea, 'fanfare' plus 'applause', and a camera crane over and back. With reduced motion: swap instantly with a sparkle fade.\n- Beach Cove: sand tops in #F7E3A6 with 2–3 instanced shells (#FFD3E6) and starfish (#FF8A5C) per cell, plus a darker tide line.\n- Meadow Hill: #A6E88A grass that rises from +0.15 to +0.45 u toward the west edge, with tiny wildflower dots in white, #FFC93C and #FF7AB8. Items sit on the raised surface.",
+  "PET COURSE ATTRACTION AND VARIANTS (att_course, course_meadow, course_beach, course_snow, course_candy). On the island the 2×2 gate is a mini stage arch: 2 rounded #FF8A3D pillars 1.9 u tall and an arched banner in THEME[course][1]. 'PET COURSE' is drawn into a CanvasTexture in Bagel Fat One, #3B2F4A. 14 marquee bulbs run around the arch (#FFF3B3 by day, a neon chase at Showtime), 2 puffy #FFD23F stars spin on top, and 2 mini hurdles stand in front (#FFFFFF posts with #FF6B6B and #FFD23F bars). The ground plate is THEME[course][0]. Each variant adds dressing to the gate:\n- meadow: flowers and a hedge\n- beach: a tiny crab and a shell\n- snow: a mini snowman and snow caps\n- candy: a lollipop and gumdrops\nTap: the spotlights snap onto the gate, 'whoosh', and the game launches. In-game colours are exactly the THEMES in pet-course.js.",
+  "PENALTY PITCH, BALLS AND STADIUMS (att_pitch, ball_classic, ball_rainbow, ball_planet, ball_gold, stadium_day, stadium_night, stadium_beach, stadium_snow).\nIsland model (3×2): a 2.8×1.6 pitch in the stadium's grass colour with white line strips. The goal is at the right end, with #FFFFFF posts (r 0.025) and a LineSegments net at 0.6. A back stand holds 40 instanced fan blobs holding wands that wave at Showtime. The selected ball sits on the penalty spot.\nStadiums (island and game):\n- day: sky #7ECBFF, grass #6AC46A.\n- night: sky #2B2A5E, grass #3F9A4A, 4 floodlight towers with emissive heads and soft cones, stars, crowd wands lit.\n- beach: warm horizon #FFE0A0, grass #7FD0A0 edged with sand, 2 palms, sea behind.\n- snow: sky #DFEEFF, grass #BFE6C8, snow banks and slow snowfall (150 flakes on HIGH, 60 on LOW).\nBalls (r 0.11 at game scale):\n- classic: a flat-shaded icosahedron (detail 1) with white faces and ink pentagon patches.\n- rainbow: 6 latitude bands in #FF6B6B, #FFA94D, #FFD23F, #7BD88F, #4FC3F7 and #C38BFF.\n- planet: a #C38BFF sphere with a #FFD23F ring tilted 18°.\n- gold: GOLD matcap with a sparkle trail.\nIn flight every ball leaves an additive 12-segment comet ribbon in its accent colour.",
+  "KART GARAGE, KARTS AND TRACKS (att_kart, kart_red, kart_blue, kart_lime, kart_unicorn, kart_gold, track_loop, track_volcano, track_beach).\nGarage (2×2): slab(1.7, 1.2, 1.2) in #8FA3C8 with a rounded roof. Roller door in #D9E1EF with #A8B3C9 slats, a checkered banner of 16 instanced quads, a Neon Lime lightning sign, 3 ink tyre-stack tori, and the selected kart parked out front at half scale. Tap: the kart revs (3 Hz wobble), puffs 2 pastel exhaust clouds, plays 'boost', and the game launches.\nKart model (0.9 u long): a rounded chassis with a bean nose. The ACTIVE PET drives, wearing its accessories. Steering wheel torus, 4 fat ink wheels with #CFC8DC hubs, a spoiler, and a neon under-glow strip that matches the body. Colours are LOCKED to KARTS:\n- red: #E94B4B\n- blue: #3B7DD8 with white rocket stripes and fins\n- lime: #7ED957 with #FFD23F bolt decals\n- unicorn: #FF8FD0 with a gold horn, a rainbow-mane spoiler and a sparkle trail\n- gold: GOLD matcap with star decals\nTracks:\n- Island Loop: grass #7AD06A, asphalt #5B5670 with a dashed centre line, #FF6B6B/#FFFFFF kerb blocks of 1 u each, palms, sea all around.\n- Volcano Ring: grass #9CC46A, a sunset sky from #FFB38A to #A66BFF, and a CUTE central volcano (#8A6B5A cone, glowing pastel lava rim #FF8A5C, lilac smoke). It never erupts.\n- Beach Hairpins: sand verges #F3DC9A, sea on both sides, striped beach huts and umbrellas.\nWalls are soft candy-coloured tyre and foam stacks. 3 checkpoint arches light up #7BD88F once passed, and the finish arch has a checkered band and marquee bulbs.",
+  "GAME SCENE: PET COURSE 3D ('Debut Run'). The logic is untouched. Mapping is 100 logic px = 1 u: x = dist/100, y = (GROUND - y)/100, lane z = 0. Side 3/4 camera at (petX + 2.2, 1.7, 7.5) looking at (petX + 2.2, 0.9, 0), FOV 40, which puts the pet about 18% from the left, matching PET_X. Parallax: hill2 at z -6, hill at z -12, then the sky dome, plus props for each theme (meadow trees; beach palms and crabs; snow pines and snowmen; candy lollipops and cupcakes). Obstacles use the same sizes as KINDS:\n- low: a hurdle\n- log: a cylinder with end rings\n- hedge: a slab with leaf puffs\n- stack: 2–3 crates, hay bales, snow blocks or cupcakes, depending on theme\n- puddle: a flat rippling ellipse (chocolate #A0522D in candy)\nTreats: bone, fish (#FF8A5C) and wrapped sweet. Course stars are puffy 3D glow stars in #FFE36B with a Neon Cyan halo, so they look clearly different from the ⭐ reward icon. A bump plays a cartoon forward roll with 3 dizzy sparkles during the 0.9 s slow-down. The finish is a stage arch with confetti and fan blobs waving wands.",
+  "GAME SCENE: PENALTY 3D ('Shootout Showcase'). The goal plane is z = 0, with 1 u = 76.67 logic px: x = (lx - 480)/76.67 and y = (340 - ly)/76.67, so the goal is 6.0 × 2.48 u. Camera behind the kicker at (0, 1.4, 9.5) looking at (0, 1.1, 0), FOV 38. The kicker is the active pet with its accessories, doing a run-up and a big cartoon paw-kick, while the avatar cheers from the touchline with a wand. The keeper is an original round goalie-blob mascot: #7BD88F jersey, huge white gloves, friendly face. Its LEAN must read clearly (15° plus a raised arm), because the lean is the gameplay tell. Aim UI: the X sweep is a Neon Cyan bar and the Y sweep a Neon Pink bar, with locked glowing pins. The top corners, which always score, twinkle slowly. On a goal: the net ripples, confetti, a crowd wave and 'GOAL!'. On a save: a goofy belly-flop from the keeper and 'SAVED!', never mocking. On a miss: the ball boings off the post or floats over the bar and the text says 'So close!'.",
+  "GAME SCENE: KART 3D ('Neon Grand Prix'). Mapping is 40 logic px = 1 u, so half-width HW = 1.25 u and the walls sit at 2.75 u. The track ribbon is built once from the logic centreline (pts/tang), with kerbs, verges in the track's grass colour, and instanced wall stacks. Default chase cam: 6.5 u up, 7.5 u behind, looking 4 u ahead, FOV 50, position smoothing 1 - e^(-8dt), yaw smoothing 1 - e^(-5dt), no roll. A 'Map cam' option in the menu gives a high 3/4 view like the 2D game, for younger drivers. Driving on grass raises dust puffs and plays 'skid'. Hitting a wall is a soft squash-bounce with 'bump' and no debris. Do NOT draw boost pads or item boxes, because the logic has neither.",
+  "SHOP ICONS AND PREVIEWS (the 'photocard' renders). One shared offscreen renderer draws each id once to a 256² transparent PNG, cached by id + state + LOOK_VERSION in memory and in Cache Storage. Camera: FOV 30, elevation 28°, yaw 25° (3/4 view from the front-left), item filling 80% of the frame, Day lights, blob shadow. The detail view is a live turntable: a stage riser (r 0.7, #FFF0FA top, Neon Pink ring) with 2 crossing spot cones, turning at 0.15 rev/s (still with reduced motion). Style items preview on the player's own house and accessories on their active pet. Karts, balls and stadiums preview in a mini scene, and variants play a 2 s flythrough. Game previews run the autopilot in 3D. Without 3D, the existing SVG icons and 2D demos are used as they are.",
+  "EDIT / PLACEMENT MODE. The camera eases to 62° elevation over 0.4 s. Grid cells are drawn as rounded-square dashed outlines in white at 0.55. A valid cell is #2ECC71 at 0.45 with a Neon Cyan edge. An invalid cell is #E74C3C at 0.42, pulsing at 1.5 Hz. The entrance cell is #FFD23F at 0.25. These match the 2D CSS meanings. A picked-up item lifts 0.25 u, wobbles ±4° at 3 Hz, and its shadow shrinks to 70%; the selected item's outline turns #FFD23F. Dropping an item plays a squash-and-stretch landing with 'chip' and a dust puff. Storing an item shrinks it into a sparkle that flies to the tray."
+ ],
+ "kpopMotifs": [
+  "SHOWTIME (dusk stage mode): a free toggle (🌙✨) that turns the island into an evening stage. Violet sky, star field, 3 spotlight beams sweeping from decorative stage buoys in the sea, neon trims on, fairy lights and paths chasing to the beat, glowing windows, and the pets dance. It also plays automatically for 8 s as an 'encore moment' after a purchase, a land unlock or reaching a goal.",
+  "ISLAND WAND (an original light stick): a white bean handle topped by a puffy 5-point star bulb that glows in the child's signature colour. It appears in the avatar's hand at Showtime, in the crowd blobs' hands, as the HUD loading spinner and as the Showtime toggle icon. Never copy the shape of any real fandom's light stick.",
+  "SIGNATURE COLOUR: each sibling's existing u.color becomes their 'member colour'. It drives the avatar's outfit, the wand glow, 40% of their confetti, the Showtime rim tint and accents on their results screens. Each sibling's island feels personal with zero new data.",
+  "PHOTOCARD SHOP: items are collectible 3:4 cards in a binder grid. Foil 'shine levels' are set by PRICE ONLY and are deterministic, never random (no gacha). The holographic sheen tilts on hover or pointer movement.",
+  "STAGE-RISER DEBUTS: every new purchase and every item detail view 'debuts' on a turning riser with crossing spotlights and a sparkle burst, the island's version of a showcase.",
+  "DANCE BREAK: an original 8-count group dance for pets and avatar at Showtime: side-steps, paw points, hops, spins, and a final group pose with a sparkle burst. Use generic moves only, never a recognisable real choreography.",
+  "MARQUEE BULBS AND NEON TUBES: bulb borders on attraction arches, a neon lightning sign on the garage, LED dots on the bunting and windmill at night. Together they give the 'stage set' feel.",
+  "CONFETTI CANNONS AND STREAMERS: paper confetti in hearts, stars and rectangles plus curly ribbon streamers, in a neon/pastel mix with the child's colour, for purchases, unlocks and personal bests. Big moments get soft sparkle-ring fireworks in the sky (no bangs).",
+  "TWINKLE LANGUAGE: four-point ✦ sparkles, small hearts and music notes are the universal 'happy' particles. The holo gradient #FFB3E6 → #B3E5FF → #C9FFE5 → #FFF3B3 marks premium highlights.",
+  "FAN BLOBS: original round bean characters (never human likenesses) fill the stands and finish lines and do a stadium wave with their wands.",
+  "STAGE-CAM: camera moves borrowed from TV music shows: slow crane reveals, push-ins when a game launches, a gentle orbit during Showtime. All become static cuts under reduced motion.",
+  "BUBBLE-LETTER TITLES: chunky Bagel Fat One headings with gradient fills (pink to violet, gold to pink) for 'GOAL!', 'ENCORE!', 'NEW PERSONAL BEST!' and the countdown digits. All text is original English.",
+  "Y2K CHROME AND HOLO for the 'cool' end of the age range: chrome kart trims, holo lenses on the shades at Showtime, gold and holo foil on the shiniest cards, neon under-glow on karts."
+ ],
+ "motion": "TEMPO: island music runs at 100 BPM (beat 0.6 s) and Showtime at 118 BPM (beat 0.508 s). Idle loop periods are multiples of half a beat where possible, so the island quietly 'breathes' with the music. Nothing moves faster than 2 Hz except wings and tails.\n\nIDLE:\n- trees sway 1–3° every 3.6–5 s; flowers bob ±2% every 2.4 s\n- flags and bunting flutter; the windmill turns at 0.25 rev/s; the fountain trickles; chimney smoke loops every 2.4 s; bulbs twinkle\n- sea bands scroll; clouds drift at 0.08 u/s; blossom petals fall\n- the avatar bobs 0.02 u at 0.5 Hz\n- pets wander at 0.9 u/s (bunny in 0.18 u hops, dragon fluttering) and do an idle action every 4–8 s\n- the mossy rock blinks every 5–9 s\nEvery loop is phase-offset by uid so nothing marches in lockstep. The dance break is the exception, where lockstep is the point.\n\nTAP FEEDBACK: every tappable thing, even one with no act, squishes 1 → 0.92 → 1.06 → 1 over 0.25 s (outBack) with 'pop', then plays its act animation. Acts can be interrupted and never stack.\n\nPLACE / BUY: an item drops in from 1.2 u: falls for 0.22 s (inQuad), squashes to y 0.8 and xz 1.12 for 0.08 s, then rebounds with outBack over 0.25 s. A 6-puff dust ring, plus 'chip' and 'pop'. On purchase, 'coins' plays and the item debuts on the stage riser with one 360° turn over 1.2 s, a sparkle burst and 'tada'. Purchases of 300 ⭐ or more (the confirm threshold) add confetti cannons from both screen edges and 'fanfare'.\n\nDANCE BREAK: runs at Showtime, 8 counts at 118 BPM, about 4.1 s, then back to idle. It repeats every 16 bars while Showtime is on. Pets first walk to open cells near the house (at most 2 s), then dance in place.\n- counts 1–2: side-step left and right with a 10° lean\n- counts 3–4: two hops\n- counts 5–6: signature moves. Puppy 'tail-wag shuffle' (hip wiggle and paw wave). Kitten 'paw point' (points up-left, then up-right). Bunny 'hop-spin'. Dragon 'wing twirl' (flutters up 0.2 u, spins, puffs sparkles). Avatar 'wand wave'.\n- count 7: everyone turns to the camera\n- count 8: group pose, finger-hearts or heart sprites, and a sparkle burst\n\nCELEBRATIONS: a land unlock raises the land, sets off 3 sparkle-ring fireworks and plays applause. Reaching a goal triggers an 8 s Showtime encore. A personal best in a game shows 'NEW PERSONAL BEST!' with fireworks and a crowd wave. Finishing a game gives confetti and the pet's signature move.\n\nCAMERA (island): PerspectiveCamera, FOV 30, for the telephoto 'toy diorama' look. The default view is 52° elevation at yaw 0, straight on, so grid editing matches the 2D map. It frames the whole unlocked island with a 6% margin and reframes smoothly when land unlocks. Controls:\n- drag orbits yaw ±35° and elevation 40–65°\n- pinch or wheel zooms 0.75–1.6×, with inertia damping 0.12\n- double-tapping an item dollies in over 0.6 s to frame it\n- a home button resets the view\nReveal moves:\n- land unlock: crane from 52° to 40° toward the region over 1.4 s, hold 1.5 s, return over 1.0 s\n- game launch: push in toward the attraction over 0.7 s, then fade into the game\n- Showtime: slow 8° orbit over 8 s, then back\nAll camera moves use easeInOutSine, and the camera never rolls.\n\nGAMES: the course camera follows with 3 u of lookahead. The penalty camera follows the ball 40% of the way, then holds. After a goal, a 1.2 s replay angle from beside the post plays (skipped under reduced motion). The kart chase cam is as specified in the item notes. Screen shake happens only on course bumps and kart wall hits: 0.06 u for 0.18 s, decaying.\n\nREDUCED MOTION (prefers-reduced-motion OR the app's own reduced flag):\n- camera moves become instant cuts, and there is no shake\n- no idle sway or bob, no falling petals\n- confetti physics becomes a 0.4 s sparkle fade\n- the dance break becomes one group pose with a sparkle fade\n- spotlights stay still, and chase lights become a steady glow\n- the Showtime transition is a 0.25 s crossfade\nIn every mode: no flashing faster than 2 Hz and no full-screen white flash.",
+ "uiStyle": "FONTS (Google Fonts, one link with display=swap; sw.js already caches fonts.googleapis.com and fonts.gstatic.com):\n- 'Bagel Fat One' 400: big display text ONLY. Screen titles, the GOAL!, ENCORE! and NEW PERSONAL BEST! banners, countdown digits and the PET COURSE banner texture.\n- 'Baloo 2' 700/800 (already in use): buttons, HUD numbers, prices and the ⭐ pill.\n- 'Fredoka' 500/600 (already in use): body copy and descriptions.\nFallback for all: system-ui, -apple-system, sans-serif. Body copy is never set in Bagel Fat One.\n\nDAY HUD (over the canvas): glass panels in rgba(255,255,255,0.78) with backdrop-filter: blur(14px) saturate(1.4), plus the -webkit- prefix. On the LOW tier, or where it isn't supported, use solid #FFF8FD. Border 1.5px rgba(255,255,255,0.9), radius 22px, shadow 0 10px 30px rgba(43,33,64,0.16). Text #2B2140, secondary text #5B4F7A.\n\nSHOWTIME HUD: panels rgba(26,18,64,0.72), text #FFFFFF, border rgba(255,255,255,0.25). The focus ring stays the existing 3px #FFD23F.\n\nBUTTONS are puffy stickers:\n- shape: radius 18px (pills 999px), 3px #FFFFFF border, shadow 0 4px 0 (the button colour 15% darker) plus 0 8px 18px rgba(43,33,64,0.18)\n- pressed: translateY(3px) with shadow 0 1px 0\n- size: at least 44×44 px; game pads keep the existing clamp(64px,13vmin,104px)\n- primary: 135deg gradient #FF5FA2 → #A66BFF with white text\n- secondary: #4FD8FF → #6C7BFF\n- BUY stays green, #2ECC71 → #1FA463 (money meaning unchanged)\n- disabled: #E4E0EE background, #4F4870 text\n- points pill: #FFE27A → #FFB347 with #5A3700 text and a tiny star that sparkles when points change\n\nSHOP ('photocard binder'): 3:4 white cards, radius 16px. The image well is radial-gradient(#FFF0FA, #E8F4FF) with the 3D icon standing on a small riser. Shine level goes by price only:\n- under 200: a plain white border\n- 200–599: a 2px pastel holo edge (#FFB3E6 → #B3E5FF)\n- 600–1199: an animated holo foil border (conic gradient over the 4 holo stops, 6 s hue drift)\n- 1200 and up: gold foil (#FFE89A → #F0C02F → #C9921A) with 3 twinkles\nA ±6° tilt-shine follows the pointer on desktop only; it is off on touch and under reduced motion. Never put text on foil.\n\nCHIPS AND BADGES: sticker chips with a white outline. NEW! is a #FF4FB8 pill with a holo border. Owned, locked and repeat chips keep their current colours. Emoji stay as icons, set on white sticker circles.\n\nGAME SHELL restyle:\n- keep the #130C2E background; the top bar becomes glass, rgba(255,255,255,0.08) with blur 10px\n- buttons get a 2px neon outline (#FF4FB8 primary, #3DF2FF secondary) with a 0 0 12px glow\n- the .go button is #FFD23F → #FF8FC8 with #4A3200 text\n- countdown digits: Bagel Fat One at clamp(90px,20vw,170px), gradient fill #FFD23F → #FF5FA2, with an expanding ring each second\n- results background: radial-gradient(circle at 50% 30%, #3B1E6E, #130C2E 70%) with 2 faint spotlight wedges\n- the personal-best badge is a holo foil pill\n\nMOTION UI: hover and press 180 ms ease-out. Sheets slide up in 260 ms with cubic-bezier(.2,1.2,.4,1). Toasts drop in from the top in 220 ms. Under reduced motion, everything becomes a 120 ms opacity fade.\n\nLEGIBILITY: text contrast of at least 4.5:1. Use #FF5FA2 behind white text only for 18px bold or larger; otherwise darken it to #E0408A. Never rely on colour alone: on/off states also change the icon or shape.",
+ "audioAndMusic": "PRINCIPLES: every sound is original, either the existing shell synths and samples or newly generated originals. Music is instrumental: no lyrics, and no references to artists or songs.\n- Music never starts before the user taps (an iOS requirement) and obeys the app's mute.\n- It has its own 🎵 toggle, remembered per device in localStorage (wrapped in try/catch), default ON at low volume.\n- It plays only on My Island and in the games, never on learning screens.\n- On visibilitychange to hidden it fades out over 200 ms; it resumes with a 300 ms fade-in.\n\nMIX: one AudioContext via getAudioCtx(). musicBus is a GainNode at 0.30 relative to SFX at 1.0; SFX keep the existing _sfxBus. Music ducks to 40% for 350 ms under fanfare, tada, applause, sting, unlock and personal-best moments. Island taps pan subtly with StereoPanner, pan = (x/width - 0.5) × 0.6. Music loops target -16 LUFS integrated with true peak ≤ -1 dBTP.\n\nCONTEXTS (BPM / key / mood):\n- Island day: 100 BPM, F major, sunny bubblegum synth-pop with a tropical lilt. It has to be calm enough to build to.\n- Showtime: 118 BPM, B♭ major, dreamy evening synth-pop with plucky arpeggios, airy pumping pads and a soft-punchy kick. The dance break is timed to this track.\n- Shop: 92 BPM, D major, cosy lo-fi pop.\n- Pet course: 128 BPM, C major, bouncy cartoon dance-pop.\n- Penalty: 112 BPM, G major, stadium pop with toms, claps and wordless crowd shouts of 'hey'.\n- Kart: 140 BPM, A minor, bright driving electro-pop and future-bass, not aggressive.\nGame menus and results keep the game's loop at 60% volume behind a 1.2 kHz lowpass. During the countdown the music ducks to 40%; 'go' releases it with a lowpass sweep from 800 Hz to 18 kHz over 0.5 s, a mini 'drop'.\n\nSHELL SOUND MAP (names from shell.js):\n- item tap: pop, plus the item's act sound\n- trampoline: boing 3 times, with combo steps 0, 2, 4 layered\n- fountain show: whoosh, then combo 0–3, then star\n- swing: whoosh on the first 3 high points\n- bubbles: pop per bubble, at most 6, with combo stepping up\n- lantern, mushrooms, lighthouse: star when switched on, chip when switched off\n- flag, bunting: whoosh at 0.5 volume\n- windmill: whoosh plus boost at 0.4 volume\n- house door: pop plus unlock\n- pet tap: pet voice plus pop\n- avatar tap: pop\n- placing an item: chip plus pop\n- invalid drop: miss at 0.5 volume\n- storing an item: whoosh\n- purchase: coins then tada; 300 ⭐ or more also gets fanfare\n- land unlock: fanfare plus applause\n- goal reached: fanfare\n- Showtime on: sting plus whoosh; off: chip\n- end of the dance break: cheer\n- game launch: whoosh, then the shell's beep/go countdown\nThe games keep all their existing logic calls (course: jump, coin; penalty: tick, kick; kart: check, coin, bump, fanfare). The 3D view may add accents on top but must never remove a logic call:\n- course: double jump → combo(step); star pickup → star; bump → oof; finish → tada plus applause\n- penalty: start → whistle; goal → cheer plus combo(goals); top-corner goal → powerup; save → save; miss → miss; heartbeat under the last shot's run-up\n- kart: grass → skid (at most once every 0.4 s); lap → powerup; final lap → sting; finish → applause\n\nPET VOICES (synthesised, original):\n- puppy 'yip': _slide 600→900 Hz triangle for 80 ms, twice, 60 ms apart\n- kitten 'mew': _slide 900→650 Hz sine for 200 ms with 6 Hz vibrato\n- bunny: _thump at f 160 twice, 90 ms apart, then pop\n- dragon: _slide 400→1200 Hz sine for 150 ms, _swell for 0.2 s, then star\n\nELEVENLABS MUSIC PROMPTS (the only third-party audio service needed, for if and when Music access arrives). Save each as audio/music/<name>.mp3 at 44.1 kHz, 128 kbps, under 700 KB, trimmed to an exact number of bars so it loops seamlessly. The code checks for the file and uses the WebAudio band when it is missing. Never mention an artist, group, show or song, and never ask for 'in the style of' anyone.\n- island_day, 16 bars = 38.4 s: 'Bright, bubbly instrumental synth-pop loop for a children's island-building game. 100 BPM, F major. Soft four-on-the-floor kick, crisp claps on 2 and 4, plucky marimba-like synth lead, warm round bass, sparkly bell arpeggios, a light steel-drum accent. Cheerful, cute and stylish, never cheesy. No vocals, no lyrics. Seamless 16-bar loop starting and ending on the downbeat.'\n- island_showtime, 16 bars ≈ 32.5 s: 'Dreamy evening synth-pop instrumental with concert-stage energy for kids. 118 BPM, B-flat major, chords E-flat, F, D minor, G minor. Punchy soft kick, snappy claps, shimmering plucked arpeggios, airy pads that pump gently with the kick, glittery chime risers every 4 bars. Uplifting and cool, not intense. No vocals, no lyrics. Seamless 16-bar loop.'\n- shop, 16 bars ≈ 41.7 s: 'Cosy lo-fi pop instrumental for browsing a toy shop. 92 BPM, D major. Mellow electric piano, soft brushed drums, round bass, gentle vibraphone melody, faint vinyl crackle. Calm, warm, happy. No vocals. Seamless loop.'\n- course, 32 bars = 60 s: 'Bouncy cartoon dance-pop instrumental for a pet obstacle-course race. 128 BPM, C major. Springy bass, four-on-the-floor kick, claps, playful pizzicato and synth-brass stabs, fun slide-whistle-like synth fills every 8 bars. Energetic and silly. No vocals. Seamless loop.'\n- penalty, 16 bars ≈ 34.3 s: 'Stadium-pop instrumental for a friendly kids football shootout. 112 BPM, G major. Big floor-tom stomps, handclaps on 2 and 4, bright synth horns, wordless crowd shouts of hey on the offbeats, building anticipation. Positive and fun. No sung lyrics. Seamless loop.'\n- kart, 32 bars ≈ 54.9 s: 'Fast, bright electro-pop racing instrumental for a kids kart game. 140 BPM, A minor. Driving offbeat bass, crisp hi-hats, sparkling future-bass chord stabs, catchy synth lead, short risers every 8 bars. Exciting but friendly, not aggressive. No vocals. Seamless loop.'\n- one-shot stingers: encore, 2 s: 'sparkly rising synth arpeggio ending on a bright major chord with a cymbal swell'. unlock, 3 s: 'short triumphant synth-brass fanfare with chimes'. results_win, 4 s: 'happy celebratory synth-pop jingle ending on a big major chord'.\n\nFALLBACK 'POCKET BAND' (WebAudio, always available): a lookahead scheduler (setInterval 25 ms, scheduling 0.12 s ahead) playing 16-step bars, at most 12 voices at once, reusing the shared noise buffer.\nInstruments:\n- KICK: sine 150→45 Hz exponential over 0.12 s, gain 0.9→0 over 0.25 s\n- CLAP: 3 noise bursts 10 ms apart through a bandpass at 1.8 kHz, Q 1.2, 0.12 s decay, gain 0.35\n- HAT: noise through a highpass at 7 kHz, 35 ms, gain 0.12 (open hat: 0.18 s)\n- BASS: triangle plus square at -12 dB through a 600 Hz lowpass, 0.2 s notes\n- PAD: 2 saws detuned ±7 cents through a 1.2 kHz lowpass, 0.3 s attack, gain 0.06, dipping to 40% for 120 ms on each kick\n- ARP: the existing _pluck at gain 0.07\n- BELL: the existing _bell, for sparkles\nProgressions (1 chord per bar, matching the file loops):\n- day: F major, B♭–C–Am–Dm\n- Showtime: B♭ major, E♭–F–Dm–Gm\n- shop: D major, Gmaj7–A–F♯m7–Bm7\n- course: C major, F–G–Em–Am\n- penalty: G major, C–D–Bm–Em\n- kart: A minor, Am–F–C–G\nPatterns (steps 0–15):\n- day: kick 0, 4, 8, 12; clap 4, 12; hat 2, 6, 10, 14; bass root on 0, 3, 8, 11; arp in up-the-chord 8th notes on bars 9–16 only\n- Showtime: the day pattern, plus open hat on 2, 6, 10, 14, 16th-note arp every bar, and the pad dip on\n- shop: kick 0, 7, 10; soft clap 4, 12; hat on every even step at 0.08; bass 0, 8; bell melody notes on 0 and 8\n- course: kick 0, 4, 8, 12; clap 4, 12; hat on all odd steps; bass bouncing root/octave on every even step\n- penalty: tom (sine 90 Hz, 0.2 s) on 0, 4, 6, 8, 12; clap 4, 12; a crowd swell (_swell 0.5 s) every 4th bar\n- kart: kick 0, 4, 8, 12; offbeat bass 2, 6, 10, 14; 16th-note hats at 0.08; a clap-roll fill on the last beat of every 8th bar\nSwitching context crossfades over 1 bar, starting on the downbeat.",
+ "doAndDont": [
+  "DO keep every item looking like its CATALOG name and description, because those texts show in the shop and cannot change. The red tile roof stays red tile, the lighthouse stays red-and-white, the cape is red and flaps, the scarf is stripy, the bow is spotty, the crown is golden, the thatch is fluffy straw, and the candy roof has icing and sprinkles.",
+  "DO reuse the locked 2D colours for every selectable style, cosmetic and pet (WALL, DOOR, roof pairs, PETCOL, KARTS, BALLS, STADIA, THEME, course THEMES, kart TRACKS). Old saves, the SVG fallback icons and the 3D look must all agree.",
+  "DO keep neon to emissive accents, at most 10% of the frame by day. DON'T paint walls, ground or sky in neon; that is exactly where 'tacky' begins.",
+  "DON'T use any real idol, group, label, TV show, song title, lyric, logo, fandom name, fandom colour scheme, official light-stick shape or recognisable choreography. Don't write Hangul or slogans that point to real artists, and don't prompt music 'in the style of' anyone. The K-pop flavour comes only from original staging, light, colour, sparkle, dance energy and the feel of the music.",
+  "DO build every model procedurally from the primitive kit, with textures drawn on a canvas at runtime. DON'T download or embed models, textures, HDRIs or sound files, and load no fonts beyond Bagel Fat One, Baloo 2 and Fredoka.",
+  "DO leave game logic and GAME_RULES alone. No GAME_RULES change is needed for this art direction: the 3D views only read round.state and map coordinates, so the same inputs must give the same results as the 2D games. Keep the 2D render(ctx) as the fallback.",
+  "DON'T add graphics that suggest mechanics the logic doesn't have, such as boost pads, power-ups, coins or extra lives.",
+  "DON'T let anything collectable in a game look like the ⭐ reward icon. Course stars are 3D glow stars with a cyan halo, and the line 'Game scores don't earn or spend ⭐' stays on the results screen.",
+  "DO keep every game's autopilot driving the 3D view. The shop preview plays the autopilot in 3D for 7 s on the stage riser and falls back to the 2D demo canvas.",
+  "DO make bumps and misses cartoon-funny: rolls, boings, dizzy sparkles, the keeper's goofy flop. DON'T show injury, damage, debris, fire, explosions, crying, scary faces, darkness or loud bangs. The dragon puffs sparkles and the volcano is cute and never erupts.",
+  "DO honour reduced motion fully, as set out in the motion section. NEVER flash faster than 2 Hz or flash the full screen white in any mode (photosensitivity).",
+  "DO keep all real UI in HTML: aria labels, keyboard focus and the #FFD23F focus ring. The canvas is a visual layer with raycast taps, backed by a hidden list of placed items that keyboard users can focus.",
+  "DO keep silhouettes distinct at 48 px icon size and readable from the default 52° camera. Check each item beside its neighbours on the grid.",
+  "DO keep placement easy to read: decor stays inside 0.86 × 0.86 of its cell, only tree canopies overhang, and buildings, attractions, paths and fun items are never jittered.",
+  "DON'T make spending feel like a game of chance. Shine levels follow price only and are deterministic: no random rewards, loot boxes, spin wheels, countdown timers or 'limited time' pressure.",
+  "DON'T autoplay audio before a tap, and DON'T play music on learning screens. DO duck music under big sound effects.",
+  "DO judge the art on the LOW tier first, on an older iPad, in both Day and Showtime. It must look good with no shadow map and no outlines before any polish is added.",
+  "DO put per-item look data in a pure module that Node can test, plus a test that every CATALOG id has a look entry built only from palette or locked tokens.",
+  "DON'T use realistic humans. The only person on the island is the chibi avatar, whose face is the child's own emoji. Crowds are original fan blobs.",
+  "DO fall back silently to the existing 2D island and games on any WebGL or CDN failure, a lost context, or sustained frame rates under 20 fps. The child should never see an error.",
+  "DON'T use parts thinner than 0.02 u (they shimmer at low pixel ratios), tiny text inside textures, or more than 3 overlapping transparent layers (fill-rate is limited on iPads)."
+ ],
+ "performanceBudget": "TARGET: 60 fps on a 2019-era iPad (A10/A12 chip) and on mid-range Android phones, never dropping below 30 fps.\n\nTIERS: decide the tier BEFORE creating the renderer, because antialias cannot be changed afterwards.\n- LOW: iOS or Android with hardwareConcurrency ≤ 4, or gl MAX_TEXTURE_SIZE < 8192, or a LOW tier saved from an earlier session\n- HIGH: a desktop without touch and with hardwareConcurrency ≥ 8\n- MID: everything else\nSave the measured tier per device in localStorage, wrapped in try/catch.\n\nPIXEL RATIO CAP: LOW 1.0, MID min(dpr, 1.5), HIGH min(dpr, 2). Antialias on MID and HIGH only.\n\nDRAW CALLS, everything on screen:\n- island: ≤ 70 LOW, 100 MID, 150 HIGH\n- games: ≤ 60, 90, 120\nHow: InstancedMesh per (id, material) for repeatables, mergeGeometries per material for unique items, one particle InstancedMesh and one halo InstancedMesh.\n\nTRIANGLES ON SCREEN:\n- island: ≤ 60k LOW, 120k MID, 200k HIGH\n- games: ≤ 50k, 100k, 150k\n\nSHADER PROGRAMS: at most 12 (toon+rim, basic, basic-additive, matcap, water, sky, cones, points, outline, shadow depth, sprite). Precompile them with renderer.compile(scene, camera) behind the loading veil so the first tap doesn't stutter.\n\nTEXTURES: all generated on a canvas at runtime, at most 8 MB of GPU memory in total:\n- toon gradient 4×1; halo, twinkle and blob textures at 64² each\n- 4 matcaps at 128²; one 128² emoji face per child\n- banner text 512×128; shore-distance map 64×40\n- LED board 256×64, animated by UV offset and never redrawn per frame\n\nLIGHTS: 1 hemisphere plus 1 directional. Zero PointLights or SpotLights; glows and beams are faked. Shadows use the static map (autoUpdate false): 1024² on MID, 2048² on HIGH, none on LOW (blob shadows instead).\n\nPARTICLES: one pooled quad InstancedMesh with capacity 128 LOW, 256 MID, 512 HIGH. Limits: confetti ≤ 120 alive, bubbles ≤ 24, petals ≤ 40, snow ≤ 60 / 100 / 150.\n\nCPU: view updates take ≤ 4 ms per frame on the target iPad, with zero allocations inside the frame loop (reuse Vector3, Matrix4 and Color). Only animated instances get matrix updates; statics are never touched after placement. Raycast only on pointer events, and only against hit boxes.\n\nFRAME PACING: use setAnimationLoop.\n- Drop to 30 fps after 20 s with no input, and return to 60 on the next input.\n- Stop rendering completely while document.hidden is true, while the island view is closed or scrolled out of view (IntersectionObserver), and while a game or the shop sheet covers the island.\n- Under reduced motion, when nothing is animating, render on demand only.\n\nADAPTIVE QUALITY: keep a rolling 120-frame average. If it stays above 24 ms for 2 s, step down one level at a time:\n1. pixel ratio -0.25\n2. shadows off\n3. outlines off\n4. particle counts halved\n5. Showtime cones off\nNever step back up during a session. If frame rates stay under 20 fps after every step, or webglcontextlost fires twice, switch to the 2D SVG island and canvas games for this session and remember the choice.\n\nLOADING: show the existing 2D island immediately. Load three plus only BufferGeometryUtils and RoundedBoxGeometry from jsDelivr in the background (the service worker caches them), then crossfade to 3D over 300 ms once the first frame is ready. If 3D isn't ready within 8 s, or the CDN or WebGL2 fails, stay on 2D silently. Target ≤ 1.5 s from opening to 3D on a cached load. Build item geometry lazily on first use and cache it by id + state + tier.\n\nMEMORY: dispose geometries, materials and textures when leaving the island. One shared offscreen renderer makes the shop icons and is disposed once its queue is empty. Game scenes are fully disposed on exit through the shell's round.dispose()."
+}

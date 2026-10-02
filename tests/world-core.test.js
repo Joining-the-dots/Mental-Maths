@@ -409,3 +409,25 @@ test('merge of two forks: each island purchase is paid exactly once', () => {
   const again = C.mergeWorlds(n2, g);
   assert.equal(again.points, m.points);
 });
+
+test('merge: only the guest copy has an island — its spending is not refunded by the stale account balance', () => {
+  const acct = { points: 1400, pointsEarned: 3000 };               /* stale account, never opened My Island */
+  const g = kid(1500);
+  C.purchase(g, 'att_pitch', { tx: 'tx_guest_pitch' });            /* 1500 -> 300 */
+  const m = C.mergeWorlds(acct, g);
+  assert.ok(C.owns(m.world, 'att_pitch'));
+  assert.equal(m.points, 1500 - 1200, 'the bigger pre-spend balance minus the spend');
+});
+
+test('merge: personal bests and arcade minutes come from both sides, whichever is newer', () => {
+  const n = kid(500), g = kid(500);
+  C.recordResult(n, 'kart', 'track_loop', { finished: true, ms: 50000 });
+  C.recordResult(g, 'kart', 'track_loop', { finished: true, ms: 58000 });
+  C.recordResult(g, 'course', 'course_meadow', { score: 900 });
+  n.world.arcade.days['2026-10-01'] = 300; g.world.arcade.days['2026-10-01'] = 120; g.world.arcade.days['2026-10-02'] = 60;
+  g.world.updatedAt = '2099-01-01T00:00:00.000Z';                  /* guest copy is the base */
+  const m = C.mergeWorlds(n, g);
+  assert.equal(m.world.pb['kart:track_loop'].ms, 50000, 'faster account time kept');
+  assert.equal(m.world.pb['course:course_meadow'].score, 900, 'guest-only PB kept');
+  assert.deepEqual(m.world.arcade.days, { '2026-10-01': 300, '2026-10-02': 60 });
+});

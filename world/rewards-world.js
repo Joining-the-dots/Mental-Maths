@@ -80,7 +80,7 @@
   var lastUndo = null;
   var lit = {};                          /* uid -> lights on */
   var pendingTx = {};                    /* itemId -> tx kept for retries */
-  var buying = false;
+  var buying = false, confirming = false;
   var petTimers = [];
   var serverOffset = 0, serverOffsetKnown = false;
 
@@ -105,6 +105,9 @@
       '.slw-btn:focus-visible,.slw-obj:focus-visible,.slw-cell:focus-visible{outline:3px solid #ffd23f;outline-offset:2px;}',
       '.slw-stagewrap{position:relative;border-radius:22px;overflow:hidden;box-shadow:0 10px 30px rgba(30,60,120,.25);background:#7fd6ff;}',
       '.slw-stage{position:relative;width:100%;aspect-ratio:' + STAGE_W + '/' + STAGE_H + ';touch-action:manipulation;user-select:none;-webkit-user-select:none;}',
+      /* phones: keep island squares finger-sized (~47px) and let the island pan sideways */
+      '@media (max-width: 700px){.slw-stagewrap{overflow-x:auto;overflow-y:hidden;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch;}.slw-stage{width:760px;}.slw-pan{display:block !important;}}',
+      '.slw-pan{display:none;text-align:center;font-size:12.5px;font-weight:800;color:#6b6390;margin:6px 0 0;}',
       '.slw-ground{position:absolute;left:0;right:0;bottom:0;height:' + (GROUND_H / STAGE_H * 100).toFixed(4) + '%;}.slw-ground svg{position:absolute;inset:0;width:100%;height:100%;}',
       '.slw-obj{position:absolute;padding:0;border:none;background:none;cursor:default;display:block;}',
       '.slw-obj svg{width:100%;height:100%;display:block;overflow:visible;}',
@@ -115,6 +118,7 @@
       '.slw-tag.lockg{background:#4a4468;color:#fff;}',
       '.slw-dot{position:absolute;right:8%;top:30%;width:clamp(14px,1.8vw,22px);height:clamp(14px,1.8vw,22px);border-radius:50%;background:#fff;border:2px solid #6c5ce7;display:flex;align-items:center;justify-content:center;font-size:clamp(8px,1vw,12px);pointer-events:none;}',
       '.slw-new{position:absolute;left:50%;top:-4%;transform:translateX(-50%);background:#ff5c8a;color:#fff;font-weight:800;font-size:clamp(9px,1.1vw,12px);border-radius:999px;padding:1px 8px;pointer-events:none;animation:slwPulse 1.4s infinite;}',
+      '.slw-new.base{top:auto;bottom:2%;}',
       '@keyframes slwPulse{0%,100%{transform:translateX(-50%) scale(1);}50%{transform:translateX(-50%) scale(1.08);}}',
       '.slw-sign{position:absolute;transform:translate(-50%,-50%);background:rgba(40,34,70,.85);color:#fff;border:2px solid rgba(255,255,255,.6);border-radius:14px;padding:6px 10px;font:inherit;font-weight:800;font-size:clamp(10px,1.3vw,14px);cursor:pointer;z-index:900;text-align:center;line-height:1.2;}',
       '.slw-pet{position:absolute;z-index:500;width:' + pct(90, STAGE_W) + ';cursor:pointer;background:none;border:none;padding:0;transition-property:left,top;transition-timing-function:linear;}',
@@ -161,7 +165,7 @@
       '.slw-ov{position:fixed;inset:0;z-index:9000;background:rgba(30,24,58,.55);display:flex;align-items:center;justify-content:center;padding:12px;}',
       '.slw-sheet{background:#fff;border-radius:22px;max-width:960px;width:100%;max-height:92vh;overflow:auto;box-shadow:0 16px 50px rgba(0,0,0,.3);padding:16px 16px 18px;position:relative;}',
       '.slw-sheet.small{max-width:440px;}',
-      '.slw-sheet h2{margin:0 0 6px;font-family:"Baloo 2",sans-serif;}',
+      '.slw-sheet h2{margin:0 0 6px;font-family:"Baloo 2",sans-serif;padding-right:44px;}',   /* clear of the ✕ */
       '.slw-x{position:absolute;right:10px;top:10px;width:42px;height:42px;border-radius:50%;border:none;background:#f1edfb;font-size:20px;cursor:pointer;}',
       '.slw-cats{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 10px;}',
       '.slw-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px;}',
@@ -268,11 +272,12 @@
             '<button class="slw-btn big" type="button" data-act="games">🎮 Games</button>' +
             '<button class="slw-btn' + (mode === 'edit' ? ' on' : '') + '" type="button" data-act="edit" aria-pressed="' + (mode === 'edit') + '">✏️ ' + (mode === 'edit' ? 'Done' : 'Edit') + '</button>' +
             '<button class="slw-btn" type="button" data-act="pets">🐾 Pets</button>' +
-            '<button class="slw-btn" type="button" data-act="sound" aria-label="Sound on or off">' + (u.muted ? '🔇' : '🔊') + '</button>' +
+            '<button class="slw-btn" type="button" data-act="sound" aria-label="Sound on or off">' + (u.muted ? '🔇 Off' : '🔊 On') + '</button>' +
             '<button class="slw-btn" type="button" data-act="info" aria-label="How it works">❓</button>' +
           '</div>' +
         '</div>' +
         '<div class="slw-stagewrap"><div class="slw-stage" id="slwStage"></div></div>' +
+        '<div class="slw-pan" aria-hidden="true">👆 Swipe the island sideways to see it all</div>' +
         '<div id="slwBar"></div>' +
         '<div class="slw-legend"><span><i style="background:#ffd23f;color:#4a3200;">▶ PLAY</i> tap to play a game</span>' +
           '<span><i style="background:#fff;border:2px solid #6c5ce7;">✋</i> tap to play with it</span>' +
@@ -281,6 +286,9 @@
       '</div>';
     drawStage();
     drawBar();
+    /* on a phone the island is wider than the screen: start centred on home */
+    var wrap = root.querySelector('.slw-stagewrap');
+    if (wrap && wrap.scrollWidth > wrap.clientWidth + 4) wrap.scrollLeft = (wrap.scrollWidth - wrap.clientWidth) / 2;
     root.querySelectorAll('[data-act]').forEach(function (b) { b.addEventListener('click', onHudAction); });
     var g = root.querySelector('.slw-goal'); if (g) g.addEventListener('click', function () { if (W().goal) openItem(W().goal); else openShop(); });
   }
@@ -313,7 +321,8 @@
       var tag = '';
       if (mode === 'play' && it.act === 'launch') tag = '<span class="slw-tag play">▶ PLAY</span>';
       else if (mode === 'play' && it.act && it.act !== 'home') tag = '<span class="slw-dot" aria-hidden="true">✋</span>';
-      var newBadge = (window._slwNew && window._slwNew[p.uid]) ? '<span class="slw-new">NEW!</span>' : '';
+      /* NEW! sits on the item's base (sprite boxes are taller than short art); games keep it on top, clear of ▶ PLAY */
+      var newBadge = (window._slwNew && window._slwNew[p.uid]) ? '<span class="slw-new' + (it.act === 'launch' ? '' : ' base') + '">NEW!</span>' : '';
       var label = it.name + (it.act === 'launch' ? ' — tap to play' : it.act ? ' — tap to play with it' : '');
       var styleAttr = 'left:' + pct(p.x * 100, STAGE_W) + ';top:' + pct(top, STAGE_H) + ';width:' + pct(fw * 100, STAGE_W) + ';height:' + pct(hUnits, STAGE_H) + ';z-index:' + (isPath ? 2 : 10 + (p.y + fh) * 10) + ';';
       var cls = 'slw-obj' + (isPath ? ' path' : '') + (selectedUid === p.uid ? ' sel' : '');
@@ -324,10 +333,12 @@
     /* locked land signs */
     Object.keys(C.REGIONS).forEach(function (rk) {
       var R = C.REGIONS[rk]; if (!R.unlock || unlocked[rk]) return;
-      var cells = C.REGION_CELLS[rk], sx = 0, sy = 0;
-      cells.forEach(function (c) { var q = c.split(','); sx += +q[0]; sy += +q[1]; });
+      /* sign sits on the outer edge of the locked land, clear of the home island */
+      var cells = C.REGION_CELLS[rk], sy = 0, xs = [];
+      cells.forEach(function (c) { var q = c.split(','); xs.push(+q[0]); sy += +q[1]; });
+      var onLeft = (Math.min.apply(null, xs) + Math.max.apply(null, xs)) / 2 < C.COLS / 2;
       var it = C.item(R.unlock);
-      html += '<button type="button" class="slw-sign" data-land="' + it.id + '" style="left:' + pct((sx / cells.length + 0.5) * 100, STAGE_W) + ';top:' + pct(PAD + (sy / cells.length + 0.5) * CH, STAGE_H) + ';">🔒 ' + esc(R.name) + '<br>⭐ ' + fmt(it.price) + '</button>';
+      html += '<button type="button" class="slw-sign" data-land="' + it.id + '" style="' + (onLeft ? 'left:1%;' : 'left:auto;right:1%;') + 'transform:translate(0,-50%);top:' + pct(PAD + (sy / cells.length + 0.5) * CH, STAGE_H) + ';">🔒 ' + esc(R.name) + '<br>⭐ ' + fmt(it.price) + '</button>';
     });
     /* you (avatar) beside the house */
     var house = w.placed.filter(function (p) { return p.id === 'house_cottage'; })[0];
@@ -376,11 +387,12 @@
       b.innerHTML = '<span class="nm">' + esc(p.name) + (w.activePet === p.id ? ' ⭐' : '') + '</span>' + ART.pet(p.id, { acc: p.acc, frame: 0 });
       var cell = free[(i * 7 + 3) % free.length].split(',');
       var pos = { x: +cell[0], y: +cell[1] };
-      function placeAt(x, y, dur) {
+      function zFor(y) { return 10 + (Math.round(y) + 1) * 10 + 5; }
+      function placeAt(x, y, dur, keepZ) {
         b.style.transitionDuration = (reduced ? 0 : dur) + 's';
         b.style.left = pct(x * 100 + 5, STAGE_W);
         b.style.top = pct(PAD + (y + 1) * CH - 72, STAGE_H);
-        b.style.zIndex = 10 + (y + 1) * 10 + 5;
+        if (!keepZ) b.style.zIndex = zFor(y);
       }
       placeAt(pos.x, pos.y, 0);
       b.addEventListener('click', function () {
@@ -396,15 +408,19 @@
         var tx = +target[0], ty = +target[1];
         var dist = Math.hypot(tx - pos.x, ty - pos.y);
         b.classList.toggle('flip', tx < pos.x);
-        var dur = Math.max(0.8, dist * 0.7);
-        placeAt(tx, ty, dur);
+        var dur = Math.max(0.8, dist * 0.7), y0 = pos.y, t0 = Date.now();
+        placeAt(tx, ty, reduced ? 0 : dur, !reduced);
         var walk = setInterval(function () {
           if (!document.body.contains(b)) { clearInterval(walk); return; }
+          /* depth follows the row the pet is crossing right now, so it walks
+             behind the house instead of over its roof */
+          var f = Math.min(1, (Date.now() - t0) / (dur * 1000));
+          b.style.zIndex = zFor(y0 + (ty - y0) * f);
           frame = 1 - frame;
           var svgHost = b.querySelector('svg');
           if (svgHost && !reduced) svgHost.outerHTML = ART.pet(p.id, { acc: p.acc, frame: frame });
         }, 220);
-        petTimers.push(setTimeout(function () { clearInterval(walk); }, dur * 1000));
+        petTimers.push(setTimeout(function () { clearInterval(walk); b.style.zIndex = zFor(ty); }, dur * 1000));
         pos = { x: tx, y: ty };
         petTimers.push(setTimeout(wander, dur * 1000 + 1500 + Math.random() * 3500));
       }
@@ -423,7 +439,7 @@
     if (a === 'sound') {
       var u = me(); u.muted = !u.muted; saveState();
       try { if (typeof renderMuteBtn === 'function') renderMuteBtn(); } catch (er) {}
-      e.currentTarget.textContent = u.muted ? '🔇' : '🔊';
+      e.currentTarget.textContent = u.muted ? '🔇 Off' : '🔊 On';
       if (!u.muted) sfx('correct');
       return;
     }
@@ -610,6 +626,7 @@
     var ov = document.createElement('div');
     ov.className = 'slw-ov' + (opts.cls ? ' ' + opts.cls : '');
     ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-modal', 'true');
+    ov.setAttribute('data-sl-modal', '1');   /* the app's own pop-ups (Daily 30 etc.) wait for this */
     ov.innerHTML = '<div class="slw-sheet' + (opts.small ? ' small' : '') + '"><button class="slw-x" type="button" aria-label="Close">✕</button>' + inner + '</div>';
     document.body.appendChild(ov);
     function close() { ov.remove(); document.removeEventListener('keydown', onKey); if (opts.onClose) opts.onClose(); }
@@ -757,7 +774,7 @@
 
   /* the purchase flow: confirm (expensive only) → locked commit → celebrate */
   function buyFlow(it, btn, errEl, done) {
-    if (buying) return;
+    if (buying || confirming) return;   /* a double-tap must not stack two confirm boxes */
     var u = me();
     var chk = C.purchaseCheck(u, it.id);
     if (!chk.ok) { if (errEl) errEl.textContent = chk.reason; return done && done(false); }
@@ -789,7 +806,8 @@
     if (it.price >= C.ECONOMY.confirmAt) {
       var c = overlay('<h2>Buy ' + esc(it.name) + '?</h2><div class="big" style="width:140px;margin:8px auto;">' + ART.icon(it.id, artState(W())) + '</div>' +
         '<p style="font-weight:700;">It costs <b>⭐ ' + fmt(it.price) + '</b>. You’ll have <b>⭐ ' + fmt((u.points || 0) - it.price) + '</b> left.</p>' +
-        '<div style="display:flex;gap:8px;justify-content:center;"><button class="slw-btn big" type="button" id="slwNo">Not yet</button><button class="slw-buy" type="button" id="slwYes" style="flex:0 0 auto;padding:10px 22px;">Yes, buy it!</button></div>', { small: true });
+        '<div style="display:flex;gap:8px;justify-content:center;"><button class="slw-btn big" type="button" id="slwNo">Not yet</button><button class="slw-buy" type="button" id="slwYes" style="flex:0 0 auto;padding:10px 22px;">Yes, buy it!</button></div>', { small: true, onClose: function () { confirming = false; } });
+      confirming = true;
       $('#slwNo', c).addEventListener('click', function () { c._close(); });
       $('#slwYes', c).addEventListener('click', function () { c._close(); proceed(); });
       return;
@@ -840,7 +858,7 @@
   function celebrate(o) {
     var cel = document.createElement('div');
     cel.className = 'slw-cele' + (reduced ? '' : ' pop');
-    cel.setAttribute('role', 'dialog'); cel.setAttribute('aria-live', 'polite');
+    cel.setAttribute('role', 'dialog'); cel.setAttribute('aria-live', 'polite'); cel.setAttribute('data-sl-modal', '1');
     cel.innerHTML = '<div class="t">' + esc(o.title) + '</div>' + (o.icon ? '<div class="ic">' + ART.icon(o.icon, artState(W())) + '</div>' : '') +
       '<div class="s">' + esc(o.sub || '') + '</div><div class="btns">' +
       (o.btns || []).map(function (b, i) { return '<button class="slw-btn big" type="button" data-b="' + i + '">' + esc(b.label) + '</button>'; }).join('') +
@@ -971,14 +989,18 @@
   }
 
   /* ---------------- arcade time (parent limit) ---------------- */
+  var qaArcade = null;   /* QA mode only: can IMPOSE a test limit, never lift a family one */
   function familyArcadeCfg() {
+    var real = null;
     try {
       var cs = window.cloudState;
       var u = me();
-      if (!cs || !cs.doc || !cs.doc.familyCode || !u || cs.boundName !== u.name) return null;
-      var a = window.slFamilyCfg && window.slFamilyCfg.arcade;
-      return a && typeof a === 'object' ? a : null;
-    } catch (e) { return null; }
+      if (cs && cs.doc && cs.doc.familyCode && u && cs.boundName === u.name) {
+        var a = window.slFamilyCfg && window.slFamilyCfg.arcade;
+        real = a && typeof a === 'object' ? a : null;
+      }
+    } catch (e) { real = null; }
+    return real || qaArcade;
   }
   function nowMs() { return Date.now() + (serverOffsetKnown ? serverOffset : 0); }
   function measureServerTime() {
@@ -1145,7 +1167,7 @@
     openItem: openItem,
     _qa: function () {
       try { if (localStorage.getItem('slQaMode') !== '1') return null; } catch (e) { return null; }
-      return { C: C, commit: commit, commitPurchase: commitPurchase, arcadeState: arcadeState, arcadeTick: arcadeTick, state: function () { return { mode: mode, placing: placing, selectedUid: selectedUid, running: running }; }, setServerOffset: function (ms) { serverOffset = ms; serverOffsetKnown = true; } };
+      return { C: C, commit: commit, commitPurchase: commitPurchase, arcadeState: arcadeState, arcadeTick: arcadeTick, state: function () { return { mode: mode, placing: placing, selectedUid: selectedUid, running: running }; }, setServerOffset: function (ms) { serverOffset = ms; serverOffsetKnown = true; }, setArcadeCfg: function (cfg) { qaArcade = cfg || null; } };
     }
   };
 })();

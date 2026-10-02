@@ -48,6 +48,8 @@
       '@keyframes slgPop{from{transform:scale(.3);}to{transform:scale(1);}}',
       '.slg-banner{position:absolute;left:50%;top:10px;transform:translateX(-50%);background:#ffd23f;color:#4a3200;font-weight:800;border-radius:999px;padding:6px 16px;z-index:4;box-shadow:0 4px 14px rgba(0,0,0,.3);font-size:15px;max-width:92%;text-align:center;}',
       '.slg-count{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:clamp(70px,18vw,160px);font-weight:800;color:#ffd23f;text-shadow:0 8px 40px rgba(0,0,0,.5);z-index:3;pointer-events:none;}',
+      '.slg-rot{display:none;position:absolute;left:50%;top:14px;transform:translateX(-50%);background:rgba(255,255,255,.12);border:2px dashed rgba(255,255,255,.35);border-radius:999px;padding:6px 14px;font-weight:800;font-size:15px;white-space:nowrap;pointer-events:none;z-index:2;}',
+      '@media (orientation: portrait) and (max-width: 760px){.slg-rot{display:block;}}',
       '@media (prefers-reduced-motion: reduce){.slg-pb{animation:none;}}'
     ].join('\n');
     document.head.appendChild(c);
@@ -96,7 +98,7 @@
         '<button class="slg-b" type="button" id="slgSound" aria-label="Sound on or off"></button>' +
         '<button class="slg-b" type="button" id="slgPause" aria-label="Pause">⏸</button>' +
         '<button class="slg-b" type="button" id="slgExit" aria-label="Back to my island">🏝️ Exit</button></div>' +
-        '<div class="slg-mid" id="slgMid"><canvas class="slg-canvas" id="slgCanvas"></canvas><div class="slg-touch" id="slgTouch"></div></div>';
+        '<div class="slg-mid" id="slgMid"><canvas class="slg-canvas" id="slgCanvas"></canvas><div class="slg-rot" aria-hidden="true">📱↻ Turn sideways for a bigger view</div><div class="slg-touch" id="slgTouch"></div></div>';
       document.body.appendChild(root);
       var mid = root.querySelector('#slgMid'), canvas = root.querySelector('#slgCanvas'), ctx = canvas.getContext('2d');
       var hudEl = root.querySelector('#slgHud'), soundBtn = root.querySelector('#slgSound'), pauseBtn = root.querySelector('#slgPause');
@@ -190,7 +192,7 @@
         phase = 'results'; stopLoop(); renderTouch(false); setBanner(null);
         if (cfg.arcade) cfg.arcade.flush();
         var res = round.result();
-        var sc = setScreen('<h2>' + esc(round.summaryTitle ? round.summaryTitle() : 'Finished!') + '</h2><div class="slg-big">' + esc(round.summaryBig()) + '</div><p>' + esc(round.summaryText ? round.summaryText() : '') + '</p><div id="slgPbSlot" style="min-height:40px;"></div>' +
+        var sc = setScreen('<h2>' + esc(round.summaryTitle ? round.summaryTitle() : 'Finished!') + '</h2><div class="slg-big">' + esc(round.summaryBig()) + '</div><p>' + esc(round.summaryText ? round.summaryText() : '') + '</p><div id="slgPbSlot" style="min-height:40px;"></div><p style="font-size:13px;opacity:.75;margin:0 0 8px;">🎮 Game scores are just for fun — they never use up your ⭐.</p>' +
           '<div class="row"><button class="slg-b go" type="button" id="slgAgain">↻ Play again</button>' +
           ((cfg.ownedVariants || []).length > 1 ? '<button class="slg-b" type="button" id="slgMenu">🗺️ Change course</button>' : '') +
           '<button class="slg-b alt" type="button" id="slgHome">🏝️ Back to my island</button></div>');

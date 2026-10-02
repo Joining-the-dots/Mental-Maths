@@ -140,12 +140,13 @@
         else s.buffer = BUFFER;               /* pressed just before landing: jump on touchdown */
       },
       forceEnd: function () { s.dist = course.length; round.done = true; },
-      hud: function () { return '🦴 ' + s.treats + '  ⭐ ' + s.stars + '  🏁 ' + Math.min(100, Math.floor(s.dist / course.length * 100)) + '%'; },
+      hud: function () { return '🦴 ' + s.treats + '  🌟 ' + s.stars + '  🏁 ' + Math.min(100, Math.floor(s.dist / course.length * 100)) + '%'; },
       score: function () { return s.treats * 10 + s.stars * 50 + Math.max(0, 600 - 100 * s.hits); },
       result: function () { return { score: Math.min(5000, round.score()) }; },
       summaryTitle: function () { return s.dist >= course.length ? '🏁 Finished!' : 'Round over'; },
-      summaryBig: function () { return round.score() + ' pts'; },
-      summaryText: function () { return '🦴 ' + s.treats + ' treats · ⭐ ' + s.stars + ' stars · ' + (s.hits ? s.hits + ' bump' + (s.hits > 1 ? 's' : '') : 'no bumps — perfect run! (+600)'); },
+      /* 'score', never 'pts' — arcade scores must not look like reward points */
+      summaryBig: function () { return 'Score ' + String(round.score()).replace(/\B(?=(\d{3})+(?!\d))/g, ','); },
+      summaryText: function () { return '🦴 ' + s.treats + ' treats · 🌟 ' + s.stars + ' stars · ' + (s.hits ? s.hits + ' bump' + (s.hits > 1 ? 's' : '') : 'no bumps — perfect run! (+600)'); },
       /* autopilot: used for the shop preview and the fairness tests */
       autoHeld: {},
       autopilot: function () { var a = autopilotWants(s, course); if (a) round.input('jump', true); },
@@ -274,7 +275,7 @@
 
   var def = {
     key: 'course', title: 'Pet Obstacle Course', emoji: '🐾', LW: LW, LH: LH, defaultVariant: 'course_meadow',
-    tutorial: [['👆', 'Tap the screen, press Space or ⬆ to jump'], ['✌️', 'Tap again in the air for a double jump'], ['🦴', 'Grab treats and ⭐ stars for points'], ['🏁', 'Reach the flag! Bumps only slow you down']],
+    tutorial: [['👆', 'Tap the screen, press Space or ⬆ to jump'], ['✌️', 'Tap again in the air for a double jump'], ['🦴', 'Grab treats and 🌟 bonus stars for a high score'], ['🏁', 'Reach the flag! Bumps only slow you down']],
     controls: [{ id: 'jump', label: '⬆ JUMP', side: 'right', wide: true }],
     keys: { ' ': 'jump', 'ArrowUp': 'jump', 'w': 'jump', 'W': 'jump', 'Enter': 'jump' },
     tapAction: 'jump',

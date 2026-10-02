@@ -130,7 +130,9 @@
         else { var dr = DRAG * dt; k.v = Math.abs(k.v) <= dr ? 0 : k.v - Math.sign(k.v) * dr; }
         if (k.v > vmax) k.v = Math.max(vmax, k.v - (onGrass ? 700 : 300) * dt);
         if (k.v < VREV) k.v = VREV;
-        var grip = Math.min(1, Math.abs(k.v) / 110) * Math.sign(k.v);
+        /* steering needs a little speed, but never none: a stopped kart can still
+           turn slowly on the spot, so nobody gets stuck facing a wall */
+        var grip = Math.max(0.45, Math.min(1, Math.abs(k.v) / 110)) * (k.v < -1 ? -1 : 1);
         if (left) k.h -= TURN * grip * dt;
         if (right) k.h += TURN * grip * dt;
         k.x += Math.cos(k.h) * k.v * dt; k.y += Math.sin(k.h) * k.v * dt;
@@ -138,17 +140,25 @@
         var nb = nearest(track, k.x, k.y, pr.idx);
         if (nb.d > WALL) {
           var c = track.pts[nb.i], nx = (k.x - c[0]) / nb.d, ny = (k.y - c[1]) / nb.d;
-          k.x = c[0] + nx * WALL; k.y = c[1] + ny * WALL;
+          /* bounce back a little inside the barrier, slow down, and swing the nose
+             along the track and slightly inwards so the next frame drives free
+             instead of pinning the kart against the wall */
+          k.x = c[0] + nx * (WALL - 3); k.y = c[1] + ny * (WALL - 3);
           k.v *= 0.45;
           var tt = track.tang[nb.i], along = Math.atan2(tt[1], tt[0]);
           if (Math.cos(k.h - along) < 0) along += Math.PI;
-          k.h += Math.atan2(Math.sin(along - k.h), Math.cos(along - k.h)) * 0.35;
+          var inward = Math.atan2(-ny, -nx), toIn = Math.atan2(Math.sin(inward - along), Math.cos(inward - along));
+          along += Math.sign(toIn) * 0.3;
+          k.h += Math.atan2(Math.sin(along - k.h), Math.cos(along - k.h)) * 0.5;
           if (s.wallT <= 0) { api.sound('bump'); s.wall++; }
           s.wallT = 0.4;
         }
         s.wallT -= dt;
         updateProgress(track, pr, k.x, k.y, Math.abs(k.v) * dt * 2.5 + 24, s.t);
-        s.wrongT = pr.back > 50 && k.v > 30 ? s.wrongT + dt : Math.max(0, s.wrongT - dt * 2);
+        /* wrong way = actually travelling against the track direction (works at any speed,
+           and reversing a little to untangle from a wall doesn't trigger it) */
+        var tw = track.tang[pr.idx], alongV = (Math.cos(k.h) * tw[0] + Math.sin(k.h) * tw[1]) * k.v;
+        s.wrongT = alongV < -40 ? s.wrongT + dt : Math.max(0, s.wrongT - dt * 2);
         if (s.msgT > 0) s.msgT -= dt;
         var tgt = camTarget(), f = Math.min(1, dt * 5);
         s.camX += (tgt[0] - s.camX) * f; s.camY += (tgt[1] - s.camY) * f;

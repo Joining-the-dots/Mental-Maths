@@ -87,6 +87,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+<!-- My Island rules (purchases ledger + merge) — shared with the game so a guest merge never refunds island spending -->
+<script src="world/world-core.js?v=1"></script>
 </head>
 <body>
 
@@ -650,6 +652,12 @@ var APP_LABELS = { maths:'🔢 Maths', spell:'🪄 Spelling', flags:'🏳️ Fla
         if (!mr || (nr && nr.done && !mr.done)) m.incentiveRuns[ik] = nr;
       }
     }
+    /* My Island: union the purchase ledgers and work the balance out from
+       them — "larger balance wins" alone would refund island spending */
+    if (n.world || g.world) {
+      var mw = window.SLWorldCore.mergeWorlds(n, g);
+      if (mw) { m.world = mw.world; m.points = mw.points; }
+    }
     /* one-off fix flags and anything else only the account has — carry it
        over so those fixes don't run a second time */
     for (var key in n) { if (!(key in m)) m[key] = n[key]; }
@@ -657,6 +665,8 @@ var APP_LABELS = { maths:'🔢 Maths', spell:'🪄 Spelling', flags:'🏳️ Fla
   }
 
   function mergeGuestJob(g, nd) {
+    /* never fall back to a points-max merge when either side has an island */
+    if (((nd.state || {}).world || (g.state || {}).world) && !window.SLWorldCore) return Promise.reject(new Error('world-core not loaded'));
     var merged = mergeGuestIntoNamed(nd.state || {}, g.state || {});
     var now = Date.now();
     merged.guestMergeAt = { at: now, from: g._uid, guestAt: g.updatedAt || 0 };
@@ -795,6 +805,7 @@ var APP_LABELS = { maths:'🔢 Maths', spell:'🪄 Spelling', flags:'🏳️ Fla
     h += '<div><button class="btn-ghost" data-fsadd="' + esc(code) + '" style="margin-top:6px;">➕ Add your own prize</button> ' +
       '<button class="btn-ghost" data-fsreq="' + esc(code) + '" style="margin-top:6px;">📨 Ask James to add something to the standard shop</button></div></div>';
     h += '</div>';
+    h += renderArcadeCard(code, fam, kids);
     h += '<h2>🎯 Bonus challenges <span class="pill">code ' + esc(code) + '</span></h2><div class="card">';
     h += '<div><select id="incKind_' + esc(code) + '" style="font-family:inherit;font-weight:700;padding:5px;max-width:100%;">';
     INC_KINDS.forEach(function (k) { h += '<option value="' + k[0] + '">' + k[1] + '</option>'; });
@@ -818,7 +829,53 @@ var APP_LABELS = { maths:'🔢 Maths', spell:'🪄 Spelling', flags:'🏳️ Fla
     h += '</div>';
     return h;
   }
+  /* ---------- My Island arcade time (owner-only; lives on families/{code}.arcade) ----------
+     Only the family owner can write the family doc (firestore.rules), so a child
+     can't change it from their device. Learning is never limited — only the
+     island's mini-games. */
+  function arcadeDayKey(tz) {
+    try { return new Intl.DateTimeFormat('en-CA', { timeZone: tz || undefined, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()); }
+    catch (e) { return new Date().toISOString().slice(0, 10); }
+  }
+  function renderArcadeCard(code, fam, kids) {
+    var a = fam.arcade || {};
+    var mins = (typeof a.dailyMinutes === 'number' && a.dailyMinutes > 0) ? a.dailyMinutes : 0;
+    var tz = a.tz || (Intl.DateTimeFormat().resolvedOptions().timeZone || 'Europe/London');
+    var day = arcadeDayKey(tz);
+    var h = '<h2>🎮 Island game time <span class="pill">code ' + esc(code) + '</span></h2><div class="card">';
+    h += '<div>Daily limit for the My Island mini-games: <select id="arcMin_' + esc(code) + '" style="font-family:inherit;font-weight:800;padding:4px 6px;">';
+    [0, 10, 15, 20, 30, 45, 60, 90, 120].forEach(function (v) {
+      h += '<option value="' + v + '"' + (v === mins ? ' selected' : '') + '>' + (v ? v + ' minutes' : 'No limit') + '</option>';
+    });
+    if (mins && [10, 15, 20, 30, 45, 60, 90, 120].indexOf(mins) < 0) h += '<option value="' + mins + '" selected>' + mins + ' minutes</option>';
+    h += '</select> <button class="btn-act" data-arcsave="' + esc(code) + '">Save</button>' +
+      '<div class="muted" style="margin-top:4px;">Learning is never limited — only the island games. Kids get a 1-minute warning; at the limit they can finish the round they’re in (at most 2 extra minutes), then games wait until midnight. ' +
+      'Resets at midnight ' + esc(tz) + '. Applies to children signed in to this family; a signed-out device can’t see the family setting.</div></div>';
+    if (kids.length) {
+      h += '<div style="margin-top:8px;"><b>Today</b>: ';
+      h += kids.map(function (d) {
+        var ad = (((d.state || {}).world || {}).arcade || {}).days || {};
+        var secs = ad[day] || 0;
+        return esc(d.username) + ' ' + Math.round(secs / 60) + ' min';
+      }).join(' · ');
+      h += ' <span class="muted">(as of each child’s last sync)</span></div>';
+    }
+    h += '</div>';
+    return h;
+  }
   function wireFamilyTools(host) {
+    host.querySelectorAll('[data-arcsave]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var code = b.dataset.arcsave;
+        var v = parseInt(document.getElementById('arcMin_' + code).value, 10);
+        if (!(v >= 0 && v <= 240)) { alert('Pick a limit between 0 and 240 minutes.'); return; }
+        var tz = 'Europe/London';
+        try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || tz; } catch (e) {}
+        saveFamily(code, { arcade: { dailyMinutes: v, tz: tz, setAt: Date.now() } }, function () {
+          alert(v ? 'Saved — island games are limited to ' + v + ' minutes a day.' : 'Saved — no daily limit on island games.');
+        });
+      });
+    });
     host.querySelectorAll('[data-fsrate]').forEach(function (b) {
       b.addEventListener('click', function () {
         var code = b.dataset.fsrate;

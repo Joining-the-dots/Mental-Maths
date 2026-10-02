@@ -10,6 +10,11 @@ const APP_SHELL = [
   './world/world-core.js?v=1',
   './world/world-art.js?v=1',
   './world/rewards-world.js?v=1',
+  /* island games: must match index.html's SL_WORLD_VER (bump both together) */
+  './world/games/shell.js?v=1',
+  './world/games/pet-course.js?v=1',
+  './world/games/penalty.js?v=1',
+  './world/games/kart.js?v=1',
   './icons/icon-192.png',
   './icons/icon-256.png',
   './icons/icon-512.png',

@@ -667,19 +667,19 @@
      so an island purchase on either side is paid for exactly once. */
   function mergeWorlds(nU, gU) {
     if (!nU.world && !gU.world) return null;
-    if (!nU.world || !gU.world) {
-      var only = JSON.parse(JSON.stringify(nU.world || gU.world));
-      return { world: only, points: Math.max(nU.points || 0, gU.points || 0) };
-    }
-    var nw = ensureWorld({ world: JSON.parse(JSON.stringify(nU.world)) });
-    var gw = ensureWorld({ world: JSON.parse(JSON.stringify(gU.world)) });
+    /* a side without a world simply spent nothing here */
+    var nw = ensureWorld({ world: nU.world ? JSON.parse(JSON.stringify(nU.world)) : emptyWorld() });
+    var gw = ensureWorld({ world: gU.world ? JSON.parse(JSON.stringify(gU.world)) : emptyWorld() });
     var byTx = {}, spentUnion = 0;
     nw.ledger.concat(gw.ledger).forEach(function (e) {
       if (!e || !e.tx || byTx[e.tx]) return;
       byTx[e.tx] = e;
       spentUnion += isInt(e.price) ? e.price : 0;
     });
-    var base = JSON.parse(JSON.stringify((nw.updatedAt || '') >= (gw.updatedAt || '') ? nw : gw));
+    /* a trimmed ledger (synced copies keep the last 1000 rows) can under-count */
+    spentUnion = Math.max(spentUnion, nw.spent || 0, gw.spent || 0);
+    var baseSrc = !nU.world ? gw : !gU.world ? nw : ((nw.updatedAt || '') >= (gw.updatedAt || '') ? nw : gw);
+    var base = JSON.parse(JSON.stringify(baseSrc));
     base.ledger = Object.keys(byTx).map(function (k) { return byTx[k]; }).sort(function (a, b) { return (a.at || '') < (b.at || '') ? -1 : 1; });
     base.owned = {};
     [nw, gw].forEach(function (src) { Object.keys(src.owned || {}).forEach(function (id) { base.owned[id] = Math.max(base.owned[id] || 0, src.owned[id] || 0); }); });
@@ -687,16 +687,29 @@
     Object.keys(base.owned).forEach(function (id) {
       var it = item(id); if (!isRepeatable(it)) return;
       var bought = 0; base.ledger.forEach(function (e) { if (e.item === id) bought++; });
-      base.owned[id] = bought + (STARTER.owned[id] || 0);
+      base.owned[id] = Math.max(bought + (STARTER.owned[id] || 0), nw.owned[id] || 0, gw.owned[id] || 0);
     });
     base.spent = spentUnion;
-    Object.keys(gw.pb || {}).forEach(function (k) {
-      var a = base.pb[k], b = gw.pb[k], game = k.split(':')[0], g = GAME_RULES[game];
-      if (!a) { base.pb[k] = b; return; }
-      if (!g) return;
-      if (g.better === 'lower' ? b.ms < a.ms : b.score > a.score) base.pb[k] = b;
+    /* personal bests: the better of both sides, whichever side is the base */
+    base.pb = {};
+    [nw, gw].forEach(function (src) {
+      Object.keys(src.pb || {}).forEach(function (k) {
+        var a = base.pb[k], b = src.pb[k], g = GAME_RULES[k.split(':')[0]];
+        if (!b) return;
+        if (!a) { base.pb[k] = b; return; }
+        if (g && (g.better === 'lower' ? b.ms < a.ms : b.score > a.score)) base.pb[k] = b;
+      });
     });
-    var preN = (nU.points || 0) + (nw.spent || 0), preG = (gU.points || 0) + (gw.spent || 0);
+    /* arcade minutes: per-day larger value (never summed — same play could be on both) */
+    base.arcade = { days: {} };
+    [nw, gw].forEach(function (src) {
+      var dd = (src.arcade && src.arcade.days) || {};
+      Object.keys(dd).forEach(function (d) { if (isInt(dd[d])) base.arcade.days[d] = Math.max(base.arcade.days[d] || 0, dd[d]); });
+    });
+    if (!base.starterGrantedAt) base.starterGrantedAt = nw.starterGrantedAt || gw.starterGrantedAt;
+    /* points: the larger balance BEFORE any island spending, minus everything
+       either side spent here — so a spend is never refunded and never doubled */
+    var preN = (isInt(nU.points) ? nU.points : 0) + (nw.spent || 0), preG = (isInt(gU.points) ? gU.points : 0) + (gw.spent || 0);
     var points = Math.max(0, Math.max(preN, preG) - spentUnion);
     var tmp = { points: points, world: base };
     normalize(tmp);

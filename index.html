@@ -1670,6 +1670,11 @@
   }
   .app-tab:hover { background: var(--neutral); }
   .app-tab.active { background: var(--accent-2); color: white; border-color: var(--accent-2); }
+  /* phones: wrap the tab row instead of widening the whole page */
+  @media (max-width: 700px) {
+    .app-tabs { flex-wrap: wrap; gap: 6px; }
+    .app-tab { padding: 6px 12px; white-space: nowrap; }
+  }
   #flagsView { padding: 12px 4px; }
   #flagsView.hidden, #ttView.hidden, #problemsView.hidden, #shopView.hidden, #mysteriesView.hidden, #mathTopicView.hidden, #peopleView.hidden, #storyView.hidden, #chessView.hidden, #spellView.hidden, #onepctView.hidden { display: none; }
 

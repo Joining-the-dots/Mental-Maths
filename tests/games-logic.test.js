@@ -182,3 +182,42 @@ test('kart: no lap is counted before the race starts moving', () => {
   assert.equal(r.progress.lap, 0);
   assert.equal(r.done, false);
 });
+
+test('kart: a kart shoved into the outside wall of a bend drives free again (never pinned)', () => {
+  for (const id of Object.keys(Kart.TRACKS)) {
+    const tr = Kart.buildTrack(id);
+    for (let i = 0; i < tr.n; i += Math.floor(tr.n / 12)) {
+      const r = Kart.newRound(api, id, {});
+      const c = tr.pts[i], tg = tr.tang[i], nx = -tg[1], ny = tg[0];
+      /* both sides of the track, nose pointing straight at the barrier */
+      for (const side of [1, -1]) {
+        r.kart.x = c[0] + nx * side * (Kart.WALL - 1); r.kart.y = c[1] + ny * side * (Kart.WALL - 1);
+        r.kart.h = Math.atan2(ny * side, nx * side); r.kart.v = 0;
+        r.progress.idx = i; r.progress.s = tr.cum[i];
+        let maxV = 0;
+        const x0 = r.kart.x, y0 = r.kart.y;
+        for (let k = 0; k < 120 * 4; k++) { r.step(STEP, { up: true }); maxV = Math.max(maxV, r.kart.v); }
+        /* with no steering at all it may stay on the grass (capped at 135), but it must be moving */
+        assert.ok(maxV > 120, `${id} sample ${i} side ${side}: still pinned (max speed ${maxV.toFixed(0)})`);
+        assert.ok(Math.hypot(r.kart.x - x0, r.kart.y - y0) > 200, `${id} sample ${i} side ${side}: barely moved`);
+      }
+    }
+  }
+});
+
+test('kart: a stopped kart can still turn on the spot', () => {
+  const r = Kart.newRound(api, 'track_loop', {});
+  const h0 = r.kart.h;
+  for (let k = 0; k < 120; k++) r.step(STEP, { left: true });
+  assert.ok(h0 - r.kart.h > 0.5, 'turned ' + (h0 - r.kart.h).toFixed(2) + ' rad in 1 s');
+});
+
+test('kart: driving the wrong way shows the turn-around banner; normal driving never does', () => {
+  const r = Kart.newRound(api, 'track_volcano', {});
+  let everWrong = false;
+  for (let k = 0; k < 120 * 20; k++) { r.autopilot(); r.step(STEP, r.autoHeld); if (r.state.wrongT > 0.6) everWrong = true; }
+  assert.equal(everWrong, false, 'no false alarm on a clean lap');
+  r.kart.h += Math.PI; r.kart.v = 0;
+  for (let k = 0; k < 120 * 2; k++) r.step(STEP, { up: true });
+  assert.ok(r.state.wrongT > 0.6, 'banner after 2 s the wrong way: ' + r.state.wrongT.toFixed(2));
+});

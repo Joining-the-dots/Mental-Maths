@@ -102,7 +102,7 @@
       result: function () { return { score: s.score, extra: s.goals }; },
       summaryTitle: function () { return s.goals >= 6 ? '🏆 Superstar striker!' : s.goals >= 4 ? '⚽ Great shooting!' : 'Good effort!'; },
       summaryBig: function () { return s.goals + ' / ' + SHOTS + ' goals'; },
-      summaryText: function () { return s.score + ' pts' + (s.corners ? ' · ' + s.corners + ' top-corner screamer' + (s.corners > 1 ? 's' : '') + ' (+50 each)' : '') + ' · Tip: watch which way the keeper leans!'; },
+      summaryText: function () { return 'Score ' + s.score + (s.corners ? ' · ' + s.corners + ' top-corner screamer' + (s.corners > 1 ? 's' : '') + ' (+50 each)' : '') + ' · Tip: watch which way the keeper leans!'; },
       autoHeld: {},
       autopilot: function () {
         /* preview: aim for a corner away from the keeper's lean */

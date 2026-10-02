@@ -13,6 +13,12 @@
   var STAGE_W = COLS * 100, STAGE_H = ROWS * CH + PAD, GROUND_H = ROWS * CH;
   var STORAGE_KEY = 'timesTableQuest_v1';
   var reduced = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  /* a parent can switch Reduce Motion on while the app stays open for days */
+  try {
+    var rmq = window.matchMedia('(prefers-reduced-motion: reduce)');
+    var onRm = function () { reduced = !!rmq.matches; s3('setReduced', reduced); };
+    if (rmq.addEventListener) rmq.addEventListener('change', onRm); else if (rmq.addListener) rmq.addListener(onRm);
+  } catch (e) {}
 
   /* ---------------- tiny utils ---------------- */
   function $(sel, el) { return (el || document).querySelector(sel); }
@@ -249,6 +255,8 @@
       '.slw-time{background:#fff8e1;border:2px solid #ffd166;border-radius:12px;padding:8px 12px;font-size:13.5px;font-weight:700;color:#6b5a22;margin-bottom:10px;}',
       '.slw-loading{padding:40px;text-align:center;font-weight:800;color:#6c5ce7;}',
       '@media (max-width:640px){.slw-pts{font-size:16px;padding:6px 12px;}.slw-btn{padding:7px 9px;font-size:13px;}.slw-learn{font-size:14px;padding:8px 12px;}}',
+      /* Showtime day<->night page change fades instead of snapping (no strobing) */
+      'html body .slw,html body .slw .slw-hud,html body .slw .slw-legend,html body .slw .slw-btn{transition:background-color .45s ease,background .45s ease,color .45s ease,border-color .45s ease;}',
       '@media (prefers-reduced-motion: reduce){.slw-wave,.slw-spin,.slw-flag,.slw-twinkle,.slw-smoke,.slw-tag.play,.slw-new{animation:none !important;}.slw-pet{transition-duration:0s !important;}.slw-cele.pop .ic{animation:none;}}'
     ].join('\n');
     document.head.appendChild(css);
@@ -275,7 +283,7 @@
      of state, rules, commits, HTML and sound decisions. Every call into
      the stage is guarded: any failure drops silently back to the 2D island.
      ================================================================ */
-  var stage3d = null, use3D = null, booting3d = false, coverCount = 0, anim3d = {}, dispose3dTimer = 0;
+  var stage3d = null, use3D = null, booting3d = false, coverCount = 0, anim3d = {}, dispose3dTimer = 0, late3d = false, userChangedInGame = false, lastShowtimeTap = 0;
   var showtimeOn = (function () { try { return localStorage.getItem('slwShowtime') === '1'; } catch (e) { return false; } })();
   function s3(method) {
     if (!stage3d || typeof stage3d[method] !== 'function') return undefined;
@@ -302,7 +310,16 @@
       return SLIsland3D.boot({ ver: window.SL_WORLD_VER, deadlineMs: 8000 });
     }).then(function (ok) {
       booting3d = false;
-      if (!ok || typeof SLIsland3D.mount !== 'function') { use3D = false; return; }
+      if (!ok || typeof SLIsland3D.mount !== 'function') {
+        /* a slow first load can still finish: stay undecided and upgrade to 3D when it's ready */
+        var gaveUp = !window.SLIsland3D || (SLIsland3D.failed && SLIsland3D.failed()) || (SLIsland3D.remembered && SLIsland3D.remembered(window.SL_WORLD_VER));
+        use3D = gaveUp ? false : null;
+        if (!gaveUp && SLIsland3D.ensure && !late3d) {
+          late3d = true;
+          SLIsland3D.ensure({ deadlineMs: 60000 }).then(function (S) { late3d = false; if (S && root && renderedFor != null && !stage3d && !running) maybeBoot3D(); }, function () { late3d = false; });
+        }
+        return;
+      }
       if (!root || renderedFor == null || stage3d) return;          /* the island closed meanwhile */
       stage3d = SLIsland3D.mount({ reduced: reduced, user: userInfo(), on: {
         tapItem: function (uid) { tapItem(uid, null); },
@@ -385,7 +402,12 @@
   }
   /* shop/sheet icons: a 3D photocard when available, the SVG otherwise */
   function iconHtml(id, st) {
-    return '<span class="slw-pc" data-pc="' + esc(id) + '"' + (st ? ' data-st="' + esc(JSON.stringify(st)) + '"' : '') + '>' + ART.icon(id, st) + '</span>';
+    var it = C.item(id), pst = st;
+    if (it && it.kind === 'acc') {            /* accessories preview on the child's own active pet */
+      var w = W(), pet = w && C.petById(w, w.activePet);
+      pst = Object.assign({}, st || {}, { pet: w && w.activePet, acc: (pet && pet.acc) || {} });
+    }
+    return '<span class="slw-pc" data-pc="' + esc(id) + '"' + (pst ? ' data-st="' + esc(JSON.stringify(pst)) + '"' : '') + '>' + ART.icon(id, st) + '</span>';
   }
   function fillPhotocards(el) { if (use3D && window.SLPhotocard && el) { try { SLPhotocard.fill(el); } catch (e) {} } }
 
@@ -409,7 +431,7 @@
     }
     if (dispose3dTimer) { clearTimeout(dispose3dTimer); dispose3dTimer = 0; }
     draw();
-    s3('resume');
+    if (!running) s3('resume');          /* never pull the shared canvas out from under a game */
     maybeIntro();
     checkGoalReached(true);
     measureServerTime();
@@ -434,7 +456,7 @@
             '<button class="slw-btn big" type="button" data-act="games">🎮 Games</button>' +
             '<button class="slw-btn' + (mode === 'edit' ? ' on' : '') + '" type="button" data-act="edit" aria-pressed="' + (mode === 'edit') + '">✏️ ' + (mode === 'edit' ? 'Done' : 'Edit') + '</button>' +
             '<button class="slw-btn" type="button" data-act="pets">🐾 Pets</button>' +
-            (is3d ? '<button class="slw-btn" type="button" data-act="showtime" aria-pressed="' + showtimeOn + '" aria-label="Showtime">' + (showtimeOn ? '🌙✨ Showtime' : '☀️ Day') + '</button>' : '') +
+            (is3d ? '<button class="slw-btn" type="button" data-act="showtime" aria-pressed="' + showtimeOn + '">' + (showtimeOn ? '☀️ Back to day' : '🌙✨ Showtime') + '</button>' : '') +
             '<button class="slw-btn" type="button" data-act="music" aria-pressed="' + musicOn() + '" aria-label="Music on or off">' + (musicOn() ? '🎵 On' : '🎵 Off') + '</button>' +
             '<button class="slw-btn" type="button" data-act="sound" aria-label="Sound on or off">' + (u.muted ? '🔇 Off' : '🔊 On') + '</button>' +
             '<button class="slw-btn" type="button" data-act="info" aria-label="How it works">❓</button>' +
@@ -463,7 +485,7 @@
     var gp = C.goalProgress(u);
     if (!gp) return '<button class="slw-goal" type="button"><span class="gt">🎯 Pick a savings goal in the shop</span></button>';
     return '<button class="slw-goal' + (gp.ready ? ' ready' : '') + '" type="button" aria-label="Savings goal: ' + esc(gp.name) + '">' +
-      '<span class="gi">' + ART.icon(gp.id, artState(C.ensureWorld(u))) + '</span>' +
+      '<span class="gi">' + iconHtml(gp.id, artState(C.ensureWorld(u))) + '</span>' +
       '<span style="flex:1;min-width:0;"><span class="gt">' + (gp.ready ? '🎉 You can buy ' + esc(gp.name) + '!' : '🎯 ' + esc(gp.name) + ' · ' + fmt(gp.have) + ' / ' + fmt(gp.price) + ' ⭐') + '</span>' +
       '<span class="gb" style="display:block;"><i style="width:' + gp.pct + '%"></i></span></span></button>';
   }
@@ -607,20 +629,23 @@
     if (a === 'pets') return openPets();
     if (a === 'info') return openInfo();
     if (a === 'showtime') {
+      var nowT = Date.now();
+      if (nowT - lastShowtimeTap < 900) return;         /* no light/dark strobing from button mashing */
+      lastShowtimeTap = nowT;
       showtimeOn = !showtimeOn;
       try { localStorage.setItem('slwShowtime', showtimeOn ? '1' : '0'); } catch (er) {}
       s3('showtime', showtimeOn);
       islandMusic(showtimeOn ? 'island_showtime' : 'island_day');
       if (showtimeOn) { sample('sting', 0.6); try { if (window.SLSound) SLSound.make({ muted: function () { var u = me(); return !!(u && u.muted); } })('whoosh'); } catch (er) {} } else sample('chip', 0.5);
       var slw = root.querySelector('.slw'); if (slw) slw.classList.toggle('showtime', showtimeOn);
-      e.currentTarget.textContent = showtimeOn ? '🌙✨ Showtime' : '☀️ Day';
+      e.currentTarget.textContent = showtimeOn ? '☀️ Back to day' : '🌙✨ Showtime';
       e.currentTarget.setAttribute('aria-pressed', String(showtimeOn));
       return;
     }
     if (a === 'music') {
       var onNow = !musicOn();
       try { if (window.SLMusic) SLMusic.setEnabled(onNow); } catch (er) {}
-      if (onNow) islandMusic('island_day');
+      if (onNow) islandMusic(use3D && stage3d && showtimeOn ? 'island_showtime' : 'island_day');
       e.currentTarget.textContent = onNow ? '🎵 On' : '🎵 Off';
       e.currentTarget.setAttribute('aria-pressed', String(onNow));
       return;
@@ -775,6 +800,8 @@
   function placeKeys(e) {
     if (mode !== 'place' || !placing) return;
     if (!islandOnScreen()) return;   /* never steal keys from maths, games or dialogs */
+    var tg = e.target && e.target.tagName;
+    if ((e.key === 'Enter' || e.key === ' ') && (tg === 'BUTTON' || tg === 'INPUT' || tg === 'A')) return;
     var k = e.key, moved = true;
     if (k === 'ArrowLeft') placing.x = Math.max(0, placing.x - 1);
     else if (k === 'ArrowRight') placing.x = Math.min(COLS - 1, placing.x + 1);
@@ -894,7 +921,7 @@
     var isGoal = w.goal === it.id;
     var goalBtn = (s.state === 'owned' || trial()) ? '' : '<button type="button" class="slw-goalbtn' + (isGoal ? ' on' : '') + '" data-goal="' + it.id + '" aria-pressed="' + isGoal + '" title="' + (isGoal ? 'This is your goal' : 'Make this my savings goal') + '">🎯</button>';
     var shine = (window.SLIslandLook && SLIslandLook.shineLevel) ? ' shine-' + SLIslandLook.shineLevel(it.price) : '';
-    return '<div class="slw-card' + shine + '"><button type="button" class="ic" data-open="' + it.id + '" aria-label="See ' + esc(it.name) + '">' + ART.icon(it.id, artState(w)) + '</button>' +
+    return '<div class="slw-card' + shine + '"><button type="button" class="ic" data-open="' + it.id + '" aria-label="See ' + esc(it.name) + '">' + iconHtml(it.id, artState(w)) + '</button>' +
       '<div class="nm">' + esc(it.name) + '</div><div class="ds">' + esc(it.desc) + '</div>' + chip +
       (trial() ? '<div class="pr"><s style="color:#9a94b5;font-weight:700;">⭐ ' + fmt(it.price) + '</s> <span class="slw-free">FREE</span></div>'
         : '<div class="pr">⭐ ' + fmt(it.price) + (rep ? ' <span style="font-size:11px;color:#8a84a3;">each</span>' : '') + '</div>') +
@@ -904,7 +931,7 @@
     if (cat) shopCat = cat;
     var u = me();
     islandMusic('shop');
-    var ov = overlay('<h2>🛍️ Island Shop</h2><div style="font-weight:800;color:#6b5a22;">You have ⭐ <span id="slwShopPts">' + fmt(u.points) + '</span> ' + (trial() ? 'saved for the 🎁 Shop (not used here)' : 'to spend · earn more by learning 📚 · same ⭐ as the 🎁 Shop') + '</div>' + (trial() ? '<div class="slw-trialbar">🧪 Test mode: everything in this shop is <b>free</b> — your ⭐ aren’t used. Try anything you like!</div>' : '') + '<div class="slw-cats" id="slwCats"></div><div class="slw-err" id="slwShopErr" role="alert"></div><div class="slw-grid" id="slwShopGrid"></div>', { onClose: function () { islandMusic('island_day'); } });
+    var ov = overlay('<h2>🛍️ Island Shop</h2><div style="font-weight:800;color:#6b5a22;">You have ⭐ <span id="slwShopPts">' + fmt(u.points) + '</span> ' + (trial() ? 'saved for the 🎁 Shop (not used here)' : 'to spend · earn more by learning 📚 · same ⭐ as the 🎁 Shop') + '</div>' + (trial() ? '<div class="slw-trialbar">🧪 Test mode: everything in this shop is <b>free</b> — your ⭐ aren’t used. Try anything you like!</div>' : '') + '<div class="slw-cats" id="slwCats"></div><div class="slw-err" id="slwShopErr" role="alert"></div><div class="slw-grid" id="slwShopGrid"></div>', { onClose: function () { islandMusic(use3D && stage3d && showtimeOn ? 'island_showtime' : 'island_day'); } });
     function paint() {
       var u2 = me();
       $('#slwShopPts', ov).textContent = fmt(u2.points);
@@ -927,6 +954,7 @@
         : trial() ? '<p style="grid-column:1/-1;font-weight:800;text-align:center;color:#1d8a4c;padding:18px;">🎉 You’ve got everything there is! Thanks for testing.</p>'
         : '<p style="grid-column:1/-1;font-weight:800;text-align:center;color:#6b6390;padding:18px;">Nothing to buy just yet — every bit of learning earns ⭐!' +
           (next ? '<br>Next up: <b>' + esc(next.name) + '</b> — just ' + fmt(next.price - (u2.points || 0)) + ' more ⭐.' : '') + '</p>';
+      fillPhotocards(ov);
       ov.querySelectorAll('[data-cat]').forEach(function (b) { b.addEventListener('click', function () { shopCat = b.dataset.cat; paint(); }); });
       ov.querySelectorAll('[data-open]').forEach(function (b) { b.addEventListener('click', function () { openItem(b.dataset.open); }); });
       ov.querySelectorAll('[data-goal]').forEach(function (b) { b.addEventListener('click', function () { toggleGoal(b.dataset.goal).then(paint); }); });
@@ -984,7 +1012,7 @@
     var u = me(), w = C.ensureWorld(u), s = iState(u, id);
     var demoGame = it.kind === 'attraction' ? it.game : (it.kind === 'variant' ? it.game : null);
     var ov = overlay(
-      '<div class="slw-detail"><div class="big" id="slwBig">' + ART.icon(id, artState(w)) + '</div>' +
+      '<div class="slw-detail"><div class="big" id="slwBig">' + iconHtml(id, artState(w)) + '</div>' +
       '<div class="info"><h2>' + esc(it.name) + '</h2><div style="color:#6b6585;">' + esc(it.desc) + '</div>' +
       '<div class="slw-unlocks">' + unlockText(it) + '</div>' +
       (trial() ? '<div class="pr" style="font-family:\'Baloo 2\',sans-serif;font-weight:800;font-size:22px;color:#b9821a;"><s style="color:#9a94b5;">⭐ ' + fmt(it.price) + '</s> <span class="slw-free">FREE while we test</span></div>'
@@ -1050,7 +1078,7 @@
       });
     };
     if (!chk.trial && it.price >= C.ECONOMY.confirmAt) {
-      var c = overlay('<h2>Buy ' + esc(it.name) + '?</h2><div class="big" style="width:140px;margin:8px auto;">' + ART.icon(it.id, artState(W())) + '</div>' +
+      var c = overlay('<h2>Buy ' + esc(it.name) + '?</h2><div class="big" style="width:140px;margin:8px auto;">' + iconHtml(it.id, artState(W())) + '</div>' +
         '<p style="font-weight:700;">It costs <b>⭐ ' + fmt(it.price) + '</b>. You’ll have <b>⭐ ' + fmt((u.points || 0) - it.price) + '</b> left.</p>' +
         '<p style="font-size:13px;font-weight:700;color:#6b6390;margin-top:-4px;">These are the same ⭐ you save for real prizes in the 🎁 Shop.</p>' +
         '<div style="display:flex;gap:8px;justify-content:center;"><button class="slw-btn big" type="button" id="slwNo">Not yet</button><button class="slw-buy" type="button" id="slwYes" style="flex:0 0 auto;padding:10px 22px;">Yes, buy it!</button></div>', { small: true, onClose: function () { confirming = false; } });
@@ -1108,11 +1136,12 @@
     var cel = document.createElement('div');
     cel.className = 'slw-cele' + (reduced ? '' : ' pop');
     cel.setAttribute('role', 'dialog'); cel.setAttribute('aria-live', 'polite'); cel.setAttribute('data-sl-modal', '1');
-    cel.innerHTML = '<div class="t">' + esc(o.title) + '</div>' + (o.icon ? '<div class="ic">' + ART.icon(o.icon, artState(W())) + '</div>' : '') +
+    cel.innerHTML = '<div class="t">' + esc(o.title) + '</div>' + (o.icon ? '<div class="ic">' + iconHtml(o.icon, artState(W())) + '</div>' : '') +
       '<div class="s">' + esc(o.sub || '') + '</div><div class="btns">' +
       (o.btns || []).map(function (b, i) { return '<button class="slw-btn big" type="button" data-b="' + i + '">' + esc(b.label) + '</button>'; }).join('') +
       '<button class="slw-btn big on" type="button" data-b="x">Yay! 🎉</button></div>';
     document.body.appendChild(cel);
+    fillPhotocards(cel);
     cover(+1);
     if (o.sfx) sample(o.sfx, 0.8);
     try { if (!reduced && typeof popConfetti === 'function') { popConfetti(); setTimeout(popConfetti, 300); } } catch (e) {}
@@ -1427,6 +1456,7 @@
           arcadeFlush();
           running = null;
           window.slGameBusy = false;
+          if (userChangedInGame) { userChangedInGame = false; onUserChanged(); return; }
           s3('resume');
           draw();
         }
@@ -1450,12 +1480,23 @@
     /* the 3D stage stops at once; its GPU memory goes after 30 s away */
     s3('suspend');
     if (dispose3dTimer) clearTimeout(dispose3dTimer);
-    dispose3dTimer = setTimeout(function () { dispose3dTimer = 0; if (stage3d && renderedFor == null) { var st = stage3d; stage3d = null; use3D = null; try { st.dispose(); } catch (e) {} } }, 30000);
+    dispose3dTimer = setTimeout(function () {
+      dispose3dTimer = 0;
+      if (renderedFor != null || running) return;
+      if (stage3d) { var st = stage3d; stage3d = null; try { st.dispose(); } catch (e) {} }
+      use3D = null;
+      /* free the shared renderer, programs and cached geometry too; the next open boots again */
+      try { if (window.SLIsland3D && SLIsland3D.dispose) SLIsland3D.dispose({ keepKit: false }); } catch (e) {}
+    }, 30000);
   }
 
   /* ---------------- profile switches / external changes ---------------- */
   function onUserChanged() {
-    if (!root || !document.getElementById('worldView') || document.getElementById('worldView').classList.contains('hidden')) { renderedFor = null; return; }
+    if (running) { userChangedInGame = true; return; }       /* a game owns the screen: catch up when it ends */
+    if (!root || !document.getElementById('worldView') || document.getElementById('worldView').classList.contains('hidden')) {
+      renderedFor = null; lit = {}; s3('setUser', userInfo());
+      return;
+    }
     closeAllOverlays();
     placing = null; mode = 'play'; selectedUid = null;
     document.removeEventListener('keydown', placeKeys);

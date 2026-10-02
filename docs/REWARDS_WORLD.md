@@ -142,7 +142,15 @@ Purchases of 300 ⭐ or more ask "Are you sure?" (`ECONOMY.confirmAt`); cheaper 
 - Minors fixed: one Esc = one dialog, focus returns to the opener, dialogs labelled by their heading; Enter on a focused celebration button works; results say "Game scores don't earn or spend ⭐"; "(+600 score)" / "(+50 score each)" / "score 650" wording; active pet badge 🏅 instead of ⭐; owned games get ▶ Play in the detail sheet and their preview says "play it on your island"; penalty aim sweeps at an even speed and only just past the frame (random tapping scores ~52%, was ~40%) and the keeper's lean is 2.5× bigger; Resume has a 2-1 countdown; results buttons ignore taps for 0.65 s; pets stop when the island tab is hidden and stay still with reduced motion; higher-contrast disabled buttons and locked game cards; curly apostrophes in pet names; keyboard hint hidden on touch screens; "Not finished" instead of "DNF"; smaller, lighter kart minimap; more opaque results backdrop.
 - Minors not changed: the app's existing tall sticky header on phones covers the island's top bar after scrolling (pre-existing app layout).
 
-## 8. Deploying (needs James's go-ahead — not done)
+## 8. Free test mode (James, 2026-10-02 — on for the first release)
+`window.SL_WORLD_TRIAL = true` in `index.html` makes every island item free so the children can try everything:
+- `purchase(u, id, {tx, trial: true})` charges 0, never touches `u.points`, `pointsEarned` or `world.spent`, and writes a ledger row `{price: 0, trial: true, list: <catalogue price>}`. All other rules still apply (catalogue only, prerequisites, one-off items once, starter/included items not for sale).
+- Per-copy items stop at 20 each while testing (`ECONOMY.trialMaxCopies`).
+- UI: a green "Test mode — everything on the island is FREE. Your ⭐ are safe!" banner replaces the savings-goal bar; prices show struck through with FREE; buttons say "Get it free"; no "are you sure?" box, no "need N more", no 🎯 goals; the intro's third slide says it's free while testing.
+- **Ending the test:** set `SL_WORLD_TRIAL = false` and deploy — real prices return immediately. Everything picked during testing stays owned unless we decide otherwise; because every free row is tagged `trial: true`, a one-off migration can later remove test items (or keep them) per child.
+- Tests: 4 test-mode cases in `tests/world-core.test.js` (free + untouched balances, rules still enforced, the 20-copy cap with real purchases still charged, merges).
+
+## 9. Deploying
 1. Merge `rewards-world` into `master`.
 2. Whenever any `world/` file changes, bump `window.SL_WORLD_VER` in `index.html` **and** the `?v=` entries in `sw.js` together; bump `CACHE_VERSION` in `sw.js`.
 3. Bump the visible version label (`Live V4.xx`).

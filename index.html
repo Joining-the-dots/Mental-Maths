@@ -31795,6 +31795,11 @@ var SPELL_BANKS = {
    It never awards or changes points.
    ================================================================ */
 window.SL_WORLD_VER = '1';
+/* FREE TEST MODE for My Island (James, 2026-10-02): island items cost 0 and the
+   children's ⭐ are never used; each free item is tagged `trial: true` in the
+   island ledger so it can be kept or cleared when testing ends.
+   Set to false (and deploy) to switch real prices back on. */
+window.SL_WORLD_TRIAL = true;
 (function () {
   'use strict';
   var loading = null;

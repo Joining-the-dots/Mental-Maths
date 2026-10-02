@@ -28,6 +28,11 @@
   function sample(name, vol) { try { if (typeof slSample === 'function') return slSample(name, vol); } catch (e) {} return false; }
   function me() { try { return ensureUser(); } catch (e) { return null; } }
   function W() { var u = me(); return u ? C.ensureWorld(u) : null; }
+  /* free test mode (index.html: window.SL_WORLD_TRIAL = true): island items cost 0,
+     children's ⭐ are never used, and each free item is tagged in the ledger */
+  function trial() { return window.SL_WORLD_TRIAL === true; }
+  function TO() { return { trial: trial() }; }
+  function iState(u, id) { return C.itemState(u, id, TO()); }
 
   /* ---------------- commit protocol (lock + fresh read + verify) ---------------- */
   function adapter() {
@@ -74,7 +79,7 @@
     var name = state.activeUser;
     return withLock(function () {
       flushIfCurrent();
-      return C.transactPurchase(adapter(), name, id, { tx: tx });
+      return C.transactPurchase(adapter(), name, id, { tx: tx, trial: trial() });
     }).then(function (res) { afterCommit(); return res; });
   }
   function afterCommit() {
@@ -131,6 +136,9 @@
       '.slw-dot{position:absolute;right:8%;top:30%;width:clamp(14px,1.8vw,22px);height:clamp(14px,1.8vw,22px);border-radius:50%;background:#fff;border:2px solid #6c5ce7;display:flex;align-items:center;justify-content:center;font-size:clamp(8px,1vw,12px);pointer-events:none;}',
       '.slw-new{position:absolute;left:50%;top:-4%;transform:translateX(-50%);background:#ff5c8a;color:#fff;font-weight:800;font-size:clamp(9px,1.1vw,12px);border-radius:999px;padding:1px 8px;pointer-events:none;animation:slwPulse 1.4s infinite;}',
       '.slw-new.base{top:auto;bottom:2%;}',
+      '.slw-free{display:inline-block;background:linear-gradient(135deg,#2ecc71,#1fa463);color:#fff;border-radius:999px;padding:1px 10px;font-weight:800;font-size:.8em;}',
+      '.slw-goal.slw-trial{border-color:#2ecc71;background:#eafaf0;cursor:default;}.slw-goal.slw-trial .gt{color:#1d8a4c;}',
+      '.slw-trialbar{margin:6px 0 2px;background:#eafaf0;border:2px solid #2ecc71;border-radius:12px;padding:6px 10px;font-weight:700;color:#1d6b40;font-size:14px;}',
       '@media (pointer: coarse){.slw-kbhint{display:none;}}',
       '@keyframes slwPulse{0%,100%{transform:translateX(-50%) scale(1);}50%{transform:translateX(-50%) scale(1.08);}}',
       '.slw-sign{position:absolute;transform:translate(-50%,-50%);background:rgba(40,34,70,.85);color:#fff;border:2px solid rgba(255,255,255,.6);border-radius:14px;padding:6px 10px;font:inherit;font-weight:800;font-size:clamp(10px,1.3vw,14px);cursor:pointer;z-index:900;text-align:center;line-height:1.2;}',
@@ -307,6 +315,7 @@
   }
 
   function goalHtml(u) {
+    if (trial()) return '<div class="slw-goal slw-trial" role="note"><span class="gt">🧪 Test mode — everything on the island is FREE. Your ⭐ are safe!</span></div>';
     var gp = C.goalProgress(u);
     if (!gp) return '<button class="slw-goal" type="button"><span class="gt">🎯 Pick a savings goal in the shop</span></button>';
     return '<button class="slw-goal' + (gp.ready ? ' ready' : '') + '" type="button" aria-label="Savings goal: ' + esc(gp.name) + '">' +
@@ -684,42 +693,44 @@
     return it.cat || 'garden';
   }
   function cardHtml(u, it) {
-    var w = C.ensureWorld(u), s = C.itemState(u, it.id), rep = C.isRepeatable(it);
+    var w = C.ensureWorld(u), s = iState(u, it.id), rep = C.isRepeatable(it);
     var chip = s.state === 'owned' ? '<span class="chip own">✓ Owned</span>'
       : s.state === 'locked' ? '<span class="chip lock">🔒 Needs ' + esc(C.item(s.needs[0]).name) + '</span>'
-      : rep ? '<span class="chip rep">Buy as many as you like' + (s.copies ? ' · you have ' + s.copies : '') + '</span>'
+      : s.state === 'capped' ? '<span class="chip own">✓ Plenty for testing (' + s.copies + ')</span>'
+      : rep ? '<span class="chip rep">' + (trial() ? 'Get as many as you like' : 'Buy as many as you like') + (s.copies ? ' · you have ' + s.copies : '') + '</span>'
       : '<span class="chip uni">Buy once, keep forever</span>';
     var buyLabel = s.state === 'owned' ? (it.kind === 'style' || it.kind === 'cosmetic' || it.kind === 'variant' ? 'Use it' : 'Owned ✓')
-      : s.state === 'locked' ? '🔒 Locked' : s.state === 'short' ? 'Need ' + fmt(s.need) + ' more ⭐' : 'Buy';
-    var disabled = s.state === 'locked' || s.state === 'short' || (s.state === 'owned' && !(it.kind === 'style' || it.kind === 'cosmetic' || it.kind === 'variant'));
+      : s.state === 'locked' ? '🔒 Locked' : s.state === 'short' ? 'Need ' + fmt(s.need) + ' more ⭐' : s.state === 'capped' ? 'Plenty ✓' : s.free ? 'Get it free' : 'Buy';
+    var disabled = s.state === 'locked' || s.state === 'short' || s.state === 'capped' || (s.state === 'owned' && !(it.kind === 'style' || it.kind === 'cosmetic' || it.kind === 'variant'));
     var isGoal = w.goal === it.id;
-    var goalBtn = (s.state === 'owned') ? '' : '<button type="button" class="slw-goalbtn' + (isGoal ? ' on' : '') + '" data-goal="' + it.id + '" aria-pressed="' + isGoal + '" title="' + (isGoal ? 'This is your goal' : 'Make this my savings goal') + '">🎯</button>';
+    var goalBtn = (s.state === 'owned' || trial()) ? '' : '<button type="button" class="slw-goalbtn' + (isGoal ? ' on' : '') + '" data-goal="' + it.id + '" aria-pressed="' + isGoal + '" title="' + (isGoal ? 'This is your goal' : 'Make this my savings goal') + '">🎯</button>';
     return '<div class="slw-card"><button type="button" class="ic" data-open="' + it.id + '" aria-label="See ' + esc(it.name) + '">' + ART.icon(it.id, artState(w)) + '</button>' +
       '<div class="nm">' + esc(it.name) + '</div><div class="ds">' + esc(it.desc) + '</div>' + chip +
-      '<div class="pr">⭐ ' + fmt(it.price) + (rep ? ' <span style="font-size:11px;color:#8a84a3;">each</span>' : '') + '</div>' +
+      (trial() ? '<div class="pr"><s style="color:#9a94b5;font-weight:700;">⭐ ' + fmt(it.price) + '</s> <span class="slw-free">FREE</span></div>'
+        : '<div class="pr">⭐ ' + fmt(it.price) + (rep ? ' <span style="font-size:11px;color:#8a84a3;">each</span>' : '') + '</div>') +
       '<div class="row"><button type="button" class="slw-buy" data-buy="' + it.id + '"' + (disabled ? ' disabled' : '') + '>' + buyLabel + '</button>' + goalBtn + '</div></div>';
   }
   function openShop(cat) {
     if (cat) shopCat = cat;
     var u = me();
-    var ov = overlay('<h2>🛍️ Island Shop</h2><div style="font-weight:800;color:#6b5a22;">You have ⭐ <span id="slwShopPts">' + fmt(u.points) + '</span> to spend · earn more by learning 📚 · same ⭐ as the 🎁 Shop</div><div class="slw-cats" id="slwCats"></div><div class="slw-err" id="slwShopErr" role="alert"></div><div class="slw-grid" id="slwShopGrid"></div>');
+    var ov = overlay('<h2>🛍️ Island Shop</h2><div style="font-weight:800;color:#6b5a22;">You have ⭐ <span id="slwShopPts">' + fmt(u.points) + '</span> ' + (trial() ? 'saved for the 🎁 Shop (not used here)' : 'to spend · earn more by learning 📚 · same ⭐ as the 🎁 Shop') + '</div>' + (trial() ? '<div class="slw-trialbar">🧪 Test mode: everything in this shop is <b>free</b> — your ⭐ aren’t used. Try anything you like!</div>' : '') + '<div class="slw-cats" id="slwCats"></div><div class="slw-err" id="slwShopErr" role="alert"></div><div class="slw-grid" id="slwShopGrid"></div>');
     function paint() {
       var u2 = me();
       $('#slwShopPts', ov).textContent = fmt(u2.points);
       $('#slwCats', ov).innerHTML = SHOP_CATS.map(function (c) { return '<button type="button" class="slw-btn' + (shopCat === c[0] ? ' on' : '') + '" data-cat="' + c[0] + '">' + c[1] + '</button>'; }).join('');
       var items = C.shopItems().filter(function (it) {
-        if (shopCat === 'afford') return C.itemState(u2, it.id).state === 'affordable';
+        if (shopCat === 'afford') return iState(u2, it.id).state === 'affordable';
         return shopCat === 'all' || catOf(it) === shopCat;
       });
       /* affordable & useful first, owned uniques last */
       items.sort(function (a, b) {
-        var sa = C.itemState(u2, a.id).state, sb = C.itemState(u2, b.id).state;
+        var sa = iState(u2, a.id).state, sb = iState(u2, b.id).state;
         var rank = { affordable: 0, short: 1, locked: 2, owned: 3 };
         return (rank[sa] - rank[sb]) || (a.price - b.price);
       });
       var next = null;
       if (!items.length && shopCat === 'afford') {
-        C.shopItems().forEach(function (it) { if (C.itemState(u2, it.id).state === 'short' && (!next || it.price < next.price)) next = it; });
+        C.shopItems().forEach(function (it) { if (iState(u2, it.id).state === 'short' && (!next || it.price < next.price)) next = it; });
       }
       $('#slwShopGrid', ov).innerHTML = items.length ? items.map(function (it) { return cardHtml(u2, it); }).join('')
         : '<p style="grid-column:1/-1;font-weight:800;text-align:center;color:#6b6390;padding:18px;">Nothing to buy just yet — every bit of learning earns ⭐!' +
@@ -730,7 +741,7 @@
       ov.querySelectorAll('[data-buy]').forEach(function (b) {
         b.addEventListener('click', function () {
           var it = C.item(b.dataset.buy);
-          if (C.itemState(me(), it.id).state === 'owned') { useOwned(it); ov._close(); return; }
+          if (iState(me(), it.id).state === 'owned') { useOwned(it); ov._close(); return; }
           buyFlow(it, b, $('#slwShopErr', ov), function (ok) { if (ok) { ov._close(); } else paint(); });
         });
       });
@@ -778,21 +789,22 @@
   }
   function openItem(id) {
     var it = C.item(id); if (!it) return;
-    var u = me(), w = C.ensureWorld(u), s = C.itemState(u, id);
+    var u = me(), w = C.ensureWorld(u), s = iState(u, id);
     var demoGame = it.kind === 'attraction' ? it.game : (it.kind === 'variant' ? it.game : null);
     var ov = overlay(
       '<div class="slw-detail"><div class="big" id="slwBig">' + ART.icon(id, artState(w)) + '</div>' +
       '<div class="info"><h2>' + esc(it.name) + '</h2><div style="color:#6b6585;">' + esc(it.desc) + '</div>' +
       '<div class="slw-unlocks">' + unlockText(it) + '</div>' +
-      '<div class="pr" style="font-family:\'Baloo 2\',sans-serif;font-weight:800;font-size:22px;color:#b9821a;">⭐ ' + fmt(it.price) + (C.isRepeatable(it) ? ' each' : '') + '</div>' +
+      (trial() ? '<div class="pr" style="font-family:\'Baloo 2\',sans-serif;font-weight:800;font-size:22px;color:#b9821a;"><s style="color:#9a94b5;">⭐ ' + fmt(it.price) + '</s> <span class="slw-free">FREE while we test</span></div>'
+        : '<div class="pr" style="font-family:\'Baloo 2\',sans-serif;font-weight:800;font-size:22px;color:#b9821a;">⭐ ' + fmt(it.price) + (C.isRepeatable(it) ? ' each' : '') + '</div>') +
       '<div class="slw-need">' + (s.state === 'short' ? 'You have ⭐ ' + fmt(u.points) + ' — just ' + fmt(s.need) + ' more to go!' : s.state === 'owned' ? 'You own this ✓' : '') + '</div>' +
       '<div class="slw-err" id="slwItemErr" role="alert"></div>' +
       '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
         (s.state === 'owned'
           ? ((it.kind === 'style' || it.kind === 'cosmetic' || it.kind === 'variant') ? '<button class="slw-buy" type="button" id="slwUse">Use it</button>' : '') +
             (it.kind === 'attraction' && it.game ? '<button class="slw-buy" type="button" id="slwPlayNow">▶ Play</button>' : '')
-          : '<button class="slw-buy" type="button" id="slwBuyNow"' + (s.state !== 'affordable' ? ' disabled' : '') + '>' + (s.state === 'affordable' ? 'Buy for ⭐ ' + fmt(it.price) : s.state === 'locked' ? '🔒 Locked' : 'Not enough ⭐ yet') + '</button>' +
-            '<button class="slw-goalbtn' + (w.goal === id ? ' on' : '') + '" type="button" id="slwGoalNow">🎯 ' + (w.goal === id ? 'My goal ✓' : 'Make it my goal') + '</button>') +
+          : '<button class="slw-buy" type="button" id="slwBuyNow"' + (s.state !== 'affordable' ? ' disabled' : '') + '>' + (s.state === 'affordable' ? (s.free ? '🎁 Get it free' : 'Buy for ⭐ ' + fmt(it.price)) : s.state === 'locked' ? '🔒 Locked' : s.state === 'capped' ? 'Plenty for testing ✓' : 'Not enough ⭐ yet') + '</button>' +
+            (trial() ? '' : '<button class="slw-goalbtn' + (w.goal === id ? ' on' : '') + '" type="button" id="slwGoalNow">🎯 ' + (w.goal === id ? 'My goal ✓' : 'Make it my goal') + '</button>')) +
         (demoGame ? '<button class="slw-btn" type="button" id="slwDemo">▶ Watch a preview</button>' : '') +
       '</div></div></div>');
     var bn = $('#slwBuyNow', ov);
@@ -818,11 +830,11 @@
   function buyFlow(it, btn, errEl, done) {
     if (buying || confirming) return;   /* a double-tap must not stack two confirm boxes */
     var u = me();
-    var chk = C.purchaseCheck(u, it.id);
+    var chk = C.purchaseCheck(u, it.id, TO());
     if (!chk.ok) { if (errEl) errEl.textContent = chk.reason; return done && done(false); }
     var proceed = function () {
       buying = true;
-      if (btn) { btn.disabled = true; btn.textContent = 'Buying…'; }
+      if (btn) { btn.disabled = true; btn.textContent = trial() ? 'Getting it…' : 'Buying…'; }
       if (errEl) errEl.textContent = '';
       var tx = pendingTx[it.id] || (pendingTx[it.id] = newTx());
       var wasGoal = W().goal === it.id;
@@ -845,7 +857,7 @@
         if (btn) { btn.disabled = false; btn.textContent = 'Try again'; }
       });
     };
-    if (it.price >= C.ECONOMY.confirmAt) {
+    if (!chk.trial && it.price >= C.ECONOMY.confirmAt) {
       var c = overlay('<h2>Buy ' + esc(it.name) + '?</h2><div class="big" style="width:140px;margin:8px auto;">' + ART.icon(it.id, artState(W())) + '</div>' +
         '<p style="font-weight:700;">It costs <b>⭐ ' + fmt(it.price) + '</b>. You’ll have <b>⭐ ' + fmt((u.points || 0) - it.price) + '</b> left.</p>' +
         '<p style="font-size:13px;font-weight:700;color:#6b6390;margin-top:-4px;">These are the same ⭐ you save for real prizes in the 🎁 Shop.</p>' +
@@ -1007,7 +1019,8 @@
     var slides = [
       ['🏝️', 'This is your island!', 'It’s all yours — with a home, a pet and an obstacle course to play.'],
       ['📚 ➜ ⭐', 'Learn to earn', 'Every time you practise maths, spelling or flags, you earn ⭐ points.'],
-      ['⭐ ➜ 🌴', 'Make it amazing', 'Spend ⭐ on trees, pets, a football pitch, a kart track and more. They’re the same ⭐ as the 🎁 Shop’s real prizes — so choose what you’d love most!']
+      trial() ? ['🧪 🎁', 'Free while we test!', 'Right now everything on the island is free — trees, pets, a football pitch, a kart track and more. Your ⭐ stay safe for the 🎁 Shop. Try it all and tell Dad what you think!']
+        : ['⭐ ➜ 🌴', 'Make it amazing', 'Spend ⭐ on trees, pets, a football pitch, a kart track and more. They’re the same ⭐ as the 🎁 Shop’s real prizes — so choose what you’d love most!']
     ];
     var i = 0;
     var ov = overlay('<div class="slw-intro"><div class="card" style="margin:0 auto;" id="slwIntro"></div></div>', { small: true, onClose: finish });

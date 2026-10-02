@@ -21,7 +21,8 @@
   var ECONOMY = {
     sessionPts: 120,          /* representative ~25-minute learning session */
     confirmAt: 300,           /* purchases at/above this ask "are you sure?" */
-    ledgerCloudCap: 1000
+    ledgerCloudCap: 1000,
+    trialMaxCopies: 20        /* free test mode: per-copy items stop at this many each */
   };
 
   /* ---------------- land ---------------- */
@@ -425,7 +426,10 @@
      purchase(u, itemId, {tx}) — the ONLY way points are spent here.
      Price always comes from CATALOG; callers cannot pass one.
      Same tx twice → returns the first result (idempotent). */
-  function purchaseCheck(u, id) {
+  /* opts.trial = the family's free test mode: the item costs 0 and the child's
+     ⭐ are never touched; every other rule (catalogue, locks, one-offs) still applies */
+  function purchaseCheck(u, id, opts) {
+    var trial = !!(opts && opts.trial);
     var w = ensureWorld(u), it = item(id);
     if (!it) return { ok: false, code: 'unknown_item', reason: 'That isn’t in the shop.' };
     if (it.retired) return { ok: false, code: 'retired', reason: 'That’s no longer in the shop.' };
@@ -435,6 +439,10 @@
     var req = it.requires || [];
     for (var i = 0; i < req.length; i++) {
       if (!owns(w, req[i])) return { ok: false, code: 'locked', needs: req[i], reason: 'First you need: ' + (item(req[i]) ? item(req[i]).name : req[i]) + '.' };
+    }
+    if (trial) {
+      if (isRepeatable(it) && ownedCount(w, id) >= ECONOMY.trialMaxCopies) return { ok: false, code: 'trial_cap', reason: 'You’ve got plenty of those for testing!' };
+      return { ok: true, item: it, price: 0, trial: true };
     }
     var bal = isInt(u.points) ? u.points : 0;
     if (bal < it.price) return { ok: false, code: 'insufficient', need: it.price - bal, reason: 'You need ' + (it.price - bal) + ' more ⭐.' };
@@ -455,15 +463,16 @@
       if (prior.item !== id) return { ok: false, code: 'tx_conflict', reason: 'Please try again.' };
       return { ok: true, replay: true, item: item(id), price: prior.price, balance: u.points, entry: prior };
     }
-    var chk = purchaseCheck(u, id);
+    var chk = purchaseCheck(u, id, opts);
     if (!chk.ok) return chk;
-    var it = chk.item, ms = opts.now;
+    var it = chk.item, ms = opts.now, charge = chk.trial ? 0 : it.price;
     /* commit — one synchronous mutation of the same profile object */
-    u.points -= it.price;
+    u.points -= charge;
     w.owned[id] = ownedCount(w, id) + 1;
-    w.spent += it.price;
+    w.spent += charge;
     (it.includes || []).forEach(function (inc) { if (!owns(w, inc)) w.owned[inc] = 1; });
-    var entry = { tx: tx, item: id, price: it.price, at: nowIso(ms), bal: u.points };
+    var entry = { tx: tx, item: id, price: charge, at: nowIso(ms), bal: u.points };
+    if (chk.trial) { entry.trial = true; entry.list = it.price; }   /* tagged: decide at the end of testing */
     w.ledger.push(entry);
     var placedUid = null;
     if (it.kind === 'pet') ensurePetRecord(w, id);
@@ -476,7 +485,7 @@
     }
     if (w.goal === id && !isRepeatable(it)) { w.goal = null; w.goalNotified = null; }
     touch(w, ms);
-    return { ok: true, item: it, price: it.price, balance: u.points, entry: entry, placedUid: placedUid };
+    return { ok: true, item: it, price: charge, trial: !!chk.trial, balance: u.points, entry: entry, placedUid: placedUid };
   }
 
   /* ---------------- commit protocol (used by the UI for every change) ----------------
@@ -730,13 +739,18 @@
   }
 
   /* ---------------- shop presentation helpers ---------------- */
-  function itemState(u, id) {
+  function itemState(u, id, opts) {
     var w = ensureWorld(u), it = item(id);
     if (!it) return { state: 'missing' };
+    var trial = !!(opts && opts.trial);
     var bal = isInt(u.points) ? u.points : 0;
     if (!isRepeatable(it) && owns(w, id)) return { state: 'owned' };
     var req = (it.requires || []).filter(function (r) { return !owns(w, r); });
     if (req.length) return { state: 'locked', needs: req };
+    if (trial) {
+      if (isRepeatable(it) && ownedCount(w, id) >= ECONOMY.trialMaxCopies) return { state: 'capped', copies: ownedCount(w, id) };
+      return { state: 'affordable', free: true, copies: isRepeatable(it) ? ownedCount(w, id) : 0 };
+    }
     if (bal >= it.price) return { state: 'affordable', copies: isRepeatable(it) ? ownedCount(w, id) : 0 };
     return { state: 'short', need: it.price - bal, copies: isRepeatable(it) ? ownedCount(w, id) : 0 };
   }

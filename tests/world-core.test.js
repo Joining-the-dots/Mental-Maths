@@ -488,3 +488,48 @@ test('arcade: the status carries its hard-stop ceiling so a limit that arrives m
   assert.equal(st.hardStopAtUsed, 600 + C.ARCADE.graceMaxSec);
   assert.equal(C.arcadeStatus(null, 0).hardStopAtUsed, Infinity);
 });
+
+/* ---- free test mode (window.SL_WORLD_TRIAL) ---- */
+test('test mode: items cost nothing, ⭐ and lifetime points untouched, each row tagged', () => {
+  const u = kid(30);                                       /* far too few ⭐ for anything big */
+  const earned = u.pointsEarned;
+  const r = C.purchase(u, 'att_kart', { tx: tx(), trial: true });
+  assert.equal(r.ok, true); assert.equal(r.price, 0); assert.equal(r.trial, true);
+  assert.equal(u.points, 30); assert.equal(u.pointsEarned, earned); assert.equal(u.world.spent, 0);
+  assert.ok(C.owns(u.world, 'att_kart') && C.owns(u.world, 'track_loop'), 'attraction + its included track');
+  const row = u.world.ledger[u.world.ledger.length - 1];
+  assert.equal(row.trial, true); assert.equal(row.price, 0); assert.equal(row.list, 1500);
+  assert.equal(C.itemState(u, 'pet_dragon', { trial: true }).state, 'affordable');
+  assert.equal(C.itemState(u, 'pet_dragon').state, 'short', 'without test mode the real price applies');
+});
+
+test('test mode keeps every other rule: unknown, locked, one-off and starter items are still refused', () => {
+  const u = kid(0);
+  assert.equal(C.purchase(u, 'not_a_thing', { tx: tx(), trial: true }).code, 'unknown_item');
+  assert.equal(C.purchase(u, 'ball_gold', { tx: tx(), trial: true }).code, 'locked');
+  assert.equal(C.purchase(u, 'house_cottage', { tx: tx(), trial: true }).code, 'not_for_sale');
+  assert.equal(C.purchase(u, 'fountain', { tx: tx(), trial: true }).ok, true);
+  assert.equal(C.purchase(u, 'fountain', { tx: tx(), trial: true }).code, 'already_owned');
+  assert.equal(u.points, 0);
+});
+
+test('test mode caps per-copy items at 20 each; a real purchase is still charged normally', () => {
+  const u = kid(100);
+  let got = 0;
+  for (let i = 0; i < 30; i++) if (C.purchase(u, 'rock_mossy', { tx: tx(), trial: true }).ok) got++;
+  assert.equal(C.ensureWorld(u).owned.rock_mossy, 20); assert.equal(got, 20);
+  assert.equal(C.itemState(u, 'rock_mossy', { trial: true }).state, 'capped');
+  assert.equal(C.purchase(u, 'flower_sun', { tx: tx() }).price, 50);
+  assert.equal(u.points, 50);
+});
+
+test('test mode merges: free rows never move a balance', () => {
+  const base = kid(500);
+  const n = JSON.parse(JSON.stringify(base)), g = JSON.parse(JSON.stringify(base));
+  C.purchase(n, 'pet_dragon', { tx: 'tx_trial_n_dragon', trial: true });
+  C.purchase(g, 'att_pitch', { tx: 'tx_trial_g_pitch', trial: true });
+  C.purchase(g, 'fountain', { tx: 'tx_real_g_fountain' });          /* one real spend: 500 → 0 */
+  const m = C.mergeWorlds(n, g);
+  assert.equal(m.points, 0);
+  assert.ok(C.owns(m.world, 'pet_dragon') && C.owns(m.world, 'att_pitch') && C.owns(m.world, 'fountain'));
+});

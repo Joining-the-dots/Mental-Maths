@@ -650,7 +650,7 @@
   }
 
   /* ---------------- shop ---------------- */
-  var SHOP_CATS = [['all', '⭐ All'], ['garden', '🌷 Garden'], ['paths', '🛤️ Paths'], ['fun', '🎪 Fun'], ['home', '🏠 Home'], ['pets', '🐾 Pets'], ['land', '🏝️ Land'], ['games', '🎮 Games']];
+  var SHOP_CATS = [['all', '⭐ All'], ['afford', '✅ I can buy'], ['garden', '🌷 Garden'], ['paths', '🛤️ Paths'], ['fun', '🎪 Fun'], ['home', '🏠 Home'], ['pets', '🐾 Pets'], ['land', '🏝️ Land'], ['games', '🎮 Games']];
   var shopCat = 'all';
   function catOf(it) {
     if (it.cat === 'lights' || it.cat === 'flags') return 'garden';
@@ -680,14 +680,23 @@
       var u2 = me();
       $('#slwShopPts', ov).textContent = fmt(u2.points);
       $('#slwCats', ov).innerHTML = SHOP_CATS.map(function (c) { return '<button type="button" class="slw-btn' + (shopCat === c[0] ? ' on' : '') + '" data-cat="' + c[0] + '">' + c[1] + '</button>'; }).join('');
-      var items = C.shopItems().filter(function (it) { return shopCat === 'all' || catOf(it) === shopCat; });
+      var items = C.shopItems().filter(function (it) {
+        if (shopCat === 'afford') return C.itemState(u2, it.id).state === 'affordable';
+        return shopCat === 'all' || catOf(it) === shopCat;
+      });
       /* affordable & useful first, owned uniques last */
       items.sort(function (a, b) {
         var sa = C.itemState(u2, a.id).state, sb = C.itemState(u2, b.id).state;
         var rank = { affordable: 0, short: 1, locked: 2, owned: 3 };
         return (rank[sa] - rank[sb]) || (a.price - b.price);
       });
-      $('#slwShopGrid', ov).innerHTML = items.map(function (it) { return cardHtml(u2, it); }).join('');
+      var next = null;
+      if (!items.length && shopCat === 'afford') {
+        C.shopItems().forEach(function (it) { if (C.itemState(u2, it.id).state === 'short' && (!next || it.price < next.price)) next = it; });
+      }
+      $('#slwShopGrid', ov).innerHTML = items.length ? items.map(function (it) { return cardHtml(u2, it); }).join('')
+        : '<p style="grid-column:1/-1;font-weight:800;text-align:center;color:#6b6390;padding:18px;">Nothing to buy just yet — every bit of learning earns ⭐!' +
+          (next ? '<br>Next up: <b>' + esc(next.name) + '</b> — just ' + fmt(next.price - (u2.points || 0)) + ' more ⭐.' : '') + '</p>';
       ov.querySelectorAll('[data-cat]').forEach(function (b) { b.addEventListener('click', function () { shopCat = b.dataset.cat; paint(); }); });
       ov.querySelectorAll('[data-open]').forEach(function (b) { b.addEventListener('click', function () { openItem(b.dataset.open); }); });
       ov.querySelectorAll('[data-goal]').forEach(function (b) { b.addEventListener('click', function () { toggleGoal(b.dataset.goal).then(paint); }); });

@@ -1141,7 +1141,9 @@
   function loadGame(game) {
     var v = window.SL_WORLD_VER || '1';
     try { if (localStorage.getItem('slQaMode') === '1') v += '&qa=' + Date.now(); } catch (e) {}
-    return loadScript('world/games/shell.js?v=' + v).then(function () { return loadScript('world/games/' + GAMES[game].file + '?v=' + v); });
+    return loadScript('world/games/shell.js?v=' + v)
+      .then(function () { return loadScript('world/games/fx.js?v=' + v); })
+      .then(function () { return loadScript('world/games/' + GAMES[game].file + '?v=' + v); });
   }
   function pbText(game) {
     var w = W(), out = [];

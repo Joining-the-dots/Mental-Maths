@@ -12,6 +12,7 @@ const APP_SHELL = [
   './world/rewards-world.js?v=1',
   /* island games: must match index.html's SL_WORLD_VER (bump both together) */
   './world/games/shell.js?v=1',
+  './world/games/fx.js?v=1',
   './world/games/pet-course.js?v=1',
   './world/games/penalty.js?v=1',
   './world/games/kart.js?v=1',

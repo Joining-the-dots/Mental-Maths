@@ -56,15 +56,39 @@
   }
 
   /* ---------- sound helpers (respect the app's mute) ---------- */
+  /* Sound names games can use (api.sound(name, vol, step)):
+       samples  right · wrong · fanfare · sting · chip · coins · unlock · applause · heartbeat
+       app sfx  correct · wrong · unlock · fanfare · tick
+       synth    jump · coin · bump · kick · beep · go · check · pop · boing · crash · oof ·
+                powerup · combo (step = 0,1,2… climbs the scale) · whoosh · boost · miss ·
+                star · shield · whistle · save · skid · cheer · tada
+     Everything respects the app's mute. */
+  var SCALE = [523, 587, 659, 784, 880, 1047, 1175, 1319, 1568, 1760];
   function makeSound(cfg) {
-    return function (name, vol) {
+    return function (name, vol, step) {
       try {
         if (cfg.muted && cfg.muted()) return;
         if (name === 'correct' || name === 'wrong' || name === 'unlock' || name === 'fanfare' || name === 'tick') { if (typeof playSfx === 'function') playSfx(name); return; }
+        if (name === 'cheer') name = 'applause';
         if (typeof slSample === 'function' && slSample(name, vol == null ? 0.8 : vol)) return;
         if (typeof getAudioCtx === 'function' && typeof _beep === 'function') {
           var ctx = getAudioCtx(); if (!ctx) return;
-          var t = ctx.currentTime;
+          var t = ctx.currentTime, v = vol == null ? 1 : Math.max(0.1, Math.min(1.5, vol));
+          var has = function (f) { return typeof window[f] === 'function'; };
+          if (name === 'pop') { if (has('_pluck')) { _pluck(ctx, 1320, t, { vol: 0.13 * v, dur: 0.22 }); _pluck(ctx, 1760, t + 0.045, { vol: 0.1 * v, dur: 0.2 }); } else _beep(ctx, 1320, t, 70, { vol: 0.12 * v }); return; }
+          if (name === 'boing') { if (has('_slide')) _slide(ctx, 280, 760, t, 170, { wave: 'triangle', vol: 0.11 * v }); return; }
+          if (name === 'crash') { if (has('_thump')) _thump(ctx, t, { f: 85, vol: 0.34 * v }); if (has('_tap')) { _tap(ctx, t, { vol: 0.2 * v, f: 520 }); _tap(ctx, t + 0.05, { vol: 0.14 * v, f: 340 }); } return; }
+          if (name === 'oof') { if (has('_slide')) _slide(ctx, 440, 150, t, 280, { wave: 'triangle', vol: 0.16 * v }); if (has('_thump')) _thump(ctx, t, { f: 110, vol: 0.2 * v }); return; }
+          if (name === 'powerup' || name === 'tada') { var notes = name === 'tada' ? [784, 988, 1175, 1568] : [659, 880, 1047, 1319]; notes.forEach(function (f, i) { if (has('_bell')) _bell(ctx, f, t + i * 0.07, { vol: 0.09 * v, dur: 0.6 }); }); return; }
+          if (name === 'combo') { var k = Math.max(0, Math.min(SCALE.length - 1, step | 0)); if (has('_pluck')) { _pluck(ctx, SCALE[k], t, { vol: 0.15 * v, dur: 0.3 }); _pluck(ctx, SCALE[k] * 1.5, t + 0.05, { vol: 0.08 * v, dur: 0.25 }); } return; }
+          if (name === 'whoosh') { if (has('_swell')) _swell(ctx, t, 0.32, { vol: 0.11 * v }); return; }
+          if (name === 'boost') { if (has('_swell')) _swell(ctx, t, 0.45, { vol: 0.12 * v }); if (has('_slide')) _slide(ctx, 180, 900, t, 420, { wave: 'sawtooth', vol: 0.05 * v }); return; }
+          if (name === 'miss') { if (has('_pluck')) { _pluck(ctx, 220, t, { vol: 0.17 * v, dur: 0.4 }); _pluck(ctx, 175, t + 0.13, { vol: 0.15 * v, dur: 0.45 }); } return; }
+          if (name === 'star') { if (has('_bell')) { _bell(ctx, 1568, t, { vol: 0.08 * v, dur: 0.5 }); _bell(ctx, 2093, t + 0.06, { vol: 0.07 * v, dur: 0.5 }); } return; }
+          if (name === 'shield') { if (has('_bell')) _bell(ctx, 660, t, { vol: 0.1 * v, dur: 0.7 }); if (has('_slide')) _slide(ctx, 500, 1000, t, 220, { wave: 'sine', vol: 0.06 * v }); return; }
+          if (name === 'whistle') { if (has('_slide')) { _slide(ctx, 2100, 2350, t, 140, { wave: 'sine', vol: 0.08 * v }); _slide(ctx, 2100, 2350, t + 0.2, 380, { wave: 'sine', vol: 0.08 * v }); } return; }
+          if (name === 'save') { if (has('_thump')) _thump(ctx, t, { f: 70, vol: 0.3 * v }); if (has('_slide')) _slide(ctx, 330, 140, t, 240, { wave: 'triangle', vol: 0.12 * v }); return; }
+          if (name === 'skid') { if (has('_tap')) { for (var s2 = 0; s2 < 4; s2++) _tap(ctx, t + s2 * 0.04, { vol: 0.06 * v, f: 2400 - s2 * 300 }); } return; }
           if (name === 'jump') _beep(ctx, 520, t, 90, { wave: 'triangle', vol: 0.12 });
           else if (name === 'coin') { _beep(ctx, 990, t, 60, { wave: 'sine', vol: 0.12 }); _beep(ctx, 1320, t + 0.05, 80, { wave: 'sine', vol: 0.1 }); }
           else if (name === 'bump') _beep(ctx, 180, t, 140, { wave: 'triangle', vol: 0.18 });

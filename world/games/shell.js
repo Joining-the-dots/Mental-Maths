@@ -10,6 +10,9 @@
 (function () {
   'use strict';
   var STEP = 1 / 120, MAX_FRAME = 0.1;
+  /* 3D draw rates: play at ~60 fps even on 90/120/144 Hz screens (the logic still
+     steps every frame), menus/results at ~30 fps — the contract's numbers */
+  var PLAY_FPS = 60, IDLE_FPS = 30;
   window.SLGames = window.SLGames || {};
 
   function el(tag, cls, html) { var e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; }
@@ -22,7 +25,10 @@
       '.slg{position:fixed;inset:0;z-index:9700;background:#130c2e;display:flex;flex-direction:column;color:#fff;font-family:"Baloo 2",system-ui,sans-serif;touch-action:none;user-select:none;-webkit-user-select:none;overscroll-behavior:none;}',
       '.slg-top{display:flex;align-items:center;gap:8px;padding:8px 10px;background:rgba(0,0,0,.25);flex:0 0 auto;}',
       '.slg-top .ttl{font-weight:800;font-size:18px;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}',
-      '.slg-top .hud{font-weight:800;font-size:16px;background:rgba(255,255,255,.12);border-radius:999px;padding:4px 12px;white-space:nowrap;}',
+      /* on a narrow (portrait) phone the HUD pill gives way first (ellipsis), so
+         🔊 ⏸ 🏝️ Exit can never be pushed past the right edge */
+      '.slg-top .hud{font-weight:800;font-size:16px;background:rgba(255,255,255,.12);border-radius:999px;padding:4px 12px;white-space:nowrap;flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;}',
+      '.slg-top .slg-b{flex:0 0 auto;white-space:nowrap;}',
       '.slg-b{border:2px solid rgba(255,255,255,.35);background:rgba(255,255,255,.1);color:#fff;border-radius:12px;min-width:44px;min-height:44px;padding:4px 10px;font:inherit;font-weight:800;font-size:16px;cursor:pointer;touch-action:manipulation;}',
       '.slg-b:focus-visible{outline:3px solid #ffd23f;outline-offset:2px;}',
       '.slg-b.go{background:#ffd23f;color:#4a3200;border-color:#ffd23f;font-size:20px;padding:10px 26px;}',
@@ -34,7 +40,14 @@
       '.slg-pad{width:clamp(64px,13vmin,104px);height:clamp(64px,13vmin,104px);border-radius:50%;border:3px solid rgba(255,255,255,.55);background:rgba(255,255,255,.18);color:#fff;font:inherit;font-weight:800;font-size:clamp(14px,3vmin,22px);touch-action:none;cursor:pointer;}',
       '.slg-pad.wide{width:clamp(110px,22vmin,170px);border-radius:999px;}',
       '.slg-pad.on{background:rgba(255,210,63,.6);border-color:#ffd23f;}',
-      '.slg-scr{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;background:rgba(19,12,46,.94);text-align:center;padding:18px;z-index:5;overflow:auto;}',
+      /* a sheet's content sits in .slg-in: its auto margins centre it when it fits, and
+         when it is taller than the sheet it starts at the top and scrolls down (flex
+         centring would spill the title above the scroll origin, out of reach) */
+      '.slg-scr{position:absolute;inset:0;display:flex;align-items:center;justify-content:flex-start;flex-direction:column;gap:12px;background:rgba(19,12,46,.94);text-align:center;padding:18px;z-index:5;overflow:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;}',
+      '.slg-in{display:flex;flex-direction:column;align-items:center;gap:inherit;width:100%;margin:auto 0;flex:0 0 auto;}',
+      '.slg-emo{font-size:54px;}',
+      '.slg-pbslot{min-height:40px;}',
+      '.slg-sr{position:absolute;width:1px;height:1px;margin:-1px;padding:0;border:0;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap;}',
       '.slg-scr h2{margin:0;font-size:clamp(26px,5vw,40px);line-height:1.1;}',
       '.slg-scr p{margin:0;max-width:560px;font-size:17px;color:#e3dcff;font-family:system-ui,sans-serif;font-weight:600;}',
       '.slg-scr .row{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;}',
@@ -48,16 +61,32 @@
       '@keyframes slgPop{from{transform:scale(.3);}to{transform:scale(1);}}',
       '.slg-banner{position:absolute;left:50%;top:10px;transform:translateX(-50%);background:#ffd23f;color:#4a3200;font-weight:800;border-radius:999px;padding:6px 16px;z-index:4;box-shadow:0 4px 14px rgba(0,0,0,.3);font-size:15px;max-width:92%;text-align:center;}',
       '.slg-count{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:clamp(70px,18vw,160px);font-weight:800;color:#ffd23f;text-shadow:0 8px 40px rgba(0,0,0,.5);z-index:3;pointer-events:none;}',
-      '.slg-rot{display:none;position:absolute;left:50%;top:14px;transform:translateX(-50%);background:rgba(255,255,255,.12);border:2px dashed rgba(255,255,255,.35);border-radius:999px;padding:6px 14px;font-weight:800;font-size:15px;white-space:nowrap;pointer-events:none;z-index:2;}',
+      /* the portrait "turn sideways" hint lives IN the menu / tutorial / pause sheets
+         (where the child can rotate), never over a game's HUD during play */
+      '.slg-rot{display:none;max-width:100%;background:rgba(255,255,255,.12);border:2px dashed rgba(255,255,255,.35);border-radius:999px;padding:6px 14px;font-weight:800;font-size:15px;line-height:1.3;pointer-events:none;}',
       '@media (orientation: portrait) and (max-width: 760px){.slg-rot{display:block;}}',
       '.slg-gl{position:absolute;inset:0;width:100%;height:100%;display:block;transition:opacity .3s;}',
       '.slg-pad[data-st=s1]{border-color:#3DF2FF;box-shadow:0 0 12px #3DF2FF;}.slg-pad[data-st=s2]{border-color:#FF4FB8;box-shadow:0 0 14px #FF4FB8;}',
       '.slg-pad[data-st=s3]{border-color:#FFD23F;box-shadow:0 0 16px #FFD23F;}.slg-pad[data-st=grey]{border-color:#CFC8DC;opacity:.75;}.slg-pad[data-st=ready]{border-color:#FFD23F;}',
       '.slg-badges{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;}.slg-badge{border-radius:999px;padding:4px 12px;font-weight:800;font-size:15px;background:rgba(255,255,255,.14);}',
       '.slg-badge.bronze{background:linear-gradient(135deg,#e8a15b,#b86b2c);}.slg-badge.silver{background:linear-gradient(135deg,#e9edf5,#9aa6bd);color:#2b2140;}.slg-badge.gold{background:linear-gradient(135deg,#ffe89a,#f0c02f);color:#4a3200;}.slg-badge.crown{background:linear-gradient(135deg,#ffb3e6,#b3e5ff,#c9ffe5,#fff3b3);color:#2b2140;}',
-      '.slg-scr.glass{top:auto;height:58%;background:rgba(26,18,64,.72);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);border-radius:22px 22px 0 0;}',
+      /* the results glass keeps the bottom 58% when its content fits and grows (up to the
+         whole stage, then scrolls) when it doesn't */
+      '.slg-scr.glass{top:auto;height:auto;min-height:58%;max-height:100%;background:rgba(26,18,64,.72);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);border-radius:22px 22px 0 0;}',
       '.slg-opt{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;align-items:center;}.slg-opt .lb{font-weight:800;font-size:14px;opacity:.85;}.slg-lock{font-size:13px;opacity:.7;margin:0;}',
-      '@media (prefers-reduced-motion: reduce){.slg-pb{animation:none;}}'
+      '@media (prefers-reduced-motion: reduce){.slg-pb{animation:none;}}',
+      /* short screens (phones held sideways): compact sheets so results / tutorial fit.
+         The html-body selectors out-rank island-encore.css only inside this query. */
+      '@media (max-height: 520px){',
+      '.slg-scr{padding:10px 14px;}.slg-scr p{font-size:15px;}.slg-emo{font-size:34px;line-height:1;}.slg-pbslot{min-height:34px;}',
+      '.slg-tut{gap:8px;}.slg-tut div{width:150px;padding:8px 10px;font-size:14px;}.slg-tut b{font-size:24px;}',
+      'html body .slg .slg-scr{gap:6px;}',
+      'html body .slg .slg-scr h2{font-size:clamp(22px,min(6vw,8.5vh),50px);}',
+      'html body .slg .slg-big{font-size:clamp(32px,min(10vw,13vh),88px);}',
+      'html body .slg .slg-tut b{height:40px;min-width:40px;font-size:22px;margin-bottom:4px;}',
+      'html body .slg .slg-scr .slg-b.go{padding:6px 22px;font-size:18px;}',
+      'html body .slg .slg-pb{font-size:16px;padding:4px 14px;}',
+      '}'
     ].join('\n');
     document.head.appendChild(c);
   }
@@ -132,7 +161,85 @@
                                    empties events after every draw
        round.countdown(countT, held, isStart), round.pauseReset(), round.padState(id),
        round.summaryBadges() -> [{text, kind}], round.onFinish()
+     The shell also owns, for every 3D view: the stage's 2D verdict (no 3D view —
+     so no WebGL context — once SLIsland3D.failed() or .remembered() says 2D), a
+     ~60 fps draw cap (logic still steps every frame), ~30 fps menus/results, and a
+     frame-rate watchdog (sustained < 20 fps in play → the same round goes 2D).
      ================================================================ */
+
+  /* ---------- pure helpers (exported on SLGameShell for tests) ---------- */
+  /* Paces draws to `fps` on any display rate; a hitch never makes it burst to
+     catch up. tick(now ms) → true when a draw is due. */
+  function makePacer(fps, tolMs) {
+    var iv = 1000 / fps, tol = tolMs == null ? 4 : tolMs, next = null;
+    return {
+      tick: function (now) {
+        if (next == null) { next = now + iv; return true; }
+        if (now < next - tol) return false;
+        next += iv;
+        if (next < now - tol) next = now + iv;
+        return true;
+      },
+      reset: function () { next = null; }
+    };
+  }
+  /* Frame-rate watchdog for a 3D view the shell drives. Draw intervals and draw work
+     (ms) are smoothed; once they average slower than `fps` (20) for `holdMs` of
+     continuous play, sample() returns true (once). A gap over 1 s (pause, hidden
+     page) restarts it, and so does reset() — the shell calls it on every stage
+     quality step, so a view on the stage lease is judged by the stage first (its
+     steps, then its own 2D verdict) and this only catches what nothing else does. */
+  function makeFrameWatch(o) {
+    o = o || {};
+    var limit = 1000 / (o.fps || 20), hold = o.holdMs != null ? o.holdMs : 6000, minFrames = o.minFrames || 12;
+    var ai = 0, aw = 0, n = 0, since = -1, fired = false;
+    function reset() { ai = 0; aw = 0; n = 0; since = -1; }
+    return {
+      sample: function (intervalMs, workMs, now) {
+        if (fired) return false;
+        if (!(intervalMs > 0) || intervalMs > 1000) { reset(); return false; }
+        var w = workMs > 0 ? workMs : 0;
+        ai = n ? ai * 0.9 + intervalMs * 0.1 : intervalMs;
+        aw = n ? aw * 0.9 + w * 0.1 : w;
+        n++;
+        if (n < minFrames) return false;
+        if (ai <= limit && aw <= limit) { since = -1; return false; }
+        if (since < 0) since = now;
+        if (now - since >= hold) { fired = true; return true; }
+        return false;
+      },
+      reset: reset,
+      stats: function () { return { fps: ai > 0 ? Math.round(10000 / ai) / 10 : 0, workMs: Math.round(aw * 100) / 100, frames: n, slow: since >= 0, fired: fired }; }
+    };
+  }
+  /* The stage's 2D verdict (world/island3d/stage.js): a 3D failure this session
+     (performance, context loss, load) or a remembered "2D on this device" record.
+     A game must not open a second WebGL context against it. → reason | null */
+  function verdict2d(w) {
+    w = w || {};
+    var IS = w.SLIsland3D;
+    if (!IS) return storedVerdict(w);
+    try { var f = typeof IS.failed === 'function' ? IS.failed() : null; if (f) return 'failed:' + f; } catch (e) {}
+    try { var r = typeof IS.remembered === 'function' ? IS.remembered(w.SL_WORLD_VER) : null; if (r && r.off) return 'remembered:' + (r.why || '2d'); } catch (e) {}
+    return null;
+  }
+  /* stage.js not loaded: read its remembered record by the same rule (stale once
+     SL_WORLD_VER changes; ?3d=1 lets a parent retry 3D) */
+  function storedVerdict(w) {
+    try {
+      if (/[?&]3d=1(&|$)/.test(String((w.location && w.location.search) || ''))) return null;
+      var rec = w.localStorage ? JSON.parse(w.localStorage.getItem('slIsland3D') || 'null') : null;
+      if (rec && typeof rec === 'object' && rec.off && String(rec.ver) === String(w.SL_WORLD_VER || '1')) return 'remembered:' + (rec.why || '2d');
+    } catch (e) {}
+    return null;
+  }
+  /* a list of short phrases read as sentences by a screen reader */
+  function sentences(parts) {
+    return parts.filter(function (s) { return s != null && String(s).trim(); }).map(function (s) {
+      s = String(s).trim(); return /[.!?…]$/.test(s) ? s : s + '.';
+    }).join(' ');
+  }
+  var ROT_HTML = '<div class="slg-rot" aria-hidden="true">📱↻ Turn sideways for a bigger view</div>';
   /* ================================================================
      define(def) -> { start(cfg), demo(host, opts) }
      def: key, title, emoji, LW, LH, tutorial[], controls[], keys{},
@@ -156,10 +263,21 @@
         '<button class="slg-b" type="button" id="slgSound" aria-label="Sound on or off"></button>' +
         '<button class="slg-b" type="button" id="slgPause" aria-label="Pause">⏸</button>' +
         '<button class="slg-b" type="button" id="slgExit" aria-label="Back to my island">🏝️ Exit</button></div>' +
-        '<div class="slg-mid" id="slgMid"><canvas class="slg-canvas" id="slgCanvas"></canvas><div class="slg-rot" aria-hidden="true">📱↻ Turn sideways for a bigger view</div><div class="slg-touch" id="slgTouch"></div></div>';
+        '<div class="slg-mid" id="slgMid"><canvas class="slg-canvas" id="slgCanvas"></canvas><div class="slg-touch" id="slgTouch"></div></div>' +
+        '<div class="slg-sr" id="slgLive" role="status" aria-live="polite" aria-atomic="true"></div>';
       document.body.appendChild(root);
       var mid = root.querySelector('#slgMid'), canvas = root.querySelector('#slgCanvas'), ctx = canvas.getContext('2d');
       var hudEl = root.querySelector('#slgHud'), soundBtn = root.querySelector('#slgSound'), pauseBtn = root.querySelector('#slgPause');
+      var liveEl = root.querySelector('#slgLive'), liveTimer = 0, livePending = '';
+      /* screen-reader announcements (results, a new personal best): the region is
+         emptied first so a repeated line is read again */
+      function say(text) {
+        if (!liveEl || !text) return;
+        livePending = livePending ? livePending + ' ' + text : String(text);
+        if (liveTimer) return;
+        liveEl.textContent = '';
+        liveTimer = setTimeout(function () { liveTimer = 0; var t = livePending; livePending = ''; if (!exited) liveEl.textContent = t; }, 80);
+      }
       function paintSound() { soundBtn.textContent = (cfg.muted && cfg.muted()) ? '🔇' : '🔊'; }
       paintSound();
       soundBtn.addEventListener('click', function () { if (cfg.toggleMute) cfg.toggleMute(); paintSound(); }, sig);
@@ -183,7 +301,9 @@
       var phase = 'menu';          /* menu | tutorial | countdown | playing | paused | results | timeup */
       var variant = cfg.variant;
       var round = null, raf = 0, last = 0, acc = 0, countT = 0, playSecAcc = 0, hardStop = Infinity, graceNote = false;
-      var lastDt = 0, countIsStart = true, v3 = null, v3mod = null, v3failed = false, idleRaf = 0, idleLast = 0, idleSkip = false, hudObj = null;
+      var lastDt = 0, countIsStart = true, v3 = null, v3mod = null, v3failed = false, idleRaf = 0, idleLast = 0, hudObj = null;
+      var playPace = makePacer(PLAY_FPS), idlePace = makePacer(IDLE_FPS), watch = makeFrameWatch(), lastDrawAt = 0, lastWork = 0, unsubQ = null;
+      var hudText = null, pads = [], countEl = null, countTxt = '';
       function countTotal() { return def.countIn ? def.countIn.beats * 60 / def.countIn.bpm : (def.countdown || 0); }
       function countLabel() {
         if (!def.countIn) return String(Math.max(1, Math.ceil(countT)));
@@ -205,15 +325,24 @@
       var screen = null, banner = null;
       var held = {};
 
-      function setScreen(html) {
+      /* noFocus: the caller focuses later (results wake their buttons after a guard) */
+      function setScreen(html, noFocus) {
         if (screen) screen.remove();
         screen = null;
         if (html == null) return;
-        screen = el('div', 'slg-scr', html);
-        mid.appendChild(screen);
-        var f = screen.querySelector('.slg-b.go') || screen.querySelector('button');
-        if (f) setTimeout(function () { try { f.focus(); } catch (e) {} }, 30);
-        return screen;
+        var s = screen = el('div', 'slg-scr');
+        s.appendChild(el('div', 'slg-in', html));
+        mid.appendChild(s);
+        if (!noFocus) setTimeout(function () { if (screen === s) focusMain(s); }, 30);
+        return s;
+      }
+      /* the sheet's main button takes focus (Enter / Space press it) without scrolling
+         a tall sheet away from its title */
+      function focusMain(sc) {
+        var f = sc.querySelector('.slg-b.go');
+        if (!f || f.disabled) f = sc.querySelector('.slg-b.alt');
+        if (!f || f.disabled) f = Array.prototype.filter.call(sc.querySelectorAll('button'), function (b) { return !b.disabled; })[0];
+        if (f) { try { f.focus({ preventScroll: true }); } catch (e) {} }
       }
       function setBanner(txt) {
         if (banner) { banner.remove(); banner = null; }
@@ -251,7 +380,7 @@
             }).join('') + '</div>' + (o.options || []).filter(function (op) { return op.locked && op.note; }).map(function (op) { return '<p class="slg-lock">' + esc(op.note) + '</p>'; }).join('');
           });
         }
-        var sc = setScreen('<div style="font-size:54px;">' + def.emoji + '</div><h2>' + esc(title) + '</h2>' + vhtml + ohtml + '<p>' + esc(pbLine()) + '</p>' +
+        var sc = setScreen(ROT_HTML + '<div class="slg-emo">' + def.emoji + '</div><h2>' + esc(title) + '</h2>' + vhtml + ohtml + '<p>' + esc(pbLine()) + '</p>' +
           '<div class="row"><button class="slg-b go" type="button" id="slgPlay">▶ Play</button><button class="slg-b" type="button" id="slgHow">❓ How to play</button></div>');
         sc.querySelectorAll('[data-var]').forEach(function (b) { b.addEventListener('click', function () { variant = b.dataset.var; cfg.variant = variant; if (cfg.onSelectVariant) cfg.onSelectVariant(variant); if (v3 && v3.setRound) v3.setRound(null, variant); menu(); }); });
         sc.querySelectorAll('[data-mvar]').forEach(function (b) { b.addEventListener('click', function () { variant = b.dataset.mvar; cfg.variant = variant; try { localStorage.setItem('slgVar:' + def.key, variant); } catch (e) {} if (v3 && v3.setRound) v3.setRound(null, variant); menu(); }); });
@@ -269,14 +398,14 @@
       }
       function tutorial() {
         phase = 'tutorial'; if (v3) startIdle();
-        var sc = setScreen('<h2>How to play</h2><div class="slg-tut">' + def.tutorial.map(function (t) { return '<div><b>' + t[0] + '</b>' + esc(t[1]) + '</div>'; }).join('') + '</div>' +
+        var sc = setScreen(ROT_HTML + '<h2>How to play</h2><div class="slg-tut">' + def.tutorial.map(function (t) { return '<div><b>' + t[0] + '</b>' + esc(t[1]) + '</div>'; }).join('') + '</div>' +
           '<div class="row"><button class="slg-b go" type="button" id="slgGotIt">Got it — let’s go!</button><button class="slg-b" type="button" id="slgBack">Back</button></div>');
         sc.querySelector('#slgGotIt').addEventListener('click', function () { if (!cfg.tutSeen) { cfg.tutSeen = true; if (cfg.onTutorialSeen) cfg.onTutorialSeen(); } beginRound(); });
         sc.querySelector('#slgBack').addEventListener('click', menu);
       }
       function timeUpScreen(afterRound) {
         phase = 'timeup'; stopLoop(); setBanner(null); renderTouch(false); mus('menuMode', true); if (v3) startIdle();
-        var sc = setScreen('<div style="font-size:54px;">⏱️</div><h2>That’s all the game time for today</h2><p>' + (afterRound ? 'Great finish! ' : '') + 'Your games are still yours — come back tomorrow. 📚 Learning is open whenever you like.</p>' +
+        var sc = setScreen('<div class="slg-emo">⏱️</div><h2>That’s all the game time for today</h2><p>' + (afterRound ? 'Great finish! ' : '') + 'Your games are still yours — come back tomorrow. 📚 Learning is open whenever you like.</p>' +
           '<div class="row"><button class="slg-b go" type="button" id="slgOut">🏝️ Back to my island</button></div>');
         sc.querySelector('#slgOut').addEventListener('click', exit);
       }
@@ -305,12 +434,15 @@
         mus('menuMode', true);
         if (cfg.arcade) cfg.arcade.flush();
         var res = round.result();
-        var badges = '';
-        if (round.summaryBadges) { try { badges = '<div class="slg-badges">' + (round.summaryBadges() || []).map(function (b) { return '<span class="slg-badge ' + esc(b.kind || '') + '">' + esc(b.text) + '</span>'; }).join('') + '</div>'; } catch (e) { badges = ''; } }
-        var sc = setScreen('<h2>' + esc(round.summaryTitle ? round.summaryTitle() : 'Finished!') + '</h2><div class="slg-big">' + esc(round.summaryBig()) + '</div><p>' + esc(round.summaryText ? round.summaryText() : '') + '</p>' + badges + '<div id="slgPbSlot" style="min-height:40px;"></div><p style="font-size:13px;opacity:.75;margin:0 0 8px;">🎮 Game scores don’t earn or spend ⭐ — learning earns ⭐.</p>' +
+        var badges = '', badgeList = [];
+        if (round.summaryBadges) { try { badgeList = round.summaryBadges() || []; badges = '<div class="slg-badges">' + badgeList.map(function (b) { return '<span class="slg-badge ' + esc(b.kind || '') + '">' + esc(b.text) + '</span>'; }).join('') + '</div>'; } catch (e) { badges = ''; badgeList = []; } }
+        var sTitle = round.summaryTitle ? round.summaryTitle() : 'Finished!', sBig = round.summaryBig(), sText = round.summaryText ? round.summaryText() : '';
+        var sc = setScreen('<h2>' + esc(sTitle) + '</h2><div class="slg-big">' + esc(sBig) + '</div><p>' + esc(sText) + '</p>' + badges + '<div id="slgPbSlot" class="slg-pbslot"></div><p style="font-size:13px;opacity:.75;margin:0 0 8px;">🎮 Game scores don’t earn or spend ⭐ — learning earns ⭐.</p>' +
           '<div class="row"><button class="slg-b go" type="button" id="slgAgain">↻ Play again</button>' +
           (variantChoices() > 1 ? '<button class="slg-b" type="button" id="slgMenu">🗺️ Change ' + esc(def.menuVariantsLabel || 'course') + '</button>' : '') +
-          '<button class="slg-b alt" type="button" id="slgHome">🏝️ Back to my island</button></div>');
+          '<button class="slg-b alt" type="button" id="slgHome">🏝️ Back to my island</button></div>', true);
+        /* tell a screen reader how it went (title, score, summary, medals) */
+        say(sentences([sTitle, sBig, sText].concat(badgeList.map(function (b) { return b && b.text; }))));
         if (v3 && def.resultsGlass) sc.classList.add('glass');
         if (v3) startIdle();
         sc.querySelector('#slgAgain').addEventListener('click', beginRound);
@@ -322,6 +454,7 @@
             if (r && r.isPB) {
               slot.innerHTML = '<span class="slg-pb">🏆 NEW PERSONAL BEST!</span>';
               sound('fanfare');
+              if (screen === sc) say('New personal best!');
               var key = def.key + ':' + String(variant || 'std');
               cfg.pb = cfg.pb || {}; cfg.pb[key] = res.ms != null ? { ms: res.ms } : { score: res.score };
             } else if (r && r.prev) {
@@ -332,8 +465,15 @@
         var st = cfg.arcade && cfg.arcade.status();
         var again = sc.querySelector('#slgAgain');
         if (st && st.exhausted) { again.textContent = '⏱️ Time’s up for today'; again.disabled = true; again.dataset.stay = '1'; again.classList.remove('go'); }
-        /* a finger still tapping the game mustn't hit Play again / Exit by accident */
-        sc.querySelectorAll('button').forEach(function (b) { if (!b.disabled) { b.disabled = true; setTimeout(function () { if (!b.dataset.stay) b.disabled = false; }, 650); } });
+        /* a finger still tapping the game mustn't hit Play again / Exit by accident: the
+           buttons wake after 0.65 s and then the main one takes focus (a disabled button
+           can't, so focusing it earlier did nothing and Enter / Space went nowhere) */
+        var guarded = Array.prototype.filter.call(sc.querySelectorAll('button'), function (b) { return !b.disabled; });
+        guarded.forEach(function (b) { b.disabled = true; });
+        setTimeout(function () {
+          guarded.forEach(function (b) { if (!b.dataset.stay) b.disabled = false; });
+          if (screen === sc && !exited) focusMain(sc);
+        }, 650);
       }
       function variantChoices() {
         if (def.menuVariants) { try { return (def.menuVariants(cfg) || []).filter(function (v) { return !v.locked; }).length; } catch (e) { return 0; } }
@@ -344,7 +484,7 @@
         if (round && round.pauseReset) { try { round.pauseReset(); } catch (e) {} }
         mus('pause', 200);
         var was = phase; phase = 'paused'; stopLoop(); held = {}; renderTouchHeld();
-        var sc = setScreen('<div style="font-size:54px;">⏸</div><h2>Paused</h2><p>Take your time.</p><div class="row"><button class="slg-b go" type="button" id="slgResume">▶ Resume</button><button class="slg-b" type="button" id="slgRestart">↻ Restart</button><button class="slg-b alt" type="button" id="slgQuit">🏝️ Exit</button></div>');
+        var sc = setScreen(ROT_HTML + '<div class="slg-emo">⏸</div><h2>Paused</h2><p>Take your time.</p><div class="row"><button class="slg-b go" type="button" id="slgResume">▶ Resume</button><button class="slg-b" type="button" id="slgRestart">↻ Restart</button><button class="slg-b alt" type="button" id="slgQuit">🏝️ Exit</button></div>');
         sc.querySelector('#slgResume').addEventListener('click', function () {
           setScreen(null);
           countIsStart = false;
@@ -356,20 +496,26 @@
         sc.querySelector('#slgQuit').addEventListener('click', exit);
       }
       pauseBtn.addEventListener('click', function () { if (phase === 'paused') { var r = screen && screen.querySelector('#slgResume'); if (r) r.click(); } else pause(); }, sig);
-      document.addEventListener('visibilitychange', function () { if (document.hidden) pause(); }, sig);
+      document.addEventListener('visibilitychange', function () {
+        if (document.hidden) pause();
+        else if (v3 && !exited && phase !== 'playing' && phase !== 'countdown' && phase !== 'paused') startIdle();   /* the menu/results 3D backdrop wakes up again */
+      }, sig);
       window.addEventListener('blur', function () { pause(); }, sig);
 
       /* ---------- loop ---------- */
-      function startLoop() { stopLoop(); stopIdle(); last = performance.now(); raf = requestAnimationFrame(frame); }
+      function startLoop() {
+        stopLoop(); stopIdle();
+        last = performance.now(); lastDrawAt = last; playPace.reset(); watch.reset();
+        raf = requestAnimationFrame(frame);
+      }
       function stopLoop() { if (raf) cancelAnimationFrame(raf); raf = 0; }
       /* menus/results keep the 3D scene alive at ~30 fps (static 2D needs no loop) */
-      function startIdle() { if (!v3 || idleRaf || exited) return; idleLast = performance.now(); idleRaf = requestAnimationFrame(idleFrame); }
+      function startIdle() { if (!v3 || idleRaf || exited) return; idleLast = performance.now(); idlePace.reset(); idleRaf = requestAnimationFrame(idleFrame); }
       function stopIdle() { if (idleRaf) cancelAnimationFrame(idleRaf); idleRaf = 0; }
       function idleFrame(now) {
         idleRaf = 0;
         if (!v3 || exited || document.hidden || phase === 'playing' || phase === 'countdown' || phase === 'paused') return;
-        idleSkip = !idleSkip;
-        if (!idleSkip) {
+        if (idlePace.tick(now)) {
           var dt = Math.min(MAX_FRAME, Math.max(0, (now - idleLast) / 1000)); idleLast = now;
           try { v3.frame(round, dt, 0, phase, 0); } catch (e) { fail3d('frame'); return; }
         }
@@ -378,9 +524,16 @@
       function frame(now) {
         raf = 0;
         var dt = Math.min(MAX_FRAME, Math.max(0, (now - last) / 1000));
-        last = now; lastDt = dt;
+        last = now;
         advance(dt);
-        draw();
+        if (!v3) { lastDt = dt; draw(); }
+        else if (playPace.tick(now)) {
+          /* 3D draws at ~60 fps on any screen; the view's dt is the time since ITS last draw */
+          var iv = now - lastDrawAt;
+          lastDrawAt = now; lastDt = Math.min(MAX_FRAME, Math.max(0, iv / 1000));
+          draw();
+          if (v3 && (phase === 'playing' || phase === 'countdown') && watch.sample(iv, lastWork, now)) fail3d('slow');
+        }
         if (phase === 'playing' || phase === 'countdown') raf = requestAnimationFrame(frame);
       }
       /* exposed for automated QA: advance the simulation by real seconds */
@@ -424,31 +577,38 @@
       }
       function draw() {
         if (v3) {
+          var t0 = performance.now();
           try { v3.frame(round, lastDt, acc / STEP, phase, countT); }
           catch (e) { fail3d('frame'); return draw(); }
+          lastWork = performance.now() - t0;
         } else {
           if (!round) { drawIdle(); return; }
           begin();
           round.render(ctx);
           ctx.restore();
         }
-        if (round && hudEl && round.hud) hudEl.textContent = round.hud();
+        /* the text HUD only when no HTML HUD replaced it, and the DOM only on a change */
+        if (round && hudEl && round.hud && !hudObj) setHudText(round.hud());
         if (hudObj) { try { hudObj.update(round, phase); } catch (e) {} }
         if (round && round.padState) {
-          touchHost.querySelectorAll('[data-ctl]').forEach(function (b) { var st = round.padState(b.dataset.ctl) || ''; if (b.dataset.st !== st) b.dataset.st = st; });
+          for (var i = 0; i < pads.length; i++) { var p = pads[i], st = round.padState(p.id) || ''; if (p.st !== st) { p.st = st; p.b.dataset.st = st; } }
         }
-        var cnt = mid.querySelector('.slg-count');
         if (phase === 'countdown') {
-          if (!cnt) { cnt = el('div', 'slg-count'); mid.appendChild(cnt); }
-          cnt.textContent = countLabel();
-        } else if (cnt) cnt.remove();
+          if (!countEl) { countEl = el('div', 'slg-count'); mid.appendChild(countEl); countTxt = null; }
+          var lbl = countLabel();
+          if (lbl !== countTxt) { countTxt = lbl; countEl.textContent = lbl; }
+        } else if (countEl) { countEl.remove(); countEl = null; }
         if (round && round.events && round.events.length) round.events.length = 0;
+      }
+      function setHudText(t) {
+        t = t == null ? '' : String(t);
+        if (t !== hudText) { hudText = t; hudEl.textContent = t; }
       }
       function drawIdle() {
         begin();
         if (def.idle) def.idle(ctx, cfg); else { ctx.fillStyle = '#2a1b5e'; ctx.fillRect(0, 0, def.LW, def.LH); }
         ctx.restore();
-        hudEl.textContent = '';
+        setHudText('');
       }
 
       /* ---------- input ---------- */
@@ -480,6 +640,7 @@
       var touchHost = root.querySelector('#slgTouch');
       function renderTouch(show) {
         touchHost.innerHTML = '';
+        pads = [];
         var controls = def.controlsFor ? def.controlsFor(cfg) : def.controls;
         if (!show || !controls) return;
         var left = el('div', 'grp'), right = el('div', 'grp');
@@ -494,16 +655,17 @@
           b.addEventListener('lostpointercapture', up, sig);
           b.addEventListener('contextmenu', function (e) { e.preventDefault(); }, sig);
           (c.side === 'left' ? left : right).appendChild(b);
+          pads.push({ b: b, id: c.id, st: null });
         });
         touchHost.appendChild(left); touchHost.appendChild(right);
       }
-      function renderTouchHeld() { touchHost.querySelectorAll('[data-ctl]').forEach(function (b) { b.classList.toggle('on', !!held[b.dataset.ctl]); }); }
+      function renderTouchHeld() { pads.forEach(function (p) { p.b.classList.toggle('on', !!held[p.id]); }); }
 
       /* ---------- exit / cleanup ---------- */
       var exited = false;
       function exit() {
         if (exited) return; exited = true;
-        stopLoop(); stopIdle();
+        stopLoop(); stopIdle(); unwatchQuality(); clearTimeout(liveTimer); liveTimer = 0;
         if (v3) { try { v3.dispose(); } catch (e) {} if (v3.canvas && v3.canvas.parentNode) v3.canvas.parentNode.removeChild(v3.canvas); v3 = null; }
         if (hudObj) { try { hudObj.dispose(); } catch (e) {} hudObj = null; }
         mus('stop', 200);
@@ -524,6 +686,9 @@
       function can3d() {
         if (!def.view3d || cfg.demo || v3failed) return false;
         try { if (localStorage.getItem('slNo3D') === '1' || sessionStorage.getItem('slNo3dGame') === '1') return false; } catch (e) {}
+        /* the stage already judged this device 2D (too slow, lost contexts, no 3D):
+           don't open a second WebGL context the island just gave up on */
+        if (verdict2d(window)) return false;
         return typeof WebGL2RenderingContext !== 'undefined' && typeof window.slLoad3D === 'function';
       }
       function load3d() {
@@ -539,11 +704,11 @@
         return Promise.race([p, to]).catch(function () { return null; });
       }
       function mount3d() {
-        if (v3 || !v3mod || v3failed || exited) return;
+        if (v3 || !v3mod || v3failed || exited || !can3d()) return;   /* the verdict may have changed since load */
         try {
           var made = v3mod.m.create(mid, { THREE: v3mod.THREE, cfg: cfg, api: api, def: def, reduced: reduced, onFail: fail3d });
           Promise.resolve(made).then(function (vw) {
-            if (exited || !vw || !vw.canvas) { if (vw && vw.dispose) try { vw.dispose(); } catch (e) {} return; }
+            if (exited || v3failed || !vw || !vw.canvas) { if (vw && vw.dispose) try { vw.dispose(); } catch (e) {} return; }
             v3 = vw;
             v3.canvas.classList.add('slg-gl');
             mid.insertBefore(v3.canvas, canvas);
@@ -551,12 +716,20 @@
             var r = mid.getBoundingClientRect();
             v3.resize(r.width, r.height);
             if (v3.setRound) v3.setRound(round, variant);
+            playPace.reset(); watch.reset(); lastDrawAt = performance.now(); watchQuality();
             if (phase === 'playing' || phase === 'countdown') draw(); else startIdle();
           }).catch(function () { fail3d('create'); });
         } catch (e) { fail3d('create'); }
       }
+      /* a stage quality step (SL3D.onQuality) restarts the shell's watchdog: the stage
+         gets to finish its own ladder (and its own 2D verdict) first */
+      function watchQuality() {
+        unwatchQuality();
+        try { var S = window.SL3D; if (S && typeof S.onQuality === 'function') unsubQ = S.onQuality(function () { watch.reset(); }); } catch (e) { unsubQ = null; }
+      }
+      function unwatchQuality() { if (unsubQ) { try { unsubQ(); } catch (e) {} unsubQ = null; } }
       function fail3d(reason) {
-        v3failed = true; stopIdle();
+        v3failed = true; stopIdle(); unwatchQuality();
         if (v3) { try { v3.dispose(); } catch (e) {} if (v3.canvas && v3.canvas.parentNode) v3.canvas.parentNode.removeChild(v3.canvas); v3 = null; }
         canvas.style.opacity = '';
         if (reason !== 'qa') { try { sessionStorage.setItem('slNo3dGame', '1'); } catch (e) {} }
@@ -578,7 +751,7 @@
       /* QA hook (inert unless localStorage.slQaMode === '1') */
       try {
         if (localStorage.getItem('slQaMode') === '1') {
-          window._slGame = { phase: function () { return phase; }, round: function () { return round; }, advance: function (sec) { var n = Math.round(sec / 0.05); for (var i = 0; i < n; i++) advance(0.05); draw(); }, beginRound: beginRound, pause: pause, exit: exit, variant: function () { return variant; }, view: function () { return v3 ? '3d' : '2d'; }, v3: function () { return v3; }, force2d: function () { fail3d('qa'); }, hud: function () { return hudObj; } };
+          window._slGame = { phase: function () { return phase; }, round: function () { return round; }, advance: function (sec) { var n = Math.round(sec / 0.05); for (var i = 0; i < n; i++) advance(0.05); draw(); }, beginRound: beginRound, pause: pause, exit: exit, variant: function () { return variant; }, view: function () { return v3 ? '3d' : '2d'; }, v3: function () { return v3; }, force2d: function () { fail3d('qa'); }, hud: function () { return hudObj; }, watch: function () { return watch.stats(); } };
           /* always the live held-input object (beginRound replaces it) */
           Object.defineProperty(window._slGame, 'held', { get: function () { return held; } });
         }
@@ -640,5 +813,5 @@
     });
   }
 
-  window.SLGameShell = { define: define, rng: rng, svgImage: svgImage, STEP: STEP };
+  window.SLGameShell = { define: define, rng: rng, svgImage: svgImage, STEP: STEP, makePacer: makePacer, makeFrameWatch: makeFrameWatch, verdict2d: verdict2d };
 })();

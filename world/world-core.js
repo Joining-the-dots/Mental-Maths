@@ -607,6 +607,16 @@
     keys.slice(0, Math.max(0, keys.length - ARCADE.keepDays)).forEach(function (k) { delete w.arcade.days[k]; });
     return w.arcade.days[day];
   }
+  /* raise (never lower) a day's total to a value already counted elsewhere */
+  function arcadeMax(u, day, secs) {
+    var w = ensureWorld(u);
+    var v = Math.round(secs);
+    if (!(v > arcadeUsed(w, day))) return false;
+    w.arcade.days[day] = v;
+    var keys = Object.keys(w.arcade.days).sort();
+    keys.slice(0, Math.max(0, keys.length - ARCADE.keepDays)).forEach(function (k) { delete w.arcade.days[k]; });
+    return true;
+  }
   /* cfg = families/{code}.arcade = {dailyMinutes, tz} (owner-written) */
   function arcadeStatus(cfg, usedSec) {
     var mins = cfg && isInt(cfg.dailyMinutes) && cfg.dailyMinutes > 0 ? cfg.dailyMinutes : null;
@@ -626,8 +636,8 @@
   /* ---------------- personal bests (never touch points) ---------------- */
   var GAME_RULES = {
     course:  { better: 'higher', maxScore: 5000 },
-    penalty: { better: 'higher', shots: 6, maxScore: 6 * 150 },
-    kart:    { better: 'lower', laps: 3, minMs: 3 * 6000, maxMs: 30 * 60000 }
+    penalty: { better: 'higher', shots: 8, maxScore: 8 * 150 },
+    kart:    { better: 'lower', minMs: 30000, maxMs: 30 * 60000 }   /* no track can be finished in under ~50 s */
   };
   function validResult(game, r) {
     var g = GAME_RULES[game]; if (!g || !r || typeof r !== 'object') return false;
@@ -721,7 +731,7 @@
     setGoal: setGoal, goalProgress: goalProgress,
     validatePetName: validatePetName, renamePet: renamePet, setActivePet: setActivePet, equipAccessory: equipAccessory, petById: petById,
     selected: selected, select: select,
-    dayKey: dayKey, arcadeUsed: arcadeUsed, arcadeAdd: arcadeAdd, arcadeStatus: arcadeStatus, roundGate: roundGate,
+    dayKey: dayKey, arcadeUsed: arcadeUsed, arcadeAdd: arcadeAdd, arcadeMax: arcadeMax, arcadeStatus: arcadeStatus, roundGate: roundGate,
     validResult: validResult, recordResult: recordResult,
     mergeWorlds: mergeWorlds, itemState: itemState, sessionsFor: sessionsFor, shopItems: shopItems
   };

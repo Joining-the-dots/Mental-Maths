@@ -3036,6 +3036,7 @@ function slWakeRelease() {
   <button class="app-tab" data-app="onepct">🏆 The 1% Challenge</button>
   <button class="app-tab" data-app="story" style="display:none;">✍️ Story</button>
   <button class="app-tab" data-app="chess" style="display:none;">♟️ Chess</button>
+  <button class="app-tab" data-app="world">🏝️ My Island</button>
   <button class="app-tab" data-app="shop">🎁 Shop</button>
 </div>
 
@@ -3657,6 +3658,8 @@ function slWakeRelease() {
 </div>
 
 <!-- V31: Shop -->
+<div id="worldView" class="hidden"></div>
+
 <div id="shopView" class="hidden">
   <div class="shop-head">
     <h2>🎁 Reward Shop</h2>
@@ -9016,6 +9019,8 @@ function setActiveApp(name) {
   if (spellEl) spellEl.classList.toggle('hidden', name !== 'spell');
   const onepctEl = document.getElementById('onepctView');
   if (onepctEl) onepctEl.classList.toggle('hidden', name !== 'onepct');
+  const worldEl = document.getElementById('worldView');
+  if (worldEl) worldEl.classList.toggle('hidden', name !== 'world');
   if (isMaths) {
     setMathsTab(getMathsTab());
   } else {
@@ -9033,6 +9038,7 @@ function setActiveApp(name) {
   if (name === 'chess' && typeof chessRender === 'function') chessRender();
   if (name === 'spell' && typeof spellRender === 'function') spellRender();
   if (name === 'onepct' && typeof onepctRender === 'function') onepctRender();
+  if (name === 'world' && typeof slOpenWorld === 'function') slOpenWorld();
 }
 document.querySelectorAll('.app-tab').forEach(t => {
   t.addEventListener('click', () => setActiveApp(t.dataset.app));
@@ -31773,6 +31779,142 @@ var SPELL_BANKS = {
      The game degrades gracefully: no internet / no login = the
      same local play as before.
      ============================================================ -->
+<script>
+/* ================================================================
+   My Island (rewards world) — integration with the existing app.
+   The world's code lives in world/*.js and loads only when the tab is
+   opened. This block: lazy loader, points-pill feedback + goal toast,
+   profile-switch detection, cross-tab state sync, guarded deep links.
+   It never awards or changes points.
+   ================================================================ */
+window.SL_WORLD_VER = '1';
+(function () {
+  'use strict';
+  var loading = null;
+  function loadScript(src) {
+    return new Promise(function (res, rej) {
+      var s = document.createElement('script');
+      s.src = src; s.async = false;
+      s.onload = res; s.onerror = function () { rej(new Error('Could not load ' + src)); };
+      document.head.appendChild(s);
+    });
+  }
+  window.slLoadWorld = function () {
+    if (window.SLWorld) return Promise.resolve();
+    if (!loading) {
+      var v = '?v=' + window.SL_WORLD_VER;
+      try { if (localStorage.getItem('slQaMode') === '1') v += '&qa=' + Date.now(); } catch (e) {}   /* QA only: always fresh */
+      loading = loadScript('world/world-core.js' + v)
+        .then(function () { return loadScript('world/world-art.js' + v); })
+        .then(function () { return loadScript('world/rewards-world.js' + v); })
+        .catch(function (e) { loading = null; throw e; });
+    }
+    return loading;
+  };
+  window.slOpenWorld = function () {
+    var host = document.getElementById('worldView');
+    if (!host) return Promise.resolve();
+    if (!window.SLWorld) host.innerHTML = '<div style="padding:40px;text-align:center;font-weight:800;color:#6c5ce7;">Loading your island… 🏝️</div>';
+    return window.slLoadWorld().then(function () { window.SLWorld.render(); }).catch(function () {
+      host.innerHTML = '<div style="padding:40px;text-align:center;font-weight:800;color:#c0392b;">Couldn’t load your island — check your connection.<br><br>' +
+        '<button class="btn btn-primary" type="button" onclick="slOpenWorld()">Try again</button></div>';
+    });
+  };
+
+  /* points pill: a little bump + "+N" when learning earns points; savings-goal
+     toast once when the goal becomes affordable; tells the island when the
+     balance or the profile changes. Purely presentational. */
+  var lastShown = { user: null, pts: null };
+  try {
+    var rawUpd = updatePointsDisplay;
+    var wrappedUpd = function () {
+      var r = rawUpd.apply(this, arguments);
+      try {
+        var u = currentUser();
+        var name = state.activeUser, pts = u && typeof u.points === 'number' ? u.points : 0;
+        if (lastShown.user === name && lastShown.pts !== null && pts > lastShown.pts) {
+          var pill = document.getElementById('pointsPill');
+          if (pill && !(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches)) {
+            pill.classList.remove('sl-bump'); void pill.offsetWidth; pill.classList.add('sl-bump');
+            var f = document.createElement('span');
+            f.className = 'sl-plus'; f.textContent = '+' + (pts - lastShown.pts);
+            pill.appendChild(f); setTimeout(function () { f.remove(); }, 1000);
+          }
+          var w = u.world;
+          if (w && w.goal && typeof w.goalPrice === 'number' && pts >= w.goalPrice && w.goalNotified !== w.goal &&
+              lastShown.pts < w.goalPrice && !document.querySelector('[data-sl-modal]')) {
+            slGoalToast(w.goalName || 'your goal');
+          }
+        }
+        var userChanged = lastShown.user !== null && lastShown.user !== name;
+        lastShown.user = name; lastShown.pts = pts;
+        if (window.SLWorld) { if (userChanged) window.SLWorld.onUserChanged(); else window.SLWorld.onPointsChanged(); }
+      } catch (e) {}
+      return r;
+    };
+    window.updatePointsDisplay = wrappedUpd;
+    updatePointsDisplay = wrappedUpd;
+  } catch (e) {}
+  function slGoalToast(name) {
+    var t = document.createElement('div');
+    t.style.cssText = 'position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:9600;background:#2c2550;color:#fff;border-radius:14px;padding:10px 14px;font-weight:800;box-shadow:0 8px 24px rgba(0,0,0,.3);display:flex;gap:10px;align-items:center;max-width:92vw;';
+    t.setAttribute('role', 'status');
+    t.innerHTML = '<span>🎯 You’ve saved enough for <b></b>!</span><button type="button" style="border:none;border-radius:10px;background:#ffd23f;color:#4a3200;font:inherit;font-weight:800;padding:6px 10px;cursor:pointer;">🏝️ My Island</button>';
+    t.querySelector('b').textContent = name;
+    t.querySelector('button').addEventListener('click', function () { t.remove(); setActiveApp('world'); });
+    document.body.appendChild(t);
+    setTimeout(function () { if (t.parentNode) t.remove(); }, 7000);
+  }
+
+  /* cross-tab sync: when ANOTHER tab saves, adopt any profile it changed more
+     recently, so a stale tab can't later write an older copy over a purchase */
+  window.addEventListener('storage', function (e) {
+    if (e.key !== 'timesTableQuest_v1' || !e.newValue) return;
+    try {
+      var incoming = JSON.parse(e.newValue);
+      if (!incoming || !incoming.users) return;
+      var changed = false;
+      Object.keys(incoming.users).forEach(function (name) {
+        var mine = state.users[name], theirs = incoming.users[name];
+        if (!mine || (theirs && (theirs._localUpdatedAt || 0) > (mine._localUpdatedAt || 0))) { state.users[name] = theirs; changed = true; }
+      });
+      if (changed) {
+        try { migrateUser(currentUser() || ensureUser()); } catch (er) {}
+        if (typeof updatePointsDisplay === 'function') updatePointsDisplay();
+        var wv = document.getElementById('worldView');
+        if (window.SLWorld && wv && !wv.classList.contains('hidden')) window.SLWorld.onUserChanged();
+      }
+    } catch (er) {}
+  });
+
+  /* deep link: #play=kart etc. goes through the same ownership gate as a tap */
+  function deepLink() {
+    var m = /^#play=(course|penalty|kart)$/.exec(location.hash || '');
+    if (!m) return;
+    try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
+    setActiveApp('world');
+    window.slLoadWorld().then(function () { setTimeout(function () { window.SLWorld.launch(m[1]); }, 400); });
+  }
+  window.addEventListener('hashchange', deepLink);
+  setTimeout(deepLink, 600);
+  /* the app restores the last tab before this block is parsed — if that
+     tab was the island, open it now that the loader exists */
+  setTimeout(function () {
+    try {
+      var wv = document.getElementById('worldView');
+      if (getActiveApp() === 'world' && wv && !wv.classList.contains('hidden') && !window.SLWorld) window.slOpenWorld();
+    } catch (e) {}
+  }, 0);
+})();
+</script>
+<style>
+  #pointsPill { position: relative; }
+  #pointsPill.sl-bump { animation: slPillBump .5s ease-out; }
+  @keyframes slPillBump { 0% { transform: scale(1); } 40% { transform: scale(1.18); } 100% { transform: scale(1); } }
+  #pointsPill .sl-plus { position: absolute; left: 50%; top: -6px; transform: translateX(-50%); font-weight: 800; font-size: 13px;
+    color: #1e9e54; pointer-events: none; animation: slPlusUp 1s ease-out forwards; white-space: nowrap; }
+  @keyframes slPlusUp { from { opacity: 1; transform: translate(-50%, 0); } to { opacity: 0; transform: translate(-50%, -22px); } }
+</style>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
@@ -31927,6 +32069,9 @@ var SPELL_BANKS = {
           ak.sort(function (a, b) { return (+c.onepct.asked[a] || 0) - (+c.onepct.asked[b] || 0); });
           ak.slice(0, ak.length - 1000).forEach(function (k) { delete c.onepct.asked[k]; });
         }
+      }
+      if (c.world && Array.isArray(c.world.ledger) && c.world.ledger.length > 1000) {
+        c.world.ledger = c.world.ledger.slice(-1000);   /* ownership lives in world.owned, not the ledger */
       }
       if (c.shop && Array.isArray(c.shop.redeemed) && c.shop.redeemed.length > 120) {
         c.shop.redeemed = c.shop.redeemed.slice(-120);
@@ -34251,6 +34396,7 @@ var SPELL_BANKS = {
   .app-tab.active[data-app="mysteries"] { background: linear-gradient(135deg,#e17055,#d63031); }
   .app-tab.active[data-app="onepct"]    { background: linear-gradient(135deg,#2a1660,#6c5ce7); }
   .app-tab.active[data-app="shop"]      { background: linear-gradient(135deg,#fdcb6e,#e17055); }
+  .app-tab.active[data-app="world"]     { background: linear-gradient(135deg,#43c6ac,#2f8fd8); }
   .maths-subtab { border-radius: 999px; transition: transform .12s, box-shadow .12s; }
   .maths-subtab:hover { transform: translateY(-2px); }
   .maths-subtab.active { background: linear-gradient(135deg,#6c5ce7,#a86ff0); color: #fff;

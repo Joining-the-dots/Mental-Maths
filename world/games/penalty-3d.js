@@ -45,7 +45,7 @@ function injectScript(src) {
   });
 }
 function isQa() {
-  try { return /[?&]qa=1(&|$)/.test(location.search) || localStorage.getItem('slQaMode') === '1'; } catch (e) { return false; }
+  try { return localStorage.getItem('slQaMode') === '1'; } catch (e) { return false; }   /* never from the URL */
 }
 /* the shared runtime (CONTRACTS §6): inject stage.js once when the island hasn't, then ensure() */
 async function ensureRuntime() {

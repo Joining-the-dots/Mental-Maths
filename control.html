@@ -88,7 +88,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 <!-- My Island rules (purchases ledger + merge) — shared with the game so a guest merge never refunds island spending -->
-<script src="world/world-core.js?v=1"></script>
+<script src="world/world-core.js?v=3"></script>
 </head>
 <body>
 
@@ -286,7 +286,7 @@ function renderDayDetail(u, key) {
   if (rows.length === 1 && !secs) return '<b>' + nice + '</b><div class="muted">Nothing recorded that day.</div>';
   return '<div style="font-weight:800;margin-bottom:4px;">' + nice + '</div>' + rows.join('');
 }
-var APP_LABELS = { maths:'🔢 Maths', spell:'🪄 Spelling', flags:'🏳️ Flags', mysteries:'🔍 Mysteries', people:'🤝 People Skills', onepct:'🏆 1% Challenge', shop:'🎁 Shop', palace:'🧠 Memory', story:'✍️ Story', chess:'♟️ Chess', unknown:'❓' };
+var APP_LABELS = { maths:'🔢 Maths', spell:'🪄 Spelling', flags:'🏳️ Flags', mysteries:'🔍 Mysteries', people:'🤝 People Skills', onepct:'🏆 1% Challenge', shop:'🎁 Shop', world:'🏝️ My Island', palace:'🧠 Memory', story:'✍️ Story', chess:'♟️ Chess', unknown:'❓' };
   var presenceUnsub = null;
   function watchPresence() {
     if (presenceUnsub || !fdb) return;

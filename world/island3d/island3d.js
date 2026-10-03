@@ -438,7 +438,9 @@
     return typeof env.setEdit === 'function' ? 'env' : 'host';
   }
   /* ?grid=1 asks for the QA grid only while the parent's test mode (SL_WORLD_TRIAL) is on */
-  function gridFromQuery(search, trial) { return !!trial && /[?&]grid=1(?:[&#]|$)/.test(String(search || '')); }
+  /* ?grid=1 draws the edit grid in play — only on a QA device (localStorage slQaMode = '1') */
+  function gridFromQuery(search, qa) { return !!qa && /[?&]grid=1(?:[&#]|$)/.test(String(search || '')); }
+  function qaDevice() { try { return root.localStorage && root.localStorage.getItem('slQaMode') === '1'; } catch (e) { return false; } }
 
   /* ---------------- v2 seams: the child on handles and atlases, paths, hearts, music, the wake ---------------- */
   /* the first name only: atlases, signs and model handles never carry more of the child's name */
@@ -609,8 +611,7 @@
     IS.mount = mount;
     IS.mount.__island3d = VERSION;
     IS.sceneVersion = VERSION;
-    var dbg = IS.debug || (IS.debug = {});
-    dbg.grid = debugGrid;
+    if (qaDevice()) { var dbg = IS.debug || (IS.debug = {}); dbg.grid = debugGrid; }   /* a console switch for QA devices only */
   }
   /* QA: SLIsland3D.debug.grid(true) draws the edit grid in play mode on every mounted island;
      grid() alone reads the setting */
@@ -622,7 +623,7 @@
     return DEBUG.grid;
   }
   function queryGrid() {
-    try { return gridFromQuery(root.location && root.location.search, root.SL_WORLD_TRIAL); } catch (e) { return false; }
+    try { return gridFromQuery(root.location && root.location.search, qaDevice()); } catch (e) { return false; }
   }
 
   function perfNow() { return (root.performance && root.performance.now) ? root.performance.now() : Date.now(); }

@@ -58,7 +58,7 @@
     'light.golden': 'Golden hour',
     'light.showtime': 'Showtime',
     /* shop */
-    'shop.dimmed': 'Dimmed ones are in the shop.',
+    'shop.dimmed': 'Dimmed ones are in the Island Shop.',
     'shop.tab.city': 'City',
     /* home sheet */
     'home.tray.shape': 'Shape',

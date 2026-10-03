@@ -288,14 +288,14 @@ test('scene v2: path auto-tiling masks (N 1 · E 2 · S 4 · W 8) across every p
   assert.equal(Object.keys(pc).length, 5, 'paths only');
 });
 
-test('scene v2: who hosts the city and the ambient life; the ?grid=1 QA switch needs test mode', () => {
+test('scene v2: who hosts the city and the ambient life; the ?grid=1 QA switch needs a QA device', () => {
   assert.equal(S.layerOwner(null), 'host');
   assert.equal(S.layerOwner({ update() {} }), 'host', 'a v1 env: the controller hosts them');
   assert.equal(S.layerOwner({ setEdit() {} }), 'env', 'a v2 env owns them');
   assert.equal(S.layerOwner({ city: {} }), 'env');
   assert.equal(S.gridFromQuery('?grid=1', true), true);
   assert.equal(S.gridFromQuery('?a=2&grid=1#x', 1), true);
-  assert.equal(S.gridFromQuery('?grid=1', false), false, 'never outside SL_WORLD_TRIAL');
+  assert.equal(S.gridFromQuery('?grid=1', false), false, 'never outside slQaMode');
   assert.equal(S.gridFromQuery('?grid=10', true), false);
   assert.equal(S.gridFromQuery('', true), false);
   assert.deepEqual(S.normUser({ name: 'Kid', color: '#123456', avatar: '🦊', seed: 'k1' }), { name: 'Kid', color: '#123456', avatar: '🦊', seed: 'k1' });
@@ -472,7 +472,7 @@ function fakeEnv(o, rec, cfg) {
 }
 /* the browser globals mount() reads; every test puts the originals back (idempotent, any order) */
 const GLOBALS = ['performance', 'SLWorldCore', 'SLIslandLook', 'SLGrid3D', 'SLMotion', 'SLIslandCamera', 'SLIslandEnv', 'SL3D', 'document',
-  'SLWorldCopy', 'SLWorldArt', 'SLCity3D', 'SLLife3D', 'SLTerrain3D', 'SL_WORLD_TRIAL', 'location'];
+  'SLWorldCopy', 'SLWorldArt', 'SLCity3D', 'SLLife3D', 'SLTerrain3D', 'SL_WORLD_TRIAL', 'location', 'localStorage'];
 const ORIGINAL = {};
 GLOBALS.forEach((k) => { ORIGINAL[k] = Object.getOwnPropertyDescriptor(globalThis, k); });
 function restoreGlobals() {
@@ -822,8 +822,11 @@ test('mount v2: the crew anchor function, the QA grid, html.sl-low and the camer
   assert.equal(btns.length, 5);
   assert.deepEqual(btns.map((b) => (/data-n="(\w+)"/.exec(b.innerHTML) || [])[1]), ['rotL', 'rotR', 'zoomIn', 'zoomOut', 'reset']);
   assert.ok(btns.every((b) => /slw-ico/.test(b.innerHTML) && b.getAttribute('aria-label')));
-  /* ?grid=1 under test mode turns the grid on at mount */
-  const Q = harness(t, { globals: { SL_WORLD_TRIAL: true, location: { search: '?grid=1' }, SLWorldArt: undefined } });
+  /* ?grid=1 turns the grid on at mount only on a QA device (slQaMode), never from the URL alone */
+  const P = harness(t, { globals: { SL_WORLD_TRIAL: true, location: { search: '?grid=1' }, localStorage: { getItem: () => null }, SLWorldArt: undefined } });
+  P.stage.sync(viewOf(u));
+  assert.equal(P.states[P.states.length - 1].grid, false, 'test mode alone is not enough');
+  const Q = harness(t, { globals: { SL_WORLD_TRIAL: true, location: { search: '?grid=1' }, localStorage: { getItem: (k) => (k === 'slQaMode' ? '1' : null) }, SLWorldArt: undefined } });
   Q.stage.sync(viewOf(u));
   assert.equal(Q.states[Q.states.length - 1].grid, true);
   assert.ok(!globalThis.document.documentElement.classList.contains('sl-low'), 'MID: no LOW mark');
@@ -849,7 +852,7 @@ test('seams v2: the child\'s first name and colour reach the LED / sign atlases 
   assert.equal(B.stage.info().failed, null);
   assert.ok(B.stage.info().issues.some((s) => /bld_stage\.setUser/.test(s)));
   assert.deepEqual(S.handleUser({ name: 'Kid', color: '#4FC3F7', avatar: '🦊' }), { name: 'Kid', color: '#4FC3F7', avatar: '🦊' });
-  assert.equal(S.firstName('  Mia  Grace '), 'Mia'); assert.equal(S.firstName(null), '');
+  assert.equal(S.firstName('  Ava  Rose '), 'Ava'); assert.equal(S.firstName(null), '');
 });
 
 test('seams v2: path models that opt in get their piece, layout and yaw from SLModelsGarden.pathPose (one layout per piece below HIGH)', (t) => {

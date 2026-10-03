@@ -37,3 +37,9 @@ test('sw.js: precaches every island3d stage file and every script the world load
   });
   ['shell.js', 'fx.js', 'pet-course.js', 'penalty.js', 'kart.js'].forEach((g) => assert.ok(shell.includes('./world/games/' + g + '?v=' + VER), g));
 });
+
+test('control.html loads the same world-core version as the app (guest merges run the current rules)', () => {
+  const m = /<script src="world\/world-core\.js\?v=(\d+)"><\/script>/.exec(read('control.html'));
+  assert.ok(m, 'control.html loads world-core.js');
+  assert.equal(m[1], VER);
+});

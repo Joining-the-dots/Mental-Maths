@@ -22,7 +22,7 @@
     sessionPts: 120,          /* representative ~25-minute learning session */
     confirmAt: 300,           /* purchases at/above this ask "are you sure?" */
     ledgerCloudCap: 1000,
-    trialMaxCopies: 20        /* free test mode: per-copy items stop at this many each */
+    trialMaxCopies: 0         /* free test mode: no cap on copies (0 = unlimited; the cloud copy keeps the last 1,000 ledger rows) */
   };
 
   /* ---------------- land ---------------- */
@@ -475,7 +475,7 @@
       if (!owns(w, req[i])) return { ok: false, code: 'locked', needs: req[i], reason: 'First you need: ' + (item(req[i]) ? item(req[i]).name : req[i]) + '.' };
     }
     if (trial) {
-      if (isRepeatable(it) && ownedCount(w, id) >= ECONOMY.trialMaxCopies) return { ok: false, code: 'trial_cap', reason: 'You’ve got plenty of those for testing!' };
+      if (ECONOMY.trialMaxCopies > 0 && isRepeatable(it) && ownedCount(w, id) >= ECONOMY.trialMaxCopies) return { ok: false, code: 'trial_cap', reason: 'You’ve got plenty of those for testing!' };
       return { ok: true, item: it, price: 0, trial: true };
     }
     var bal = isInt(u.points) ? u.points : 0;
@@ -792,7 +792,7 @@
     var req = (it.requires || []).filter(function (r) { return !owns(w, r); });
     if (req.length) return { state: 'locked', needs: req };
     if (trial) {
-      if (isRepeatable(it) && ownedCount(w, id) >= ECONOMY.trialMaxCopies) return { state: 'capped', copies: ownedCount(w, id) };
+      if (ECONOMY.trialMaxCopies > 0 && isRepeatable(it) && ownedCount(w, id) >= ECONOMY.trialMaxCopies) return { state: 'capped', copies: ownedCount(w, id) };
       return { state: 'affordable', free: true, copies: isRepeatable(it) ? ownedCount(w, id) : 0 };
     }
     if (bal >= it.price) return { state: 'affordable', copies: isRepeatable(it) ? ownedCount(w, id) : 0 };

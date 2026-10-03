@@ -44,7 +44,7 @@ This file is the running record: findings → plan → economy → checklist →
 ## 3. Economy (provisional — no per-session telemetry exists)
 Earning rules (unchanged): grid answer 1 (3 if newly mastered) · Lightning 1/answer · Trick Master 2 · daily drill 3 · flags 2 · spelling 2 first try / 1 retry / +3 mastery / boss +25 · 1% Challenge 2-15 per rung, Club win +25 · trick learned +10 · Daily 30 doubles 30 minutes and adds a bonus.
 
-Observed totals (Control Centre): Joshua ≈3,497 pts in ≈13 h active (≈270/h); Mia balance 4,615 after 14 h 47 m active (≥312/h; balance is a lower bound on earned).
+Observed totals (Control Centre, two of the children, anonymised): roughly 270-310 points per active hour.
 
 **Representative session = ~25 active minutes ≈ 120 points** (≈ 4.8 pts/min). A Daily-30 session pays roughly 2-2.5× that. Prices are centralised in `world/world-core.js` (`CATALOG`, `ECONOMY.sessionPts`) and can be retuned without code changes elsewhere.
 
@@ -147,10 +147,10 @@ Purchases of 300 ⭐ or more ask "Are you sure?" (`ECONOMY.confirmAt`); cheaper 
 ## 8. Free test mode (James, 2026-10-02 — on for the first release)
 `window.SL_WORLD_TRIAL = true` in `index.html` makes every island item free so the children can try everything:
 - `purchase(u, id, {tx, trial: true})` charges 0, never touches `u.points`, `pointsEarned` or `world.spent`, and writes a ledger row `{price: 0, trial: true, list: <catalogue price>}`. All other rules still apply (catalogue only, prerequisites, one-off items once, starter/included items not for sale).
-- Per-copy items stop at 20 each while testing (`ECONOMY.trialMaxCopies`).
+- No cap on per-copy items while testing (`ECONOMY.trialMaxCopies = 0`; James, 2026-10-03). The cloud copy keeps the last 1,000 ledger rows.
 - UI: a green "Test mode — everything on the island is FREE. Your ⭐ are safe!" banner replaces the savings-goal bar; prices show struck through with FREE; buttons say "Get it free"; no "are you sure?" box, no "need N more", no 🎯 goals; the intro's third slide says it's free while testing.
 - **Ending the test:** set `SL_WORLD_TRIAL = false` and deploy — real prices return on each device's next online reload (an open tab or an offline launch keeps the old page until then). To end it everywhere at a set moment without relying on reloads, also set `window.SL_WORLD_TRIAL_UNTIL = Date.parse('YYYY-MM-DDTHH:MM:SSZ')`, which is checked on every purchase. `window.SL_WORLD_TRIAL_FAMILIES = ['LION78']` limits free mode to listed family codes (signed-out devices then pay real prices). After the test, children who had free items see a one-time "Testing's over" note. Everything picked during testing stays owned unless we decide otherwise; because every free row is tagged `trial: true`, a one-off migration can later remove test items (or keep them) per child.
-- Tests: 4 test-mode cases in `tests/world-core.test.js` (free + untouched balances, rules still enforced, the 20-copy cap with real purchases still charged, merges).
+- Tests: 4 test-mode cases in `tests/world-core.test.js` (free + untouched balances, rules still enforced, no copy cap, with real purchases still charged, merges).
 
 ## 9. Deploying
 1. Merge `rewards-world` into `master`.

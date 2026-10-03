@@ -68,7 +68,7 @@ test('copy: the art director rewrites and the Encore City lines', () => {
     'goal.set': 'Set a goal 🎯',
     'buy.cosmetic': 'Equipped for your next run.',
     'light.golden': 'Golden hour', 'light.showtime': 'Showtime',
-    'shop.dimmed': 'Dimmed ones are in the shop.',
+    'shop.dimmed': 'Dimmed ones are in the Island Shop.',
     'makeover.toast': 'Your home got a city makeover. Tap it to switch back to the cottage.',
     'makeover.revert': 'Back to the cottage',
     'shop.tab.city': 'City', 'home.tray.shape': 'Shape', 'label.crew': 'Crew',

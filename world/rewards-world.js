@@ -483,7 +483,7 @@
           '<div class="slw-pts" title="Your spendable points">⭐ <span id="slwPts">' + fmt(u.points) + '</span></div>' +
           goalHtml(u) +
           '<div class="slw-acts">' +
-            '<button class="slw-btn big" type="button" data-act="shop">' + lbl('shop', 'Shop') + '</button>' +
+            '<button class="slw-btn big" type="button" data-act="shop">' + lbl('shop', 'Island Shop') + '</button>' +
             '<button class="slw-btn big" type="button" data-act="games">' + lbl('games', 'Games') + '</button>' +
             '<button class="slw-btn' + (mode === 'edit' ? ' on' : '') + '" type="button" data-act="edit" aria-pressed="' + (mode === 'edit') + '">' + lbl('edit', mode === 'edit' ? 'Done' : 'Edit') + '</button>' +
             '<button class="slw-btn" type="button" data-act="pets">' + lbl('crew', tx('label.crew')) + '</button>' +
@@ -498,7 +498,7 @@
         '<div id="slwBar"></div>' +
         '<div class="slw-legend"><span><i style="background:#ffd23f;color:#4a3200;">▶ PLAY</i> tap to play a game</span>' +
           '<span><i style="background:#fff;border:2px solid #6c5ce7;">✋</i> tap to play with it</span>' +
-          '<span><i style="background:#4a4468;color:#fff;">🔒</i> unlock in the shop</span>' +
+          '<span><i style="background:#4a4468;color:#fff;">🔒</i> unlock in the Island Shop</span>' +
           '<span>Everything else is just for looks</span></div>' +
       '</div>';
     drawStage();
@@ -517,7 +517,7 @@
   function goalHtml(u) {
     if (trial()) return '<div class="slw-goal slw-trial" role="note"><span class="gt">Test mode: everything on the island is free. Your ⭐ stay put.</span></div>';
     var gp = C.goalProgress(u);
-    if (!gp) return '<button class="slw-goal" type="button"><span class="gt">' + lbl('goal', 'Pick a savings goal in the shop') + '</span></button>';
+    if (!gp) return '<button class="slw-goal" type="button"><span class="gt">' + lbl('goal', 'Pick a savings goal in the Island Shop') + '</span></button>';
     return '<button class="slw-goal' + (gp.ready ? ' ready' : '') + '" type="button" aria-label="Savings goal: ' + esc(gp.name) + '">' +
       '<span class="gi">' + iconHtml(gp.id, artState(C.ensureWorld(u))) + '</span>' +
       '<span style="flex:1;min-width:0;"><span class="gt">' + (gp.ready ? 'Ready: you can buy ' + esc(gp.name) : '🎯 ' + esc(gp.name) + ' · ' + fmt(gp.have) + ' / ' + fmt(gp.price) + ' ⭐') + '</span>' +
@@ -1297,7 +1297,7 @@
         (accs.length ? '<div style="font-size:12px;font-weight:800;margin-top:4px;">Wear:</div><div class="slw-tray">' + accs.map(function (a) {
           var on = p.acc[a.slot] === a.id;
           return '<button type="button" class="slw-trayitem" data-acc="' + a.id + '" data-pet="' + p.id + '" aria-pressed="' + on + '" style="' + (on ? 'border-color:#6c5ce7;background:#f1edfb;' : '') + '"><span style="display:block;position:relative;height:56px;">' + iconHtml(a.id) + '</span><span>' + esc(a.name) + (on ? ' ✓' : '') + '</span></button>';
-        }).join('') + '</div>' : '<div style="font-size:12px;color:#7c8696;font-weight:700;margin-top:4px;">Caps, beanies, headphones and more are in the shop’s Crew aisle.</div>') +
+        }).join('') + '</div>' : '<div style="font-size:12px;color:#7c8696;font-weight:700;margin-top:4px;">Caps, beanies, headphones and more are in the Island Shop’s Crew aisle.</div>') +
         '</div></div></div>';
     });
     html += '<button class="slw-btn" type="button" id="slwMorePets">' + lbl('shop', 'More crew and gear') + '</button>';
@@ -1325,8 +1325,21 @@
     var ov = overlay('<h2>❓ How My Island works</h2>' +
       '<p style="font-weight:700;line-height:1.6;">📚 <b>Learn</b> anywhere in the app → you earn ⭐ points.<br>' + (trial() ? '🧪 Everything in the Island Shop is <b>free while we test</b> — your ⭐ stay safe.' : '🛍️ <b>Spend</b> them in the Island Shop → your island grows.') + '<br>🎮 <b>Play</b> your island games — they’re just for fun and never cost or earn points.<br>' +
       esc(tx('crew.neverSad')) + (trial() ? '' : '<br>⭐ Spending points never lowers your total-earned score.') + '</p>' + timeHtml(st) +
-      '<div style="display:flex;gap:8px;flex-wrap:wrap;"><button class="slw-btn" type="button" id="slwReplay">▶ Show the welcome again</button></div>', { small: true });
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;"><button class="slw-btn" type="button" id="slwReplay">▶ Show the welcome again</button>' +
+      (can3DAgain() ? '<button class="slw-btn" type="button" id="slw3dAgain">Try 3D again</button>' : '') + '</div>', { small: true });
     $('#slwReplay', ov).addEventListener('click', function () { ov._close(); showIntro(); });
+    var again = $('#slw3dAgain', ov);
+    if (again) again.addEventListener('click', function () {
+      ov._close();
+      try { SLIsland3D.forget(); } catch (e) {}
+      try { localStorage.removeItem('slNo3D'); } catch (e) {}
+      use3D = null; maybeBoot3D();
+    });
+  }
+  /* this device fell back to the 2D island (a slow or lost 3D renderer): offer one more go */
+  function can3DAgain() {
+    if (use3D || stage3d) return false;
+    try { return !!(window.SLIsland3D && SLIsland3D.forget && SLIsland3D.remembered && SLIsland3D.remembered(window.SL_WORLD_VER)); } catch (e) { return false; }
   }
   function timeHtml(st) {
     if (!st.status.limited) return '<div class="slw-time" style="background:#f1edfb;border-color:#d9d2ee;color:#4a3f75;">🎮 Island games have no daily time limit on this account.</div>';
@@ -1508,8 +1521,8 @@
     Object.keys(GAMES).forEach(function (g) {
       var G = GAMES[g], own = C.owns(w, G.att);
       html += '<div class="slw-game' + (own ? '' : ' locked') + '" style="background:' + G.grad + ';"><h3>' + esc(G.name) + '</h3>' +
-        '<div class="pb">' + (own ? esc(pbText(g)) : '🔒 Unlock with the ' + esc(C.item(G.att).name) + ' in the shop') + '</div>' +
-        '<button class="slw-btn big" type="button" data-play="' + g + '">' + (own ? '▶ Play' : '👀 See it in the shop') + '</button></div>';
+        '<div class="pb">' + (own ? esc(pbText(g)) : '🔒 Unlock with the ' + esc(C.item(G.att).name) + ' in the Island Shop') + '</div>' +
+        '<button class="slw-btn big" type="button" data-play="' + g + '">' + (own ? '▶ Play' : '👀 See it in the Island Shop') + '</button></div>';
     });
     var ov = overlay(html + '</div>');
     ov.querySelectorAll('[data-play]').forEach(function (b) { b.addEventListener('click', function () { ov._close(); launch(b.dataset.play); }); });
@@ -1570,6 +1583,9 @@
       s3('suspend');                                     /* the game borrows the 3D renderer */
       window.SLGames[game].start(cfg);
     }).catch(function () {
+      /* a game that never started must not hold the app's pop-ups or the island's renderer */
+      window.slGameBusy = false;
+      s3('resume');
       running = null;
       toast('⚠️ Couldn’t load the game — check your connection and try again.');
     });

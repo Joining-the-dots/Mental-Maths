@@ -513,12 +513,14 @@ test('test mode keeps every other rule: unknown, locked, one-off and starter ite
   assert.equal(u.points, 0);
 });
 
-test('test mode caps per-copy items at 20 each; a real purchase is still charged normally', () => {
+test('test mode has no cap on per-copy items (James 2026-10-03); a real purchase is still charged normally', () => {
   const u = kid(100);
   let got = 0;
-  for (let i = 0; i < 30; i++) if (C.purchase(u, 'rock_mossy', { tx: tx(), trial: true }).ok) got++;
-  assert.equal(C.ensureWorld(u).owned.rock_mossy, 20); assert.equal(got, 20);
-  assert.equal(C.itemState(u, 'rock_mossy', { trial: true }).state, 'capped');
+  for (let i = 0; i < 60; i++) if (C.purchase(u, 'rock_mossy', { tx: tx(), trial: true }).ok) got++;
+  assert.equal(C.ensureWorld(u).owned.rock_mossy, 60); assert.equal(got, 60);
+  assert.equal(C.itemState(u, 'rock_mossy', { trial: true }).state, 'affordable', 'still free to get more');
+  assert.equal(C.ECONOMY.trialMaxCopies, 0, '0 = unlimited');
+  assert.equal(u.points, 100, 'no points used');
   assert.equal(C.purchase(u, 'flower_sun', { tx: tx() }).price, 50);
   assert.equal(u.points, 50);
 });

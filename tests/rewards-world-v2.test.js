@@ -75,3 +75,20 @@ test('every way into the 2D island sets the LOW panels (parent opt-out, no WebGL
   assert.match(boot, /WebGL2RenderingContext === 'undefined'\) \{ use3D = false; lowPanels\(\); return; \}/);
   assert.match(boot, /if \(gaveUp\) lowPanels\(\);/);
 });
+
+test('a game that fails to load or start never leaves the app "game busy" (Daily 30 and family pop-ups keep working)', () => {
+  const l = fn('launch');
+  const c = l.slice(l.indexOf('}).catch(function () {'));
+  assert.match(c, /window\.slGameBusy = false;/);
+  assert.match(c, /s3\('resume'\);/);
+});
+
+test('the island\'s shop is always called the Island Shop, so it is never confused with the 🎁 Shop tab', () => {
+  assert.match(SRC, /data-act="shop">' \+ lbl\('shop', 'Island Shop'\)/);
+  assert.ok(!/in the shop\b/.test(SRC), 'no bare "in the shop" left');
+});
+
+test('a device remembered as 2D can try 3D again from the How-it-works sheet', () => {
+  assert.match(fn('openInfo'), /can3DAgain\(\) \? '<button class="slw-btn" type="button" id="slw3dAgain">Try 3D again<\/button>'/);
+  assert.match(fn('openInfo'), /SLIsland3D\.forget\(\);[\s\S]*use3D = null; maybeBoot3D\(\);/);
+});

@@ -84,10 +84,11 @@ test('fx3d: kind and emote names resolve through aliases, unknown kinds play a s
   assert.equal(F.kindOf('no-such-kind'), 'sparkle');
   assert.equal(F.kindOf('shell'), 'sparkle', 'the firework shell is internal');
   for (const k of ['dust', 'exhaust', 'splash', 'dizzy']) assert.equal(F.kindOf(k), k);
-  assert.equal(F.emoteOf('love'), 'heart');
+  assert.equal(F.emoteOf('love'), 'star', 'hearts belong to the finger-heart');
   assert.equal(F.emoteOf('music'), 'note');
   assert.equal(F.emoteOf('tumble'), 'dizzy');
-  assert.equal(F.emoteOf('???'), 'heart');
+  assert.equal(F.emoteOf('fingerHeart'), 'fingerHeart');
+  assert.equal(F.emoteOf('???'), 'star');
 });
 
 test('fx3d: capacity per tier follows the budgets; per-kind limits never exceed the bible', () => {
@@ -331,6 +332,222 @@ test('fx3d: the sprite shader is one program for paper and glow, fogged, colour-
   assert.match(Fs, /#ifdef FOG_EXP2/);
   assert.match(Fs, /gl_FragColor = vec4\(gl_FragColor\.rgb \* a, a \* \(1\.0 - vGlow\)\)/, 'premultiplied: glow writes alpha 0');
   assert.doesNotMatch(Fs, /tonemapping_fragment/);
+});
+
+/* ================================================================ fx3d: Encore City ================================================================ */
+/* a minimal THREE + kit, enough for create() in Node (no WebGL) */
+class FxColor {
+  constructor(r = 1, g = 1, b = 1) { this.r = r; this.g = g; this.b = b; this.isColor = true; }
+  copy(c) { this.r = c.r; this.g = c.g; this.b = c.b; return this; }
+  clone() { return new FxColor(this.r, this.g, this.b); }
+  setRGB(r, g, b) { this.r = r; this.g = g; this.b = b; return this; }
+  lerp(c, k) { this.r += (c.r - this.r) * k; this.g += (c.g - this.g) * k; this.b += (c.b - this.b) * k; return this; }
+}
+class FxV3 {
+  constructor(x = 0, y = 0, z = 0) { this.x = x; this.y = y; this.z = z; this.isVector3 = true; }
+  set(x, y, z) { this.x = x; this.y = y; this.z = z; return this; }
+  copy(v) { return this.set(v.x, v.y, v.z); }
+  add(v) { this.x += v.x; this.y += v.y; this.z += v.z; return this; }
+  sub(v) { this.x -= v.x; this.y -= v.y; this.z -= v.z; return this; }
+  equals(v) { return v.x === this.x && v.y === this.y && v.z === this.z; }
+}
+class FxObj { constructor(g, m) { this.children = []; this.parent = null; this.geometry = g; this.material = m; this.visible = true; }
+  add(o) { o.parent = this; this.children.push(o); return this; } remove(o) { this.children = this.children.filter((c) => c !== o); o.parent = null; return this; } }
+class FxAttr { constructor(a, n) { this.array = a; this.itemSize = n; this.updateRanges = []; } setUsage() { return this; } }
+class FxGeo { constructor() { this.attributes = {}; this.instanceCount = 0; } setIndex() {} setAttribute(n, a) { this.attributes[n] = a; } dispose() {} }
+const FxT = {
+  Color: FxColor, Vector3: FxV3, Group: FxObj, Mesh: FxObj, InstancedBufferGeometry: FxGeo, BufferAttribute: FxAttr,
+  InstancedBufferAttribute: FxAttr, ShaderMaterial: class { constructor(o) { Object.assign(this, o); } dispose() {} },
+  UniformsUtils: { merge: (l) => Object.assign({}, ...l) }, UniformsLib: { fog: {} },
+  CustomBlending: 5, AddEquation: 100, OneFactor: 201, OneMinusSrcAlphaFactor: 205, DynamicDrawUsage: 35048
+};
+function fxKit(tier) {
+  const pools = [];
+  const hexCol = (h) => { const n = parseInt(String(h).slice(1), 16); return new FxColor(((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255); };
+  return {
+    THREE: FxT, tier: tier || 'MID', pools, ATLAS: Kit.ATLAS, ATLAS_CELLS: Kit.ATLAS_CELLS,
+    col: (tok) => Object.assign(hexCol(L.hex(tok) || '#CFC8DC'), { tok }), rgb: (h) => Object.assign(hexCol(h), { tok: h }),
+    tex: { sparkles: () => ({}) },
+    billboards(o) {
+      const used = new Set(), sets = new Map();
+      const p = { mesh: new FxObj(), sets, alloc() { for (let i = 0; i < o.capacity; i++) if (!used.has(i)) { used.add(i); return i; } return -1; },
+        free(i) { used.delete(i); sets.delete(i); }, set(i, ...a) { sets.set(i, a); }, commit() {}, dispose() {}, get live() { return used.size; } };
+      pools.push(p);
+      return p;
+    }
+  };
+}
+function fxMake(o) { const K = fxKit(o && o.tier); return { K, fx: F.create(K, {}, Object.assign({ seed: 5, tier: 'MID' }, o)) }; }
+function liveCells(fx) {
+  const mesh = fx.group.children.find((m) => m.geometry && m.geometry.attributes.iData && m.geometry.instanceCount !== undefined && m.material.name === 'fx3d:particles');
+  const d = mesh.geometry.attributes.iData.array, c = mesh.geometry.attributes.iCol.array, out = [];
+  for (let k = 0; k < mesh.geometry.instanceCount; k++) if (c[k * 4 + 3] > 0 || d[k * 4] > 0) out.push(d[k * 4 + 2]);
+  return out;
+}
+const CELL_NAME = Object.fromEntries(Object.entries(Kit.ATLAS).map(([k, v]) => [v, k]));
+
+test('fx3d: confetti is 55 % rectangles, 25 % ✦ and 20 % curly streamers — never hearts or circles', () => {
+  assert.deepEqual(F.CONFETTI_MIX, { rect: 0.55, sparkle: 0.25, curl: 0.2 });
+  for (const len of [20, 40, 100, 120]) {
+    const n = { rect: 0, sparkle: 0, curl: 0 };
+    const r = F.rng(len);
+    for (let i = 0; i < len; i++) n[F.spawn(F.KINDS.confetti, i, len, r, {}).cell]++;
+    assert.deepEqual(n, { rect: Math.round(0.55 * len), sparkle: Math.round(0.25 * len), curl: Math.round(0.2 * len) }, len + ' pieces');
+  }
+  /* evenly mixed: every 5 consecutive pieces hold at least two rectangles */
+  for (let i = 0; i < 20; i++) assert.ok([0, 1, 2, 3, 4].filter((k) => F.confettiCell(i + k) === 'rect').length >= 2);
+  for (const c of F.KINDS.confetti.cells.concat(F.KINDS.streamer.cells)) assert.ok(!['heart', 'circle'].includes(c), c);
+  /* the streamers in the mix are long curls */
+  const curl = F.spawn(F.KINDS.confetti, F.MIX_PATTERN.indexOf('curl'), 20, F.rng(1), {});
+  assert.ok(curl.size >= F.KINDS.confetti.size[0] * 2, 'curls are longer: ' + curl.size);
+});
+
+test('fx3d: confetti colours are 40 % the member colour, the rest Neon Magenta / LED Cyan / Electric Violet / Bone White', () => {
+  assert.deepEqual(F.TOKENS.confetti, ['Neon Magenta', 'LED Cyan', 'Electric Violet', 'Bone White']);
+  const { fx } = fxMake({ member: '#4FC3F7' });
+  assert.equal(fx.emit('confetti', [0, 0, 0], 100), 100);
+  const mesh = fx.group.children.find((m) => m.material.name === 'fx3d:particles'), col = mesh.geometry.attributes.iCol.array;
+  const member = [0x4F / 255, 0xC3 / 255, 0xF7 / 255], allowed = F.TOKENS.confetti.map((t) => L.hex(t));
+  let m = 0;
+  for (let k = 0; k < 100; k++) {
+    const c = [col[k * 4], col[k * 4 + 1], col[k * 4 + 2]];
+    if (c.every((v, i) => near(v, member[i], 1e-6))) { m++; continue; }
+    const hex = '#' + c.map((v) => Math.round(v * 255).toString(16).padStart(2, '0')).join('').toUpperCase();
+    assert.ok(allowed.includes(hex), 'confetti colour ' + hex);
+  }
+  assert.equal(m, 40, '40 % in the member colour');
+  assert.ok(liveCells(fx).every((c) => !['heart', 'circle'].includes(CELL_NAME[c])), 'no hearts or circles fly');
+});
+
+test('fx3d: fireworks are ✦ ring bursts that leave ✦ trails (MID/HIGH), soft and flash-free', () => {
+  assert.deepEqual(F.KINDS.firework.cells, ['sparkle']);
+  assert.equal(F.KINDS.firework.spread, 'disc');
+  assert.ok(F.KINDS.firework.trail >= 0.05, 'trail sprites at most every 0.05 s');
+  assert.deepEqual(F.TOKENS.neon, L.NEON4);
+  for (const tier of ['MID', 'LOW']) {
+    const { fx } = fxMake({ tier });
+    assert.equal(fx.fireworks({}), 3);
+    for (let i = 0; i < 90; i++) fx.update(1 / 60);
+    const cells = liveCells(fx).map((c) => CELL_NAME[c]);
+    assert.ok(cells.every((c) => c === 'sparkle' || c === 'dot'), tier + ': only ✦ (and the soft glow): ' + [...new Set(cells)].join(','));
+    /* one ring of 20: on MID it leaves ✦ trails behind it, on LOW the small pool keeps just the ring */
+    const { fx: one } = fxMake({ tier });
+    one.emit('firework', [0, 5, 0], 20);
+    for (let i = 0; i < 18; i++) one.update(1 / 60);
+    if (tier === 'MID') assert.ok(one.info().alive > 30, 'the ring and its ✦ trails: ' + one.info().alive);
+    else assert.equal(one.info().alive, 20, 'LOW: no trails');
+    assert.equal(one.emit('firework', [0, 5, 0], 20, { trail: false }), 20);
+  }
+  /* reduced motion: a still sparkle fade per burst, nothing launched, no trails */
+  const { fx: rfx } = fxMake({ reduced: true });
+  rfx.fireworks({});
+  assert.equal(rfx.info().queued, 0);
+  assert.ok(rfx.info().alive <= 3 * F.KINDS.firework.reducedMax);
+});
+
+test('fx3d: dust puffs are a small grey-violet', () => {
+  assert.deepEqual(F.KINDS.dust.tokens, ['Concrete Light', 'Text Muted']);
+  for (const t of F.KINDS.dust.tokens) {
+    const h = L.hex(t), r = parseInt(h.slice(1, 3), 16), g = parseInt(h.slice(3, 5), 16), b = parseInt(h.slice(5, 7), 16);
+    assert.ok(b > g && r > g && Math.max(r, g, b) - Math.min(r, g, b) < 50, t + ' is a muted grey-violet');
+  }
+  assert.ok(F.KINDS.dust.size[1] <= 0.22);
+});
+
+test('fx3d: hearts appear only for the finger-heart', () => {
+  /* the emitter table: only the finger-heart kind uses the heart cell */
+  for (const [name, s] of Object.entries(F.KINDS)) if (name !== 'heart') assert.ok(!s.cells.includes('heart'), name);
+  for (const [name, e] of Object.entries(F.EMOTES)) if (name !== 'fingerHeart') assert.notEqual(e.cell, 'heart', name);
+  assert.equal(F.heartAllowed({}), false);
+  assert.equal(F.heartAllowed({ fingerHeart: true }), true);
+  const { fx } = fxMake({});
+  fx.emit('heart', [0, 1, 0], 3);
+  fx.emit('love', [0, 1, 0], 3);
+  fx.emit('hearts', [0, 1, 0], 3, { token: 'Neon Pink' });
+  assert.ok(fx.info().alive >= 3, 'something still celebrates');
+  assert.ok(liveCells(fx).every((c) => CELL_NAME[c] !== 'heart'), 'but never a heart');
+  fx.emit('heart', [0, 1, 0], 1, { fingerHeart: true });
+  fx.update(0.1);
+  assert.ok(liveCells(fx).some((c) => CELL_NAME[c] === 'heart'), 'the finger-heart is the one heart');
+  /* emote bubbles: a 'heart' bubble shows a star; 'fingerHeart' the heart */
+  assert.equal(F.emoteOf('heart'), 'star');
+  assert.equal(F.emoteOf('fingerHeart'), 'fingerHeart');
+});
+
+test('fx3d: the local halo bloom — up 0.25 s, down 0.5 s, at most once per 1.5 s per item, ≤ 1.2 u, never reduced', () => {
+  assert.equal(L.FX.bloomGapSec, 1.5);
+  assert.equal(F.bloomAt(0), 0);
+  assert.ok(near(F.bloomAt(0.25), 1, 1e-9));
+  assert.ok(F.bloomAt(0.5) > 0 && F.bloomAt(0.5) < 1);
+  assert.equal(F.bloomAt(0.76), -1, 'over after 0.75 s');
+  let prev = -1;
+  for (let t = 0; t <= 0.25; t += 0.01) { const v = F.bloomAt(t); assert.ok(v >= prev - 1e-12); prev = v; }
+  assert.equal(F.bloomAllowed(null, 3), true);
+  assert.equal(F.bloomAllowed(3, 4.4), false);
+  assert.equal(F.bloomAllowed(3, 4.5), true);
+  assert.ok(F.BLOOM_MAX <= 1.2);
+  const { K, fx } = fxMake({});
+  const halos = K.pools[K.pools.length - 1];
+  assert.equal(fx.bloom('booth:p7', [1, 1.5, 0], { size: 9, token: 'Window Warm' }), true);
+  assert.equal(fx.bloom('booth:p7', [1, 1.5, 0]), false, 'a quick re-tap never re-blooms');
+  assert.equal(fx.bloom('screen:p8', [3, 2, 0]), true, 'another item blooms on its own clock');
+  let maxSize = 0, maxA = 0;
+  for (let i = 0; i < 60; i++) {
+    fx.update(1 / 60);
+    for (const a of halos.sets.values()) { maxSize = Math.max(maxSize, a[3]); maxA = Math.max(maxA, a[5]); }
+    if (i === 29) assert.equal(fx.bloom('booth:p7', [1, 1.5, 0]), false, 'still within 1.5 s');
+  }
+  assert.ok(maxSize <= 1.2 + 1e-9 && maxA <= 1 + 1e-9 && maxA > 0.9, 'size ' + maxSize + ' alpha ' + maxA);
+  assert.equal(fx.info().blooms, 0, 'both blooms are over');
+  assert.equal(halos.live, 0, 'their halo slots are free');
+  for (let i = 0; i < 40; i++) fx.update(1 / 60);
+  assert.equal(fx.bloom('booth:p7', [1, 1.5, 0]), true, 'after 1.5 s it may bloom again');
+  fx.setReduced(true);
+  assert.equal(fx.info().blooms, 0, 'reduced motion settles it');
+  assert.equal(fx.bloom('other', [0, 0, 0]), false, 'and never blooms');
+});
+
+test('fx3d: uplight pools follow the Showtime mix (0.25 golden hour → 0.4 Showtime, r 0.5)', () => {
+  assert.deepEqual(L.FX.uplight, { r: 0.5, day: 0.25, show: 0.4 });
+  const { fx } = fxMake({});
+  assert.equal(fx.uplight('lamp:p3', true, { x: 1, y: 0.02, z: 2 }, 'Window Warm'), true);
+  const marks = fx.group.children.find((m) => m.material.name === 'fx3d:marks');
+  const alpha = () => marks.geometry.attributes.iCol.array[3], size = () => marks.geometry.attributes.iData.array[0];
+  assert.ok(near(alpha(), 0.25, 1e-6) && near(size(), 0.5 * 2 / 0.875, 1e-6));
+  fx.update(1 / 60, 12.3, { show: 1 });
+  assert.ok(near(alpha(), 0.4, 1e-6), 'Showtime');
+  fx.update(1 / 60, 12.4, { show: 0.5 });
+  assert.ok(near(alpha(), 0.325, 1e-6), 'mid-blend');
+  assert.equal(fx.info().uplights, 1);
+  fx.uplight('lamp:p3', false);
+  assert.equal(fx.info().uplights, 0);
+});
+
+test('fx3d: emote bubbles are dark glass with a neon rim and a glowing icon', () => {
+  assert.equal(F.EMOTE_SLOTS, 4);
+  const { fx } = fxMake({});
+  fx.emote([0, 1, 0], 'note');
+  const marks = fx.group.children.find((m) => m.material.name === 'fx3d:marks');
+  const base = F.MARK_CAP, d = marks.geometry.attributes.iData.array, c = marks.geometry.attributes.iCol.array;
+  const glass = L.hex('Panel Glass'), toHex = (k) => '#' + [0, 1, 2].map((i) => Math.round(c[k * 4 + i] * 255).toString(16).padStart(2, '0')).join('').toUpperCase();
+  assert.equal(toHex(base), glass, 'the bubble is dark glass');
+  assert.equal(CELL_NAME[d[(base + 1) * 4 + 2]], 'ring', 'a neon rim');
+  assert.equal(d[(base + 1) * 4 + 3] % 2, 1, 'the rim glows');
+  assert.equal(CELL_NAME[d[(base + 3) * 4 + 2]], 'note');
+  assert.equal(toHex(base + 3), L.hex('Electric Violet'));
+  for (const e of Object.values(F.EMOTES)) assert.ok(L.isToken(e.token));
+});
+
+test('fx3d: flash safety — every rate ≤ 2 Hz, no big white sprite, the LED sets mix 4 hues', () => {
+  for (const [name, s] of Object.entries(F.KINDS)) {
+    if (s.twinkle) assert.ok(s.twinkle <= 2, name);
+    if (s.flip) assert.ok(s.flip[1] <= 2, name);
+    if (s.sway) assert.ok(s.sway[1] <= 2, name);
+    if (s.glow) assert.ok(s.size[1] * (s.end > 1 ? s.end : 1) <= 1.2, name + ': a glow stays a local sprite');
+  }
+  assert.ok(F.PEARL_HZ <= 2);
+  for (const set of ['neon', 'confetti', 'sparkle']) assert.ok(new Set(F.TOKENS[set]).size >= 4, set + ' mixes 4 hues');
+  assert.ok(!Object.values(F.TOKENS).some((l) => l.includes('Cloud White') && l.length === 1), 'no plain white set');
 });
 
 /* ================================================================ edit3d ================================================================ */

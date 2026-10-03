@@ -15,29 +15,50 @@
                   sight pruning with a 0.2 u clearance, Catmull-Rom through
                   the (re-densified) cell centres; every smoothed path is
                   validated cell by cell (falls back to the polyline).
-     walking      0.9 u/s, turn rate 6 rad/s, accel 3 u/s²; slows to turn in
+     walking      1.0 u/s, turn rate 6 rad/s, accel 3 u/s²; slows to turn in
                   place; waits ≤ 0.8 s for a pet in front, then re-plans.
      reservations every pet holds exactly ONE reserved cell — its target
-                  while walking, its own cell otherwise — so no two pets ever
-                  pick the same spot or stand on each other.
+                  while walking, its own cell otherwise (its approach / landing
+                  cell while it is up on a seat, a roof or the stage deck) — so no
+                  two pets ever pick the same spot or stand on each other. The
+                  avatar's dance spot (studio at Showtime) is reserved the same way.
      sync         re-plans any pet whose cell / path / target became blocked;
                   a pet on a blocked cell, or enclosed in a 1-cell pocket while
                   a bigger area exists, pops (event 'pop') to the nearest free
-                  cell; new pets 'spawn' near the house.
+                  cell; new pets 'spawn' near the house; a pet performing on an
+                  item that moved or went away lands on a free cell.
      idle         an idle action every 4–8 s (start to start; the action is
                   sized to fit its gap): wander, sit, sniff, look at the camera,
-                  look at the avatar, scratch, roll over, nap, play (puppy tail
-                  chase · kitten pounce · bunny binky · dragon loop), visit an
-                  item (sniff flowers, watch fun items) or sit on a bench
-                  (×4 likelier at Showtime). Reduced motion: turn and emote only.
+                  look at the avatar, lean, look back, nod to the beat (music
+                  only), nap, play (puppy tail chase · kitten pounce · bunny binky ·
+                  dragon loop), visit an item (sniff flowers, watch fun items and
+                  the city buildings, likelier when buildings are placed) or sit
+                  on a bench (×4 likelier at Showtime). Reduced motion: turn and
+                  emote only.
      perform      'trampoline': the active pet runs over (lead ≤ 1.2 s, a sparkle
                   zip when too far), hops on, bounces SLMotion's 3 bounces with
                   the front flip, hops off. 'bench': walks over, hops up, sits,
-                  hops down. Returns the lead seconds (-1 = no pet).
-     dance        pets gather (≤ 2 s) on open cells in front of the house, the
-                  8-count at 118 BPM (≈ 4.07 s) starts on the next bar (when a
-                  beat clock is given), then the group pose; reduced = one group
-                  pose. danceAt(t) is the shared timeline.
+                  hops down. The city buildings (PERFORMS):
+                  'pose'   (Photo Booth) runs to the front cell (lead ≤ 1.2 s) and
+                           strikes 3 poses on the booth's ticks (perfPose 0..2)
+                  'sip'    (Boba Café) runs to the café, hops onto the 'seat'
+                           anchor, sits and wiggles, hops down
+                  'roof'   (Rooftop Hangout) arc-hops up to the 'roof' anchor
+                           (lead ≤ 2 s), rests 6 s, hops down
+                  'studio' (Dance Studio) every pet to the entrance cells and
+                           their neighbours, then the shared 8-count (danceAt)
+                  'stage'  (Concert Stage) every pet up onto a deck mark (hop
+                           from a pit / side cell), then the 8-count
+                  Anchors come live from setAnchorFn(fn(uid, name) → {x, y, z} |
+                  null) (the island supplies it), else from the building's
+                  footprint. Returns the lead seconds (-1 = no pet / no legal
+                  target: the building then animates alone). Never targets an
+                  occupied, reserved or off-land cell.
+     dance        pets gather (≤ 2 s) on open cells in front of the house (or at
+                  the Dance Studio when one is placed), the 8-count at 118 BPM
+                  (≈ 4.07 s) starts on the next bar (when a beat clock is given),
+                  then the freeze; reduced = one freeze pose (on the stage the
+                  pets appear on their marks). danceAt(t) is the shared timeline.
      glance       the avatar glances at a pet every 5–7 s (glanceAt).
 
    API
@@ -48,15 +69,18 @@
        .pets                      stable pet state objects (fields documented at newPet)
        .pet(id) · .activeId() · .now · .graph · .camYaw (set by actors: yaw that faces the camera)
        .tap(id) → emote kind | ''  hop pause + happy tail; emote chosen by the seeded RNG
-       .perform(kind, uid, petId?) → lead seconds | -1
+       .perform(kind, uid, petId?, {avatar}?) → lead seconds | -1   (avatar: true = the avatar
+                                  joins a 'studio' / 'stage' dance: brain.avatarMark)
        .dance(on, {beat, bpm}) → seconds until the dance break is over (0 = none)
-       .danceT0 · .danceOn · .danceEnd
-       .setMode(mode) · .setReduced(on) · .setShow(k)
+       .danceT0 · .danceOn · .danceEnd · .danceKind ('break' | 'studio' | 'stage') · .danceUid
+       .avatarMark                {on, kind, uid, x, y, z, cell} — where the avatar dances
+       .setAnchorFn(fn) · .setMusic(on) · .setMode(mode) · .setReduced(on) · .setShow(k)
        .events                    [{type: 'pop'|'spawn'|'emote'|'land'|'sparkle'|'cheer', id, …}] — the
                                   reader empties it (events are rare; they may allocate)
      Pure helpers (tests / actors): buildGraph, astar, distMap, smoothPath, pathValid, samplePath,
        heightAt, nearestFree, danceSpots, danceAt, alignDelay, glanceAt, bounceAt, makeRng, hash,
-       cellIndex, cellOf, centreX, centreZ, WALK, IDLE, HOP, SEAT, BOUNCE, DANCE, GLANCE, ACTIONS
+       cellIndex, cellOf, centreX, centreZ, WALK, IDLE, HOP, SEAT, BOUNCE, DANCE, GLANCE, ACTIONS,
+       PERFORMS, POSE_TICKS, STAGE, ANCHOR_FALLBACK, posesOf
    ================================================================ */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) {
@@ -78,11 +102,12 @@
 
   /* ---------------- tuning (art bible + architecture 'animation') ---------------- */
   var WALK = {
-    speed: 0.9, turn: 6, accel: 3, run: 3, zip: 5.5, runAccel: 14,
+    speed: 1.0, turn: 6, accel: 3, run: 3, zip: 5.5, runAccel: 14,
     near: 0.45, wait: 0.8, look: 0.18, clearance: 0.2, startFree: 0.3, step: 0.05, sub: 4
   };
   var IDLE = { min: 4, max: 8, first: 0.6, stagger: 0.9, slack: 0.6, turnPad: 0.5 };
-  var HOP = { on: 0.32, off: 0.4, h: 0.22, benchOn: 0.36 };
+  /* hops onto / off seats (s, u): the trampoline, the bench and café stool, the roof deck */
+  var HOP = { on: 0.32, off: 0.4, h: 0.22, benchOn: 0.36, roofOn: 0.7, roofOff: 0.6, roofH: 0.35 };
   /* seats (item space, from the models): trampoline mat top (T.y - T.depth), bench 'seat' anchor */
   var SEAT = { trampoline: { y: 0.374, z: 0, face: null }, bench: { y: 0.31, z: 0.03, face: 0 } };
   /* the trampoline bounce — the same numbers as SLMotion.BOUNCE (checked by the tests) */
@@ -91,32 +116,55 @@
   BOUNCE.length = 4 * BOUNCE.contact + BOUNCE.flights.reduce(function (a, b) { return a + b; }, 0);
   var DANCE = {
     bpm: 118, counts: 8, beat: 60 / 118, dur: 8 * 60 / 118, gatherMax: 2, hold: 0.6, reducedDur: 2.2,
-    /* counts 1–2 side-steps · 3–4 hops · 5–6 signature · 7 face the camera · 8 group pose */
-    moves: ['side', 'side', 'hop', 'hop', 'signature', 'signature', 'face', 'pose'],
-    cues: [{ count: 5, emit: 'puff', who: 'pet_dragon' }, { count: 8, emit: 'burst', heart: true }, { count: 9, sfx: 'cheer' }]
+    /* generic moves only: 1–2 groove bounce · 3–4 step-touch · 5–6 the species signature ·
+       7 a point that snaps to the camera · 8 the freeze */
+    moves: ['groove', 'groove', 'step', 'step', 'signature', 'signature', 'point', 'freeze'],
+    /* the dragon's sparkle puff, the burst on the freeze (the avatar's finger-heart), 'cheer' */
+    cues: [{ count: 5, emit: 'puff', who: 'pet_dragon' }, { count: 8, emit: 'burst', fingerHeart: 'avatar' }, { count: 9, sfx: 'cheer' }]
   };
   var GLANCE = { min: 5, max: 7, dur: 1.6, ease: 0.3 };
+
+  /* the city-building performances (the building model calls a.pets.perform(kind, uid)) */
+  var PERFORMS = {
+    trampoline: { id: 'trampoline' }, bench: { id: 'bench' },
+    pose: { id: 'bld_photobooth', maxLead: 1.2 },
+    sip: { id: 'bld_boba', anchor: 'seat', maxLead: 1.2, rest: 2.4, maxY: 1.2 },
+    roof: { id: 'bld_rooftop', anchor: 'roof', maxLead: 2, rest: 6, maxY: 2.4 },
+    studio: { id: 'bld_dance', group: true },
+    stage: { id: 'bld_stage', group: true }
+  };
+  /* the photo booth's three poses (sit · paw-point · cheer) start on its countdown ticks
+     (SLMotion 'snap' at 0.1 / 0.7 / 1.3 s) or 0.6 s apart from the pet's arrival */
+  var POSE_TICKS = [0.1, 0.7, 1.3], POSE_GAP = 0.6, POSE_HOLD = 0.9;
+  /* the Concert Stage deck (item space): the top at y 0.32, marks across its front half,
+     the avatar centre stage */
+  var STAGE = { y: 0.32, z: 0.3, xs: [-0.55, 0.55, -1.05, 1.05], me: [0, 0.32, 0.38] };
+  /* where a seat sits when the island gives no anchor function (item space) */
+  var ANCHOR_FALLBACK = { bld_boba: { seat: [0.5, 0.42, 0.18] }, bld_rooftop: { roof: [-0.3, 1.66, -0.15] } };
+  var AVATAR_RES = 999;                      /* the reservation value of the avatar's dance spot */
 
   /* in-place actions: duration range (s); kinds the actors know how to pose */
   var ACTIONS = {
     sit: { dur: [2.5, 4] }, sniff: { dur: [1.6, 2.4] }, look: { dur: [1.6, 2.4] }, lookAvatar: { dur: [1.6, 2.4] },
-    scratch: { dur: [1.6, 2.2] }, roll: { dur: [1.4, 1.4] }, nap: { dur: [3.2, 7.2] },
+    lean: { dur: [2, 2] }, lookBack: { dur: [1.6, 1.6] }, beatNod: { dur: [2.4, 3.6] }, nap: { dur: [3.2, 7.2] },
     chase: { dur: [1.6, 1.6] }, pounce: { dur: [1.0, 1.0] }, binky: { dur: [0.9, 0.9] }, loop: { dur: [1.4, 1.4] },
     turn: { dur: [1.2, 1.6] }, emote: { dur: [1.2, 1.6] }
   };
   var PLAY = { pet_puppy: 'chase', pet_kitten: 'pounce', pet_bunny: 'binky', pet_dragon: 'loop' };
   var POUNCE_DIST = 0.35;
-  /* idle choice weights (base); species tweaks below */
-  var WEIGHTS = { wander: 4, sit: 1.2, sniff: 1.1, look: 1, lookAvatar: 1, scratch: 0.7, roll: 0.6, nap: 0.35, play: 1, visit: 1.3, bench: 0.8 };
+  /* idle choice weights (base); species tweaks below. beatNod only while music plays. */
+  var WEIGHTS = { wander: 4, sit: 1.2, sniff: 1.1, look: 1, lookAvatar: 1, lean: 0.8, lookBack: 0.7, beatNod: 1.1, nap: 0.35, play: 1, visit: 1.3, bench: 0.8 };
   var SPECIES_W = {
-    pet_puppy: { play: 1.3, roll: 0.9 }, pet_kitten: { play: 1.6, nap: 0.6, scratch: 0.9 },
-    pet_bunny: { sniff: 1.6, roll: 0.3 }, pet_dragon: { play: 1.2, scratch: 0.3, roll: 0.3 }
+    pet_puppy: { play: 1.3, lookBack: 1.2 }, pet_kitten: { play: 1.6, nap: 0.6, lean: 1.3 },
+    pet_bunny: { sniff: 1.6, beatNod: 1.2 }, pet_dragon: { play: 1.2, lean: 0.8 }
   };
   var REDUCED_W = { look: 1.2, lookAvatar: 1, turn: 1.4, emote: 0.8 };
-  var EMOTES = ['heart', 'note', 'star'];
+  /* idle emotes (hearts belong to the avatar's finger-heart only) */
+  var EMOTES = ['note', 'star', 'sparkle'];
   /* what a visit does at each kind of item */
   var SNIFF_IDS = /^(flower_|bush_|tree_|rock_|mushroom_)/;
   var WATCH_IDS = { trampoline: 1, fountain: 1, swing: 1, bubbles: 1, windmill: 1, sandcastle: 1, snowman: 1, lighthouse: 1, att_course: 1, att_pitch: 1, att_kart: 1 };
+  var CITY_IDS = /^bld_/;                    /* the city buildings: watched, and idled near */
 
   /* ---------------- maths ---------------- */
   function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
@@ -221,7 +269,7 @@
     var g = {
       walk: new Uint8Array(NCELL), land: new Uint8Array(NCELL), y: new Float32Array(NCELL),
       obj: new Array(NCELL), comp: new Int16Array(NCELL), compSize: [0], largest: 0,
-      objects: {}, items: [], avatar: -1, avatarX: 0, avatarZ: 0, house: null, free: 0
+      objects: {}, items: [], city: 0, avatar: -1, avatarX: 0, avatarZ: 0, house: null, free: 0
     };
     var i, c, r;
     for (i = 0; i < NCELL; i++) {
@@ -256,6 +304,7 @@
                  x: p.x + fp[0] / 2 - 8, z: p.y + fp[1] / 2 - 5, y: base };
       g.objects[p.uid] = ob;
       g.items.push(ob);
+      if (CITY_IDS.test(p.id)) g.city++;
     });
     g.house = houseOf(placed, Cc);
     labelComponents(g);
@@ -556,6 +605,16 @@
     return list.slice(0, n).map(function (e) { return e.i; });
   }
 
+  /* the photo booth's pose timeline from the act start, given the pet's arrival (lead):
+     → {starts: [s0, s1, s2], end}; pose k holds from starts[k] to the next start */
+  function posesOf(lead, out) {
+    out = out || { starts: [0, 0, 0], end: 0 };
+    lead = Math.max(0, +lead || 0);
+    for (var k = 0; k < 3; k++) out.starts[k] = Math.max(POSE_TICKS[k], lead + POSE_GAP * k);
+    out.end = Math.max(out.starts[2], 1.5) + POSE_HOLD;
+    return out;
+  }
+
   /* ---------------- the avatar's glance at a pet: every 5–7 s, 1.6 s long ---------------- */
   function glanceAt(t, seed, out) {
     out = out || {};
@@ -578,8 +637,11 @@
        speed (u/s) cruise (the gait's nominal speed) omega (turn rate, rad/s) ·
        state 'idle'|'walk'|'act'|'perform'|'dance'|'sit' · action (act name / goal) ·
        actT0 actDur · lookX lookZ lookK (head look target) · faceCam 0..1 ·
-       tapT happyUntil · onSeat ('' | 'trampoline' | 'bench') · flip 0..1 bounce (y above the seat) ·
-       hop 0..1 (hop-on/off progress) · perfPhase · danceSpot · cell res */
+       tapT happyUntil · onSeat ('' | 'trampoline' | 'bench' | 'sip' | 'roof' | 'stage') ·
+       flip 0..1 bounce (y above the seat) · hop 0..1 (hop-on/off progress) ·
+       perfPhase ('run' | 'hopOn' | 'bounce' | 'sit' | 'pose' | 'hopOff' | '') · perfPose (photo booth
+       pose 0..2, -1 between) · perf.hopDur (the running hop's length) · danceSpot (cell) ·
+       danceMark ({x, y, z} on the stage deck, else null) · danceApproach (its cell) · cell res */
   function newPet(id, index) {
     return {
       id: id, species: id, index: index, active: false,
@@ -589,9 +651,12 @@
       path: null, pathS: 0, seg: 1, goal: null, waitT: 0, pauseUntil: -1, turnTo: null,
       lookX: 0, lookZ: 0, lookK: 0, faceCam: 0, desiredYaw: 0, hasDesired: false,
       tapT: -99, happyUntil: -99,
-      onSeat: '', flip: 0, bounce: 0, hop: 0, perfPhase: '', danceSpot: -1, gatherT0: 0, gatherDur: 1,
+      onSeat: '', flip: 0, bounce: 0, hop: 0, perfPhase: '', perfPose: -1,
+      danceSpot: -1, danceMark: null, danceApproach: -1, gatherT0: 0, gatherDur: 1,
       perf: { kind: '', uid: '', t0: 0, lead: 0, runT0: 0, runDur: 0, sitUntil: 0, hopT0: 0, approach: -1, fromIdle: false,
-              ax: 0, ay: 0, az: 0, sx: 0, sy: 0, sz: 0, lx: 0, ly: 0, lz: 0, land: -1, face: 0, path: null },
+              ax: 0, ay: 0, az: 0, sx: 0, sy: 0, sz: 0, lx: 0, ly: 0, lz: 0, land: -1, face: 0, path: null,
+              hopDur: HOP.on, hopH: HOP.h, obx: 0, obz: 0, poses: { starts: [0, 0, 0], end: 0 } },
+      mark: { x: 0, y: 0, z: 0 },                    /* the stage deck mark (danceMark points here) */
       px: 0, pz: 0, qx: 0, qz: 0                       /* pounce start / end */
     };
   }
@@ -603,13 +668,18 @@
     var rng = makeRng(seed);
     var brain = {
       version: VERSION, seed: seed, now: 0, pets: [], graph: null, mode: 'play', reduced: !!opts.reduced,
-      show: 0, camYaw: 0, events: [], danceOn: false, danceT0: 0, danceEnd: 0, danceReduced: false, synced: false
+      show: 0, music: false, camYaw: 0, events: [], danceOn: false, danceT0: 0, danceEnd: 0, danceReduced: false,
+      danceKind: '', danceUid: '', synced: false,
+      /* where the avatar dances when it joins a studio / stage dance (actors.js moves it there) */
+      avatarMark: { on: false, kind: '', uid: '', x: 0, y: 0, z: 0, cell: -1 }
     };
     var res = new Int16Array(NCELL).fill(-1);
     var extra = new Uint8Array(NCELL);              /* scratch: other pets' cells while planning */
     var dist = new Float64Array(NCELL), parent = new Int16Array(NCELL);
-    var _sp = { x: 0, z: 0, dx: 0, dz: 1, seg: 1 }, _b = { matDip: 0, petY: 0, flip: 0, done: false };
+    var _sp = { x: 0, z: 0, dx: 0, dz: 1, seg: 1 }, _b = { matDip: 0, petY: 0, flip: 0, done: false }, _an = { x: 0, y: 0, z: 0 };
     var byId = {};
+    var anchorFn = typeof opts.anchorFn === 'function' ? opts.anchorFn : null;
+    var danceOb = { x: 0, z: 0 };                    /* where the performed-on building stood when its dance began */
 
     function pick(list) { return list[Math.floor(rng() * list.length) % list.length]; }
     function range(r) { return r[0] + (r[1] - r[0]) * rng(); }
@@ -627,17 +697,20 @@
       if (p.state === 'walk' && p.path) return p.path.target;
       if (p.state === 'perform') return p.perf.land >= 0 ? p.perf.land : p.perf.approach;
       if (p.state === 'dance' && p.danceSpot >= 0) return p.danceSpot;
+      if (p.state === 'dance' && p.danceApproach >= 0) return p.danceApproach;
       return cellOf(p.x, p.z);
     }
     function rebuildReservations() {
       res.fill(-1);
+      var am = brain.avatarMark;
+      if (am.on && am.cell >= 0) { if (g().walk[am.cell]) res[am.cell] = AVATAR_RES; else am.cell = -1; }
       brain.pets.forEach(function (p) {
         var want = wantedCell(p);
         if (want >= 0 && res[want] < 0 && g().walk[want]) { res[want] = p.index; p.res = want; }
         else p.res = -1;
       });
     }
-    /* other pets' standing cells, as extra blockers for planning */
+    /* other pets' standing cells (and the avatar's dance spot), as extra blockers for planning */
     function blockOthers(p, also) {
       extra.fill(0);
       brain.pets.forEach(function (q) {
@@ -646,6 +719,8 @@
         if (qc >= 0 && q.state !== 'walk' && q.onSeat === '') extra[qc] = 1;
         if (q.res >= 0 && q.state !== 'walk') extra[q.res] = 1;
       });
+      var am = brain.avatarMark;
+      if (am.on && am.cell >= 0) extra[am.cell] = 1;
       if (also >= 0) extra[also] = 1;
       var me = cellOf(p.x, p.z);
       if (me >= 0) extra[me] = 0;
@@ -667,7 +742,8 @@
     }
     function clearMotion(p) {
       p.path = null; p.pathS = 0; p.seg = 1; p.goal = null; p.speed = 0; p.waitT = 0;
-      p.onSeat = ''; p.flip = 0; p.bounce = 0; p.hop = 0; p.perfPhase = ''; p.perf.kind = ''; p.perf.path = null;
+      p.onSeat = ''; p.flip = 0; p.bounce = 0; p.hop = 0; p.perfPhase = ''; p.perfPose = -1; p.perf.kind = ''; p.perf.path = null;
+      p.danceMark = null; p.danceApproach = -1;
       p.lookK = 0; p.faceCam = 0; p.hasDesired = false;
     }
     function toIdle(p, nextIn) {
@@ -760,6 +836,7 @@
     function startAct(p, name, dur, goal) {
       p.state = 'act'; p.action = name; p.actT0 = brain.now; p.actDur = dur; p.actEnd = brain.now + dur;
       p.lookK = 0; p.faceCam = 0; p.hasDesired = false;
+      p.side = rng() < 0.5 ? 1 : -1;                  /* which hip / shoulder a lean or a look-back favours */
       var tx = null, tz = null;
       if (goal && goal.fx != null) { tx = goal.fx; tz = goal.fz; }
       else if (name === 'lookAvatar' && g().avatar >= 0) { tx = g().avatarX; tz = g().avatarZ; }
@@ -792,7 +869,9 @@
       if (brain.reduced) { for (k in REDUCED_W) w[k] = REDUCED_W[k]; if (g().avatar < 0) w.lookAvatar = 0; return w; }
       for (k in WEIGHTS) w[k] = WEIGHTS[k] * (sp[k] != null ? sp[k] : 1);
       if (g().avatar < 0) w.lookAvatar = 0;
+      if (!brain.music) w.beatNod = 0;                /* nodding needs a beat to nod to */
       if (brain.show > 0.5) w.bench *= 4;
+      if (g().city > 0) w.visit *= 1.5;               /* the crew likes hanging round the city buildings */
       return w;
     }
     function decide(p) {
@@ -854,12 +933,16 @@
       if (from < 0) return false;
       var opts2 = [];
       g().items.forEach(function (ob) {
-        var kind = SNIFF_IDS.test(ob.id) ? 'sniff' : WATCH_IDS[ob.id] ? 'look' : '';
+        var city = CITY_IDS.test(ob.id);
+        var kind = SNIFF_IDS.test(ob.id) ? 'sniff' : WATCH_IDS[ob.id] || city ? 'look' : '';
         if (!kind || ob.id === 'bench') return;
         ob.adj.forEach(function (a) {
           if (!isFinite(dist[a]) || (res[a] >= 0 && res[a] !== p.index)) return;
           var walkT = dist[a] * 1.06 / WALK.speed + IDLE.turnPad;
-          if (walkT + 1.4 <= budget) opts2.push({ a: a, ob: ob, kind: kind, walkT: walkT });
+          if (walkT + 1.4 > budget) return;
+          var o = { a: a, ob: ob, kind: kind, walkT: walkT };
+          opts2.push(o);
+          if (city) opts2.push(o);                   /* the city buildings draw the crew twice as often */
         });
       });
       while (opts2.length) {
@@ -906,7 +989,7 @@
       return false;
     }
 
-    /* ---------- seats: the trampoline and the bench ---------- */
+    /* ---------- seats: the trampoline, the bench, the café stool, the roof deck ---------- */
     function seatOf(ob, kind) {
       var s = SEAT[kind];
       return { x: ob.x, y: ob.y + s.y, z: ob.z + s.z };
@@ -915,23 +998,93 @@
     function startSeat(p, ob, kind, sitDur) {
       var pf = p.perf, s = seatOf(ob, kind);
       pf.kind = kind; pf.uid = ob.uid; pf.t0 = brain.now; pf.lead = HOP.benchOn; pf.runT0 = brain.now; pf.runDur = 0;
-      pf.ax = p.x; pf.ay = p.y; pf.az = p.z; pf.sx = s.x; pf.sy = s.y; pf.sz = s.z;
-      pf.hopT0 = brain.now; pf.sitUntil = brain.now + HOP.benchOn + Math.max(1, sitDur); pf.land = -1; pf.path = null;
+      pf.ax = p.x; pf.ay = p.y; pf.az = p.z; pf.sx = s.x; pf.sy = s.y; pf.sz = s.z; pf.obx = ob.x; pf.obz = ob.z;
+      pf.hopT0 = brain.now; pf.hopDur = HOP.benchOn; pf.hopH = HOP.h;
+      pf.sitUntil = brain.now + HOP.benchOn + Math.max(1, sitDur); pf.land = -1; pf.path = null;
       pf.face = SEAT.bench.face; pf.approach = cellOf(p.x, p.z); pf.fromIdle = true;
       p.state = 'perform'; p.action = kind; p.perfPhase = 'hopOn'; p.speed = 0;
       reserve(p, pf.approach);
     }
-    function perform(kind, uid, petId) {
-      var gr = g();
-      if (!gr || brain.reduced || brain.mode !== 'play' || brain.danceOn) return -1;
-      if (kind !== 'trampoline' && kind !== 'bench') return -1;
-      var ob = gr.objects[uid];
-      if (!ob && (uid == null || uid === kind)) {       /* given the item id instead of a uid: the first one */
-        for (var k = 0; k < gr.items.length; k++) if (gr.items[k].id === kind) { ob = gr.items[k]; break; }
+    /* a building's live anchor (world) through the island's anchor function, else from its
+       footprint. An anchor the model does not have comes back as its 'top' (the kit's fallback),
+       and anything outside the building's box is ignored, so a stale point is never used. */
+    function anchorAt(ob, name, maxY, out) {
+      if (anchorFn) {
+        var a = null, top = null;
+        try { a = anchorFn(ob.uid, name); } catch (e) { a = null; }
+        if (a && isFinite(a.x) && isFinite(a.y) && isFinite(a.z)) {
+          try { top = anchorFn(ob.uid, 'top'); } catch (e2) { top = null; }
+          var same = !!top && Math.abs(top.x - a.x) + Math.abs(top.y - a.y) + Math.abs(top.z - a.z) < 1e-4;
+          var inside = Math.abs(a.x - ob.x) <= ob.w / 2 + 0.15 && Math.abs(a.z - ob.z) <= ob.h / 2 + 0.15 &&
+                       a.y >= ob.y - 0.05 && a.y <= ob.y + maxY;
+          if (!same && inside) { out.x = +a.x; out.y = +a.y; out.z = +a.z; return out; }
+        }
       }
-      if (!ob || ob.id !== kind) return -1;
+      var f = ANCHOR_FALLBACK[ob.id] && ANCHOR_FALLBACK[ob.id][name];
+      if (!f) return null;
+      out.x = ob.x + f[0]; out.y = ob.y + f[1]; out.z = ob.z + f[2];
+      return out;
+    }
+    /* the item a perform is for: by uid, or (given the kind or the item id) the first one placed */
+    function findItem(kind, uid) {
+      var gr = g(), spec = PERFORMS[kind], ob = gr.objects[uid];
+      if (!ob && (uid == null || uid === kind || uid === spec.id)) {
+        for (var k = 0; k < gr.items.length; k++) if (gr.items[k].id === spec.id) { ob = gr.items[k]; break; }
+      }
+      return ob && ob.id === spec.id ? ob : null;
+    }
+    /* a run-over to approach cell a: ≤ maxLead s including the hop (a sparkle zip when it is too
+       far to run); → {path, runDur, lead} */
+    function runOver(p, a, cells, hopDur, maxLead, minLead) {
+      var gr = g(), path = cells ? smoothPath(gr, cells, p.x, p.z, null) : null, len = path ? path.total : Infinity;
+      var runMax = maxLead - hopDur;
+      if (!path || len / WALK.zip > runMax) {
+        /* too far for the run-over: a sparkle zip to the approach side, then a short dash */
+        var x0 = p.x, y0 = p.y, z0 = p.z;
+        var ax = centreX(a), az = centreZ(a), ddx = p.x - ax, ddz = p.z - az, dd = Math.sqrt(ddx * ddx + ddz * ddz) || 1;
+        var back = Math.min(1.2, dd);
+        var sx = ax + ddx / dd * back, sz = az + ddz / dd * back;
+        if (!losClear(gr, sx, sz, ax, az, null, 0, -1)) { sx = ax; sz = az; }
+        p.x = sx; p.z = sz; p.y = heightAt(gr, sx, sz);
+        brain.events.push({ type: 'pop', id: p.id, x0: x0, y0: y0, z0: z0, x: p.x, y: p.y, z: p.z });
+        path = finishPath([sx, ax], [sz, az], [cellOf(sx, sz), a], a);
+        len = path.total;
+      }
+      var runDur = len < 0.05 ? 0 : clamp(len / WALK.run, 0.25, runMax);
+      if (len / runDur > WALK.zip) runDur = len / WALK.zip;
+      var lead = clamp(runDur + hopDur, minLead, maxLead);
+      return { path: path, runDur: lead - hopDur, lead: lead };
+    }
+    /* the run state every run-over starts with */
+    function startRun(p, kind, ob, a, run) {
+      var gr = g(), pf = p.perf;
+      pf.kind = kind; pf.uid = ob.uid; pf.t0 = brain.now; pf.land = -1; pf.approach = a; pf.fromIdle = false;
+      pf.obx = ob.x; pf.obz = ob.z;
+      pf.lead = run.lead; pf.path = run.path; pf.runT0 = brain.now; pf.runDur = run.runDur; pf.hopT0 = brain.now + run.runDur;
+      pf.ax = centreX(a); pf.az = centreZ(a); pf.ay = heightAt(gr, pf.ax, pf.az);
+      if (pf.runDur <= 0) { pf.ax = p.x; pf.az = p.z; pf.ay = p.y; }
+      p.state = 'perform'; p.action = kind;
+      p.cruise = run.path ? Math.max(WALK.speed, run.path.total / Math.max(0.05, run.runDur)) : WALK.speed;
+      p.pathS = 0; p.seg = 1;
+      reserve(p, a);
+    }
+    function perform(kind, uid, petId, o) {
+      var gr = g(), spec = PERFORMS[kind];
+      if (!gr || !spec || brain.mode !== 'play' || !brain.pets.length) return -1;
+      var ob = findItem(kind, uid);
+      if (!ob) return -1;
+      if (spec.group) return performGroup(kind, ob, o || {});
+      if (brain.reduced || brain.danceOn) return -1;
       var p = byId[petId || brain.activeId()] || null;
       if (!p) return -1;
+      if (p.state === 'dance') finishDancer(p, true, null);
+      if (kind === 'pose') return performPose(ob, p);
+      if (kind === 'sip' || kind === 'roof') return performPerch(kind, ob, p);
+      return performSeat(kind, ob, p);
+    }
+    /* the trampoline (run over, bounce) and the bench (walk over, sit) */
+    function performSeat(kind, ob, p) {
+      var gr = g();
       if (p.state === 'perform' && p.perf.uid === ob.uid) {
         var pf0 = p.perf;
         if (kind === 'bench') return p.perfPhase === 'run' || p.perfPhase === 'hopOn' ? Math.max(0, pf0.hopT0 + HOP.benchOn - brain.now) : 0;
@@ -960,44 +1113,86 @@
       } else cells = a === from ? [from] : chainTo(parent, from, a);
       if (kind === 'bench' && !cells) return -1;
       clearMotion(p);
-      var pf = p.perf, s = seatOf(ob, kind), path = cells ? smoothPath(gr, cells, p.x, p.z, null) : null, len = path ? path.total : Infinity;
-      pf.kind = kind; pf.uid = ob.uid; pf.t0 = brain.now; pf.land = -1;
-      pf.sx = s.x; pf.sy = s.y; pf.sz = s.z; pf.face = kind === 'bench' ? SEAT.bench.face : null;
-      var hopDur = kind === 'bench' ? HOP.benchOn : HOP.on, lead;
-      if (kind === 'trampoline') {
-        var runMax = BOUNCE.maxLead - hopDur;
-        if (!path || len / WALK.zip > runMax) {
-          /* too far for a 1.2 s run-over: a sparkle zip to the approach side, then a short dash */
-          var x0 = p.x, y0 = p.y, z0 = p.z;
-          var ax = centreX(a), az = centreZ(a), ddx = p.x - ax, ddz = p.z - az, dd = Math.sqrt(ddx * ddx + ddz * ddz) || 1;
-          var back = Math.min(1.2, dd);
-          var sx = ax + ddx / dd * back, sz = az + ddz / dd * back;
-          if (!losClear(gr, sx, sz, ax, az, null, 0, -1)) { sx = ax; sz = az; }
-          p.x = sx; p.z = sz; p.y = heightAt(gr, sx, sz);
-          brain.events.push({ type: 'pop', id: p.id, x0: x0, y0: y0, z0: z0, x: p.x, y: p.y, z: p.z });
-          path = finishPath([sx, ax], [sz, az], [cellOf(sx, sz), a], a);
-          len = path.total;
-        }
-        var runDur = len < 0.05 ? 0 : clamp(len / WALK.run, 0.25, runMax);
-        if (len / runDur > WALK.zip) runDur = len / WALK.zip;
-        lead = clamp(runDur + hopDur, BOUNCE.minLead, BOUNCE.maxLead);
-        runDur = lead - hopDur;
-        pf.runDur = runDur;
-      } else {
+      var pf = p.perf, s = seatOf(ob, kind), hopDur = kind === 'bench' ? HOP.benchOn : HOP.on, run;
+      if (kind === 'trampoline') run = runOver(p, a, cells, hopDur, BOUNCE.maxLead, BOUNCE.minLead);
+      else {
+        var path = smoothPath(gr, cells, p.x, p.z, null);
         if (!path) return -1;
-        pf.runDur = len < 0.05 ? 0 : len / (WALK.speed * 1.4) + 0.2;
-        lead = pf.runDur + hopDur;
-        pf.sitUntil = brain.now + lead + 3.5 + rng() * 2;
+        var walkDur = path.total < 0.05 ? 0 : path.total / (WALK.speed * 1.4) + 0.2;
+        run = { path: path, runDur: walkDur, lead: walkDur + hopDur };
       }
-      pf.lead = lead; pf.path = path; pf.runT0 = brain.now; pf.hopT0 = brain.now + pf.runDur;
-      pf.ax = centreX(a); pf.az = centreZ(a); pf.ay = heightAt(gr, pf.ax, pf.az);
-      pf.approach = a; pf.fromIdle = false;
-      if (pf.runDur <= 0) { pf.ax = p.x; pf.az = p.z; pf.ay = p.y; }
-      p.state = 'perform'; p.action = kind; p.perfPhase = pf.runDur > 0 ? 'run' : 'hopOn';
-      p.cruise = path ? Math.max(WALK.speed, path.total / Math.max(0.05, pf.runDur)) : WALK.speed;
-      p.pathS = 0; p.seg = 1;
-      reserve(p, a);
-      return lead;
+      startRun(p, kind, ob, a, run);
+      pf.sx = s.x; pf.sy = s.y; pf.sz = s.z; pf.face = kind === 'bench' ? SEAT.bench.face : null;
+      pf.hopDur = hopDur; pf.hopH = HOP.h;
+      if (kind === 'bench') pf.sitUntil = brain.now + run.lead + 3.5 + rng() * 2;
+      p.perfPhase = pf.runDur > 0 ? 'run' : 'hopOn';
+      return run.lead;
+    }
+    /* the Photo Booth: run to the front cell (or the nearest free side cell), 3 poses on the ticks */
+    function performPose(ob, p) {
+      var gr = g(), pf = p.perf;
+      if (p.state === 'perform' && pf.kind === 'pose' && pf.uid === ob.uid) {        /* a re-tap restarts the poses */
+        if (p.perfPhase === 'run') return Math.max(0, pf.runT0 + pf.runDur - brain.now);
+        pf.t0 = brain.now; pf.lead = 0; posesOf(0, pf.poses); p.perfPose = -1;
+        return 0;
+      }
+      if (p.state === 'perform') finishSeat(p, true);
+      var from = cellOf(p.x, p.z);
+      if (from < 0) return -1;
+      distMap(gr, from, null, dist, parent);
+      var front = cellIndex(ob.c, ob.r + ob.h), a = -1, bestD = Infinity;
+      if (front >= 0 && ob.adj.indexOf(front) >= 0 && (res[front] < 0 || res[front] === p.index)) a = front;
+      else ob.adj.forEach(function (c) {
+        if (res[c] >= 0 && res[c] !== p.index) return;
+        var d = (isFinite(dist[c]) ? dist[c] : 40) + (rowOf(c) === ob.r + ob.h ? 0 : 0.6);
+        if (d < bestD) { bestD = d; a = c; }
+      });
+      if (a < 0) return -1;
+      var cells = isFinite(dist[a]) ? (a === from ? [from] : chainTo(parent, from, a)) : null;
+      clearMotion(p);
+      var run = runOver(p, a, cells, 0, PERFORMS.pose.maxLead, 0);
+      startRun(p, 'pose', ob, a, run);
+      pf.land = a;
+      posesOf(run.lead, pf.poses);
+      p.perfPose = -1;
+      if (run.runDur > 0) p.perfPhase = 'run';
+      else { p.perfPhase = 'pose'; place(p, a); }
+      return run.lead;
+    }
+    /* the Boba Café stool ('sip') and the Rooftop Hangout deck ('roof'): run, hop up onto the
+       anchor, sit or rest, hop down */
+    function performPerch(kind, ob, p) {
+      var gr = g(), spec = PERFORMS[kind], pf = p.perf;
+      if (p.state === 'perform' && pf.kind === kind && pf.uid === ob.uid) {          /* a re-tap: stay a little longer */
+        if (p.perfPhase === 'sit') pf.sitUntil = Math.max(pf.sitUntil, brain.now + spec.rest);
+        return p.perfPhase === 'run' || p.perfPhase === 'hopOn' ? Math.max(0, pf.hopT0 + pf.hopDur - brain.now) : 0;
+      }
+      var seat = anchorAt(ob, spec.anchor, spec.maxY, _an);
+      if (!seat) return -1;
+      var sx = seat.x, sy = seat.y, sz = seat.z;
+      if (p.state === 'perform') finishSeat(p, true);
+      var from = cellOf(p.x, p.z);
+      if (from < 0) return -1;
+      distMap(gr, from, null, dist, parent);
+      /* the approach: the free side cell nearest the seat, the front row preferred */
+      var a = -1, bestD = Infinity;
+      ob.adj.forEach(function (c) {
+        if (res[c] >= 0 && res[c] !== p.index) return;
+        var dx = centreX(c) - sx, dz = centreZ(c) - sz;
+        var d = Math.sqrt(dx * dx + dz * dz) + (rowOf(c) === ob.r + ob.h ? 0 : 0.35) + (isFinite(dist[c]) ? 0 : 2);
+        if (d < bestD) { bestD = d; a = c; }
+      });
+      if (a < 0) return -1;
+      var cells = isFinite(dist[a]) ? (a === from ? [from] : chainTo(parent, from, a)) : null;
+      var hopDur = kind === 'roof' ? HOP.roofOn : HOP.benchOn;
+      clearMotion(p);
+      var run = runOver(p, a, cells, hopDur, spec.maxLead, hopDur);
+      startRun(p, kind, ob, a, run);
+      pf.sx = sx; pf.sy = sy; pf.sz = sz; pf.face = null;
+      pf.hopDur = hopDur; pf.hopH = kind === 'roof' ? HOP.roofH : HOP.h;
+      pf.sitUntil = pf.hopT0 + hopDur + spec.rest;
+      p.perfPhase = pf.runDur > 0 ? 'run' : 'hopOn';
+      return run.lead;
     }
     function placeOnSeat(p) {
       var pf = p.perf;
@@ -1011,11 +1206,12 @@
       if (p.perfPhase === 'run') {
         var u = pf.runDur > 0 ? (now - pf.runT0) / pf.runDur : 1;
         if (u >= 1 || !pf.path) {
-          /* the hop starts exactly at runT0 + runDur from the end of the path */
+          /* the hop (or the poses) start exactly at runT0 + runDur from the end of the path */
           if (pf.path) { samplePath(pf.path, pf.path.total, _sp, p.seg); pf.ax = _sp.x; pf.az = _sp.z; }
           else { pf.ax = p.x; pf.az = p.z; }
           pf.ay = heightAt(gr, pf.ax, pf.az);
-          p.perfPhase = 'hopOn'; pf.hopT0 = pf.runT0 + pf.runDur;
+          if (pf.kind === 'pose') { p.x = pf.ax; p.z = pf.az; p.y = pf.ay; p.cell = cellOf(p.x, p.z); p.speed = 0; p.perfPhase = 'pose'; }
+          else { p.perfPhase = 'hopOn'; pf.hopT0 = pf.runT0 + pf.runDur; }
         } else {
           var s = pf.path.total * runProfile(u);
           samplePath(pf.path, s, _sp, p.seg);
@@ -1028,15 +1224,23 @@
           return;
         }
       }
+      if (p.perfPhase === 'pose') {                       /* the photo booth: sit · paw-point · cheer */
+        var t = now - pf.t0, k = -1;
+        for (var i = 0; i < 3; i++) if (t >= pf.poses.starts[i]) k = i;
+        p.perfPose = k; p.speed = 0;
+        turnToward(p, brain.camYaw, WALK.turn, dt);
+        if (t >= pf.poses.end) finishSeat(p, false);
+        return;
+      }
       if (p.perfPhase === 'hopOn') {
-        var dur = pf.kind === 'bench' ? HOP.benchOn : HOP.on, v = clamp01((now - pf.hopT0) / dur);
+        var v = clamp01((now - pf.hopT0) / pf.hopDur);
         p.hop = v; p.speed = 0; p.onSeat = '';
         p.x = pf.ax + (pf.sx - pf.ax) * v; p.z = pf.az + (pf.sz - pf.az) * v;
-        p.y = pf.ay + (pf.sy - pf.ay) * v + HOP.h * arc(v);
+        p.y = pf.ay + (pf.sy - pf.ay) * v + pf.hopH * arc(v);
         turnToward(p, Math.atan2(pf.sx - pf.ax, pf.sz - pf.az) || p.yaw, WALK.turn * 2, dt);
         if (v >= 1) {
           placeOnSeat(p);
-          p.perfPhase = pf.kind === 'bench' ? 'sit' : 'bounce';
+          p.perfPhase = pf.kind === 'trampoline' ? 'bounce' : 'sit';
           brain.events.push({ type: 'land', id: p.id, kind: pf.kind, x: p.x, y: p.y, z: p.z });
         }
         return;
@@ -1056,10 +1260,10 @@
         return;
       }
       if (p.perfPhase === 'hopOff') {
-        var w = clamp01((now - pf.hopT0) / HOP.off);
+        var w = clamp01((now - pf.hopT0) / pf.hopDur);
         p.hop = 1 - w; p.onSeat = ''; p.flip = 0; p.bounce = 0;
         p.x = pf.sx + (pf.lx - pf.sx) * w; p.z = pf.sz + (pf.lz - pf.sz) * w;
-        p.y = pf.sy + (pf.ly - pf.sy) * w + HOP.h * arc(w);
+        p.y = pf.sy + (pf.ly - pf.sy) * w + pf.hopH * arc(w);
         turnToward(p, Math.atan2(pf.lx - pf.sx, pf.lz - pf.sz) || p.yaw, WALK.turn * 2, dt);
         if (w >= 1) finishSeat(p, false);
       }
@@ -1075,7 +1279,8 @@
       if (land < 0) land = nearestFree(gr, pf.sx, pf.sz, res, p.index, gr.largest);
       if (land < 0) { finishSeat(p, true); return; }
       pf.land = land; pf.lx = centreX(land); pf.lz = centreZ(land); pf.ly = heightAt(gr, pf.lx, pf.lz);
-      pf.hopT0 = brain.now; p.perfPhase = 'hopOff';
+      pf.hopT0 = brain.now; pf.hopDur = pf.kind === 'roof' ? HOP.roofOff : HOP.off; pf.hopH = pf.kind === 'roof' ? HOP.roofH * 0.8 : HOP.h;
+      p.perfPhase = 'hopOff';
       reserve(p, land);
     }
     function finishSeat(p, instant) {
@@ -1095,78 +1300,236 @@
       if (!fromIdle) p.nextAt = Math.max(p.nextAt, brain.now + 2 + 2 * rng());
     }
 
-    /* ---------- dance break ---------- */
-    function dance(on, o) {
-      o = o || {};
-      var gr = g();
-      if (!on) {
-        if (brain.danceOn) brain.pets.forEach(function (p) { if (p.state === 'dance') toIdle(p, 1 + rng() * 2); });
-        brain.danceOn = false;
-        return 0;
+    /* ---------- dance breaks and the group performances ---------- */
+    function firstItem(id) {
+      var items = g().items;
+      for (var k = 0; k < items.length; k++) if (items[k].id === id) return items[k];
+      return null;
+    }
+    /* the Dance Studio floor: its entrance cells, the cells beside them, then the row in front */
+    function studioSpots(ob) {
+      var gr = g(), row = ob.r + ob.h, cand = [], out = [], dx;
+      for (dx = 0; dx < ob.w; dx++) cand.push(cellIndex(ob.c + dx, row));
+      cand.push(cellIndex(ob.c - 1, row), cellIndex(ob.c + ob.w, row));
+      for (dx = -1; dx <= ob.w; dx++) cand.push(cellIndex(ob.c + dx, row + 1));
+      cand.forEach(function (i) { if (i >= 0 && gr.walk[i] && out.indexOf(i) < 0) out.push(i); });
+      return out;
+    }
+    /* the Concert Stage's approach cells: the crowd pit (entrance), then beside its front corners */
+    function stageApproaches(ob) {
+      var gr = g(), row = ob.r + ob.h, cand = [], out = [];
+      for (var dx = 0; dx < ob.w; dx++) cand.push(cellIndex(ob.c + dx, row));
+      cand.push(cellIndex(ob.c - 1, row - 1), cellIndex(ob.c + ob.w, row - 1), cellIndex(ob.c - 1, row), cellIndex(ob.c + ob.w, row));
+      cand.forEach(function (i) { if (i >= 0 && gr.walk[i] && out.indexOf(i) < 0) out.push(i); });
+      return out;
+    }
+    /* n distinct open, unreserved cells: the preferred ones first, then the nearest open cells
+       round the `around` cells (default: the preferred ones) */
+    function pickSpots(n, preferred, around) {
+      var gr = g(), out = [], cx = 0, cz = 0, i;
+      for (i = 0; i < preferred.length && out.length < n; i++) if (res[preferred[i]] < 0 && out.indexOf(preferred[i]) < 0) out.push(preferred[i]);
+      around = around && around.length ? around : preferred;
+      if (out.length >= n || !around.length) return out;
+      around.forEach(function (c) { cx += centreX(c); cz += centreZ(c); });
+      cx /= around.length; cz /= around.length;
+      var list = [];
+      for (i = 0; i < NCELL; i++) {
+        if (!gr.walk[i] || out.indexOf(i) >= 0 || res[i] >= 0) continue;
+        var dx = centreX(i) - cx, dz = centreZ(i) - cz;
+        list.push({ i: i, d: dx * dx + dz * dz + (gr.largest && gr.comp[i] !== gr.largest ? 4 : 0) });
       }
-      if (!gr || !brain.pets.length || brain.mode !== 'play') return 0;
-      brain.danceOn = true; brain.danceReduced = brain.reduced;
+      list.sort(function (a, b) { return a.d - b.d || a.i - b.i; });
+      for (i = 0; i < list.length && out.length < n; i++) out.push(list[i].i);
+      return out;
+    }
+    /* send a dancer to ground cell sc within `budget` s (time-driven, so everyone is on the spot
+       by count 1); → its gather time */
+    function gatherCell(p, sc, budget) {
+      var gr = g();
+      clearMotion(p);
+      p.state = 'dance'; p.action = 'dance'; p.danceSpot = sc;
+      reserve(p, sc);
+      var here = cellOf(p.x, p.z), t = 0, path;
+      if (here === sc) path = finishPath([p.x, centreX(sc)], [p.z, centreZ(sc)], [sc], sc);   /* just step to the centre */
+      else path = planTo(p, sc, -1);
+      if (path && path.total > 0.02) {
+        var cruise = Math.max(WALK.speed, path.total / budget);
+        if (cruise > WALK.zip) { popTo(p, sc, 'pop'); p.state = 'dance'; p.action = 'dance'; p.danceSpot = sc; }
+        else {
+          p.path = path; p.pathS = 0; p.seg = 1; p.cruise = cruise;
+          p.gatherT0 = brain.now; p.gatherDur = Math.max(0.2, path.total / cruise);
+          t = p.gatherDur;
+        }
+      } else if (!path && here !== sc) { popTo(p, sc, 'pop'); p.state = 'dance'; p.action = 'dance'; p.danceSpot = sc; }
+      else { p.x = centreX(sc); p.z = centreZ(sc); p.cell = sc; p.y = heightAt(gr, p.x, p.z); }
+      return t;
+    }
+    /* send a dancer up onto a stage mark: to approach cell a, then a hop; → when it stands on the mark */
+    function gatherMark(p, a, m) {
+      var gr = g(), pf = p.perf, t = 0;
+      if (brain.reduced) {                                /* reduced: it simply appears on its mark */
+        var x0 = p.x, y0 = p.y, z0 = p.z;
+        clearMotion(p);
+        p.state = 'dance'; p.action = 'dance'; p.danceSpot = -1;
+        reserve(p, a);
+        p.x = m.x; p.y = m.y; p.z = m.z; p.onSeat = 'stage'; p.hop = 1;
+        brain.events.push({ type: 'pop', id: p.id, x0: x0, y0: y0, z0: z0, x: p.x, y: p.y, z: p.z });
+      } else {
+        t = gatherCell(p, a, DANCE.gatherMax - 0.15 - HOP.on);
+        p.danceSpot = -1;
+        pf.hopDur = HOP.on; pf.hopH = HOP.h; pf.hopT0 = brain.now + t;
+        pf.ax = centreX(a); pf.az = centreZ(a); pf.ay = heightAt(gr, pf.ax, pf.az);
+        t += HOP.on;
+      }
+      p.danceApproach = a;
+      p.mark.x = m.x; p.mark.y = m.y; p.mark.z = m.z; p.danceMark = p.mark;
+      return t;
+    }
+    /* a dancer off the floor: down from its mark (instantly, or a hop when the dance just ended) */
+    function startMarkHopOff(p) {
+      var gr = g(), pf = p.perf, l = freeFor(p, p.danceApproach) ? p.danceApproach : nearestFree(gr, p.x, p.z, res, p.index, gr.largest);
+      if (l < 0 || brain.reduced) { finishDancer(p, true, 1.5 + rng() * 2); return; }
+      pf.land = l; pf.lx = centreX(l); pf.lz = centreZ(l); pf.ly = heightAt(gr, pf.lx, pf.lz);
+      pf.hopT0 = brain.now; pf.hopDur = HOP.off; pf.hopH = HOP.h;
+      p.perfPhase = 'hopOff';
+      reserve(p, l);
+    }
+    function finishDancer(p, instant, nextIn) {
+      if (instant && p.danceMark && (p.onSeat || p.perfPhase === 'hopOn' || p.perfPhase === 'hopOff')) {
+        var gr = g(), l = freeFor(p, p.danceApproach) ? p.danceApproach : nearestFree(gr, p.x, p.z, res, p.index, gr.largest);
+        if (l >= 0) { place(p, l); reserve(p, l); }
+      }
+      toIdle(p, nextIn);
+    }
+    function endDance(instant) {
+      brain.pets.forEach(function (p) { if (p.state === 'dance') finishDancer(p, instant, 1 + rng() * 2); });
+      brain.danceOn = false;
+      brain.avatarMark.on = false; brain.avatarMark.cell = -1;
+    }
+    /* kind 'break' (the Showtime dance break: by the house, or on a Dance Studio's floor),
+       'studio' or 'stage'. o = {beat, bpm, perBar}; avatar = the avatar joins (studio / stage) */
+    function startDance(kind, ob, o, avatar) {
+      var gr = g(), am = brain.avatarMark;
       brain.pets.forEach(function (p) { if (p.state === 'perform') finishSeat(p, true); });
-      if (brain.reduced) {
+      if (brain.danceOn) endDance(true);
+      brain.danceOn = true; brain.danceReduced = brain.reduced; brain.danceKind = kind; brain.danceUid = ob ? ob.uid : '';
+      danceOb.x = ob ? ob.x : 0; danceOb.z = ob ? ob.z : 0;
+      am.on = false; am.cell = -1; am.kind = kind; am.uid = brain.danceUid;
+      var studio = kind === 'studio' ? ob : kind === 'break' ? firstItem('bld_dance') : null;
+      var preferred = studio ? studioSpots(studio) : [], around = preferred.slice(), gather = 0;
+      if (avatar && kind === 'stage') { am.on = true; am.x = ob.x + STAGE.me[0]; am.y = ob.y + STAGE.me[1]; am.z = ob.z + STAGE.me[2]; }
+      if (avatar && kind === 'studio' && !brain.reduced && preferred.length) {
+        am.on = true; am.cell = preferred.shift(); am.x = centreX(am.cell); am.z = centreZ(am.cell); am.y = heightAt(gr, am.x, am.z);
+      }
+      if (brain.reduced && kind !== 'stage') {             /* reduced: one freeze pose where everyone stands */
         brain.danceT0 = brain.now; brain.danceEnd = brain.now + DANCE.reducedDur;
         brain.pets.forEach(function (p) {
           clearMotion(p); p.state = 'dance'; p.action = 'dance'; p.danceSpot = p.cell;
           p.desiredYaw = brain.camYaw; p.hasDesired = true; p.faceCam = 1;
         });
-        return DANCE.reducedDur;
+        return;
       }
-      var spots = danceSpots(gr, brain.pets.length, res), gather = 0;
       res.fill(-1);
+      if (am.on && am.cell >= 0) res[am.cell] = AVATAR_RES;
       var left = brain.pets.slice();
-      spots.forEach(function (sc) {
+      function nearestPet(x, z) {
         var bi = -1, bd = Infinity;
-        left.forEach(function (p, k) { var dx = p.x - centreX(sc), dz = p.z - centreZ(sc), d = dx * dx + dz * dz; if (d < bd) { bd = d; bi = k; } });
-        if (bi < 0) return;
-        var p = left.splice(bi, 1)[0];
-        clearMotion(p);
-        p.state = 'dance'; p.action = 'dance'; p.danceSpot = sc;
-        reserve(p, sc);
-        var here = cellOf(p.x, p.z), t = 0, path;
-        if (here === sc) path = finishPath([p.x, centreX(sc)], [p.z, centreZ(sc)], [sc], sc);   /* just step to the centre */
-        else path = planTo(p, sc, -1);
-        if (path && path.total > 0.02) {
-          /* time-driven, so everyone is on their spot by count 1 (no waiting on each other) */
-          var cruise = Math.max(WALK.speed, path.total / (DANCE.gatherMax - 0.15));
-          if (cruise > WALK.zip) { popTo(p, sc, 'pop'); p.state = 'dance'; p.action = 'dance'; p.danceSpot = sc; }
-          else {
-            p.path = path; p.pathS = 0; p.seg = 1; p.cruise = cruise;
-            p.gatherT0 = brain.now; p.gatherDur = Math.max(0.2, path.total / cruise);
-            t = p.gatherDur;
-          }
-        } else if (!path && here !== sc) { popTo(p, sc, 'pop'); p.state = 'dance'; p.action = 'dance'; p.danceSpot = sc; }
-        else { p.x = centreX(sc); p.z = centreZ(sc); p.cell = sc; p.y = heightAt(gr, p.x, p.z); }
-        gather = Math.max(gather, t);
-      });
+        left.forEach(function (p, k) { var dx = p.x - x, dz = p.z - z, d = dx * dx + dz * dz; if (d < bd) { bd = d; bi = k; } });
+        return bi < 0 ? null : left.splice(bi, 1)[0];
+      }
+      if (kind === 'stage') {
+        var approaches = stageApproaches(ob), used = [];
+        for (var k = 0; k < STAGE.xs.length && left.length; k++) {
+          var m = { x: ob.x + STAGE.xs[k], y: ob.y + STAGE.y, z: ob.z + STAGE.z }, a = -1, ad = Infinity;
+          approaches.forEach(function (c) {
+            if (used.indexOf(c) >= 0) return;
+            var dx = centreX(c) - m.x, dz = centreZ(c) - m.z, d = dx * dx + dz * dz;
+            if (d < ad) { ad = d; a = c; }
+          });
+          if (a < 0) break;                                /* the pit is full: the rest dance on the ground */
+          used.push(a);
+          gather = Math.max(gather, gatherMark(nearestPet(m.x, m.z), a, m));
+        }
+        preferred = approaches.filter(function (c) { return used.indexOf(c) < 0; });
+        around = approaches;
+      }
+      if (left.length && !brain.reduced) {
+        var spots = around.length ? pickSpots(left.length, preferred, around) : danceSpots(gr, left.length, res);
+        spots.forEach(function (sc) {
+          var p = nearestPet(centreX(sc), centreZ(sc));
+          if (p) gather = Math.max(gather, gatherCell(p, sc, DANCE.gatherMax - 0.15));
+        });
+      }
       left.forEach(function (p) {                       /* no spot (a full island): dance where it stands */
         clearMotion(p); p.state = 'dance'; p.action = 'dance'; p.danceSpot = cellOf(p.x, p.z);
         reserve(p, freeFor(p, p.danceSpot) ? p.danceSpot : -1);
       });
+      if (brain.reduced) { brain.danceT0 = brain.now; brain.danceEnd = brain.now + DANCE.reducedDur; return; }
       gather = Math.min(DANCE.gatherMax, gather);
       var delay = alignDelay(gather, o.beat, o.bpm, o.perBar !== false);
       if (delay > gather + 4 * 60 / DANCE.bpm + 1e-6) delay = gather;      /* a stale clock never stalls the dance */
       brain.danceT0 = brain.now + delay;
       brain.danceEnd = brain.danceT0 + DANCE.dur + DANCE.hold;
-      return brain.danceEnd - brain.now;
+    }
+    function dance(on, o) {
+      o = o || {};
+      var gr = g();
+      if (!on) { if (brain.danceOn) endDance(true); return 0; }
+      if (!gr || !brain.pets.length || brain.mode !== 'play') return 0;
+      startDance('break', null, o, false);
+      return brain.danceReduced ? DANCE.reducedDur : brain.danceEnd - brain.now;
+    }
+    /* the Dance Studio and the Concert Stage: every pet joins; → the lead to count 1 (a re-tap of
+       the same building keeps the dance going) */
+    function performGroup(kind, ob, o) {
+      if (brain.danceOn && brain.danceKind === kind && brain.danceUid === ob.uid) return Math.max(0, brain.danceT0 - brain.now);
+      if (kind === 'studio' && !brain.reduced && !studioSpots(ob).length) return -1;
+      if (kind === 'stage' && !stageApproaches(ob).length) return -1;
+      startDance(kind, ob, o, !!o.avatar);
+      return Math.max(0, brain.danceT0 - brain.now);
     }
     function danceStep(p, dt) {
+      var pf = p.perf, now = brain.now, m = p.danceMark;
       if (p.path) {
-        var path = p.path, u = clamp01((brain.now - p.gatherT0) / p.gatherDur);
+        var path = p.path, u = clamp01((now - p.gatherT0) / p.gatherDur);
         samplePath(path, path.total * smooth01(u), _sp, p.seg);
         var mx = _sp.x - p.x, mz = _sp.z - p.z, mv = Math.sqrt(mx * mx + mz * mz);
         p.seg = _sp.seg; p.x = _sp.x; p.z = _sp.z; p.y = heightAt(g(), p.x, p.z); p.cell = cellOf(p.x, p.z);
         p.speed = dt > 0 ? mv / dt : 0;
         if (mv > 1e-6) turnToward(p, Math.atan2(mx, mz), WALK.turn * 2, dt); else p.omega = 0;
-        if (u >= 1) { p.path = null; p.speed = 0; reserve(p, p.danceSpot); }
+        if (u >= 1) { p.path = null; p.speed = 0; reserve(p, p.danceSpot >= 0 ? p.danceSpot : p.danceApproach); }
         return;
       }
+      if (m && !p.onSeat && p.perfPhase !== 'hopOff') {     /* up onto the stage mark */
+        p.speed = 0;
+        if (now < pf.hopT0) { turnToward(p, Math.atan2(m.x - p.x, m.z - p.z), WALK.turn * 2, dt); return; }
+        var v = clamp01((now - pf.hopT0) / pf.hopDur);
+        p.perfPhase = 'hopOn'; p.hop = v;
+        p.x = pf.ax + (m.x - pf.ax) * v; p.z = pf.az + (m.z - pf.az) * v;
+        p.y = pf.ay + (m.y - pf.ay) * v + pf.hopH * arc(v);
+        turnToward(p, Math.atan2(m.x - pf.ax, m.z - pf.az) || p.yaw, WALK.turn * 2, dt);
+        if (v >= 1) {
+          p.onSeat = 'stage'; p.perfPhase = ''; p.hop = 1; p.x = m.x; p.y = m.y; p.z = m.z;
+          brain.events.push({ type: 'land', id: p.id, kind: 'stage', x: p.x, y: p.y, z: p.z });
+        }
+        return;
+      }
+      if (m && p.perfPhase === 'hopOff') {                  /* down again after the freeze */
+        var w = clamp01((now - pf.hopT0) / pf.hopDur);
+        p.hop = 1 - w; p.onSeat = '';
+        p.x = m.x + (pf.lx - m.x) * w; p.z = m.z + (pf.lz - m.z) * w;
+        p.y = m.y + (pf.ly - m.y) * w + pf.hopH * arc(w);
+        turnToward(p, Math.atan2(pf.lx - m.x, pf.lz - m.z) || p.yaw, WALK.turn * 2, dt);
+        if (w >= 1) { p.x = pf.lx; p.z = pf.lz; p.y = pf.ly; toIdle(p, 1.5 + rng() * 2); }
+        return;
+      }
+      if (m) { p.x = m.x; p.y = m.y; p.z = m.z; }
       p.speed = 0;
       turnToward(p, brain.camYaw, WALK.turn, dt);
-      if (brain.now >= brain.danceEnd) toIdle(p, 1.5 + rng() * 2);
+      if (now >= brain.danceEnd) {
+        if (m && p.onSeat) startMarkHopOff(p);
+        else toIdle(p, 1.5 + rng() * 2);
+      }
     }
 
     /* ---------- the per-frame step ---------- */
@@ -1194,7 +1557,10 @@
       dt = typeof dt === 'number' && isFinite(dt) ? clamp(dt, 0, 0.25) : 0;
       brain.now += dt;
       if (!brain.graph) return false;
-      if (brain.danceOn && brain.now >= brain.danceEnd) brain.danceOn = false;
+      if (brain.danceOn && brain.now >= brain.danceEnd) {
+        brain.danceOn = false;
+        if (brain.avatarMark.on) { brain.avatarMark.on = false; if (brain.avatarMark.cell >= 0 && res[brain.avatarMark.cell] === AVATAR_RES) res[brain.avatarMark.cell] = -1; brain.avatarMark.cell = -1; }
+      }
       var moving = false;
       for (var k = 0; k < brain.pets.length; k++) {
         var p = brain.pets[k];
@@ -1234,6 +1600,13 @@
       var mode = input.mode || (w && typeof w.mode === 'string' ? w.mode : null) || brain.mode || 'play';
       return { src: src, mode: mode, pets: Array.isArray(input.pets) ? input.pets : [], avatar: input.avatar, activePet: src.activePet || (w && w.activePet) || null };
     }
+    /* is a performance still valid on this layout (its item there, unmoved, its cell still free)? */
+    function performStillValid(p, gr) {
+      var pf = p.perf, ob = gr.objects[pf.uid], spec = PERFORMS[pf.kind];
+      if (!ob || !spec || ob.id !== spec.id || Math.abs(ob.x - pf.obx) > 1e-6 || Math.abs(ob.z - pf.obz) > 1e-6) return false;
+      var tgt = pf.land >= 0 ? pf.land : pf.approach;
+      return tgt < 0 || gr.walk[tgt] === 1;
+    }
     function sync(input) {
       var r = readInput(input), out = { added: [], removed: [], popped: [] };
       var first = !brain.synced;
@@ -1256,6 +1629,11 @@
       });
       if (next.length && !next.some(function (p) { return p.active; })) next[0].active = true;
       brain.pets = next;
+      /* a studio / stage dance whose building moved or went away ends now */
+      if (brain.danceOn && brain.danceUid) {
+        var dob = gr.objects[brain.danceUid];
+        if (!dob || Math.abs(dob.x - danceOb.x) > 1e-6 || Math.abs(dob.z - danceOb.z) > 1e-6) endDance(true);
+      }
       rebuildReservations();
       /* place new pets (spread out, near the house) */
       var taken = [];
@@ -1274,9 +1652,12 @@
       /* validate everyone against the new layout */
       brain.pets.forEach(function (p) {
         if (p.state === 'perform') {
-          var ob = gr.objects[p.perf.uid];
-          if (!ob || ob.id !== p.perf.kind || Math.abs(ob.x - (p.perf.sx)) > 1e-6 || Math.abs(ob.z + SEAT[p.perf.kind].z - p.perf.sz) > 1e-6) finishSeat(p, true);
-          else return;
+          if (performStillValid(p, gr)) return;
+          finishSeat(p, true);
+        }
+        if (p.state === 'dance' && p.danceMark) {
+          if ((p.onSeat || p.perfPhase === 'hopOn' || p.perfPhase === 'hopOff') && gr.walk[p.danceApproach]) return;
+          if (p.onSeat || p.perfPhase) finishDancer(p, true, 1);
         }
         var c = cellOf(p.x, p.z);
         if (c < 0 || !gr.walk[c]) {
@@ -1296,6 +1677,7 @@
           if (ds >= 0) { popTo(p, ds); p.state = 'dance'; p.action = 'dance'; p.danceSpot = ds; out.popped.push(p.id); }
           return;
         }
+        if (p.state === 'dance' && p.danceMark && path && !pathValid(gr, path, p.pathS, null, c)) { finishDancer(p, true, 1); return; }
         if (path && p.state === 'walk') {
           var ok = gr.walk[path.target] && pathValid(gr, path, p.pathS, null, c) && (res[path.target] < 0 || res[path.target] === p.index);
           if (!ok) {
@@ -1321,6 +1703,7 @@
         if (brain.danceOn) dance(false);
         brain.pets.forEach(function (p) {
           if (p.state === 'perform') finishSeat(p, true);
+          if (p.state === 'dance') finishDancer(p, true, null);
           var c = cellOf(p.x, p.z);
           clearMotion(p);
           p.state = 'sit'; p.action = 'sit'; p.cell = c;
@@ -1338,6 +1721,7 @@
         if (brain.danceOn) dance(false);
         brain.pets.forEach(function (p) {
           if (p.state === 'perform') finishSeat(p, true);
+          if (p.state === 'dance') finishDancer(p, true, IDLE.first);
           if (p.state === 'walk' || p.state === 'act') toIdle(p, IDLE.first);
         });
       }
@@ -1362,13 +1746,20 @@
     brain.setMode = function (m) { setMode(m); };
     brain.setReduced = setReduced;
     brain.setShow = function (k) { brain.show = clamp01(+k || 0); };
+    brain.setMusic = function (on) { brain.music = !!on; };
+    /* fn(uid, name) → {x, y, z} | null: a building's live anchor in world space (the island's itemPoint) */
+    brain.setAnchorFn = function (fn) { anchorFn = typeof fn === 'function' ? fn : null; };
     brain.pet = function (id) { return byId[id] || null; };
     brain.activeId = function () {
       for (var k = 0; k < brain.pets.length; k++) if (brain.pets[k].active) return brain.pets[k].id;
       return brain.pets.length ? brain.pets[0].id : null;
     };
     brain.reservations = function () { return res; };
-    brain.danceInfo = function (out) { return danceAt(brain.danceOn ? brain.now - brain.danceT0 : -1, brain.danceReduced, out); };
+    brain.danceInfo = function (out) {
+      out = danceAt(brain.danceOn ? brain.now - brain.danceT0 : -1, brain.danceReduced, out);
+      out.kind = brain.danceOn ? brain.danceKind : '';
+      return out;
+    };
     brain.glance = function (out) { return glanceAt(brain.now, seed, out); };
     return brain;
   }
@@ -1376,10 +1767,11 @@
   return {
     VERSION: VERSION, COLS: COLS, ROWS: ROWS,
     WALK: WALK, IDLE: IDLE, HOP: HOP, SEAT: SEAT, BOUNCE: BOUNCE, DANCE: DANCE, GLANCE: GLANCE, ACTIONS: ACTIONS, PLAY: PLAY,
+    PERFORMS: PERFORMS, POSE_TICKS: POSE_TICKS, STAGE: STAGE, ANCHOR_FALLBACK: ANCHOR_FALLBACK, AVATAR_RES: AVATAR_RES, EMOTES: EMOTES,
     create: create,
     buildGraph: buildGraph, astar: astar, distMap: distMap, smoothPath: smoothPath, pathValid: pathValid, samplePath: samplePath,
     losClear: losClear, heightAt: heightAt, nearestFree: nearestFree, danceSpots: danceSpots, danceAt: danceAt,
-    alignDelay: alignDelay, glanceAt: glanceAt, bounceAt: bounceAt, makeRng: makeRng, hash: hash,
+    alignDelay: alignDelay, glanceAt: glanceAt, bounceAt: bounceAt, posesOf: posesOf, makeRng: makeRng, hash: hash,
     cellIndex: cellIndex, cellOf: cellOf, centreX: centreX, centreZ: centreZ, keyOf: keyOf, parseKey: parseKey, wrap: wrap
   };
 }));

@@ -40,7 +40,8 @@ function randomLayout(seed) {
   }
   return { u, w };
 }
-function onSeat(p) { return p.state === 'perform' && (p.onSeat || p.perfPhase === 'hopOn' || p.perfPhase === 'hopOff'); }
+/* up on a seat, a roof or the stage deck (or hopping there): its cell is the item's, its reservation the approach */
+function onSeat(p) { return (p.state === 'perform' || p.state === 'dance') && (!!p.onSeat || p.perfPhase === 'hopOn' || p.perfPhase === 'hopOff'); }
 function checkInvariants(brain, msg) {
   const g = brain.graph, res = brain.reservations(), seen = new Map();
   for (let i = 0; i < res.length; i++) if (res[i] >= 0) {
@@ -484,8 +485,9 @@ test('pets: the dance timeline is 8 counts at 118 BPM (≈ 4.07 s) ending in the
     assert.equal(d.phase, 'dance'); assert.equal(d.count, c + 1);
     moves.push(d.move);
   }
-  assert.deepEqual(moves, ['side', 'side', 'hop', 'hop', 'signature', 'signature', 'face', 'pose']);
-  assert.equal(B.danceAt(B.DANCE.dur - 1e-6, false, {}).move, 'pose');
+  assert.deepEqual(moves, ['groove', 'groove', 'step', 'step', 'signature', 'signature', 'point', 'freeze']);
+  for (const m of moves) assert.ok(m === 'signature' || CH.DANCE_MOVES.includes(m), m + ' is a generic move');
+  assert.equal(B.danceAt(B.DANCE.dur - 1e-6, false, {}).move, 'freeze');
   assert.equal(B.danceAt(B.DANCE.dur + 0.1, false, {}).phase, 'hold');
   assert.equal(B.danceAt(B.DANCE.dur + B.DANCE.hold + 0.01, false, {}).phase, 'done');
   assert.equal(B.danceAt(-0.5, false, {}).phase, 'wait');
@@ -498,8 +500,10 @@ test('pets: the dance timeline is 8 counts at 118 BPM (≈ 4.07 s) ending in the
   /* reduced: one group pose */
   const r = B.danceAt(0.5, true, {});
   assert.equal(r.move, 'pose'); assert.equal(B.danceAt(B.DANCE.reducedDur + 0.01, true, {}).phase, 'done');
-  /* the cue list: the dragon's sparkle puff, the burst with hearts, then 'cheer' */
+  /* the cue list: the dragon's sparkle puff, the burst (with the avatar's finger-heart), then 'cheer' */
   assert.deepEqual(B.DANCE.cues.map((c) => c.emit || c.sfx), ['puff', 'burst', 'cheer']);
+  assert.equal(B.DANCE.cues[1].fingerHeart, 'avatar');
+  assert.ok(!B.DANCE.cues.some((c) => c.heart), 'no pet hearts');
 });
 
 test('pets: the dance break gathers everyone (≤ 2 s) on open cells by the house and starts together on a bar', () => {
@@ -545,6 +549,285 @@ test('pets: the avatar glances at a pet every 5–7 s for 1.6 s', () => {
   for (let i = 1; i < starts.length; i++) assert.ok(starts[i] - starts[i - 1] >= 5 - 0.02 && starts[i] - starts[i - 1] <= 7 + 0.02, 'gap ' + (starts[i] - starts[i - 1]));
   assert.ok(starts.length >= 40);
   assert.deepEqual(B.glanceAt(42.5, 'me', {}), B.glanceAt(42.5, 'me', {}));
+});
+
+/* ================================================================
+   Encore City: the crew performs at the city buildings
+   ================================================================ */
+const KIND_OF = { pose: 'bld_photobooth', sip: 'bld_boba', roof: 'bld_rooftop', studio: 'bld_dance', stage: 'bld_stage' };
+/* a starter island (plus extras) with each building placed at its first legal spot */
+function cityWorld(ids, extra) {
+  const u = starter(), w = u.world, buy = buyer(u, 'cw' + (cityN++));
+  for (const id of (extra || [])) assert.ok(buy(id).ok, 'buy ' + id);
+  const placed = {};
+  for (const id of ids) {
+    assert.ok(buy(id).ok, 'buy ' + id);
+    let done = false;
+    for (let y = 0; y < 10 && !done; y++) for (let x = 0; x < 16 && !done; x++) if (C.place(u, id, x, y).ok) done = true;
+    assert.ok(done, 'place ' + id);
+    placed[id] = w.placed.find((p) => p.id === id);
+  }
+  return { u, w, placed };
+}
+let cityN = 0;
+const ALL_PETS = ['pet_kitten', 'pet_bunny', 'pet_dragon'];
+
+test('pets: the city performs map to their buildings; no pet, no building, the wrong one or edit mode → -1', () => {
+  for (const [k, id] of Object.entries(KIND_OF)) assert.equal(B.PERFORMS[k].id, id, k);
+  const { w, placed } = cityWorld(Object.values(KIND_OF), ['land_cove', 'land_meadow']);
+  const empty = B.create({ seed: 'none' });
+  empty.sync({ world: w, pets: [] });
+  for (const k of Object.keys(KIND_OF)) assert.equal(empty.perform(k, placed[KIND_OF[k]].uid), -1, k + ' with no pet');
+  const brain = B.create({ seed: 'wrong' });
+  brain.sync({ world: w, pets: petsOf(w) });
+  for (const k of Object.keys(KIND_OF)) {
+    assert.equal(brain.perform(k, 'p999'), -1, k + ' with no building');
+    const other = Object.values(placed).find((p) => p.id !== KIND_OF[k]);
+    assert.equal(brain.perform(k, other.uid), -1, k + ' on the wrong building');
+  }
+  assert.equal(brain.perform('juggle', placed.bld_stage.uid), -1, 'unknown kinds');
+  brain.setMode('edit');
+  for (const k of Object.keys(KIND_OF)) assert.equal(brain.perform(k, placed[KIND_OF[k]].uid), -1, k + ' in edit mode');
+});
+
+test('pets: city performs never target an occupied, reserved or off-land cell (random layouts with buildings)', () => {
+  let runs = 0;
+  const kinds = new Set();
+  for (let s = 0; s < 70; s++) {
+    const { w } = randomLayout(2000 + s);
+    for (const kind of Object.keys(KIND_OF)) {
+      const it = w.placed.find((p) => p.id === KIND_OF[kind]);
+      if (!it) continue;
+      const brain = B.create({ seed: 'city' + s + kind });
+      brain.sync({ world: w, pets: petsOf(w) });
+      for (let i = 0; i < 30; i++) brain.step(DT);
+      const lead = brain.perform(kind, it.uid, undefined, { avatar: true });
+      if (lead < 0) continue;
+      runs++; kinds.add(kind);
+      const cap = kind === 'roof' ? 2 : kind === 'studio' || kind === 'stage' ? B.DANCE.gatherMax : 1.2;
+      assert.ok(lead <= cap + 1e-9, kind + ' lead ' + lead);
+      const ob = brain.graph.objects[it.uid];
+      for (let i = 0; i < 20 * 14; i++) {
+        brain.step(DT);
+        checkInvariants(brain, kind + ' layout ' + s + ' step ' + i);
+        for (const p of brain.pets) {
+          const tgt = p.state === 'perform' ? (p.perf.land >= 0 ? p.perf.land : p.perf.approach)
+            : p.state === 'dance' ? (p.danceSpot >= 0 ? p.danceSpot : p.danceApproach) : -1;
+          if (tgt >= 0) assert.equal(brain.graph.walk[tgt], 1, kind + ': the target is a free cell');
+          if (onSeat(p)) assert.ok(Math.abs(p.x - ob.x) <= ob.w / 2 + 0.6 && Math.abs(p.z - ob.z) <= ob.h / 2 + 0.6, kind + ': up only on its own building');
+        }
+        const am = brain.avatarMark;
+        if (am.on && am.cell >= 0) for (const p of brain.pets) assert.notEqual(p.res, am.cell, 'never on the avatar\'s spot');
+      }
+      for (const p of brain.pets) assert.ok(p.state !== 'perform' && p.state !== 'dance', kind + ' is over: ' + p.state);
+      assert.equal(brain.avatarMark.on, false);
+    }
+  }
+  assert.ok(runs >= 25, 'performances exercised: ' + runs);
+  assert.equal(kinds.size, 5, 'every kind ran: ' + [...kinds].join(', '));
+});
+
+test('pets: the studio and stage gathers complete within the 8-count timing (on the spot / mark by count 1)', () => {
+  for (const kind of ['studio', 'stage']) {
+    const { w, placed } = cityWorld([KIND_OF[kind]], ALL_PETS.concat(['land_cove', 'land_meadow']));
+    for (let s = 0; s < 12; s++) {
+      const brain = B.create({ seed: kind + s });
+      brain.sync({ world: w, pets: petsOf(w) });
+      for (let i = 0; i < 20 + s * 13; i++) brain.step(DT);
+      const ob = brain.graph.objects[placed[KIND_OF[kind]].uid];
+      const lead = brain.perform(kind, ob.uid, undefined, { avatar: true });
+      assert.ok(lead >= 0 && lead <= B.DANCE.gatherMax + 1e-9, kind + ' lead ' + lead);
+      assert.equal(brain.danceKind, kind);
+      assert.equal(brain.perform(kind, ob.uid), Math.max(0, brain.danceT0 - brain.now), 'a re-tap keeps the same dance');
+      while (brain.now < brain.danceT0) { brain.step(DT); checkInvariants(brain, kind + ' gathering ' + s); }
+      const spots = new Set();
+      for (const p of brain.pets) {
+        assert.equal(p.state, 'dance');
+        if (p.danceMark) {
+          assert.equal(p.onSeat, 'stage', p.id + ' up on its mark by count 1');
+          assert.ok(near(p.y, ob.y + B.STAGE.y, 1e-9) && near(p.x, p.danceMark.x, 1e-9), p.id + ' on the deck');
+          spots.add(p.danceMark.x);
+        } else {
+          assert.ok(Math.hypot(p.x - B.centreX(p.danceSpot), p.z - B.centreZ(p.danceSpot)) < 1e-6, p.id + ' on its spot by count 1');
+          spots.add(p.danceSpot);
+        }
+      }
+      assert.equal(spots.size, brain.pets.length, 'distinct spots and marks');
+      if (kind === 'stage') {
+        assert.ok(brain.pets.every((p) => p.danceMark), 'the whole crew is on the deck');
+        const am = brain.avatarMark;
+        assert.ok(am.on && near(am.y, ob.y + B.STAGE.y) && near(am.x, ob.x), 'the avatar takes centre stage');
+      } else {
+        const row = ob.r + ob.h;
+        for (const p of brain.pets) {
+          const c = p.danceSpot % 16, r = Math.floor(p.danceSpot / 16);
+          assert.ok(r >= row && r <= row + 1 && c >= ob.c - 1 && c <= ob.c + ob.w, p.id + ' on the studio floor or beside it');
+        }
+        const am = brain.avatarMark;
+        assert.ok(am.on && am.cell >= 0 && brain.reservations()[am.cell] === B.AVATAR_RES, 'the avatar\'s spot is reserved');
+      }
+      while (brain.danceOn) brain.step(DT);
+      for (let i = 0; i < 30; i++) { brain.step(DT); checkInvariants(brain, kind + ' after ' + s); }
+      for (const p of brain.pets) assert.notEqual(p.state, 'dance', 'back to idle after the freeze');
+      assert.equal(brain.avatarMark.on, false);
+    }
+  }
+});
+
+test('pets: the photo booth — run to the front cell, then sit · paw-point · cheer on the booth\'s ticks', () => {
+  assert.deepEqual(B.posesOf(0).starts, B.POSE_TICKS, 'already there: the poses land on the ticks');
+  for (const lead of [0.3, 0.9, 1.2]) {
+    const q = B.posesOf(lead);
+    assert.ok(q.starts[0] >= lead - 1e-9 && q.starts[1] - q.starts[0] >= 0.6 - 1e-9 && q.starts[2] - q.starts[1] >= 0.6 - 1e-9 && q.end > q.starts[2]);
+  }
+  /* the booth where its front cell is open land (so a rock can block it later) */
+  const u = starter(), w = u.world, buy = buyer(u, 'booth');
+  assert.ok(buy('pet_kitten').ok && buy('bld_photobooth').ok && buy('rock_mossy').ok);
+  let spot = null;
+  for (let y = 0; y < 9 && !spot; y++) for (let x = 0; x < 16 && !spot; x++) {
+    if (!C.canPlace(w, 'bld_photobooth', x, y).ok) continue;
+    if (C.canPlace(Object.assign({}, w, { placed: w.placed.concat([{ uid: 'probe', id: 'bld_photobooth', x, y }]) }), 'rock_mossy', x, y + 1).ok) spot = [x, y];
+  }
+  assert.ok(spot, 'a booth spot with open land in front');
+  assert.ok(C.place(u, 'bld_photobooth', spot[0], spot[1]).ok);
+  const placed = { bld_photobooth: w.placed.find((q) => q.id === 'bld_photobooth') };
+  const brain = B.create({ seed: 'booth' });
+  brain.sync({ world: w, pets: petsOf(w) });
+  for (let i = 0; i < 40; i++) brain.step(DT);
+  const ob = brain.graph.objects[placed.bld_photobooth.uid], front = B.cellIndex(ob.c, ob.r + 1);
+  const lead = brain.perform('pose', ob.uid);
+  assert.ok(lead >= 0 && lead <= 1.2, 'lead ' + lead);
+  const p = brain.pet(brain.activeId());
+  assert.equal(p.perf.land, front, 'the front cell');
+  const P = B.posesOf(lead), seq = [];
+  for (let t = 0; t < P.end + 0.5; t += DT) {
+    brain.step(DT);
+    checkInvariants(brain, 'booth');
+    if (p.perfPose >= 0 && seq[seq.length - 1] !== p.perfPose) seq.push(p.perfPose);
+  }
+  assert.deepEqual(seq, [0, 1, 2], 'three poses in order');
+  assert.equal(p.state, 'idle');
+  /* a rock on the front cell: the pet poses beside the booth instead, never on the rock */
+  assert.ok(C.place(u, 'rock_mossy', ob.c, ob.r + 1).ok);
+  brain.sync({ world: w, pets: petsOf(w) });
+  assert.ok(brain.perform('pose', ob.uid) >= 0);
+  assert.notEqual(p.perf.land, front);
+  assert.equal(brain.graph.walk[p.perf.land], 1);
+  for (let i = 0; i < 80; i++) { brain.step(DT); checkInvariants(brain, 'booth beside'); }
+});
+
+test('pets: the café stool and the roof deck — live anchors from setAnchorFn, else from the footprint', () => {
+  const { w, placed } = cityWorld(['bld_boba', 'bld_rooftop'], ['land_cove', 'land_meadow']);
+  const brain = B.create({ seed: 'perch' });
+  brain.sync({ world: w, pets: petsOf(w) });
+  const boba = brain.graph.objects[placed.bld_boba.uid], roof = brain.graph.objects[placed.bld_rooftop.uid];
+  const seat = { x: boba.x + 0.45, y: boba.y + 0.44, z: boba.z + 0.2 }, deck = { x: roof.x - 0.2, y: roof.y + 1.62, z: roof.z - 0.1 };
+  const asked = [];
+  brain.setAnchorFn((uid, name) => {
+    asked.push(name);
+    if (uid === boba.uid && name === 'seat') return seat;
+    if (uid === roof.uid && name === 'roof') return deck;
+    return { x: 0, y: 9, z: 0 };
+  });
+  const p = brain.pet(brain.activeId());
+  let lead = brain.perform('sip', boba.uid), sat = 0;
+  assert.ok(lead > 0 && lead <= 1.2, 'sip lead ' + lead);
+  assert.ok(asked.includes('seat'));
+  for (let i = 0; i < 20 * 8 && p.state === 'perform'; i++) {
+    brain.step(DT);
+    checkInvariants(brain, 'sip');
+    if (p.onSeat === 'sip') { sat++; assert.ok(near(p.x, seat.x) && near(p.y, seat.y) && near(p.z, seat.z), 'on the stool'); }
+  }
+  assert.ok(sat * DT >= 2.2 && sat * DT <= 2.6, 'sits about 2.4 s: ' + sat * DT);
+  assert.equal(p.state, 'idle');
+  assert.ok(boba.adj.includes(B.cellOf(p.x, p.z)), 'hopped down beside the café');
+  for (let i = 0; i < 20 * 5; i++) brain.step(DT);
+  lead = brain.perform('roof', roof.uid);
+  assert.ok(lead > 0 && lead <= 2 + 1e-9, 'roof lead ' + lead);
+  let up = 0;
+  for (let i = 0; i < 20 * 11 && p.state === 'perform'; i++) {
+    brain.step(DT);
+    checkInvariants(brain, 'roof');
+    if (p.onSeat === 'roof') { up++; assert.ok(near(p.y, deck.y), 'up on the roof deck'); }
+  }
+  assert.ok(up * DT >= 5.9 && up * DT <= 6.2, 'rests 6 s up there: ' + up * DT);
+  assert.equal(p.state, 'idle');
+  assert.ok(roof.adj.includes(B.cellOf(p.x, p.z)), 'hopped down beside the hangout');
+  for (let i = 0; i < 20 * 5; i++) brain.step(DT);
+  /* an anchor the model lacks comes back as its 'top' (or outside the building): the footprint fallback */
+  brain.setAnchorFn(() => ({ x: boba.x, y: boba.y + 1.95, z: boba.z }));
+  assert.ok(brain.perform('sip', boba.uid) > 0);
+  assert.ok(near(p.perf.sy, boba.y + B.ANCHOR_FALLBACK.bld_boba.seat[1]), 'the footprint seat');
+  for (let i = 0; i < 20 * 6; i++) brain.step(DT);
+  brain.setAnchorFn(null);
+  assert.ok(brain.perform('roof', roof.uid) > 0);
+  assert.ok(near(p.perf.sy, roof.y + B.ANCHOR_FALLBACK.bld_rooftop.roof[1]), 'the footprint roof seat');
+  /* the building goes away while the pet is up there: it lands on a free cell */
+  for (let i = 0; i < 45; i++) brain.step(DT);
+  assert.equal(p.onSeat, 'roof');
+  brain.sync({ world: Object.assign({}, w, { placed: w.placed.filter((q) => q.uid !== roof.uid) }), pets: petsOf(w) });
+  assert.notEqual(p.state, 'perform', 'the roof is gone: the visit ends');
+  assert.equal(brain.graph.walk[B.cellOf(p.x, p.z)], 1);
+  checkInvariants(brain, 'roof gone');
+});
+
+test('pets: the v2 idles — lean and look-back, a nod to the beat only while music plays; no roll-over or scratch', () => {
+  assert.ok(!B.ACTIONS.roll && !B.ACTIONS.scratch, 'roll-over and scratch are retired');
+  for (const k of ['lean', 'lookBack', 'beatNod']) assert.ok(B.ACTIONS[k], k);
+  assert.equal(B.WALK.speed, 1.0, 'walk 1.0 u/s');
+  function run(music) {
+    const u = starter();
+    for (const id of ALL_PETS) buyer(u, 'idle' + music)(id);
+    const brain = B.create({ seed: 'v2idles' });
+    brain.sync({ world: u.world, pets: petsOf(u.world) });
+    brain.setMusic(music);
+    const acts = new Set();
+    for (let i = 0; i < 20 * 400; i++) { brain.step(DT); for (const p of brain.pets) if (p.state === 'act') acts.add(p.action); }
+    return acts;
+  }
+  const quiet = run(false), loud = run(true);
+  assert.ok(quiet.has('lean') && quiet.has('lookBack'), [...quiet].join(', '));
+  assert.ok(!quiet.has('beatNod'), 'no nodding without music');
+  assert.ok(loud.has('beatNod'), 'nods to the beat with music: ' + [...loud].join(', '));
+  for (const a of [...quiet, ...loud]) assert.ok(a !== 'roll' && a !== 'scratch');
+});
+
+test('pets: idle emotes are notes, stars and sparkles — hearts belong to the avatar\'s finger-heart', () => {
+  assert.ok(!B.EMOTES.includes('heart'));
+  const u = starter();
+  for (const id of ALL_PETS) buyer(u, 'emo')(id);
+  const brain = B.create({ seed: 'emotes', reduced: true });
+  brain.sync({ world: u.world, pets: petsOf(u.world) });
+  const kinds = new Set();
+  for (let i = 0; i < 20 * 200; i++) {
+    brain.step(DT);
+    for (const e of brain.events) if (e.type === 'emote') kinds.add(e.kind);
+    brain.events.length = 0;
+  }
+  assert.ok(kinds.size >= 2);
+  for (const k of kinds) assert.ok(B.EMOTES.includes(k), k);
+  for (const p of brain.pets) assert.notEqual(brain.tap(p.id), 'heart');
+});
+
+test('pets: reduced motion — the solo city performs are skipped, the group ones never walk', () => {
+  const { w, placed } = cityWorld(Object.values(KIND_OF), ALL_PETS.concat(['land_cove', 'land_meadow']));
+  const brain = B.create({ seed: 'red-city', reduced: true });
+  brain.sync({ world: w, pets: petsOf(w) });
+  for (const k of ['pose', 'sip', 'roof']) assert.equal(brain.perform(k, placed[KIND_OF[k]].uid), -1, k + ': the building animates alone');
+  const at = brain.pets.map((p) => [p.x, p.z]);
+  assert.equal(brain.perform('studio', placed.bld_dance.uid), 0);
+  for (let i = 0; i < 60; i++) {
+    brain.step(DT);
+    brain.pets.forEach((p, k) => { assert.notEqual(p.state, 'walk'); assert.equal(p.x, at[k][0]); assert.equal(p.z, at[k][1]); });
+  }
+  assert.equal(brain.danceOn, false, 'one short freeze');
+  brain.events.length = 0;
+  assert.equal(brain.perform('stage', placed.bld_stage.uid, undefined, { avatar: true }), 0);
+  const ob = brain.graph.objects[placed.bld_stage.uid];
+  for (const p of brain.pets) if (p.danceMark) { assert.equal(p.onSeat, 'stage', 'appears on its mark'); assert.ok(near(p.y, ob.y + B.STAGE.y)); }
+  assert.ok(brain.events.filter((e) => e.type === 'pop').length >= 1, 'a still sparkle where it was and where it is');
+  for (let i = 0; i < 80; i++) { brain.step(DT); checkInvariants(brain, 'reduced stage'); for (const p of brain.pets) assert.notEqual(p.state, 'walk'); }
+  for (const p of brain.pets) { assert.equal(p.state, 'idle'); assert.equal(brain.graph.walk[B.cellOf(p.x, p.z)], 1, 'back on the ground'); }
 });
 
 /* ================================================================
@@ -680,15 +963,33 @@ test('actors: tapping a pet hops it, plays its voice and shows an emote; tapping
   const before = fx.live;
   actors.tap('pet_dragon');
   assert.ok(fx.live - before >= 5, 'sparkles');
-  /* the avatar */
+  /* the avatar: the tap emotes cycle — the finger-heart first, then the V-sign and the mic-point */
+  for (let i = 0; i < 60; i++) actors.update(1 / 30, 0, 0, null);
   assert.equal(actors.tap('me'), true);
   const av = S.made.find((r) => r.kind === 'avatar');
-  for (let i = 0; i < 10; i++) actors.update(1 / 30, 0, 0, null);
-  assert.ok(av.last.armR > 100, 'waving');
   const pops = sound.calls.filter((c) => c === 'pop').length;
-  for (let i = 0; i < 30; i++) actors.update(1 / 30, 0, 0, null);
+  for (let i = 0; i < 10; i++) actors.update(1 / 30, 0, 0, null);
+  assert.ok(av.last.armR > 100 && av.last.faceCam === 1, 'the finger-heart by the cheek');
   assert.equal(sound.calls.filter((c) => c === 'pop').length, pops + 1, "the finger-heart 'pop'");
-  assert.ok(av.last.armL > 100 && av.last.armR > 100, 'both arms up for the finger-heart');
+  const dots = [...fx.sets.values()].filter((a) => a[6] === A.EMOTE.cells.dot);
+  assert.equal(dots.length, A.HEART_LINE.dots, 'a neon line-heart of LED dots');
+  assert.ok(dots.every((a) => a[4] === 'Neon Magenta'));
+  for (let i = 0; i < 40; i++) actors.update(1 / 30, 0, 0, null);
+  const seen = [];
+  for (let n = 0; n < 2; n++) {
+    const before2 = sound.calls.length;
+    actors.tap('me');
+    for (let i = 0; i < 10; i++) actors.update(1 / 30, 0, 0, null);
+    const cue = sound.calls.slice(before2).find((c) => c === 'chip' || c === 'beep');
+    seen.push(cue);
+    if (cue === 'chip') assert.ok(av.last.armR > 100 && Math.abs(av.last.headRoll) > 8, 'V-sign with a head tilt');
+    else assert.ok(av.last.armRf > 70, 'mic-point to the camera');
+    for (let i = 0; i < 40; i++) actors.update(1 / 30, 0, 0, null);
+  }
+  assert.deepEqual(seen.slice().sort(), ['beep', 'chip'], 'the V-sign and the mic-point both come round');
+  actors.tap('me');
+  for (let i = 0; i < 10; i++) actors.update(1 / 30, 0, 0, null);
+  assert.equal(sound.calls.filter((c) => c === 'pop').length, pops + 2, 'and the finger-heart again');
   for (let i = 0; i < 60; i++) actors.update(1 / 30, 0, 0, null);
   assert.equal(fx.live, 0, 'sprites fade and free their slots');
   assert.equal(actors.tap('pet:nobody'), false);
@@ -722,7 +1023,7 @@ test('actors: perform drives the trampoline bounce on the rig (lead for models-f
   assert.equal(actors.perform('trampoline', 'nope'), -1);
 });
 
-test('actors: the dance break poses every rig in sync, ends with hearts, sparkles and cheer', () => {
+test('actors: the dance break poses every rig in sync, ends with sparkles, the avatar\'s finger-heart and cheer', () => {
   const u = starter(), w = u.world;
   buyer(u, 'd')('pet_kitten');
   const { actors, S, sound, K } = stage();
@@ -738,12 +1039,13 @@ test('actors: the dance break poses every rig in sync, ends with hearts, sparkle
     actors.update(1 / 30, 0, 1, null);
     maxFx = Math.max(maxFx, fx.live);
     const t = actors.brain.now - T0;
-    if (t > 2.2 * B.DANCE.beat && t < 3.8 * B.DANCE.beat) for (const r of S.made) if (r.kind === 'pet' && r.last.y > 0.05) sawDanceY = true;
+    if (t > 0.2 * B.DANCE.beat && t < 1.8 * B.DANCE.beat) for (const r of S.made) if (r.kind === 'pet' && r.last.y > 0.015) sawDanceY = true;
+    for (const a of fx.sets.values()) assert.notEqual(a[6], A.EMOTE.cells.heart, 'no heart sprites');
     if (t > 7.2 * B.DANCE.beat && t < B.DANCE.dur) sawFace = Math.max(sawFace, ...S.made.filter((r) => r.kind === 'pet').map((r) => r.last.faceCam));
   }
-  assert.ok(sawDanceY, 'counts 3–4: hops');
-  assert.equal(sawFace, 1, 'count 8: the group pose faces the camera');
-  assert.ok(maxFx >= 3, 'hearts and sparkles at the group pose');
+  assert.ok(sawDanceY, 'counts 1–2: the groove bounce');
+  assert.equal(sawFace, 1, 'count 8: the freeze faces the camera');
+  assert.ok(maxFx >= 3 + A.HEART_LINE.dots, 'sparkles and the line-heart at the freeze');
   assert.ok(sound.calls.includes('cheer'), "'cheer' at the end");
   assert.equal(actors.info().dance, false);
 });
@@ -797,7 +1099,18 @@ test('actors: emote() targets pets, the avatar, all; register() adds SL3D.makeAc
   assert.equal(actors.emote('me', 'fingerHeart'), true);
   for (let i = 0; i < 6; i++) actors.update(1 / 30, 0, 0, null);      /* a 0.15 s crossfade */
   const av = S.made.find((r) => r.kind === 'avatar');
-  assert.ok(av.last.armL > 140 && av.last.armR > 140, 'finger-heart straight away (no wave first)');
+  assert.ok(av.last.armR > 120 && av.last.faceCam === 1, 'finger-heart straight away (no wave first)');
+  assert.equal(actors.emote('me', 'vSign'), true);
+  for (let i = 0; i < 12; i++) actors.update(1 / 30, 0, 0, null);
+  assert.ok(av.last.armR > 120 && av.last.headRoll > 8, 'the V-sign');
+  assert.equal(actors.emote('me', 'micPoint'), true);
+  for (let i = 0; i < 12; i++) actors.update(1 / 30, 0, 0, null);
+  assert.ok(av.last.armRf > 70, 'the mic-point');
+  /* hearts belong to the finger-heart: a pet's heart is a star */
+  const n0 = fx.live;
+  assert.equal(actors.emote('pet:pet_bunny', 'heart'), true);
+  assert.equal(fx.live, n0 + 1);
+  assert.ok(![...fx.sets.values()].some((a) => a[6] === A.EMOTE.cells.heart), 'never the heart cell');
   assert.equal(actors.emote('all', 'heart'), true);
   assert.equal(actors.emote('pet:nobody', 'heart'), false);
   assert.ok(actors.anchorOf('me', {}).y > 0.9, 'the avatar label anchor sits above its head');
@@ -833,4 +1146,99 @@ test('actors: without makeRig / makeAvatar (a failed chunk) it still runs on pla
   assert.equal(actors.info().avatar, true);
   actors.dispose();
   assert.equal(calls.length, 2, 'placeholder geometries disposed');
+});
+
+/* ---------------- Encore City: actors at the city buildings ---------------- */
+test('actors: the crew performs at the city buildings; the avatar takes the stage, and the studio floor at Showtime', () => {
+  const { w, placed } = cityWorld(['bld_stage', 'bld_dance', 'bld_photobooth'], ['land_cove', 'land_meadow', 'pet_kitten']);
+  const { actors, S } = stage();
+  actors.sync(petsOf(w), ME, w);
+  for (let i = 0; i < 10; i++) actors.update(1 / 30, 0, 0, null);
+  const av = S.made.find((r) => r.kind === 'avatar'), home = [av.root.position.x, av.root.position.z];
+  /* the stage: everyone up on the deck, the avatar centre stage, home again afterwards */
+  const ob = actors.brain.graph.objects[placed.bld_stage.uid];
+  const lead = actors.petsApi.perform('stage', placed.bld_stage.uid);
+  assert.ok(lead >= 0 && lead <= B.DANCE.gatherMax + 1e-9, 'lead ' + lead);
+  let centre = false, petsUp = false, danced = false;
+  for (let i = 0; i < 30 * 9; i++) {
+    actors.update(1 / 30, i / 30, 0, null);
+    if (near(av.root.position.y, ob.y + B.STAGE.y, 1e-9) && near(av.root.position.x, ob.x, 1e-9)) centre = true;
+    if (actors.brain.pets.every((p) => p.onSeat === 'stage')) petsUp = true;
+    if (actors.brain.danceOn && actors.brain.now > actors.brain.danceT0 + 0.5 && av.last.y > 0.005) danced = true;
+  }
+  assert.ok(centre && petsUp && danced, 'centre stage ' + centre + ', crew on the deck ' + petsUp + ', dancing ' + danced);
+  for (let i = 0; i < 60; i++) actors.update(1 / 30, 0, 0, null);
+  assert.ok(near(av.root.position.x, home[0]) && near(av.root.position.z, home[1]), 'home again');
+  /* the studio by day: the crew dances, the avatar stays home; at Showtime the avatar joins */
+  actors.petsApi.perform('studio', placed.bld_dance.uid);
+  assert.equal(actors.brain.avatarMark.on, false);
+  while (actors.brain.danceOn) actors.update(1 / 30, 0, 0, null);
+  for (let i = 0; i < 60; i++) actors.update(1 / 30, 0, 1, null);
+  actors.petsApi.perform('studio', placed.bld_dance.uid);
+  assert.equal(actors.brain.avatarMark.on, true, 'the avatar joins at Showtime');
+  actors.update(1 / 30, 0, 1, null);
+  assert.ok(near(av.root.position.x, actors.brain.avatarMark.x) && near(av.root.position.z, actors.brain.avatarMark.z), 'on the studio floor');
+  while (actors.brain.danceOn) actors.update(1 / 30, 0, 1, null);
+  for (let i = 0; i < 60; i++) actors.update(1 / 30, 0, 0, null);
+  /* the photo booth: sit, paw-point, cheer, facing the camera */
+  const lead2 = actors.petsApi.perform('pose', placed.bld_photobooth.uid);
+  assert.ok(lead2 >= 0 && lead2 <= 1.2);
+  const p = actors.brain.pet(actors.active()), rig = S.made.find((r) => r.id === p.id && !r.disposed);
+  const poses = {};
+  for (let i = 0; i < 30 * 4; i++) {
+    actors.update(1 / 30, 0, 0, null);
+    if (p.perfPose >= 0) poses[p.perfPose] = Object.assign({}, rig.last);
+  }
+  assert.ok(poses[0] && poses[0].pitch < -10, 'pose 1: sit');
+  assert.ok(poses[1] && poses[1].legFR > 100, 'pose 2: paw-point');
+  assert.ok(poses[2] && poses[2].blush === 1, 'pose 3: cheer (the only blush)');
+});
+
+test('actors: Showtime twirls the Spark Stick (360° over 1.2 s, every 8 s) — never under reduced motion', () => {
+  const u = starter(), w = u.world;
+  const { actors, S } = stage();
+  actors.sync(petsOf(w), ME, w);
+  const av = S.made.find((r) => r.kind === 'avatar');
+  let starts = 0, prev = 0, max = 0;
+  for (let i = 0; i < 30 * 20; i++) {
+    actors.update(1 / 30, i / 30, 1, null);
+    const tw = av.last.twirl;
+    if (tw > 0 && prev === 0) starts++;
+    prev = tw; max = Math.max(max, tw);
+  }
+  assert.ok(starts >= 2 && starts <= 3, 'twirls in 20 s: ' + starts);
+  assert.ok(max > 300 && max <= 360, 'a full turn: ' + max);
+  assert.equal(av.wand, true);
+  actors.setReduced(true);
+  for (let i = 0; i < 30 * 10; i++) { actors.update(1 / 30, 0, 1, null); assert.equal(av.last.twirl, 0, 'no twirl under reduced motion'); }
+});
+
+test('actors: music nods and headphone rings follow the beat; anchors come from the island hook or setAnchorFn', () => {
+  const u = starter(), w = u.world;
+  const asked = [];
+  const { actors, S } = stage({ itemPoint: (uid, name) => { asked.push(name); return null; } });
+  const beats = [];
+  const made = S.makeRig;
+  S.makeRig = (id, acc) => { const r = made(id, acc); r.setBeat = (b, bpm, red) => { beats.push([b, bpm, red]); return r; }; return r; };
+  actors.sync([{ id: 'pet_puppy', acc: { neck: 'acc_headphones' }, active: true }], ME, w);
+  for (let i = 0; i < 20; i++) actors.update(1 / 30, 0, 1, { beat: 10 + i * 0.066, bpm: 118, playing: true });
+  assert.equal(actors.brain.music, true, 'beat.playing switches the nod on');
+  assert.ok(beats.length >= 20 && beats.every((b) => Number.isFinite(b[0]) && b[1] === 118), 'the rings get the beat');
+  actors.update(1 / 30, 0, 1, { beat: 12, bpm: 118 });
+  assert.equal(actors.brain.music, false, 'an internal clock is not music');
+  actors.setMusic(true);
+  actors.update(1 / 30, 0, 1, { beat: 12, bpm: 118 });
+  assert.equal(actors.brain.music, true, 'setMusic overrides');
+  actors.setMusic(null);
+  /* the island's itemPoint hook resolves the building anchors */
+  const { w: w2, placed } = cityWorld(['bld_boba']);
+  actors.sync(petsOf(w2), ME, w2);
+  actors.update(1 / 30, 0, 0, null);
+  assert.ok(actors.petsApi.perform('sip', placed.bld_boba.uid) > 0);
+  assert.ok(asked.includes('seat'), 'asked the island for the café seat');
+  const mine = [];
+  actors.setAnchorFn((uid, name) => { mine.push(name); return null; });
+  for (let i = 0; i < 30 * 6; i++) actors.update(1 / 30, 0, 0, null);
+  actors.petsApi.perform('sip', placed.bld_boba.uid);
+  assert.ok(mine.includes('seat'), 'setAnchorFn replaces the hook');
 });

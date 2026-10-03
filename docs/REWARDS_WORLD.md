@@ -56,17 +56,19 @@ Observed totals (Control Centre): Joshua ≈3,497 pts in ≈13 h active (≈270/
 
 Existing balances are untouched. A child with a large balance (e.g. 4,615) can buy several major items at once; a child with ~0 starts with the free starter island and earns toward a goal. World spending shares the same ⭐ as the real-prize shop — parents should know points spent on the island are not available for real prizes.
 
-### Full price list (81 items; all in `world/world-core.js` → `CATALOG`)
+### Full price list (104 items since Encore City v2; all in `world/world-core.js` → `CATALOG`)
 "Free (starter)" items are granted once, the first time a profile opens My Island. Items that need an attraction say so in the shop; free balls/stadiums/tracks/karts come **with** their attraction.
 
 - **Attractions (unlock a game for keeps):** Pet Obstacle Course free (starter) · Penalty Pitch 1,200 (+ Classic ball, Sunny stadium) · Kart Garage 1,500 (+ Island Loop track, Red racer)
 - **Land:** Meadow Hill 900 · Beach Cove 1,000
 - **Pets:** Puppy free (starter) · Bunny 550 · Kitten 600 · Baby dragon 1,400
-- **Accessories (any pet):** Party hat 100 · Big bow 100 · Cosy scarf 120 · Cool shades 140 · Golden crown 250 · Super cape 300
-- **Home styles:** walls Pink/Mint/Sky-blue 120, Lilac 150 · roofs Blue slate 300, Thatched 350, Candy 450, Castle turrets 600 · doors Red/Green 80, Golden 150 · details Rooftop flag 100, Smoking chimney 120, Window boxes 150, Fairy lights 200
+- **Accessories (any pet):** Party hat 100 · Big bow 100 · Cosy scarf 120 · Beanie 120 · Cool shades 140 · Snapback 160 · Studio headphones 180 · LED visor 220 · Golden crown 250 · Hoodie 260 · Super cape 300
+- **Home shapes (v2):** Classic cottage and City loft free (included with the home; the loft is the default) · Beach villa 650 · Neon tower 950 · Sky dome 1,250. A shape keeps the child's walls, roof, door and extras.
+- **Home styles:** walls Pink/Mint/Sky-blue/Concrete/Gallery white 120, Lilac/Graphite 150, Midnight blue 180 · roofs Blue slate 300, Thatched 350, Candy 450, Castle turrets 600 · doors Red/Green 80, Golden 150, Smoked glass 160 · details Rooftop flag 100, Smoking chimney 120, Window boxes 150, Fairy lights 200, Neon roofline 250
 - **Decor (per copy):** Tulips 40 · Daisy patch 40 · Mossy rock 40 · Sunflowers 50 · Rose bush 70 · Party bunting 80 · Lantern post 90 · Glowing mushrooms 90 · Island flag 100 · Pine tree 110 · Garden bench 110 · Oak tree 120 · Sandcastle 120 · Beach umbrella 130 · Palm tree 140 · Apple tree 150 · Snowman 150 · Blossom tree 160 · Windmill 380 · Lighthouse 650
 - **Paths (per copy):** Stone 20 · Wooden boardwalk 25 · Flower stepping stones 30
 - **Interactive fun (one of each):** Bubble machine 300 · Tree swing 380 · Trampoline 450 · Fountain 500
+- **City buildings (v2, one of each, tap to play with):** Photo Booth 250 · Boba Café 350 · LED Screen Tower 450 · Recording Studio 550 · Dance Studio 950 · Rooftop Hangout 1,100 · Concert Stage 1,450 (its encore runs 8 s of Showtime, then the child's own setting returns). No building awards or spends ⭐.
 - **Game extras:** courses Beach Run 350, Snowy Trail 400, Candy Land 500 · tracks Beach Hairpins 700, Volcano Ring 800 · balls Rainbow 200, Planet 250, Golden 300 · stadiums Beach/Snowy 400, Floodlit night 450 · karts Blue rocket/Lime lightning 300, Unicorn 450, Golden 500
 
 Purchases of 300 ⭐ or more ask "Are you sure?" (`ECONOMY.confirmAt`); cheaper ones buy on one tap.

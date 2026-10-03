@@ -33,7 +33,7 @@
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Baloo+2:wght@600;700;800&family=Patrick+Hand&family=Bagel+Fat+One&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Baloo+2:wght@600;700;800&family=Patrick+Hand&family=Bagel+Fat+One&family=Unbounded:wght@600;800&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
   /* V48.1 shop product images */
   .shop-item-imgwrap { height:110px; display:flex; align-items:center; justify-content:center; margin-bottom:6px; }
@@ -31802,7 +31802,7 @@ var SPELL_BANKS = {
    profile-switch detection, cross-tab state sync, guarded deep links.
    It never awards or changes points.
    ================================================================ */
-window.SL_WORLD_VER = '1';
+window.SL_WORLD_VER = '2';
 /* FREE TEST MODE for My Island (James, 2026-10-02): island items cost 0 and the
    children's ⭐ are never used; each free item is tagged `trial: true` in the
    island ledger so it can be kept or cleared when testing ends.
@@ -31851,6 +31851,7 @@ window.SL_WORLD_TRIAL = true;
         document.head.appendChild(lk);
       }
       loading = loadScript('world/world-core.js' + v)
+        .then(function () { return loadScript('world/world-copy.js' + v); })
         .then(function () { return loadScript('world/world-art.js' + v); })
         .then(function () { return loadScript('world/world-look.js' + v); })
         .then(function () { return loadScript('world/sound.js' + v); })
@@ -31863,7 +31864,7 @@ window.SL_WORLD_TRIAL = true;
   window.slOpenWorld = function () {
     var host = document.getElementById('worldView');
     if (!host) return Promise.resolve();
-    if (!window.SLWorld) host.innerHTML = '<div style="padding:40px;text-align:center;font-weight:800;color:#6c5ce7;">Loading your island… 🏝️</div>';
+    if (!window.SLWorld) host.innerHTML = '<div style="padding:40px;text-align:center;font-weight:800;color:#6c5ce7;">Loading your island…</div>';
     return window.slLoadWorld().then(function () { window.SLWorld.render(); }).catch(function () {
       host.innerHTML = '<div style="padding:40px;text-align:center;font-weight:800;color:#c0392b;">Couldn’t load your island — check your connection.<br><br>' +
         '<button class="btn btn-primary" type="button" onclick="slOpenWorld()">Try again</button></div>';

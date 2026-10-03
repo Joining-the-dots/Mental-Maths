@@ -53,6 +53,7 @@ test('toQuery round-trips through parseParams and omits defaults', () => {
 /* ---------------- styles: the lab's st is exactly what SL3D.make hands build() ---------------- */
 test('styleFor mirrors stage.js resolveSt for every CATALOG id', () => {
   const sts = [{}, { wall: 'wall_pink', roof: 'roof_castle', door: 'door_gold', details: { detail_lights: true } },
+    { shape: 'shape_dome', variant: 1, wall: 'wall_midnight', door: 'door_glass' },
     { course: 'course_snow', ball: 'ball_gold', stadium: 'stadium_night', kart: 'kart_blue' }, { acc: { hat: 'acc_crown' } }];
   C.CATALOG.forEach((it) => sts.forEach((st) => {
     assert.deepEqual(LAB.styleFor(it.id, st, C.DEFAULTS), S.resolveSt(it.id, st, C.DEFAULTS), it.id);
@@ -68,6 +69,7 @@ test('showcaseSections: every CATALOG id exactly once, plus the house combos', (
     assert.equal(ids.length, C.CATALOG.length);
     assert.deepEqual(ids.slice().sort(), C.CATALOG.map((i) => i.id).sort());
     assert.equal(combos.length, LAB.COMBOS.length);
+    assert.equal(LAB.COMBOS.filter((c) => /^grid_/.test(c.key)).length, LAB.SHAPES.length * LAB.ROOFS.length, 'every shape wears every roof');
     assert.ok(!secs.some((s) => s.name === 'Other'), 'no id falls through to "Other"');
     const keys = secs.flatMap((s) => s.entries.map((e) => e.key));
     assert.equal(new Set(keys).size, keys.length, 'entry keys are unique');
@@ -134,15 +136,16 @@ test('actsFor: every CATALOG act maps to SLMotion timelines; controller acts exi
 
 test('styleOptions and accBySlot come from the catalogue slots', () => {
   const h = LAB.styleOptions('house_cottage', C);
-  assert.deepEqual(h.map((o) => o.slot), ['wall', 'roof', 'door', 'details']);
-  assert.ok(h[3].multi); assert.equal(h[3].options.length, 4);
-  assert.deepEqual(LAB.styleOptions('roof_blue', C).map((o) => o.slot), ['wall', 'roof', 'door', 'details']);
+  assert.deepEqual(h.map((o) => o.slot), ['shape', 'wall', 'roof', 'door', 'details']);
+  assert.deepEqual(h[0].options, LAB.SHAPES);
+  assert.ok(h[4].multi); assert.equal(h[4].options.length, 5);
+  assert.deepEqual(LAB.styleOptions('roof_blue', C).map((o) => o.slot), ['shape', 'wall', 'roof', 'door', 'details']);
   assert.deepEqual(LAB.styleOptions('att_pitch', C).map((o) => o.slot), ['ball', 'stadium']);
   assert.deepEqual(LAB.styleOptions('kart_gold', C)[0].options, LAB.KARTS.slice().sort((a, b) => C.CATALOG.findIndex((i) => i.id === a) - C.CATALOG.findIndex((i) => i.id === b)));
   assert.deepEqual(LAB.styleOptions('pet_kitten', C).map((o) => o.slot), ['acc.hat', 'acc.neck', 'acc.face', 'acc.back']);
   assert.deepEqual(LAB.styleOptions('tree_oak', C), []);
   const a = LAB.accBySlot(C);
-  assert.deepEqual(a, { hat: ['acc_partyhat', 'acc_crown'], neck: ['acc_bow', 'acc_scarf'], face: ['acc_shades'], back: ['acc_cape'] });
+  assert.deepEqual(a, { hat: ['acc_partyhat', 'acc_crown', 'acc_beanie', 'acc_cap'], neck: ['acc_bow', 'acc_scarf', 'acc_headphones'], face: ['acc_shades', 'acc_visor'], back: ['acc_cape', 'acc_hoodie'] });
   assert.deepEqual(LAB.PETS.slice().sort(), C.CATALOG.filter((i) => i.kind === 'pet').map((i) => i.id).sort());
   assert.deepEqual(LAB.KARTS.slice().sort(), C.CATALOG.filter((i) => i.slot === 'kart').map((i) => i.id).sort());
 });
@@ -175,12 +178,12 @@ test('max island: all land, every placeable id, 20 paths, 4 pets wearing every a
   w.pets.forEach((p) => { assert.equal(Object.keys(p.acc).length, 4, p.id); Object.values(p.acc).forEach((a) => worn.add(a)); });
   assert.deepEqual([...worn].sort(), C.CATALOG.filter((i) => i.kind === 'acc').map((i) => i.id).sort());
   assert.equal(C.selected(w, 'roof'), 'roof_candy');
-  assert.deepEqual(Object.keys(w.details).sort(), ['detail_chimney', 'detail_flag', 'detail_lights', 'detail_windowbox']);
+  assert.deepEqual(Object.keys(w.details).sort(), C.CATALOG.filter((i) => i.slot === 'detail').map((i) => i.id).sort());
   assert.equal(u.points, 0, 'free test mode: no points were needed or spent');
   assertLegal(u);
 });
 
-test('all-81 showcase: every id owned, each placeable placed exactly once', () => {
+test('all-104 showcase: every id owned, each placeable placed exactly once', () => {
   const u = LAB.showcaseWorld(C), w = u.world;
   assert.deepEqual(u.errors, []);
   C.CATALOG.forEach((i) => assert.ok(C.owns(w, i.id), i.id + ' owned'));
@@ -201,7 +204,7 @@ test('islandView: the view model rewards-world hands SLIsland3D.sync', () => {
   assert.equal(v.placed.length, w.placed.length);
   assert.deepEqual(Object.keys(v.placed[0]).sort(), ['id', 'uid', 'x', 'y']);
   assert.deepEqual(v.style, {
-    wall: 'wall_pink', roof: 'roof_candy', door: 'door_gold', details: w.details,
+    wall: 'wall_pink', roof: 'roof_candy', door: 'door_gold', details: w.details, shape: 'shape_tower', variant: 0,
     course: C.selected(w, 'course'), ball: C.selected(w, 'ball'), stadium: C.selected(w, 'stadium'), kart: C.selected(w, 'kart')
   });
   assert.deepEqual(v.unlocked.sort(), ['cove', 'home', 'meadow']);

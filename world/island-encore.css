@@ -45,7 +45,7 @@
    .slw-cele.encore         lighter scrim over the 3D encore moment
    .slw-cannons             empty element: 2 confetti cannons (≥ 300 ⭐)
    .slw-pts.sparkle         add for ~1 s when the points change (shimmer)
-   .slw-btn[data-act="shop"|"games"|"showtime"|"music"] (+ aria-pressed)
+   .slw-btn[data-act="shop"|"games"|"showtime"|"music"] (+ aria-pressed; the showtime toggle uses data-on="1" and is named by its next action)
    html.sl-low              LOW tier: solid #15112A panels, no blur
    2D city buildings (world-art sprites; tapItem restarts `.go`):
      .slw-hatch .slw-pearls .slw-strip .slw-marquee .slw-onair .slw-eq
@@ -292,7 +292,7 @@ html body .slw-btn[data-act="showtime"] {
   --sle-glow: 0 0 14px rgba(138, 92, 255, 0.3);
   --sle-glow-press: 0 0 7px rgba(138, 92, 255, 0.15);
 }
-html body .slw-btn[data-act="showtime"][aria-pressed="true"] {
+html body .slw-btn[data-act="showtime"][data-on="1"] {
   --sle-a: var(--sle-amber-a); --sle-b: var(--sle-amber-b);
   --sle-fg: var(--sle-amber-fg); --sle-lip: var(--sle-amber-lip);
   --sle-bw: 1.5px;

@@ -258,6 +258,9 @@
       var reduced = !!cfg.reduced;
       var root = el('div', 'slg');
       root.setAttribute('role', 'dialog'); root.setAttribute('aria-label', title);
+      /* skin hooks (world/island-encore.css): the player's colour and the count-in beat */
+      if (cfg.user && /^#[0-9a-f]{6}$/i.test(cfg.user.color || '')) root.style.setProperty('--sle-member', cfg.user.color);
+      if (def.countIn && def.countIn.bpm > 0) root.style.setProperty('--slg-beat', (60 / def.countIn.bpm).toFixed(3) + 's');
       root.innerHTML =
         '<div class="slg-top"><span class="ttl">' + def.emoji + ' ' + esc(title) + '</span><span class="hud" id="slgHud" aria-live="off"></span>' +
         '<button class="slg-b" type="button" id="slgSound" aria-label="Sound on or off"></button>' +
@@ -596,7 +599,11 @@
         if (phase === 'countdown') {
           if (!countEl) { countEl = el('div', 'slg-count'); mid.appendChild(countEl); countTxt = null; }
           var lbl = countLabel();
-          if (lbl !== countTxt) { countTxt = lbl; countEl.textContent = lbl; }
+          if (lbl !== countTxt) {
+            countTxt = lbl; countEl.textContent = lbl;
+            /* one ring per beat (the CSS plays it once; reduced motion keeps the digit only) */
+            if (!reduced) countEl.appendChild(el('span', 'slg-ring'));
+          }
         } else if (countEl) { countEl.remove(); countEl = null; }
         if (round && round.events && round.events.length) round.events.length = 0;
       }

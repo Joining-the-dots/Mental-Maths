@@ -12,6 +12,7 @@
      styleFor(id, st, defaults)           the st SL3D.make hands build() (mirrors stage.js resolveSt)
      plan(id, C, L, has)                  one showcase entry {key, id, via, base, st, fp, kind, label, note, missing}
      showcaseSections(C, L, has)          [{name, entries}] — every CATALOG id once, plus house combos
+                                          (the v1 permutations and the 5 shapes × 5 roofs grid)
      layoutGrid(sections, opts)           {items: [{entry, x, z, w, d}], headers: [{name, x, z}], bounds}
      actsFor(id, C, M)                    {item: [...], controller: [...]} act names for the turntable
      styleOptions(id, C) · accBySlot(C)   pickers for the turntable / pets mode
@@ -30,7 +31,7 @@
 }(typeof self !== 'undefined' ? self : this, function () {
   'use strict';
 
-  var VERSION = 1;
+  var VERSION = 2;
   var MODES = ['showcase', 'item', 'pets', 'karts', 'env', 'island'];
   var FIXTURES = ['starter', 'max', 'showcase'];
   var TIERS = ['LOW', 'MID', 'HIGH'];
@@ -40,14 +41,23 @@
   var KARTS = ['kart_red', 'kart_blue', 'kart_lime', 'kart_gold', 'kart_unicorn'];
   var ACC_SLOTS = ['hat', 'neck', 'face', 'back'];
   var T0 = Date.UTC(2026, 0, 1, 9, 0, 0);       /* every fixture timestamp: deterministic */
-  var ALL_DETAILS = { detail_windowbox: true, detail_chimney: true, detail_lights: true, detail_flag: true };
-  /* house style permutations shown after the single styles */
+  var ALL_DETAILS = { detail_windowbox: true, detail_chimney: true, detail_lights: true, detail_flag: true, detail_neon: true };
+  var SHAPES = ['shape_cottage', 'shape_loft', 'shape_villa', 'shape_tower', 'shape_dome'];
+  var ROOFS = ['roof_red', 'roof_blue', 'roof_thatch', 'roof_candy', 'roof_castle'];
+  /* house style permutations shown after the single styles: the v1 cottage combos, then every
+     shape wearing every roof (each roof name must stay true on every shape) */
   var COMBOS = [
-    { key: 'combo_castle', label: 'castle + every detail', st: { wall: 'wall_lilac', roof: 'roof_castle', door: 'door_gold', details: ALL_DETAILS } },
-    { key: 'combo_candy', label: 'candy + every detail', st: { wall: 'wall_pink', roof: 'roof_candy', door: 'door_red', details: ALL_DETAILS } },
-    { key: 'combo_thatch', label: 'thatch, box + chimney', st: { wall: 'wall_mint', roof: 'roof_thatch', door: 'door_green', details: { detail_windowbox: true, detail_chimney: true } } },
-    { key: 'combo_slate', label: 'slate, lights + flag', st: { wall: 'wall_sky', roof: 'roof_blue', door: 'door_blue', details: { detail_lights: true, detail_flag: true } } }
-  ];
+    { key: 'combo_castle', label: 'castle + every detail', st: { shape: 'shape_cottage', wall: 'wall_lilac', roof: 'roof_castle', door: 'door_gold', details: ALL_DETAILS } },
+    { key: 'combo_candy', label: 'candy + every detail', st: { shape: 'shape_cottage', wall: 'wall_pink', roof: 'roof_candy', door: 'door_red', details: ALL_DETAILS } },
+    { key: 'combo_thatch', label: 'thatch, box + chimney', st: { shape: 'shape_cottage', wall: 'wall_mint', roof: 'roof_thatch', door: 'door_green', details: { detail_windowbox: true, detail_chimney: true } } },
+    { key: 'combo_slate', label: 'slate, lights + flag', st: { shape: 'shape_cottage', wall: 'wall_sky', roof: 'roof_blue', door: 'door_blue', details: { detail_lights: true, detail_flag: true } } }
+  ].concat([].concat.apply([], SHAPES.map(function (sh, i) {
+    var wall = ['wall_cream', 'wall_concrete', 'wall_gallery', 'wall_graphite', 'wall_midnight'][i];
+    return ROOFS.map(function (rf) {
+      return { key: 'grid_' + sh.slice(6) + '_' + rf.slice(5), label: sh.slice(6) + ' × ' + rf.slice(5),
+               st: { shape: sh, wall: wall, roof: rf, door: sh === 'shape_cottage' ? 'door_blue' : 'door_glass', details: {} } };
+    });
+  })));
 
   function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
   function own(o, k) { return o != null && Object.prototype.hasOwnProperty.call(o, k); }
@@ -134,7 +144,10 @@
   function styleFor(id, st, defaults) {
     st = st || {}; defaults = defaults || {};
     function pick(k, d) { return st[k] || defaults[k] || d; }
-    if (id === 'house_cottage') return { wall: pick('wall', 'wall_cream'), roof: pick('roof', 'roof_red'), door: pick('door', 'door_blue'), details: st.details || {} };
+    if (id === 'house_cottage') {
+      return { wall: pick('wall', 'wall_cream'), roof: pick('roof', 'roof_red'), door: pick('door', 'door_blue'), details: st.details || {},
+               shape: pick('shape', 'shape_loft'), variant: st.variant | 0 };
+    }
     if (id === 'att_course') return { course: pick('course', 'course_meadow') };
     if (id === 'att_pitch') return { ball: pick('ball', 'ball_classic'), stadium: pick('stadium', 'stadium_day') };
     if (id === 'att_kart') return { kart: pick('kart', 'kart_red') };
@@ -161,6 +174,7 @@
     if (!it) return [];
     if (id === 'house_cottage' || it.kind === 'style') {
       return [
+        { slot: 'shape', label: 'Shape', multi: false, options: bySlot(C, 'shape') },
         { slot: 'wall', label: 'Walls', multi: false, options: bySlot(C, 'wall') },
         { slot: 'roof', label: 'Roof', multi: false, options: bySlot(C, 'roof') },
         { slot: 'door', label: 'Door', multi: false, options: bySlot(C, 'door') },
@@ -222,11 +236,13 @@
   /* section order; every CATALOG id lands in exactly one (tested) */
   var SECTIONS = [
     { name: 'Home & attractions', test: function (it) { return it.kind === 'house' || it.kind === 'attraction'; } },
+    { name: 'City buildings', test: function (it) { return it.cat === 'city'; } },
     { name: 'Garden', test: function (it, lk) { return /^(tree|flower|bush|rock)$/.test(lk); } },
     { name: 'Lights & flags', test: function (it, lk) { return /^(light|mushroom|flag)$/.test(lk); } },
     { name: 'Decor & landmarks', test: function (it, lk) { return it.kind === 'decor' && /^(decor|landmark)$/.test(lk); } },
     { name: 'Paths', test: function (it) { return it.kind === 'path'; } },
     { name: 'Fun', test: function (it) { return it.kind === 'fun'; } },
+    { name: 'Home shapes', test: function (it) { return it.kind === 'style' && it.slot === 'shape'; } },
     { name: 'Walls & doors', test: function (it) { return it.kind === 'style' && (it.slot === 'wall' || it.slot === 'door'); } },
     { name: 'Roofs & details', test: function (it) { return it.kind === 'style' && (it.slot === 'roof' || it.slot === 'detail'); } },
     { name: 'House combos', combos: true, test: function () { return false; } },
@@ -325,6 +341,7 @@
     return r.uid;
   }
   function finish(u, ctx) { u.errors = ctx.errors; return u; }
+  function area(C, id) { var fp = (C.item(id) || {}).fp || [1, 1]; return fp[0] * fp[1]; }
   function starterWorld(C) {
     var u = profile('Lab starter'), ctx = newCtx('st');
     C.ensureWorld(u);
@@ -362,18 +379,20 @@
     /* paths: 20 in all (the starter's 4 stone + 2 stone + 7 wood + 7 flower) */
     var extraPaths = { path_stone: 20 - 7 - 7 - C.ownedCount(w, 'path_stone'), path_wood: 7 - C.ownedCount(w, 'path_wood'), path_flower: 7 - C.ownedCount(w, 'path_flower') };
     Object.keys(extraPaths).forEach(function (id) { for (var i = 0; i < extraPaths[id]; i++) buy(C, u, id, ctx); });
-    selectAll(C, u, ['wall_pink', 'roof_candy', 'door_gold'], ctx);    /* candy keeps the rooftop flag (castle drops it) */
+    selectAll(C, u, ['wall_pink', 'roof_candy', 'door_gold', 'shape_tower'], ctx);    /* candy keeps the rooftop flag (castle drops it); the tower is the tallest home */
+    /* all 11 accessories are worn (4 hats, 3 neck, 2 face, 2 back across 4 pets) */
     equipAll(C, u, {
       pet_puppy: ['acc_crown', 'acc_bow', 'acc_shades', 'acc_cape'],
-      pet_kitten: ['acc_partyhat', 'acc_scarf', 'acc_shades', 'acc_cape'],
-      pet_bunny: ['acc_crown', 'acc_scarf', 'acc_shades', 'acc_cape'],
-      pet_dragon: ['acc_partyhat', 'acc_bow', 'acc_shades', 'acc_cape']
+      pet_kitten: ['acc_partyhat', 'acc_scarf', 'acc_visor', 'acc_hoodie'],
+      pet_bunny: ['acc_beanie', 'acc_headphones', 'acc_shades', 'acc_cape'],
+      pet_dragon: ['acc_cap', 'acc_bow', 'acc_visor', 'acc_hoodie']
     }, ctx);
-    /* place every stored copy: fun, then decor spread over the land, then paths near the door */
+    /* place every stored copy, biggest footprints first (the city buildings need the room),
+       then fun, then decor spread over the land, then paths near the door */
     var cells = landCells(C, w), k = 0;
     var stored = C.inventory(w).map(function (x) { return x; });
     var rank = { fun: 0, decor: 1, path: 2 };
-    stored.sort(function (a, b) { return (rank[C.item(a.id).kind] || 0) - (rank[C.item(b.id).kind] || 0) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0); });
+    stored.sort(function (a, b) { return area(C, b.id) - area(C, a.id) || (rank[C.item(a.id).kind] || 0) - (rank[C.item(b.id).kind] || 0) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0); });
     stored.forEach(function (x) {
       var kind = C.item(x.id).kind;
       for (var i = 0; i < x.count; i++) {
@@ -384,7 +403,7 @@
     u.name = 'Lab max island';
     return finish(u, ctx);
   }
-  /* 'all-81 showcase': every CATALOG id owned, each placeable placed exactly once, in rows */
+  /* 'all-104 showcase': every CATALOG id owned, each placeable placed exactly once, biggest first */
   function showcaseWorld(C) {
     var u = starterWorld(C), ctx = newCtx('sc');
     ctx.errors = u.errors.slice();
@@ -394,13 +413,14 @@
     buyEverything(C, u, ctx);
     selectAll(C, u, ['wall_sky', 'roof_castle', 'door_red'], ctx);
     equipAll(C, u, {
-      pet_puppy: ['acc_partyhat', 'acc_bow'], pet_kitten: ['acc_crown', 'acc_scarf'],
-      pet_bunny: ['acc_shades'], pet_dragon: ['acc_cape']
+      pet_puppy: ['acc_cap', 'acc_headphones', 'acc_shades'], pet_kitten: ['acc_beanie', 'acc_scarf', 'acc_hoodie'],
+      pet_bunny: ['acc_crown', 'acc_bow', 'acc_visor'], pet_dragon: ['acc_partyhat', 'acc_cape']
     }, ctx);
-    var ids = C.CATALOG.filter(function (it) { return C.isPlaceable(it) && C.placedCount(w, it.id) === 0; }).map(function (it) { return it.id; });
+    var ids = C.CATALOG.filter(function (it) { return C.isPlaceable(it) && C.placedCount(w, it.id) === 0; }).map(function (it) { return it.id; })
+      .sort(function (a, b) { return area(C, b) - area(C, a); });
     var cells = landCells(C, w), step = Math.max(1, Math.floor(cells.length / Math.max(1, ids.length)));
     ids.forEach(function (id, i) { placeOne(C, u, id, cells[Math.min(cells.length - 1, i * step)], ctx); });
-    u.name = 'Lab all-81 showcase';
+    u.name = 'Lab all-104 showcase';
     return finish(u, ctx);
   }
   function fixture(name, C) {
@@ -417,6 +437,7 @@
       placed: w.placed.filter(function (p) { return !!C.item(p.id); }).map(function (p) { return { uid: p.uid, id: p.id, x: p.x, y: p.y }; }),
       style: {
         wall: C.selected(w, 'wall'), roof: C.selected(w, 'roof'), door: C.selected(w, 'door'), details: copy(w.details),
+        shape: C.selected(w, 'shape'), variant: extra.variant | 0,
         course: C.selected(w, 'course'), ball: C.selected(w, 'ball'), stadium: C.selected(w, 'stadium'), kart: C.selected(w, 'kart')
       },
       unlocked: C.unlockedRegions(w),
@@ -526,7 +547,7 @@
 
   return {
     VERSION: VERSION, MODES: MODES, FIXTURES: FIXTURES, CLIPS: CLIPS, PETS: PETS, KARTS: KARTS,
-    ACC_SLOTS: ACC_SLOTS, COMBOS: COMBOS, T0: T0,
+    ACC_SLOTS: ACC_SLOTS, COMBOS: COMBOS, SHAPES: SHAPES, ROOFS: ROOFS, T0: T0,
     parseParams: parseParams, toQuery: toQuery, styleFor: styleFor, plan: plan,
     showcaseSections: showcaseSections, layoutGrid: layoutGrid, actsFor: actsFor,
     styleOptions: styleOptions, accBySlot: accBySlot,

@@ -8,6 +8,11 @@
   'use strict';
   var C = window.SLWorldCore, ART = window.SLWorldArt;
   if (!C || !ART) return;
+  /* one voice for every string (world/world-copy.js); the fallback keeps the island working without it */
+  function tx(key, vars, fb) { var CP = window.SLWorldCopy; return CP ? CP.t(key, vars, fb) : (fb || key); }
+  function dsc(it) { var CP = window.SLWorldCopy; return (CP && CP.desc(it.id)) || it.desc || ''; }
+  function ico(name) { return typeof ART.uiIcon === 'function' ? ART.uiIcon(name) : ''; }
+  function lbl(icon, text) { var i = ico(icon); return (i ? i + ' ' : '') + esc(text); }
   var CH = ART.CH, COLS = C.COLS, ROWS = C.ROWS;
   var PAD = 80;                               /* sky above row 0 for tall sprites */
   var STAGE_W = COLS * 100, STAGE_H = ROWS * CH + PAD, GROUND_H = ROWS * CH;
@@ -272,11 +277,26 @@
   }
 
   /* ---------------- style state for art ---------------- */
+  /* FNV-1a of the profile key: each family's home gets its own stable trim (variant 0 or 1) */
+  function famVariant() {
+    var k = String(state.activeUser || '').toLowerCase(), h = 2166136261;
+    for (var i = 0; i < k.length; i++) { h ^= k.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; }
+    return h % 2;
+  }
+  function firstName(n) { return String(n || '').trim().split(/\s+/)[0].slice(0, 12); }
   function artState(w) {
+    var u = me() || {};
     return {
       wall: C.selected(w, 'wall'), roof: C.selected(w, 'roof'), door: C.selected(w, 'door'), details: w.details,
+      shape: C.selected(w, 'shape'), variant: famVariant(), name: firstName(u.name), member: u.color || '#6C5CE7',
       course: C.selected(w, 'course'), ball: C.selected(w, 'ball'), stadium: C.selected(w, 'stadium'), kart: C.selected(w, 'kart')
     };
+  }
+  /* a city building's own trim (one of 3, by uid) for the 2D sprite */
+  function bldState(st, p) {
+    var L = window.SLIslandLook, it = C.item(p.id);
+    if (!it || it.cat !== 'city') return st;
+    return Object.assign({}, st, { variant: (L && L.variantOf) ? L.variantOf(p.uid, p.id) : 0 });
   }
 
   /* ================================================================
@@ -285,7 +305,7 @@
      of state, rules, commits, HTML and sound decisions. Every call into
      the stage is guarded: any failure drops silently back to the 2D island.
      ================================================================ */
-  var stage3d = null, use3D = null, booting3d = false, coverCount = 0, anim3d = {}, dispose3dTimer = 0, late3d = false, userChangedInGame = false, lastShowtimeTap = 0;
+  var stage3d = null, use3D = null, booting3d = false, coverCount = 0, anim3d = {}, dispose3dTimer = 0, late3d = false, userChangedInGame = false, lastShowtimeTap = 0, encoreUntil = 0;
   var showtimeOn = (function () { try { return localStorage.getItem('slwShowtime') === '1'; } catch (e) { return false; } })();
   function s3(method) {
     if (!stage3d || typeof stage3d[method] !== 'function') return undefined;
@@ -298,7 +318,7 @@
     try { if (window.SLIsland3D && SLIsland3D.remember2D && /perf|lost/.test(String(reason || ''))) SLIsland3D.remember2D(reason); } catch (e) {}
     if (root && document.getElementById('slwStage')) draw();
   }
-  function userInfo() { var u = me() || {}; return { name: u.name || '', color: u.color || '#6C5CE7', avatar: u.avatar || '🙂' }; }
+  function userInfo() { var u = me() || {}; return { name: u.name || '', color: u.color || '#6C5CE7', avatar: u.avatar || '🙂', seed: String(state.activeUser || '').toLowerCase() }; }
   function maybeBoot3D() {
     if (stage3d || booting3d || use3D === false) return;
     try { if (localStorage.getItem('slNo3D') === '1') { use3D = false; return; } } catch (e) {}
@@ -419,16 +439,17 @@
     if (!root) return;
     injectCss();
     var u = me();
-    if (!u) { root.innerHTML = '<div class="slw-loading">Pick a player first 🙂</div>'; return; }
+    if (!u) { root.innerHTML = '<div class="slw-loading">' + esc(tx('player.pick')) + '</div>'; return; }
     var w = C.ensureWorld(u);
     /* first visit for this profile: grant the starter island exactly once */
     if (!w.starterGrantedAt || C.normalize(u)) {
       commit(function (fu) {
         var granted = C.grantStarter(fu);
         var fixed = C.normalize(fu);
+        if (granted) C.ensureWorld(fu).tutSeen.cityV2 = true;     /* a brand-new island starts in the city */
         return { ok: granted || fixed };
       }).then(function () { draw(); maybeIntro(); });
-      root.innerHTML = '<div class="slw-loading">Building your island… 🏝️</div>';
+      root.innerHTML = '<div class="slw-loading">Building your island…</div>';
       return;
     }
     if (dispose3dTimer) { clearTimeout(dispose3dTimer); dispose3dTimer = 0; }
@@ -450,27 +471,27 @@
     root.innerHTML =
       '<div class="slw' + (mode !== 'play' ? ' slw-edit' : '') + (is3d && showtimeOn ? ' showtime' : '') + '">' +
         '<div class="slw-hud">' +
-          '<button class="slw-learn" type="button" data-act="learn">📚 Back to learning</button>' +
+          '<button class="slw-learn" type="button" data-act="learn">Back to learning</button>' +
           '<div class="slw-pts" title="Your spendable points">⭐ <span id="slwPts">' + fmt(u.points) + '</span></div>' +
           goalHtml(u) +
           '<div class="slw-acts">' +
-            '<button class="slw-btn big" type="button" data-act="shop">🛍️ Shop</button>' +
-            '<button class="slw-btn big" type="button" data-act="games">🎮 Games</button>' +
-            '<button class="slw-btn' + (mode === 'edit' ? ' on' : '') + '" type="button" data-act="edit" aria-pressed="' + (mode === 'edit') + '">✏️ ' + (mode === 'edit' ? 'Done' : 'Edit') + '</button>' +
-            '<button class="slw-btn" type="button" data-act="pets">🐾 Pets</button>' +
-            (is3d ? '<button class="slw-btn" type="button" data-act="showtime" aria-pressed="' + showtimeOn + '">' + (showtimeOn ? '☀️ Back to day' : '🌙✨ Showtime') + '</button>' : '') +
-            '<button class="slw-btn" type="button" data-act="music" aria-pressed="' + musicOn() + '" aria-label="Music on or off">' + (musicOn() ? '🎵 On' : '🎵 Off') + '</button>' +
+            '<button class="slw-btn big" type="button" data-act="shop">' + lbl('shop', 'Shop') + '</button>' +
+            '<button class="slw-btn big" type="button" data-act="games">' + lbl('games', 'Games') + '</button>' +
+            '<button class="slw-btn' + (mode === 'edit' ? ' on' : '') + '" type="button" data-act="edit" aria-pressed="' + (mode === 'edit') + '">' + lbl('edit', mode === 'edit' ? 'Done' : 'Edit') + '</button>' +
+            '<button class="slw-btn" type="button" data-act="pets">' + lbl('crew', tx('label.crew')) + '</button>' +
+            (is3d ? '<button class="slw-btn" type="button" data-act="showtime"' + (showtimeOn ? ' data-on="1"' : '') + '>' + lightLabel() + '</button>' : '') +
+            '<button class="slw-btn" type="button" data-act="music" aria-pressed="' + musicOn() + '" aria-label="Music on or off">' + lbl('music', musicOn() ? 'On' : 'Off') + '</button>' +
             '<button class="slw-btn" type="button" data-act="sound" aria-label="Sound on or off">' + (u.muted ? '🔇 Off' : '🔊 On') + '</button>' +
             '<button class="slw-btn" type="button" data-act="info" aria-label="How it works">❓</button>' +
           '</div>' +
         '</div>' +
         '<div class="slw-stagewrap' + (is3d ? ' slw-is3d' : '') + '"><div class="slw-stage" id="slwStage"></div></div>' +
-        '<div class="slw-pan" aria-hidden="true">👆 Swipe the island sideways to see it all</div>' +
+        '<div class="slw-pan" aria-hidden="true">Swipe the island sideways to see it all</div>' +
         '<div id="slwBar"></div>' +
         '<div class="slw-legend"><span><i style="background:#ffd23f;color:#4a3200;">▶ PLAY</i> tap to play a game</span>' +
           '<span><i style="background:#fff;border:2px solid #6c5ce7;">✋</i> tap to play with it</span>' +
           '<span><i style="background:#4a4468;color:#fff;">🔒</i> unlock in the shop</span>' +
-          '<span>Everything else is decoration ✨</span></div>' +
+          '<span>Everything else is just for looks</span></div>' +
       '</div>';
     drawStage();
     drawBar();
@@ -482,13 +503,14 @@
     var g = root.querySelector('.slw-goal'); if (g) g.addEventListener('click', function () { if (W().goal) openItem(W().goal); else openShop(); });
   }
 
+  function lightLabel() { return showtimeOn ? lbl('golden', tx('light.golden')) : lbl('showtime', tx('light.showtime')); }
   function goalHtml(u) {
-    if (trial()) return '<div class="slw-goal slw-trial" role="note"><span class="gt">🧪 Test mode — everything on the island is FREE. Your ⭐ are safe!</span></div>';
+    if (trial()) return '<div class="slw-goal slw-trial" role="note"><span class="gt">🧪 Test mode: everything on the island is free. Your ⭐ stay put.</span></div>';
     var gp = C.goalProgress(u);
-    if (!gp) return '<button class="slw-goal" type="button"><span class="gt">🎯 Pick a savings goal in the shop</span></button>';
+    if (!gp) return '<button class="slw-goal" type="button"><span class="gt">' + lbl('goal', 'Pick a savings goal in the shop') + '</span></button>';
     return '<button class="slw-goal' + (gp.ready ? ' ready' : '') + '" type="button" aria-label="Savings goal: ' + esc(gp.name) + '">' +
       '<span class="gi">' + iconHtml(gp.id, artState(C.ensureWorld(u))) + '</span>' +
-      '<span style="flex:1;min-width:0;"><span class="gt">' + (gp.ready ? '🎉 You can buy ' + esc(gp.name) + '!' : '🎯 ' + esc(gp.name) + ' · ' + fmt(gp.have) + ' / ' + fmt(gp.price) + ' ⭐') + '</span>' +
+      '<span style="flex:1;min-width:0;"><span class="gt">' + (gp.ready ? 'Ready: you can buy ' + esc(gp.name) : '🎯 ' + esc(gp.name) + ' · ' + fmt(gp.have) + ' / ' + fmt(gp.price) + ' ⭐') + '</span>' +
       '<span class="gb" style="display:block;"><i style="width:' + gp.pct + '%"></i></span></span></button>';
   }
 
@@ -506,7 +528,7 @@
     w.placed.forEach(function (p) {
       var it = C.item(p.id); if (!it) return;          /* unknown future item: kept in data, not drawn */
       if (placing && placing.uid === p.uid) return;    /* drawn as the ghost while moving */
-      var sp = ART.sprite(p.id, Object.assign({ lit: !!lit[p.uid] }, st)); if (!sp) return;
+      var sp = ART.sprite(p.id, Object.assign({ lit: !!lit[p.uid] }, bldState(st, p))); if (!sp) return;
       var fw = it.fp[0], fh = it.fp[1];
       var hUnits = sp.h * (fw * 100 / sp.w);
       var top = PAD + (p.y + fh) * CH - hUnits;
@@ -546,7 +568,7 @@
     stage.querySelectorAll('[data-uid]').forEach(function (el) { el.addEventListener('click', onObjectTap); });
     stage.querySelectorAll('[data-land]').forEach(function (el) { el.addEventListener('click', function () { openItem(el.dataset.land); }); });
     var meEl = stage.querySelector('.slw-me');
-    if (meEl) meEl.addEventListener('click', function () { meEl.classList.remove('wave'); void meEl.offsetWidth; meEl.classList.add('wave'); fx(meEl, '👋'); });
+    if (meEl) meEl.addEventListener('click', function () { meEl.classList.remove('wave'); void meEl.offsetWidth; meEl.classList.add('wave'); fx(meEl, '✦'); });
     if (mode === 'place') drawPlacement();
     startPets();
   }
@@ -592,7 +614,7 @@
       b.addEventListener('click', function () {
         b.classList.remove('hop'); void b.offsetWidth; b.classList.add('hop');
         b.classList.add('say'); setTimeout(function () { b.classList.remove('say'); }, 1800);
-        fx(b, ['💖', '✨', '🎾', '😊'][Math.floor(Math.random() * 4)]);
+        fx(b, ['♪', '✦', '★'][Math.floor(Math.random() * 3)]);
         sfx('unlock');
       });
       host.appendChild(b);
@@ -640,15 +662,15 @@
       islandMusic(showtimeOn ? 'island_showtime' : 'island_day');
       if (showtimeOn) { sample('sting', 0.6); try { if (window.SLSound) SLSound.make({ muted: function () { var u = me(); return !!(u && u.muted); } })('whoosh'); } catch (er) {} } else sample('chip', 0.5);
       var slw = root.querySelector('.slw'); if (slw) slw.classList.toggle('showtime', showtimeOn);
-      e.currentTarget.textContent = showtimeOn ? '☀️ Back to day' : '🌙✨ Showtime';
-      e.currentTarget.setAttribute('aria-pressed', String(showtimeOn));
+      e.currentTarget.innerHTML = lightLabel();
+      if (showtimeOn) e.currentTarget.setAttribute('data-on', '1'); else e.currentTarget.removeAttribute('data-on');
       return;
     }
     if (a === 'music') {
       var onNow = !musicOn();
       try { if (window.SLMusic) SLMusic.setEnabled(onNow); } catch (er) {}
       if (onNow) islandMusic(use3D && stage3d && showtimeOn ? 'island_showtime' : 'island_day');
-      e.currentTarget.textContent = onNow ? '🎵 On' : '🎵 Off';
+      e.currentTarget.innerHTML = lbl('music', onNow ? 'On' : 'Off');
       e.currentTarget.setAttribute('aria-pressed', String(onNow));
       return;
     }
@@ -687,6 +709,15 @@
         }
         case 'home': s3('act', uid, 'home'); return openHome(uid);
         case 'glow': lit[uid] = !lit[uid]; s3('setLit', uid, lit[uid]); sample(lit[uid] ? 'star' : 'chip', 0.5) || sfx('tick'); return;
+        case 'encore': {
+          /* the stage's encore: 8 s of Showtime, then the child's own setting comes back */
+          if (Date.now() < encoreUntil) return;
+          encoreUntil = Date.now() + 8000;
+          s3('act', uid, 'encore');
+          s3('showtime', true, { encoreMs: 8000 });
+          sample('sting', 0.6);
+          return;
+        }
         default: if (it.act) s3('act', uid, it.act); return;
       }
     }
@@ -698,8 +729,8 @@
       case 'bounce': {
         el.classList.remove('slw-bounce'); void el.offsetWidth; el.classList.add('slw-bounce');
         var petEl = $('.slw-pet', root);
-        if (petEl) { petEl.style.transitionDuration = '0.4s'; petEl.style.left = el.style.left; petEl.style.top = 'calc(' + el.style.top + ' + 2%)'; setTimeout(function () { petEl.classList.remove('hop'); void petEl.offsetWidth; petEl.classList.add('hop'); fx(el, 'BOING!'); }, 420); }
-        else fx(el, 'BOING!');
+        if (petEl) { petEl.style.transitionDuration = '0.4s'; petEl.style.left = el.style.left; petEl.style.top = 'calc(' + el.style.top + ' + 2%)'; setTimeout(function () { petEl.classList.remove('hop'); void petEl.offsetWidth; petEl.classList.add('hop'); fx(el, '✦'); }, 420); }
+        else fx(el, '✦');
         sample('chip', 0.6) || sfx('unlock');
         return;
       }
@@ -708,8 +739,38 @@
       case 'bubbles': { var bb = el.querySelector('.slw-bubbles'); if (bb) { bb.classList.remove('go'); void el.offsetWidth; bb.classList.add('go'); } fx(el, '🫧'); sfx('unlock'); return; }
       case 'spin': { var sp = el.querySelector('.slw-spin'); if (sp) { sp.classList.add('fast'); setTimeout(function () { sp.classList.remove('fast'); }, 2200); } fx(el, '🌬️'); return; }
       case 'wave': { var fl = el.querySelector('.slw-flag'); if (fl) { fl.classList.add('fast'); setTimeout(function () { fl.classList.remove('fast'); }, 1600); } fx(el, '🎉'); return; }
+      /* the city buildings: restart the sprite's own hook (island-encore.css animates .go; every act ends within 3 s) */
+      case 'snap': go2d(el, '.slw-strip'); fx(el, '✦'); sample('chip', 0.6) || sfx('tick'); return;
+      case 'serve': go2d(el, '.slw-hatch'); go2d(el, '.slw-pearls'); fx(el, '♪'); sample('coins', 0.4) || sfx('correct'); return;
+      case 'screen': {
+        /* the LED tower cycles its four shows: name marquee, pixel pet, EQ, star field */
+        var scr = el.querySelector('.slw-screen');
+        if (scr) {
+          var nx = ((+scr.getAttribute('data-prog') || 0) + 1) % 4;
+          scr.setAttribute('data-prog', String(nx));
+          scr.querySelectorAll('.slw-prog').forEach(function (g) { g.setAttribute('display', g.classList.contains('p' + nx) ? 'inline' : 'none'); });
+        }
+        go2d(el, '.slw-marquee'); sfx('tick'); return;
+      }
+      case 'record': go2d(el, '.slw-onair'); go2d(el, '.slw-eq'); fx(el, '♪'); sample('chip', 0.5) || sfx('tick'); return;
+      case 'dance': go2d(el, '.slw-floor'); fx(el, '♪'); sample('star', 0.5) || sfx('correct'); return;
+      case 'hangout': el.querySelectorAll('.slw-bean').forEach(function (b) { restart(b); }); fx(el, '✦'); sfx('tick'); return;
+      case 'encore': {
+        if (Date.now() < encoreUntil) return;
+        encoreUntil = Date.now() + 8000;
+        go2d(el, '.slw-beam');
+        var slw = root.querySelector('.slw');
+        if (slw && !showtimeOn) {
+          slw.classList.add('showtime');
+          setTimeout(function () { var s2 = root && root.querySelector('.slw'); if (s2 && !showtimeOn) s2.classList.remove('showtime'); }, 8000);
+        }
+        fx(el, '★'); sample('sting', 0.6) || sfx('fanfare');
+        return;
+      }
     }
   }
+  function restart(node) { node.classList.remove('go'); void node.getBoundingClientRect(); node.classList.add('go'); }
+  function go2d(el, sel) { var n = el.querySelector(sel); if (n) restart(n); }
 
   /* ---------------- edit / placement ---------------- */
   function drawBar() {
@@ -737,16 +798,16 @@
         html += '<div class="msg">' + esc(sit.name) + '</div>' +
           '<button class="slw-btn on" type="button" id="slwMove">↔️ Move</button>' +
           (C.isStorable(sit) ? '<button class="slw-btn" type="button" id="slwStore">📦 Put away</button>' : '<span style="font-size:12px;font-weight:700;color:#7c8696;">This one always stays on your island — you can move it.</span>') +
-          (sit.id === 'house_cottage' ? '<button class="slw-btn" type="button" id="slwHome">🎨 Colours</button>' : '');
+          (sit.id === 'house_cottage' ? '<button class="slw-btn" type="button" id="slwHome">' + lbl('home', 'Restyle') + '</button>' : '');
       }
     } else {
-      html += '<div class="msg">✏️ Tap something on your island to move it or put it away.</div>';
+      html += '<div class="msg">' + esc(tx('edit.hint')) + '</div>';
     }
     html += '<button class="slw-btn" type="button" id="slwEditDone">Done</button></div>';
     var inv = C.inventory(w).filter(function (x) { return C.isPlaceable(C.item(x.id)); });
     html += '<div class="slw-tray" aria-label="Things you own that aren’t on the island">' + (inv.length
       ? inv.map(function (x) { var it2 = C.item(x.id); return '<button type="button" class="slw-trayitem" data-tray="' + x.id + '"><b>×' + x.count + '</b>' + ART.icon(x.id, artState(w)) + '<span>' + esc(it2.name) + '</span></button>'; }).join('')
-      : '<div style="font-size:13px;font-weight:700;color:#7c8696;padding:6px;">📦 Your storage is empty — everything you own is out on the island!</div>') + '</div>';
+      : '<div style="font-size:13px;font-weight:700;color:#7c8696;padding:6px;">Storage is empty. Everything you own is out on the island.</div>') + '</div>';
     bar.innerHTML = html;
     var mv = $('#slwMove', bar); if (mv) mv.addEventListener('click', function () { var pp = w.placed.filter(function (q) { return q.uid === selectedUid; })[0]; if (pp) startPlacement(pp.id, pp.uid, false); });
     var stb = $('#slwStore', bar); if (stb) stb.addEventListener('click', function () { storeSelected(); });
@@ -831,14 +892,14 @@
       if (!pl.uid) { window._slwNew = window._slwNew || {}; window._slwNew[res.uid] = 1; }
       anim3d.dropUid = pl.uid || res.uid;              /* the 3D drop-in plays on the next sync */
       endPlacement(pl.fromBuy ? 'play' : 'edit');
-      toast(pl.uid ? 'Moved! ✨' : 'Placed! ✨', { label: '↩ Undo', fn: undo });
+      toast(tx(pl.uid ? 'edit.moved' : 'edit.placed'), { label: '↩ Undo', fn: undo });
     });
   }
   function cancelPlacement() {
     if (!placing) return;
     var wasBuy = placing.fromBuy, wasNew = !placing.uid;
     endPlacement(wasBuy ? 'play' : 'edit');
-    if (wasNew) toast('📦 Saved in your storage — place it any time from ✏️ Edit.');
+    if (wasNew) toast(tx('edit.stored'));
   }
   function storeSelected() {
     var uid = selectedUid; if (!uid) return;
@@ -848,7 +909,7 @@
       lastUndo = { type: 'store', id: p.id, x: p.x, y: p.y };
       s3('storeFx', uid);
       selectedUid = null; draw();
-      toast('📦 Put away safely — it’s in your storage.', { label: '↩ Undo', fn: undo });
+      toast(tx('edit.stored'), { label: '↩ Undo', fn: undo });
     });
   }
   function undo() {
@@ -904,7 +965,11 @@
   }
 
   /* ---------------- shop ---------------- */
-  var SHOP_CATS = [['all', '⭐ All'], ['afford', '✅ I can buy'], ['garden', '🌷 Garden'], ['paths', '🛤️ Paths'], ['fun', '🎪 Fun'], ['home', '🏠 Home'], ['pets', '🐾 Pets'], ['land', '🏝️ Land'], ['games', '🎮 Games']];
+  function shopCats() {
+    return [['all', '⭐ All'], ['afford', 'I can buy'], ['garden', 'Garden'], ['paths', 'Paths'], ['fun', 'Fun'],
+      ['city', lbl('city', tx('shop.tab.city', null, 'City'))], ['home', lbl('home', 'Home')], ['pets', lbl('crew', tx('label.crew', null, 'Crew'))],
+      ['land', 'Land'], ['games', lbl('games', 'Games')]];
+  }
   var shopCat = 'all';
   function catOf(it) {
     if (it.cat === 'lights' || it.cat === 'flags') return 'garden';
@@ -924,7 +989,7 @@
     var goalBtn = (s.state === 'owned' || trial()) ? '' : '<button type="button" class="slw-goalbtn' + (isGoal ? ' on' : '') + '" data-goal="' + it.id + '" aria-pressed="' + isGoal + '" title="' + (isGoal ? 'This is your goal' : 'Make this my savings goal') + '">🎯</button>';
     var shine = (window.SLIslandLook && SLIslandLook.shineLevel) ? ' shine-' + SLIslandLook.shineLevel(it.price) : '';
     return '<div class="slw-card' + shine + '"><button type="button" class="ic" data-open="' + it.id + '" aria-label="See ' + esc(it.name) + '">' + iconHtml(it.id, artState(w)) + '</button>' +
-      '<div class="nm">' + esc(it.name) + '</div><div class="ds">' + esc(it.desc) + '</div>' + chip +
+      '<div class="nm">' + esc(it.name) + '</div><div class="ds">' + esc(dsc(it)) + '</div>' + chip +
       (trial() ? '<div class="pr"><s style="color:#9a94b5;font-weight:700;">⭐ ' + fmt(it.price) + '</s> <span class="slw-free">FREE</span></div>'
         : '<div class="pr">⭐ ' + fmt(it.price) + (rep ? ' <span style="font-size:11px;color:#8a84a3;">each</span>' : '') + '</div>') +
       '<div class="row"><button type="button" class="slw-buy" data-buy="' + it.id + '"' + (disabled ? ' disabled' : '') + '>' + buyLabel + '</button>' + goalBtn + '</div></div>';
@@ -933,11 +998,11 @@
     if (cat) shopCat = cat;
     var u = me();
     islandMusic('shop');
-    var ov = overlay('<h2>🛍️ Island Shop</h2><div style="font-weight:800;color:#6b5a22;">You have ⭐ <span id="slwShopPts">' + fmt(u.points) + '</span> ' + (trial() ? 'saved for the 🎁 Shop (not used here)' : 'to spend · earn more by learning 📚 · same ⭐ as the 🎁 Shop') + '</div>' + (trial() ? '<div class="slw-trialbar">🧪 Test mode: everything in this shop is <b>free</b> — your ⭐ aren’t used. Try anything you like!</div>' : '') + '<div class="slw-cats" id="slwCats"></div><div class="slw-err" id="slwShopErr" role="alert"></div><div class="slw-grid" id="slwShopGrid"></div>', { onClose: function () { islandMusic(use3D && stage3d && showtimeOn ? 'island_showtime' : 'island_day'); } });
+    var ov = overlay('<h2>' + lbl('shop', 'Island Shop') + '</h2><div style="font-weight:800;color:#6b5a22;">You have ⭐ <span id="slwShopPts">' + fmt(u.points) + '</span> ' + (trial() ? 'saved for the 🎁 Shop (not used here)' : 'to spend · earn more by learning 📚 · same ⭐ as the 🎁 Shop') + '</div>' + (trial() ? '<div class="slw-trialbar">🧪 Test mode: everything in this shop is <b>free</b>. Your ⭐ aren’t used, so try anything.</div>' : '') + '<div class="slw-cats" id="slwCats"></div><div class="slw-err" id="slwShopErr" role="alert"></div><div class="slw-grid" id="slwShopGrid"></div>', { onClose: function () { islandMusic(use3D && stage3d && showtimeOn ? 'island_showtime' : 'island_day'); } });
     function paint() {
       var u2 = me();
       $('#slwShopPts', ov).textContent = fmt(u2.points);
-      $('#slwCats', ov).innerHTML = SHOP_CATS.map(function (c) { return '<button type="button" class="slw-btn' + (shopCat === c[0] ? ' on' : '') + '" data-cat="' + c[0] + '">' + c[1] + '</button>'; }).join('');
+      $('#slwCats', ov).innerHTML = shopCats().map(function (c) { return '<button type="button" class="slw-btn' + (shopCat === c[0] ? ' on' : '') + '" data-cat="' + c[0] + '">' + c[1] + '</button>'; }).join('');
       var items = C.shopItems().filter(function (it) {
         if (shopCat === 'afford') return iState(u2, it.id).state === 'affordable';
         return shopCat === 'all' || catOf(it) === shopCat;
@@ -953,7 +1018,7 @@
         C.shopItems().forEach(function (it) { if (iState(u2, it.id).state === 'short' && (!next || it.price < next.price)) next = it; });
       }
       $('#slwShopGrid', ov).innerHTML = items.length ? items.map(function (it) { return cardHtml(u2, it); }).join('')
-        : trial() ? '<p style="grid-column:1/-1;font-weight:800;text-align:center;color:#1d8a4c;padding:18px;">🎉 You’ve got everything there is! Thanks for testing.</p>'
+        : trial() ? '<p style="grid-column:1/-1;font-weight:800;text-align:center;color:#1d8a4c;padding:18px;">You’ve got everything there is. Thanks for testing.</p>'
         : '<p style="grid-column:1/-1;font-weight:800;text-align:center;color:#6b6390;padding:18px;">Nothing to buy just yet — every bit of learning earns ⭐!' +
           (next ? '<br>Next up: <b>' + esc(next.name) + '</b> — just ' + fmt(next.price - (u2.points || 0)) + ' more ⭐.' : '') + '</p>';
       fillPhotocards(ov);
@@ -979,7 +1044,7 @@
       if (r.ok) { var fw = C.ensureWorld(u); fw.goalPrice = it ? it.price : null; fw.goalName = it ? it.name : null; }
       return r;
     }).then(function (res) {
-      if (res && res.ok) { toast(target ? '🎯 New goal: ' + it.name + '!' : 'Goal cleared.'); draw(); return; }
+      if (res && res.ok) { toast(target ? '🎯 New goal: ' + it.name : 'Goal cleared.'); draw(); return; }
       if (res && res.code === 'locked' && res.needs && W().goal !== res.needs) {
         var pre = C.item(res.needs);
         return toggleGoal(res.needs).then(function () { toast('🎯 First you need the ' + pre.name + ' — that’s your goal now!'); });
@@ -989,7 +1054,7 @@
   }
   function useOwned(it) {
     if (it.kind === 'style') { commit(function (u) { return C.select(u, it.id); }).then(function () { draw(); openHome(); }); return; }
-    if (it.kind === 'cosmetic' || it.kind === 'variant') { commit(function (u) { return C.select(u, it.id); }).then(function () { draw(); toast('Selected: ' + it.name + ' ✓'); }); return; }
+    if (it.kind === 'cosmetic' || it.kind === 'variant') { commit(function (u) { return C.select(u, it.id); }).then(function () { draw(); toast(tx('buy.cosmetic')); }); return; }
   }
 
   /* item detail sheet (preview, unlocks, buy, goal) */
@@ -998,14 +1063,16 @@
     if (it.kind === 'attraction') parts.push(trial() ? '🎮 Unlocks a new game — tap it on your island to play.' : '🎮 Unlocks a new game for keeps — tap it on your island to play.');
     (it.includes || []).forEach(function (inc) { var ii = C.item(inc); if (ii) parts.push('🎁 Comes with: ' + ii.name); });
     if (it.kind === 'land') parts.push('🏝️ Opens ' + (C.REGION_CELLS[it.region] || []).length + ' new squares of island.');
-    if (it.kind === 'pet') parts.push('🐾 A new pet who wanders your island and can run your obstacle course.');
-    if (it.kind === 'acc') parts.push('🎀 Any of your pets can wear it — on the island and in the obstacle course.');
-    if (it.kind === 'variant' && it.game === 'course') parts.push('🏃 A new obstacle course for your pet, with its own best score.');
+    if (it.kind === 'pet') parts.push('A new crew member who roams your island and can run the Debut Run.');
+    if (it.kind === 'acc') parts.push('Anyone in your crew can wear it, on the island and in the Debut Run.');
+    if (it.kind === 'variant' && it.game === 'course') parts.push('A new Debut Run course, with its own best score.');
     if (it.kind === 'variant' && it.game === 'kart') parts.push('🏁 A new race track, with its own best time.');
     if (it.kind === 'cosmetic') parts.push('✨ Changes how the game looks — it doesn’t make it easier or harder.');
-    if (it.kind === 'style') parts.push('🏠 Changes how your home looks. Switch between styles you own any time.');
+    if (it.kind === 'style' && it.slot === 'shape') parts.push(esc(tx('unlock.shape')));
+    else if (it.kind === 'style') parts.push('Changes how your home looks. Switch between styles you own any time.');
     if (C.isRepeatable(it)) parts.push('🔁 Each one you buy is one more on your island. Put them away and bring them back any time.');
-    if (it.kind === 'fun') parts.push('✋ Tap it on your island to play with it.');
+    if (it.cat === 'city') parts.push(esc(tx('unlock.city')));
+    else if (it.kind === 'fun') parts.push('✋ Tap it on your island to play with it.');
     (it.requires || []).forEach(function (r) { parts.push('🔒 First you need: ' + C.item(r).name + '.'); });
     return parts.join('<br>');
   }
@@ -1015,7 +1082,7 @@
     var demoGame = it.kind === 'attraction' ? it.game : (it.kind === 'variant' ? it.game : null);
     var ov = overlay(
       '<div class="slw-detail"><div class="big" id="slwBig">' + iconHtml(id, artState(w)) + '</div>' +
-      '<div class="info"><h2>' + esc(it.name) + '</h2><div style="color:#6b6585;">' + esc(it.desc) + '</div>' +
+      '<div class="info"><h2>' + esc(it.name) + '</h2><div style="color:#6b6585;">' + esc(dsc(it)) + '</div>' +
       '<div class="slw-unlocks">' + unlockText(it) + '</div>' +
       (trial() ? '<div class="pr" style="font-family:\'Baloo 2\',sans-serif;font-weight:800;font-size:22px;color:#b9821a;"><s style="color:#9a94b5;">⭐ ' + fmt(it.price) + '</s> <span class="slw-free">FREE while we test</span></div>'
         : '<div class="pr" style="font-family:\'Baloo 2\',sans-serif;font-weight:800;font-size:22px;color:#b9821a;">⭐ ' + fmt(it.price) + (C.isRepeatable(it) ? ' each' : '') + '</div>') +
@@ -1098,7 +1165,7 @@
     sample('coins', 0.8) || sfx('fanfare');
     if (isGoal && it.kind !== 'attraction' && it.kind !== 'land') {
       draw();
-      celebrate({ title: '🎯 Goal reached: ' + it.name + '!', sub: 'You saved up and did it. Pick your next goal in the shop!', icon: it.id, sfx: 'fanfare' });
+      celebrate({ title: '🎯 Goal reached: ' + it.name, sub: tx('goal.reached'), icon: it.id, sfx: 'fanfare' });
       if (C.isPlaceable(it)) startPlacement(it.id, null, true);
       return;
     }
@@ -1118,19 +1185,19 @@
     }
     if (it.kind === 'pet') {
       draw();
-      celebrate({ title: '🐾 Welcome, ' + C.petById(w, it.id).name + '!', sub: 'Your new ' + it.name.toLowerCase() + ' is exploring your island. Give them a name in 🐾 Pets.', icon: it.id, sfx: 'fanfare', btns: [{ label: '✏️ Name my pet', fn: openPets }] });
+      celebrate({ title: C.petById(w, it.id).name + ' joined the crew', sub: 'Your new ' + it.name.toLowerCase() + ' is already exploring. Pick a name in Crew.', icon: it.id, sfx: 'fanfare', btns: [{ label: 'Name them', fn: openPets }] });
       return;
     }
-    if (it.kind === 'style') { draw(); celebrate({ title: '🏠 ' + it.name + '!', sub: 'Your home has had a makeover. Switch styles any time by tapping your home.', icon: it.id }); return; }
+    if (it.kind === 'style') { draw(); celebrate({ title: it.name, sub: tx('buy.style'), icon: it.id }); return; }
     if (it.kind === 'acc') {
       var ap = w.activePet;
       commit(function (u) { return C.equipAccessory(u, ap, it.id); }).then(function () { draw(); });
-      celebrate({ title: '🎀 ' + it.name + '!', sub: 'Your pet is wearing it now. Swap it between pets in 🐾 Pets.', icon: it.id });
+      celebrate({ title: it.name, sub: tx('buy.acc'), icon: it.id });
       return;
     }
-    if (it.kind === 'cosmetic' || it.kind === 'variant') { draw(); celebrate({ title: '✨ ' + it.name + '!', sub: 'Selected — you’ll see it next time you play.', icon: it.id }); return; }
+    if (it.kind === 'cosmetic' || it.kind === 'variant') { draw(); celebrate({ title: it.name, sub: tx('buy.cosmetic'), icon: it.id }); return; }
     /* placeable decor/path/fun → straight into placement, which can be skipped */
-    toast('✨ ' + it.name + ' is yours! Pick a spot.');
+    toast(it.name + ' is yours. Pick a spot.');
     startPlacement(it.id, null, true);
   }
 
@@ -1141,7 +1208,7 @@
     cel.innerHTML = '<div class="t">' + esc(o.title) + '</div>' + (o.icon ? '<div class="ic">' + iconHtml(o.icon, artState(W())) + '</div>' : '') +
       '<div class="s">' + esc(o.sub || '') + '</div><div class="btns">' +
       (o.btns || []).map(function (b, i) { return '<button class="slw-btn big" type="button" data-b="' + i + '">' + esc(b.label) + '</button>'; }).join('') +
-      '<button class="slw-btn big on" type="button" data-b="x">Yay! 🎉</button></div>';
+      '<button class="slw-btn big on" type="button" data-b="x">' + esc(tx('celebrate.ok')) + '</button></div>';
     document.body.appendChild(cel);
     fillPhotocards(cel);
     cover(+1);
@@ -1169,16 +1236,19 @@
   function openHome() {
     var w = W(), st = artState(w);
     function opts(slot) {
-      return C.CATALOG.filter(function (it) { return it.kind === 'style' && it.slot === slot; }).map(function (it) {
+      return C.CATALOG.filter(function (it) { return it.kind === 'style' && it.slot === slot && !it.retired; }).map(function (it) {
         var own = C.owns(w, it.id), on = it.multi ? !!w.details[it.id] : st[slot] === it.id;
-        return '<button type="button" class="slw-trayitem" data-style="' + it.id + '" ' + (own ? '' : 'data-locked="1"') + ' style="' + (on ? 'border-color:#6c5ce7;background:#f1edfb;' : '') + (own ? '' : 'opacity:.55;') + '">' +
-          ART.icon(it.id) + '<span>' + esc(it.name) + (own ? (on ? ' ✓' : '') : (trial() ? ' · FREE' : ' · ⭐' + fmt(it.price))) + '</span></button>';
+        /* shapes preview in the child's own colours; roofs and extras on the child's own shape */
+        var pv = slot === 'shape' ? ART.sprite('house_cottage', Object.assign({}, st, { shape: it.id })).svg : ART.icon(it.id, st);
+        return '<button type="button" class="slw-trayitem" data-style="' + it.id + '" ' + (own ? '' : 'data-locked="1"') + ' aria-pressed="' + on + '" style="' + (on ? 'border-color:#6c5ce7;background:#f1edfb;' : '') + (own ? '' : 'opacity:.55;') + '">' +
+          pv + '<span>' + esc(it.name) + (own ? (on ? ' ✓' : '') : (trial() ? ' · FREE' : ' · ⭐' + fmt(it.price))) + '</span></button>';
       }).join('');
     }
-    var ov = overlay('<h2>🏠 Your home</h2><div class="slw-detail"><div class="big" style="max-width:300px;">' + ART.sprite('house_cottage', st).svg + '</div><div class="info">' +
+    var ov = overlay('<h2>' + lbl('home', 'Your home') + '</h2><div class="slw-detail"><div class="big" style="max-width:300px;">' + ART.sprite('house_cottage', st).svg + '</div><div class="info">' +
+      '<b>' + esc(tx('home.tray.shape')) + '</b><div class="slw-tray">' + opts('shape') + '</div>' +
       '<b>Walls</b><div class="slw-tray">' + opts('wall') + '</div><b>Roof</b><div class="slw-tray">' + opts('roof') + '</div>' +
       '<b>Door</b><div class="slw-tray">' + opts('door') + '</div><b>Extras (tap to switch on/off)</b><div class="slw-tray">' + opts('detail') + '</div>' +
-      '<div style="font-size:12.5px;color:#7c8696;font-weight:700;">Faded ones are in the shop — tap to see them.</div></div></div>');
+      '<div style="font-size:12.5px;color:#7c8696;font-weight:700;">' + esc(tx('shop.dimmed')) + '</div></div></div>');
     ov.querySelectorAll('[data-style]').forEach(function (b) {
       b.addEventListener('click', function () {
         var id = b.dataset.style;
@@ -1193,7 +1263,7 @@
     var w = W();
     var pets = w.pets.filter(function (p) { return C.owns(w, p.id); });
     var accs = C.CATALOG.filter(function (it) { return it.kind === 'acc' && C.owns(w, it.id); });
-    var html = '<h2>🐾 Your pets</h2><div style="font-size:13px;color:#6b6585;font-weight:700;margin-bottom:8px;">Pets never get sad or poorly — they’re always happy to see you. The ⭐ pet runs your obstacle course.</div>';
+    var html = '<h2>' + lbl('crew', tx('crew.title')) + '</h2><div style="font-size:13px;color:#6b6585;font-weight:700;margin-bottom:8px;">' + esc(tx('crew.neverSad')) + ' The 🏅 one runs your Debut Run.</div>';
     pets.forEach(function (p) {
       var it = C.item(p.id);
       html += '<div class="slw-card" style="margin-bottom:10px;"><div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">' +
@@ -1201,15 +1271,15 @@
         '<div style="flex:1;min-width:200px;"><div class="nm">' + esc(p.name) + ' <span style="font-weight:700;color:#7c8696;">the ' + esc(it.name.toLowerCase()) + '</span>' + (w.activePet === p.id ? ' 🏅' : '') + '</div>' +
         '<label style="font-size:12px;font-weight:800;color:#4a3f75;">New name <input data-name="' + p.id + '" maxlength="14" value="' + esc(p.name) + '" style="font:inherit;padding:6px 8px;border:2px solid #d9d2ee;border-radius:10px;width:140px;"></label> ' +
         '<button class="slw-btn" type="button" data-rename="' + p.id + '">Save name</button> ' +
-        (w.activePet === p.id ? '' : '<button class="slw-btn" type="button" data-active="' + p.id + '">⭐ Run the course</button>') +
+        (w.activePet === p.id ? '' : '<button class="slw-btn" type="button" data-active="' + p.id + '">🏅 Make them the runner</button>') +
         '<div class="slw-err" data-err="' + p.id + '"></div>' +
         (accs.length ? '<div style="font-size:12px;font-weight:800;margin-top:4px;">Wear:</div><div class="slw-tray">' + accs.map(function (a) {
           var on = p.acc[a.slot] === a.id;
           return '<button type="button" class="slw-trayitem" data-acc="' + a.id + '" data-pet="' + p.id + '" style="' + (on ? 'border-color:#6c5ce7;background:#f1edfb;' : '') + '">' + ART.icon(a.id) + '<span>' + esc(a.name) + (on ? ' ✓' : '') + '</span></button>';
-        }).join('') + '</div>' : '<div style="font-size:12px;color:#7c8696;font-weight:700;margin-top:4px;">Hats, bows and capes are in the shop’s 🐾 Pets aisle.</div>') +
+        }).join('') + '</div>' : '<div style="font-size:12px;color:#7c8696;font-weight:700;margin-top:4px;">Caps, beanies, headphones and more are in the shop’s Crew aisle.</div>') +
         '</div></div></div>';
     });
-    html += '<button class="slw-btn" type="button" id="slwMorePets">🛍️ More pets & outfits</button>';
+    html += '<button class="slw-btn" type="button" id="slwMorePets">' + lbl('shop', 'More crew and gear') + '</button>';
     var ov = overlay(html);
     ov.querySelectorAll('[data-rename]').forEach(function (b) {
       b.addEventListener('click', function () {
@@ -1217,7 +1287,7 @@
         var v = C.validatePetName(val);
         if (!v.ok) { err.textContent = v.reason; return; }
         commit(function (u) { return C.renamePet(u, id, val); }).then(function (res) {
-          if (res && res.ok) { ov._close(); draw(); toast('🐾 Hello, ' + res.name + '!'); openPets(); }
+          if (res && res.ok) { ov._close(); draw(); toast(tx('crew.named', { name: res.name })); openPets(); }
           else err.textContent = (res && res.reason) || 'Couldn’t save that.';
         });
       });
@@ -1232,7 +1302,7 @@
     var st = arcadeState();
     var ov = overlay('<h2>❓ How My Island works</h2>' +
       '<p style="font-weight:700;line-height:1.6;">📚 <b>Learn</b> anywhere in the app → you earn ⭐ points.<br>' + (trial() ? '🧪 Everything in the Island Shop is <b>free while we test</b> — your ⭐ stay safe.' : '🛍️ <b>Spend</b> them in the Island Shop → your island grows.') + '<br>🎮 <b>Play</b> your island games — they’re just for fun and never cost or earn points.<br>' +
-      '🐾 Your pets are always happy, even if you have a break.' + (trial() ? '' : '<br>⭐ Spending points never lowers your total-earned score.') + '</p>' + timeHtml(st) +
+      esc(tx('crew.neverSad')) + (trial() ? '' : '<br>⭐ Spending points never lowers your total-earned score.') + '</p>' + timeHtml(st) +
       '<div style="display:flex;gap:8px;flex-wrap:wrap;"><button class="slw-btn" type="button" id="slwReplay">▶ Show the welcome again</button></div>', { small: true });
     $('#slwReplay', ov).addEventListener('click', function () { ov._close(); showIntro(); });
   }
@@ -1247,20 +1317,31 @@
   function maybeIntro() {
     var w = W(); if (!w) return;
     if (!w.introSeen) { showIntro(); return; }
+    maybeMakeover(w);
     if (!trial() && !w.trialOverSeen && (w.ledger || []).some(function (e) { return e && e.trial; })) {
       var ov = overlay('<div class="slw-intro"><div class="card" style="margin:0 auto;"><div class="hero">⭐ 🏝️</div><h2>Testing’s over — thank you!</h2>' +
         '<p style="font-weight:700;color:#4a3f75;">From now on, island things cost ⭐ — the same ⭐ you save for real prizes in the 🎁 Shop. Everything you already picked is still on your island.</p>' +
-        '<div style="display:flex;justify-content:center;"><button class="slw-btn big on" type="button" id="slwTrialOk">Got it! 🎉</button></div></div></div>',
+        '<div style="display:flex;justify-content:center;"><button class="slw-btn big on" type="button" id="slwTrialOk">Got it</button></div></div></div>',
         { small: true, onClose: function () { commit(function (u) { var fw = C.ensureWorld(u); if (fw.trialOverSeen) return { ok: false }; fw.trialOverSeen = true; return { ok: true }; }); } });
       $('#slwTrialOk', ov).addEventListener('click', function () { ov._close(); });
     }
   }
+  /* islands made before Encore City now show the City loft: say so once, with a one-tap way back */
+  function maybeMakeover(w) {
+    if (w.sel.shape || w.tutSeen.cityV2 || !C.item('shape_cottage')) return;
+    commit(function (u) { var fw = C.ensureWorld(u); if (fw.tutSeen.cityV2) return { ok: false }; fw.tutSeen.cityV2 = true; return { ok: true }; });
+    setTimeout(function () {
+      toast(tx('makeover.toast'), { label: tx('makeover.revert'), fn: function () {
+        commit(function (u) { return C.select(u, 'shape_cottage'); }).then(function (res) { if (res && res.ok) { draw(); sfx('correct'); } });
+      } });
+    }, 900);
+  }
   function showIntro() {
     var slides = [
-      ['🏝️', 'This is your island!', 'It’s all yours — with a home, a pet and an obstacle course to play.'],
-      ['📚 ➜ ⭐', 'Learn to earn', 'Every time you practise maths, spelling or flags, you earn ⭐ points.'],
-      trial() ? ['🧪 🎁', 'Free while we test!', 'Right now everything on the island is free — trees, pets, a football pitch, a kart track and more. Your ⭐ stay safe for the 🎁 Shop. Try it all and tell Dad what you think!']
-        : ['⭐ ➜ 🌴', 'Make it amazing', 'Spend ⭐ on trees, pets, a football pitch, a kart track and more. They’re the same ⭐ as the 🎁 Shop’s real prizes — so choose what you’d love most!']
+      ['🏙️', 'Your island. Your city.', 'A home, your first crew member and the Debut Run. The city across the bay is waiting for you.'],
+      ['📚 ➜ ⭐', 'Learn to earn', 'Every maths, spelling or flags session earns ⭐.'],
+      trial() ? ['🧪 🎁', 'Free while we test', 'Everything on the island is free right now: city buildings, crew, a football pitch, a race track and more. Your ⭐ stay saved for the 🎁 Shop. Try it all and tell Dad what you think.']
+        : ['⭐ ➜ 🏙️', 'Make it yours', 'Spend ⭐ on city buildings, crew, a football pitch, a race track and more. They’re the same ⭐ as the 🎁 Shop’s real prizes, so choose what you want most.']
     ];
     var i = 0;
     var ov = overlay('<div class="slw-intro"><div class="card" style="margin:0 auto;" id="slwIntro"></div></div>', { small: true, onClose: finish });
@@ -1269,7 +1350,7 @@
       var s = slides[i];
       $('#slwIntro', ov).innerHTML = '<div class="hero">' + s[0] + '</div><h2>' + s[1] + '</h2><p style="font-weight:700;color:#4a3f75;">' + s[2] + '</p>' +
         '<div class="slw-dots">' + slides.map(function (_, k) { return '<i class="' + (k === i ? 'on' : '') + '"></i>'; }).join('') + '</div>' +
-        '<div style="display:flex;gap:8px;justify-content:center;"><button class="slw-btn" type="button" id="slwSkip">Skip</button><button class="slw-btn big on" type="button" id="slwNext">' + (i < slides.length - 1 ? 'Next ➜' : 'Let’s go! 🎉') + '</button></div>';
+        '<div style="display:flex;gap:8px;justify-content:center;"><button class="slw-btn" type="button" id="slwSkip">Skip</button><button class="slw-btn big on" type="button" id="slwNext">' + (i < slides.length - 1 ? 'Next ➜' : 'Let’s go') + '</button></div>';
       $('#slwSkip', ov).addEventListener('click', function () { ov._close(); });
       $('#slwNext', ov).addEventListener('click', function () { if (i < slides.length - 1) { i++; paint(); } else ov._close(); });
       try { $('#slwNext', ov).focus(); } catch (e) {}
@@ -1284,7 +1365,7 @@
     if (!gp || !gp.ready || w.goalNotified === gp.id) return;
     commit(function (fu) { var fw = C.ensureWorld(fu); if (fw.goalNotified === gp.id) return { ok: false }; fw.goalNotified = gp.id; return { ok: true }; });
     window._slwLastGoal = gp.id;
-    if (onOpen) celebrate({ title: '🎯 You did it!', sub: 'You’ve saved enough for ' + gp.name + '. Buy it now, or keep saving for something bigger.', icon: gp.id, sfx: 'fanfare', btns: [{ label: '🛍️ Go to it', fn: function () { openItem(gp.id); } }] });
+    if (onOpen) celebrate({ title: '🎯 Goal reached', sub: 'You’ve saved enough for ' + gp.name + '. Buy it now, or keep saving for something bigger.', icon: gp.id, sfx: 'fanfare', btns: [{ label: 'Go to it', fn: function () { openItem(gp.id); } }] });
   }
 
   /* ---------------- arcade time (parent limit) ---------------- */
@@ -1401,7 +1482,7 @@
   }
   function openGames() {
     var w = W(), st = arcadeState();
-    var html = '<h2>🎮 Island games</h2>' + timeHtml(st) + '<div class="slw-games">';
+    var html = '<h2>' + lbl('games', 'Island games') + '</h2>' + timeHtml(st) + '<p style="font-size:12.5px;font-weight:700;color:#7c8696;margin:0 0 8px;">' + esc(tx('games.noPoints')) + '</p><div class="slw-games">';
     Object.keys(GAMES).forEach(function (g) {
       var G = GAMES[g], own = C.owns(w, G.att);
       html += '<div class="slw-game' + (own ? '' : ' locked') + '" style="background:' + G.grad + ';"><h3>' + G.emoji + ' ' + G.name + '</h3>' +

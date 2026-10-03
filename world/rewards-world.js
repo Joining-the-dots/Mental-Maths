@@ -296,7 +296,8 @@
   function bldState(st, p) {
     var L = window.SLIslandLook, it = C.item(p.id);
     if (!it || it.cat !== 'city') return st;
-    return Object.assign({}, st, { variant: (L && L.variantOf) ? L.variantOf(p.uid, p.id) : 0 });
+    var w = W();
+    return Object.assign({}, st, { variant: (L && L.variantOf) ? L.variantOf(p.uid, p.id) : 0, pet: (w && w.activePet) || 'pet_puppy' });
   }
 
   /* ================================================================
@@ -312,8 +313,10 @@
     try { return stage3d[method].apply(stage3d, Array.prototype.slice.call(arguments, 1)); }
     catch (e) { disable3D('call:' + method); return undefined; }
   }
+  function lowPanels() { try { document.documentElement.classList.add('sl-low'); } catch (e) {} }
   function disable3D(reason) {
     var st = stage3d; stage3d = null; use3D = false;
+    lowPanels();
     if (st) { try { st.dispose(); } catch (e) {} }
     try { if (window.SLIsland3D && SLIsland3D.remember2D && /perf|lost/.test(String(reason || ''))) SLIsland3D.remember2D(reason); } catch (e) {}
     if (root && document.getElementById('slwStage')) draw();
@@ -336,6 +339,7 @@
         /* a slow first load can still finish: stay undecided and upgrade to 3D when it's ready */
         var gaveUp = !window.SLIsland3D || (SLIsland3D.failed && SLIsland3D.failed()) || (SLIsland3D.remembered && SLIsland3D.remembered(window.SL_WORLD_VER));
         use3D = gaveUp ? false : null;
+        if (gaveUp) lowPanels();
         if (!gaveUp && SLIsland3D.ensure && !late3d) {
           late3d = true;
           SLIsland3D.ensure({ deadlineMs: 60000 }).then(function (S) { late3d = false; if (S && root && renderedFor != null && !stage3d && !running) maybeBoot3D(); }, function () { late3d = false; });
@@ -438,7 +442,7 @@
   }
 
   /* ---------------- top-level render ---------------- */
-  function render() {
+  function render(again) {
     root = document.getElementById('worldView');
     if (!root) return;
     injectCss();
@@ -446,13 +450,13 @@
     if (!u) { root.innerHTML = '<div class="slw-loading">' + esc(tx('player.pick')) + '</div>'; return; }
     var w = C.ensureWorld(u);
     /* first visit for this profile: grant the starter island exactly once */
-    if (!w.starterGrantedAt || C.normalize(u)) {
+    if (!again && (!w.starterGrantedAt || C.normalize(u))) {
       commit(function (fu) {
         var granted = C.grantStarter(fu);
         var fixed = C.normalize(fu);
         if (granted) C.ensureWorld(fu).tutSeen.cityV2 = true;     /* a brand-new island starts in the city */
         return { ok: granted || fixed };
-      }).then(function () { draw(); maybeIntro(); maybeBoot3D(); });   /* a migrated save still gets its 3D island */
+      }).then(function () { render(true); });   /* once: the normal open (resume, intro, goal, 3D boot) */
       root.innerHTML = '<div class="slw-loading">Building your island…</div>';
       return;
     }
@@ -473,7 +477,7 @@
     stopPets();
     var is3d = !!(use3D && stage3d);
     root.innerHTML =
-      '<div class="slw' + (mode !== 'play' ? ' slw-edit' : '') + (is3d && showtimeOn ? ' showtime' : '') + '">' +
+      '<div class="slw' + (mode !== 'play' ? ' slw-edit' : '') + (is3d ? '' : ' dusk') + (showtimeOn ? ' showtime' : '') + '">' +
         '<div class="slw-hud">' +
           '<button class="slw-learn" type="button" data-act="learn">Back to learning</button>' +
           '<div class="slw-pts" title="Your spendable points">⭐ <span id="slwPts">' + fmt(u.points) + '</span></div>' +
@@ -483,7 +487,7 @@
             '<button class="slw-btn big" type="button" data-act="games">' + lbl('games', 'Games') + '</button>' +
             '<button class="slw-btn' + (mode === 'edit' ? ' on' : '') + '" type="button" data-act="edit" aria-pressed="' + (mode === 'edit') + '">' + lbl('edit', mode === 'edit' ? 'Done' : 'Edit') + '</button>' +
             '<button class="slw-btn" type="button" data-act="pets">' + lbl('crew', tx('label.crew')) + '</button>' +
-            (is3d ? '<button class="slw-btn" type="button" data-act="showtime"' + (showtimeOn ? ' data-on="1"' : '') + '>' + lightLabel() + '</button>' : '') +
+            '<button class="slw-btn" type="button" data-act="showtime"' + (showtimeOn ? ' data-on="1"' : '') + ' aria-label="' + lightAria() + '">' + lightLabel() + '</button>' +
             '<button class="slw-btn" type="button" data-act="music" aria-pressed="' + musicOn() + '" aria-label="Music on or off">' + lbl('music', musicOn() ? 'On' : 'Off') + '</button>' +
             '<button class="slw-btn" type="button" data-act="sound" aria-label="Sound on or off">' + (u.muted ? '🔇 Off' : '🔊 On') + '</button>' +
             '<button class="slw-btn" type="button" data-act="info" aria-label="How it works">❓</button>' +
@@ -499,7 +503,8 @@
       '</div>';
     drawStage();
     drawBar();
-    islandMusic(is3d && showtimeOn ? 'island_showtime' : 'island_day');
+    islandMusic(showtimeOn ? 'island_showtime' : 'island_day');
+    fillPhotocards(root.querySelector('.slw-goal'));
     /* on a phone the 2D island is wider than the screen: start centred on home */
     var wrap = root.querySelector('.slw-stagewrap');
     if (!is3d && wrap && wrap.scrollWidth > wrap.clientWidth + 4) wrap.scrollLeft = (wrap.scrollWidth - wrap.clientWidth) / 2;
@@ -508,8 +513,9 @@
   }
 
   function lightLabel() { return showtimeOn ? lbl('golden', tx('light.golden')) : lbl('showtime', tx('light.showtime')); }
+  function lightAria() { return esc('Switch to ' + (showtimeOn ? tx('light.golden').toLowerCase() : tx('light.showtime'))); }
   function goalHtml(u) {
-    if (trial()) return '<div class="slw-goal slw-trial" role="note"><span class="gt">🧪 Test mode: everything on the island is free. Your ⭐ stay put.</span></div>';
+    if (trial()) return '<div class="slw-goal slw-trial" role="note"><span class="gt">Test mode: everything on the island is free. Your ⭐ stay put.</span></div>';
     var gp = C.goalProgress(u);
     if (!gp) return '<button class="slw-goal" type="button"><span class="gt">' + lbl('goal', 'Pick a savings goal in the shop') + '</span></button>';
     return '<button class="slw-goal' + (gp.ready ? ' ready' : '') + '" type="button" aria-label="Savings goal: ' + esc(gp.name) + '">' +
@@ -569,7 +575,10 @@
         '<span class="face">' + esc(u.avatar || '🙂') + '</span></button>';
     }
     stage.innerHTML = html + '<div id="slwPets"></div><div id="slwPlace"></div>';
-    stage.querySelectorAll('[data-uid]').forEach(function (el) { el.addEventListener('click', onObjectTap); });
+    stage.querySelectorAll('[data-uid]').forEach(function (el) {
+      el.addEventListener('click', onObjectTap);
+      if (screenProg[el.dataset.uid]) showProg(el, screenProg[el.dataset.uid]);   /* a redraw keeps the chosen show */
+    });
     stage.querySelectorAll('[data-land]').forEach(function (el) { el.addEventListener('click', function () { openItem(el.dataset.land); }); });
     var meEl = stage.querySelector('.slw-me');
     if (meEl) meEl.addEventListener('click', function () { meEl.classList.remove('wave'); void meEl.offsetWidth; meEl.classList.add('wave'); fx(meEl, '✦'); });
@@ -578,6 +587,7 @@
   }
 
   function fx(el, txt) {
+    if (reduced) return;                       /* reduced motion: the act's end state says it */
     var stage = $('#slwStage', root); if (!stage || !el) return;
     var r = el.getBoundingClientRect(), s = stage.getBoundingClientRect();
     var d = document.createElement('div');
@@ -602,7 +612,7 @@
     pets.forEach(function (p, i) {
       var b = document.createElement('button');
       b.type = 'button'; b.className = 'slw-pet';
-      b.setAttribute('aria-label', p.name + ' the ' + C.item(p.id).name.toLowerCase() + (w.activePet === p.id ? ' (runs your obstacle course)' : ''));
+      b.setAttribute('aria-label', p.name + ' the ' + C.item(p.id).name.toLowerCase() + (w.activePet === p.id ? ' (runs your Debut Run)' : ''));
       var frame = 0;
       b.innerHTML = '<span class="nm">' + esc(p.name) + (w.activePet === p.id ? ' 🏅' : '') + '</span>' + ART.pet(p.id, { acc: p.acc, frame: 0 });
       var cell = free[(i * 7 + 3) % free.length].split(',');
@@ -667,13 +677,14 @@
       if (showtimeOn) { sample('sting', 0.6); try { if (window.SLSound) SLSound.make({ muted: function () { var u = me(); return !!(u && u.muted); } })('whoosh'); } catch (er) {} } else sample('chip', 0.5);
       var slw = root.querySelector('.slw'); if (slw) slw.classList.toggle('showtime', showtimeOn);
       e.currentTarget.innerHTML = lightLabel();
+      e.currentTarget.setAttribute('aria-label', lightAria());
       if (showtimeOn) e.currentTarget.setAttribute('data-on', '1'); else e.currentTarget.removeAttribute('data-on');
       return;
     }
     if (a === 'music') {
       var onNow = !musicOn();
       try { if (window.SLMusic) SLMusic.setEnabled(onNow); } catch (er) {}
-      if (onNow) islandMusic(use3D && stage3d && showtimeOn ? 'island_showtime' : 'island_day');
+      if (onNow) islandMusic(showtimeOn ? 'island_showtime' : 'island_day');
       e.currentTarget.innerHTML = lbl('music', onNow ? 'On' : 'Off');
       e.currentTarget.setAttribute('aria-pressed', String(onNow));
       return;
@@ -717,9 +728,8 @@
           /* the stage's encore: 8 s of Showtime, then the child's own setting comes back */
           if (Date.now() < encoreUntil) return;
           encoreUntil = Date.now() + 8000;
-          s3('act', uid, 'encore');
+          s3('act', uid, 'encore');                       /* its motion cue plays the sting */
           s3('showtime', true, { encoreMs: 8000 });
-          sample('sting', 0.6);
           return;
         }
         default: if (it.act) s3('act', uid, it.act); return;
@@ -747,13 +757,12 @@
       case 'snap': go2d(el, '.slw-strip'); fx(el, '✦'); sample('chip', 0.6) || sfx('tick'); return;
       case 'serve': go2d(el, '.slw-hatch'); go2d(el, '.slw-pearls'); fx(el, '♪'); sample('coins', 0.4) || sfx('correct'); return;
       case 'screen': {
-        /* the LED tower cycles its four shows: name marquee, pixel pet, EQ, star field */
-        var scr = el.querySelector('.slw-screen');
-        if (scr) {
-          var nx = ((+scr.getAttribute('data-prog') || 0) + 1) % 4;
-          scr.setAttribute('data-prog', String(nx));
-          scr.querySelectorAll('.slw-prog').forEach(function (g) { g.setAttribute('display', g.classList.contains('p' + nx) ? 'inline' : 'none'); });
-        }
+        /* the LED tower cycles its four shows: name marquee, pixel pet, EQ, star field (≤ 2 changes a second) */
+        var nowS = Date.now();
+        if (nowS - (screenTap[uid] || 0) < 500) return;
+        screenTap[uid] = nowS;
+        screenProg[uid] = ((screenProg[uid] || 0) + 1) % 4;
+        showProg(el, screenProg[uid]);
         go2d(el, '.slw-marquee'); sfx('tick'); return;
       }
       case 'record': go2d(el, '.slw-onair'); go2d(el, '.slw-eq'); fx(el, '♪'); sample('chip', 0.5) || sfx('tick'); return;
@@ -773,6 +782,12 @@
       }
     }
   }
+  var screenProg = {}, screenTap = {};
+  function showProg(el, n) {
+    var scr = el && el.querySelector('.slw-screen'); if (!scr) return;
+    scr.setAttribute('data-prog', String(n));
+    scr.querySelectorAll('.slw-prog').forEach(function (g) { g.setAttribute('display', g.classList.contains('p' + n) ? 'inline' : 'none'); });
+  }
   function restart(node) { node.classList.remove('go'); void node.getBoundingClientRect(); node.classList.add('go'); }
   function go2d(el, sel) { var n = el.querySelector(sel); if (n) restart(n); }
 
@@ -785,9 +800,9 @@
       var chk = C.canPlace(w, placing.id, placing.x, placing.y, placing.uid);
       var it = C.item(placing.id);
       bar.innerHTML = '<div class="slw-bar"><div class="msg' + (chk.ok ? '' : ' bad') + '" id="slwPlaceMsg">' +
-        (chk.ok ? 'Tap a square to move it, then tap ✅' : '⚠️ ' + esc(chk.reason)) + '</div>' +
-        '<button class="slw-btn on big" type="button" id="slwPlaceOk"' + (chk.ok ? '' : ' disabled') + '>✅ Put ' + esc(it.name.toLowerCase()) + ' here</button>' +
-        '<button class="slw-btn big" type="button" id="slwPlaceCancel">' + (placing.uid ? '✖ Cancel move' : '📦 Keep it for later') + '</button>' +
+        (chk.ok ? 'Tap a square to move it, then confirm.' : esc(chk.reason)) + '</div>' +
+        '<button class="slw-btn on big" type="button" id="slwPlaceOk"' + (chk.ok ? '' : ' disabled') + '>Put ' + esc(it.name.toLowerCase()) + ' here</button>' +
+        '<button class="slw-btn big" type="button" id="slwPlaceCancel">' + (placing.uid ? 'Cancel move' : lbl('storage', 'Keep it for later')) + '</button>' +
         '<span class="slw-kbhint" style="font-size:12px;color:#7c8696;font-weight:700;">Keyboard: arrows move · Enter places · Esc cancels</span></div>';
       $('#slwPlaceOk', bar).addEventListener('click', confirmPlacement);
       $('#slwPlaceCancel', bar).addEventListener('click', cancelPlacement);
@@ -800,8 +815,8 @@
       var sit = p && C.item(p.id);
       if (sit) {
         html += '<div class="msg">' + esc(sit.name) + '</div>' +
-          '<button class="slw-btn on" type="button" id="slwMove">↔️ Move</button>' +
-          (C.isStorable(sit) ? '<button class="slw-btn" type="button" id="slwStore">📦 Put away</button>' : '<span style="font-size:12px;font-weight:700;color:#7c8696;">This one always stays on your island — you can move it.</span>') +
+          '<button class="slw-btn on" type="button" id="slwMove">Move</button>' +
+          (C.isStorable(sit) ? '<button class="slw-btn" type="button" id="slwStore">' + lbl('storage', 'Put away') + '</button>' : '<span style="font-size:12px;font-weight:700;color:#7c8696;">This one always stays on your island — you can move it.</span>') +
           (sit.id === 'house_cottage' ? '<button class="slw-btn" type="button" id="slwHome">' + lbl('home', 'Restyle') + '</button>' : '');
       }
     } else {
@@ -830,7 +845,7 @@
     mode = 'place';
     document.addEventListener('keydown', placeKeys);
     draw();
-    if (!uid && !C.findSpot(w, id)) { var m = $('#slwPlaceMsg', root); if (m) m.textContent = '⚠️ Your island is full! Put something away first, or keep it for later.'; }
+    if (!uid && !C.findSpot(w, id)) { var m = $('#slwPlaceMsg', root); if (m) m.textContent = 'Your island is full. Put something away first, or keep it for later.'; }
   }
   function placeAtCell(nx, ny) {
     if (!placing) return;
@@ -1002,7 +1017,7 @@
     if (cat) shopCat = cat;
     var u = me();
     islandMusic('shop');
-    var ov = overlay('<h2>' + lbl('shop', 'Island Shop') + '</h2><div style="font-weight:800;color:#6b5a22;">You have ⭐ <span id="slwShopPts">' + fmt(u.points) + '</span> ' + (trial() ? 'saved for the 🎁 Shop (not used here)' : 'to spend · earn more by learning 📚 · same ⭐ as the 🎁 Shop') + '</div>' + (trial() ? '<div class="slw-trialbar">🧪 Test mode: everything in this shop is <b>free</b>. Your ⭐ aren’t used, so try anything.</div>' : '') + '<div class="slw-cats" id="slwCats"></div><div class="slw-err" id="slwShopErr" role="alert"></div><div class="slw-grid" id="slwShopGrid"></div>', { onClose: function () { islandMusic(use3D && stage3d && showtimeOn ? 'island_showtime' : 'island_day'); } });
+    var ov = overlay('<h2>' + lbl('shop', 'Island Shop') + '</h2><div style="font-weight:800;color:#6b5a22;">You have ⭐ <span id="slwShopPts">' + fmt(u.points) + '</span> ' + (trial() ? 'saved for the prize Shop (not used here)' : 'to spend. Learning earns more, and it’s the same balance as the prize Shop.') + '</div>' + (trial() ? '<div class="slw-trialbar">Test mode: everything in this shop is <b>free</b>. Your points aren’t used, so try anything.</div>' : '') + '<div class="slw-cats" id="slwCats"></div><div class="slw-err" id="slwShopErr" role="alert"></div><div class="slw-grid" id="slwShopGrid"></div>', { onClose: function () { islandMusic(showtimeOn ? 'island_showtime' : 'island_day'); } });
     function paint() {
       var u2 = me();
       $('#slwShopPts', ov).textContent = fmt(u2.points);
@@ -1100,6 +1115,7 @@
             (trial() ? '' : '<button class="slw-goalbtn' + (w.goal === id ? ' on' : '') + '" type="button" id="slwGoalNow">🎯 ' + (w.goal === id ? 'My goal ✓' : 'Make it my goal') + '</button>')) +
         (demoGame ? '<button class="slw-btn" type="button" id="slwDemo">▶ Watch a preview</button>' : '') +
       '</div></div></div>');
+    fillPhotocards(ov);
     var bn = $('#slwBuyNow', ov);
     if (bn) bn.addEventListener('click', function () { buyFlow(it, bn, $('#slwItemErr', ov), function (ok) { if (ok) ov._close(); }); });
     var gn = $('#slwGoalNow', ov); if (gn) gn.addEventListener('click', function () { toggleGoal(id).then(function () { ov._close(); }); });
@@ -1156,6 +1172,7 @@
         '<p style="font-size:13px;font-weight:700;color:#6b6390;margin-top:-4px;">These are the same ⭐ you save for real prizes in the 🎁 Shop.</p>' +
         '<div style="display:flex;gap:8px;justify-content:center;"><button class="slw-btn big" type="button" id="slwNo">Not yet</button><button class="slw-buy" type="button" id="slwYes" style="flex:0 0 auto;padding:10px 22px;">Yes, buy it!</button></div>', { small: true, onClose: function () { confirming = false; } });
       confirming = true;
+      fillPhotocards(c);
       $('#slwNo', c).addEventListener('click', function () { c._close(); });
       $('#slwYes', c).addEventListener('click', function () { c._close(); proceed(); });
       return;
@@ -1271,7 +1288,7 @@
     pets.forEach(function (p) {
       var it = C.item(p.id);
       html += '<div class="slw-card" style="margin-bottom:10px;"><div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">' +
-        '<div style="width:120px;">' + ART.pet(p.id, { acc: p.acc }) + '</div>' +
+        '<div style="width:120px;">' + iconHtml(p.id, { acc: p.acc || {} }) + '</div>' +
         '<div style="flex:1;min-width:200px;"><div class="nm">' + esc(p.name) + ' <span style="font-weight:700;color:#7c8696;">the ' + esc(it.name.toLowerCase()) + '</span>' + (w.activePet === p.id ? ' 🏅' : '') + '</div>' +
         '<label style="font-size:12px;font-weight:800;color:#4a3f75;">New name <input data-name="' + p.id + '" maxlength="14" value="' + esc(p.name) + '" style="font:inherit;padding:6px 8px;border:2px solid #d9d2ee;border-radius:10px;width:140px;"></label> ' +
         '<button class="slw-btn" type="button" data-rename="' + p.id + '">Save name</button> ' +
@@ -1279,12 +1296,13 @@
         '<div class="slw-err" data-err="' + p.id + '"></div>' +
         (accs.length ? '<div style="font-size:12px;font-weight:800;margin-top:4px;">Wear:</div><div class="slw-tray">' + accs.map(function (a) {
           var on = p.acc[a.slot] === a.id;
-          return '<button type="button" class="slw-trayitem" data-acc="' + a.id + '" data-pet="' + p.id + '" style="' + (on ? 'border-color:#6c5ce7;background:#f1edfb;' : '') + '">' + ART.icon(a.id) + '<span>' + esc(a.name) + (on ? ' ✓' : '') + '</span></button>';
+          return '<button type="button" class="slw-trayitem" data-acc="' + a.id + '" data-pet="' + p.id + '" aria-pressed="' + on + '" style="' + (on ? 'border-color:#6c5ce7;background:#f1edfb;' : '') + '">' + iconHtml(a.id) + '<span>' + esc(a.name) + (on ? ' ✓' : '') + '</span></button>';
         }).join('') + '</div>' : '<div style="font-size:12px;color:#7c8696;font-weight:700;margin-top:4px;">Caps, beanies, headphones and more are in the shop’s Crew aisle.</div>') +
         '</div></div></div>';
     });
     html += '<button class="slw-btn" type="button" id="slwMorePets">' + lbl('shop', 'More crew and gear') + '</button>';
     var ov = overlay(html);
+    fillPhotocards(ov);
     ov.querySelectorAll('[data-rename]').forEach(function (b) {
       b.addEventListener('click', function () {
         var id = b.dataset.rename, val = $('[data-name="' + id + '"]', ov).value, err = $('[data-err="' + id + '"]', ov);
@@ -1332,7 +1350,7 @@
   }
   /* islands made before Encore City now show the City loft: say so once, with a one-tap way back */
   function maybeMakeover(w) {
-    if (w.sel.shape || w.tutSeen.cityV2 || !C.item('shape_cottage')) return;
+    if (w.sel.shape || w.tutSeen.cityV2 || !C.item('shape_cottage') || C.selected(w, 'shape') === 'shape_cottage') return;
     commit(function (u) { var fw = C.ensureWorld(u); if (fw.tutSeen.cityV2) return { ok: false }; fw.tutSeen.cityV2 = true; return { ok: true }; });
     setTimeout(function () {
       toast(tx('makeover.toast'), { label: tx('makeover.revert'), fn: function () {
@@ -1489,7 +1507,7 @@
     var html = '<h2>' + lbl('games', 'Island games') + '</h2>' + timeHtml(st) + '<p style="font-size:12.5px;font-weight:700;color:#7c8696;margin:0 0 8px;">' + esc(tx('games.noPoints')) + '</p><div class="slw-games">';
     Object.keys(GAMES).forEach(function (g) {
       var G = GAMES[g], own = C.owns(w, G.att);
-      html += '<div class="slw-game' + (own ? '' : ' locked') + '" style="background:' + G.grad + ';"><h3>' + G.emoji + ' ' + G.name + '</h3>' +
+      html += '<div class="slw-game' + (own ? '' : ' locked') + '" style="background:' + G.grad + ';"><h3>' + esc(G.name) + '</h3>' +
         '<div class="pb">' + (own ? esc(pbText(g)) : '🔒 Unlock with the ' + esc(C.item(G.att).name) + ' in the shop') + '</div>' +
         '<button class="slw-btn big" type="button" data-play="' + g + '">' + (own ? '▶ Play' : '👀 See it in the shop') + '</button></div>';
     });

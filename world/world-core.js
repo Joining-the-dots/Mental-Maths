@@ -591,7 +591,7 @@
     });
     /* placements: unknown ids are kept untouched (future data); too many copies trimmed;
        illegal positions: house/attractions re-homed, decorations go back to storage */
-    var seenCount = {}, keep = [];
+    var seenCount = {}, keep = [], placedChanged = false;
     var order = w.placed.slice().sort(function (a, b) {
       var ka = item(a.id), kb = item(b.id);
       var ra = ka && (ka.kind === 'house' || ka.kind === 'attraction') ? 0 : 1;
@@ -602,11 +602,11 @@
     order.forEach(function (p) {
       var it = item(p.id);
       if (!it) { keep.push(p); return; }
-      if (!p.uid) { p.uid = newUid(w); changed = true; }
+      if (!p.uid) { p.uid = newUid(w); placedChanged = true; }
       seenCount[p.id] = (seenCount[p.id] || 0) + 1;
-      if (seenCount[p.id] > ownedCount(w, p.id)) { changed = true; return; }
+      if (seenCount[p.id] > ownedCount(w, p.id)) { placedChanged = true; return; }
       if (!canPlace(probe, p.id, p.x, p.y).ok) {
-        changed = true;
+        placedChanged = true;
         if (it.kind === 'house' || it.kind === 'attraction') {
           var s = findSpot(probe, p.id, p.x, p.y);
           if (s) { p.x = s.x; p.y = s.y; } else { return; }
@@ -614,7 +614,9 @@
       }
       probe.placed.push(p); keep.push(p);
     });
-    if (changed) w.placed = keep;
+    /* only a placement repair rewrites placed[], and it keeps the save's own order (the
+       house/attractions-first pass order is for checking, not for storing) */
+    if (placedChanged) { w.placed = w.placed.filter(function (p) { return keep.indexOf(p) >= 0; }); changed = true; }
     /* owned house/attractions that aren't placed get a spot if one exists */
     CATALOG.forEach(function (it) {
       if ((it.kind === 'house' || it.kind === 'attraction') && owns(w, it.id) && placedCount(w, it.id) === 0) {

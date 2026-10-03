@@ -756,3 +756,17 @@ test('v2 (j): the max island — every placeable id (one each, biggest first) pl
   for (const p of w.placed) assert.ok(C.canPlace(w, p.id, p.x, p.y, p.uid).ok, p.id + ' legal');
   assert.equal(C.normalize(u), false, 'the full island is already a normal state');
 });
+
+test('v2 (k): the one-time shape grant keeps an old save\'s placed[] order (an attraction bought after the starter stays last)', () => {
+  const u = kid(5000);
+  assert.ok(C.purchase(u, 'att_pitch', { tx: tx() }).ok);
+  delete u.world.owned.shape_cottage; delete u.world.owned.shape_loft;      /* as a v1 save */
+  const before = JSON.stringify(u.world.placed);
+  assert.equal(u.world.placed[u.world.placed.length - 1].id, 'att_pitch');
+  assert.equal(C.normalize(u), true, 'the grant is a change');
+  assert.equal(JSON.stringify(u.world.placed), before, 'same items, same order, same positions');
+  /* a real repair still rewrites placed[], in the save's own order */
+  u.world.placed.push({ uid: 'pz', id: 'tree_oak', x: -5, y: -5 });
+  assert.equal(C.normalize(u), true);
+  assert.equal(JSON.stringify(u.world.placed), before, 'the illegal copy went back to storage; the rest kept their order');
+});

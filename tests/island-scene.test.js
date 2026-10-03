@@ -431,19 +431,30 @@ class FakeBatch {
   worldPos(uid, out) { const c = this.copies.get(uid), p = c ? G.pivot(this.template.id, c.x, c.y) : { x: 0, y: 0, z: 0 }; out.x = p.x; out.y = p.y; out.z = p.z; return out; }
   anchorWorld(uid, name, out) { const a = this.template.anchors[name] || this.template.anchors.top; this.worldPos(uid, out); out.x += a[0]; out.y += a[1]; out.z += a[2]; return out; }
   hide() {} show() {} setState() {} setPivot() {} pivot() { return new M4(); } setHighlight() {} copyGeometry() { return null; } basePositions() { return null; }
-  commit() {} dispose() { this.disposed = true; }
+  commit() { if (this.log) this.log.push('batch'); } dispose() { this.disposed = true; }
 }
-function fakeKit(tier) {
+function fakeKit(tier, cfg) {
+  cfg = cfg || {};
   const K = {
     THREE: T, tier: tier || 'MID', batches: [], atlasUsers: [],
     templates: { get: (id, sk, t, st) => ({ id, sk, st, anchors: id === 'bld_stage' ? STAGE_ANCHORS : { top: [0, 1, 0] }, pivots: {}, parts: [] }) },
     stateKey: (id, st) => L.stateKey(id, st || {}),
-    batch(tpl) { const b = new FakeBatch(tpl); K.batches.push(b); return b; },
+    batch(tpl, o) { const b = new FakeBatch(tpl); b.opts = o; b.log = cfg.log || null; K.batches.push(b); return b; },
     setSelPulse() {}, billboards: () => ({ mesh: new Obj3(), dispose() {} }),
     /* the shared atlases (kit.js): only their user cells matter here */
     ledAtlas: () => ({ setUser(u) { K.atlasUsers.push(['led', u]); } }),
     signAtlas: () => ({ setUser(u) { K.atlasUsers.push(['sign', u]); } })
   };
+  /* the kit's merged layer (perf), opt-in: it records its commits in the shared log */
+  if (cfg.merger) {
+    K.mergers = [];
+    K.merger = (o) => {
+      const m = { o, group: new Obj3(), commits: 0, disposed: false,
+        commit() { m.commits++; if (cfg.log) cfg.log.push('merger'); return m; }, dispose() { m.disposed = true; }, info() { return {}; } };
+      K.mergers.push(m);
+      return m;
+    };
+  }
   return K;
 }
 function fakeEnv(o, rec, cfg) {
@@ -474,18 +485,18 @@ function harness(t, cfg = {}) {
   Object.defineProperty(globalThis, 'performance', { value: { now: () => clock.now }, configurable: true, writable: true });
   t.after(restoreGlobals);
   if (!timed.has(t)) { t.mock.timers.enable({ apis: ['setTimeout'] }); timed.add(t); }
-  const K = fakeKit(cfg.tier), envCalls = [], envs = [], calls = [], states = [], actorsLog = [];
+  const K = fakeKit(cfg.tier, cfg), envCalls = [], envs = [], calls = [], states = [], actorsLog = [];
   Object.assign(globalThis, { SLWorldCore: C, SLIslandLook: L, SLGrid3D: G, SLMotion: M, SLIslandCamera: Cam, SLWorldCopy: Copy });
   globalThis.SLIslandEnv = { create: (K2, S2, o) => { const e = fakeEnv(o, envCalls, cfg); envs.push(e); return e; } };
   globalThis.document = { createElement: (tag) => new FakeEl(tag), activeElement: null, documentElement: new FakeEl('html') };
   if (cfg.globals) Object.assign(globalThis, cfg.globals);
   const leases = [];
   const SL = {
-    ready: true, THREE: T, tier: cfg.tier || 'MID', budget: { particles: 256 }, quality: { particleScale: 1 }, issues: [],
+    ready: true, THREE: T, tier: cfg.tier || 'MID', budget: { particles: 256 }, quality: cfg.quality || { particleScale: 1 }, issues: [],
     models: cfg.models || {}, kit: () => K,
     lease(name, h) {
       const canvas = new FakeEl('canvas');
-      const l = { name, h, canvas, renderer: { domElement: canvas }, start() {}, stop() {}, invalidate() {}, observe() {}, compile() { return null; },
+      const l = { name, h, canvas, renderer: { domElement: canvas }, start() {}, stop() {}, invalidate() {}, observe() {}, compile() { if (cfg.log) cfg.log.push('compile'); return null; },
         resize(w, hh) { if (h.onResize) h.onResize(w, hh); }, setCovered() {}, setHidden() {}, setReduced() {}, input() {}, release() {}, info() { return {}; } };
       leases.push(l);
       return l;
@@ -500,6 +511,9 @@ function harness(t, cfg = {}) {
     },
     makeEdit: () => ({ setState(s) { states.push(s); }, update: () => false, ghostShown: () => false, setReduced() {}, dispose() {} })
   };
+  /* the stage's quality listeners (opt-in): H.quality(q) plays an adaptive step */
+  const qualityFns = [];
+  if (cfg.onQuality) SL.onQuality = (fn) => { qualityFns.push(fn); return () => { const i = qualityFns.indexOf(fn); if (i >= 0) qualityFns.splice(i, 1); }; };
   globalThis.SL3D = SL;
   const on = {};
   ['tapItem', 'tapPet', 'tapAvatar', 'tapLand', 'tapCell', 'dragStart', 'dragCell', 'dragEnd', 'ready', 'fail'].forEach((k) => { on[k] = (...a) => calls.push([k, ...a]); });
@@ -514,6 +528,7 @@ function harness(t, cfg = {}) {
     advance(ms) { clock.now += ms; t.mock.timers.tick(ms); },
     batchOf(uid) { return K.batches.filter((b) => !b.disposed && b.has(uid)).pop() || null; },
     called(k) { return calls.filter((c) => c[0] === k); },
+    quality(q) { qualityFns.slice().forEach((fn) => fn(q)); },
     keyTap(uid) { const list = stage.element.querySelector('[data-k="u:' + uid + '"]'); assert.ok(list, 'the keyboard list has ' + uid); stage.element.children.find((c) => c.tagName === 'UL').dispatch('click', { target: list }); }
   };
   t.after(() => { try { stage.dispose(); } catch (e) { /* gone */ } });
@@ -867,4 +882,58 @@ test('seams v2 (LOW): the selection pool has its own key, so it never takes a bu
   H.stage.sync(viewOf(u, { mode: 'edit', selectedUid: null }));
   assert.deepEqual(of('sel:' + studio).pop(), ['decal', 'sel:' + studio, false, undefined]);
   assert.ok(of('u:' + studio).every((e) => e[2]), 'the uplight stayed on throughout');
+});
+
+/* ---------------- perf (fix2/perf): the merged layer and the 'decor' quality step ---------------- */
+test('perf-2 / perf-4: every item batch joins the kit\'s merged layer, committed after the batches each frame and before every compile', (t) => {
+  const u = starter();
+  placeAny(u, 'bld_boba');
+  const log = [];
+  const H = harness(t, { merger: true, log, models: { path_stone: { pieces: true } } });
+  H.stage.sync(viewOf(u));
+  assert.equal(H.K.mergers.length, 1, 'one merged layer for the island');
+  const mg = H.K.mergers[0];
+  assert.ok(H.K.batches.length >= 8, 'house, course, paths, trees, flowers, the café');
+  for (const b of H.K.batches) assert.equal(b.opts && b.opts.merge, mg, b.template.id + ' joins it');
+  assert.ok(H.K.batches.some((b) => /^p:/.test(b.template.sk)), 'the auto-tiled path pieces too (0–1 draw calls whatever the pieces)');
+  /* its group is in the scene: under the items root */
+  assert.ok(mg.group.parent && mg.group.parent.name === 'items');
+  /* the first compile (maybeReady) sees the merged meshes: a commit comes before it */
+  const c0 = log.indexOf('compile');
+  assert.ok(c0 > 0 && log.lastIndexOf('merger', c0) >= 0, 'committed before the compile');
+  /* each frame: every batch commits, then the layer */
+  log.length = 0;
+  H.step(1);
+  const first = log.indexOf('merger');
+  assert.ok(first > 0 && log.slice(0, first).every((e) => e === 'batch') && log.slice(0, first).length === H.K.batches.filter((b) => !b.disposed).length);
+  /* a placement after ready: the new batch joins and the recompile still follows a commit */
+  log.length = 0;
+  placeAny(u, 'lighthouse');
+  H.stage.sync(viewOf(u));
+  assert.equal(H.K.batches[H.K.batches.length - 1].opts.merge, mg);
+  H.stage.dispose();
+  assert.equal(mg.disposed, true, 'disposed with the island');
+});
+
+test('perf-5: the \'decor\' quality step rests every item idle at its rest pose — once, then no per-frame idles', (t) => {
+  const u = starter();
+  const idles = [];
+  const sway = { idle(a) { idles.push({ uid: a.uid, reduced: a.reduced }); return true; } };
+  const H = harness(t, { onQuality: true, quality: { particleScale: 1, decor: true }, models: { tree_oak: sway, tree_pine: sway } });
+  H.stage.sync(viewOf(u));
+  H.step(10);
+  const trees = u.world.placed.filter((p) => p.id === 'tree_oak' || p.id === 'tree_pine').length;
+  assert.ok(idles.length >= 10 * trees, 'idles every frame by default');
+  assert.ok(idles.every((e) => e.reduced === false));
+  /* a CPU-bound device: the ladder's 'decor' step */
+  idles.length = 0;
+  H.quality({ particleScale: 1, decor: false, steps: ['decor'] });
+  H.step(10);
+  assert.equal(idles.length, trees, 'once per copy');
+  assert.ok(idles.every((e) => e.reduced === true), 'at the model\'s rest pose (its reduced-motion end state)');
+  /* a sync (a move, a store, a restyle) settles them once more, then they rest again */
+  idles.length = 0;
+  H.stage.sync(viewOf(u));
+  H.step(10);
+  assert.equal(idles.length, trees);
 });

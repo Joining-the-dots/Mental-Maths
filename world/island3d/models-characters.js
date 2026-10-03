@@ -18,16 +18,23 @@
        anchors top, dizzy (centre of the dizzy-star ring), emote
        Rigid skinning: one SkinnedMesh per material, every vertex 100 % on one
        bone. Draw calls: toon + shine (unlit 'state') + gold (crown) + foil (shades
-       at night) + rings (headphones), plus the 0.009 u Midnight Ink hull on MID/HIGH
-       (and the kitten's whisker LineSegments). setBeat pulses the headphone rings
+       at night) + rings (headphones), plus the 0.009 u Midnight Ink hull on MID/HIGH.
+       The kitten's whiskers are thin tubes in the toon mesh (as on photocards): no
+       line program, no extra draw. setBeat pulses the headphone rings
        ±20 % on the beat at Showtime (never faster than 2 Hz).
      makeAvatar({color, emoji}, tier) → AvatarRig {root, bones, sockets{hand}, anchors,
        pose, setPose, setShow, setWand(on), play(clip, t, opts), dispose()}
        h 1.0; hood, headset mic, hoodie, legs and sneakers; the face is ALWAYS the
-       child's emoji on the face cap. ≤ 1,500 tris (MID) / 1,050 (LOW).
+       child's emoji on the face cap (an InstancedMesh(1) with an instance colour: the
+       kit's LED / sign program, not a program of its own). The Spark Stick is built,
+       hidden, with the avatar, so a mount's compile warms it and the first Showtime
+       or dance compiles nothing; setWand(on) only shows it.
+       ≤ 1,500 tris (MID) / 1,050 (LOW).
      makeWand(colorHex, tier) → the Spark Stick Group (userData {kind, color, tip, points: 4,
        setShow(k), dispose()}): a 4-point ✦ prism in the member colour on an ink handle.
-       It is the only light stick; never 5-pointed (the ⭐ reward), ≤ 260 tris.
+       It is the only light stick; never 5-pointed (the ⭐ reward), ≤ 260 tris. Its three
+       parts are InstancedMesh(1)s with an instance colour, so they draw with the island's
+       instanced toon, 'state' and additive 'state' programs (no plain-mesh programs).
      makeFanBlob(seed, tier, {detail: 'crowd'|'hero', member}) → Group
        (userData {look, geos, colors, update(t, o), setShow(k), dispose()}): tonal
        streetwear by day, Crowd Shadow silhouettes at night, lit by their Spark Sticks.
@@ -1054,8 +1061,9 @@
       });
     }
 
-    /* kitten whiskers: thin tubes on a photocard (the rig draws them as LineSegments) */
-    if (petId === 'pet_kitten' && !rig) {
+    /* kitten whiskers: thin tubes, on photocards and rigs alike (perf: a LineSegments mesh cost
+       the rig a draw call and a line program of its own) */
+    if (petId === 'pet_kitten') {
       whiskerLines().forEach(function (l) {
         var a = l[0], b = l[1], dx = b[0] - a[0], dy = b[1] - a[1], len = Math.sqrt(dx * dx + dy * dy);
         put({ g: 'tube', a: [0.0045, 0.0045, len, 4], t: { r: [0, 0, -Math.atan2(dx, dy) / DEG], p: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2] }, c: Tk.whisker, bone: 'head' });
@@ -1442,8 +1450,8 @@
   /* ================================================================
      PET ASSEMBLY — every part in the rest pose, ITEM space, tagged with its bone
      and material. Rigs get the rig-only and night parts; photocard templates get
-     the day look (thin whisker tubes instead of lines, no blush).
-     → {parts: [{geo, bone, mat, cloth?}], whiskers, J, S}
+     the day look (no blush). Both draw the kitten's whiskers as thin toon tubes.
+     → {parts: [{geo, bone, mat, cloth?}], whiskers (null), J, S}
      ================================================================ */
   function assemblePet(K, petId, acc, mode) {
     var rig = !!(mode && mode.rig), list = petParts(petId, acc, rig), parts = [];
@@ -1453,13 +1461,8 @@
       if (!rig && mat === 'rings') mat = 'shine';
       parts.push({ geo: geoOf(K, d), bone: d.bone || 'body', mat: mat, cloth: !!d.cloth });
     });
-    var whiskers = null;
-    if (petId === 'pet_kitten' && rig) {
-      var W = [], hj = HEAD;
-      whiskerLines().forEach(function (l) { W.push(l[0][0] - hj[0], l[0][1] - hj[1], l[0][2] - hj[2], l[1][0] - hj[0], l[1][1] - hj[1], l[1][2] - hj[2]); });
-      whiskers = new Float32Array(W);
-    }
-    return { parts: parts, whiskers: whiskers, J: jointsOf(petId), S: socketsOf(petId) };
+    /* whiskers: always null since perf (they are toon tubes in parts, rig or not) */
+    return { parts: parts, whiskers: null, J: jointsOf(petId), S: socketsOf(petId) };
   }
 
   /* ---------------- rigid-skinned geometry (cached per pet + accessories + tier) ---------------- */
@@ -1578,17 +1581,6 @@
       meshes.outline = skinnedMesh(T, toonGeo, hullMaterial(K), skeleton, group, 'outline');
       meshes.outline.receiveShadow = false;
     }
-    if (data.whiskers) {
-      var wg = K.parts.get('char:whiskers', K.tier, function (Kt) {
-        var g = new Kt.THREE.BufferGeometry();
-        g.setAttribute('position', new Kt.THREE.BufferAttribute(data.whiskers, 3));
-        return g;
-      });
-      meshes.whiskers = new T.LineSegments(wg, K.mat('line:' + petTokens(petId).whisker));
-      meshes.whiskers.name = 'whiskers'; meshes.whiskers.frustumCulled = false;
-      bones.head.add(meshes.whiskers);
-    }
-
     /* sockets and anchors follow their bones */
     var sockets = {}, anchors = {};
     SOCKETS.forEach(function (s) {
@@ -1749,14 +1741,22 @@
   function haloMaterial(K) {
     return K.variant('state', 'char:wand-halo', { transparent: true, opacity: 0.15, blending: K.THREE.AdditiveBlending, depthWrite: false });
   }
+  /* a single copy as an InstancedMesh(1) with a white instance colour: it draws with the island's
+     instanced programs (toon, 'state', the additive 'state' beams, the LED / sign map program)
+     rather than plain-mesh twins of them */
+  function one(T, geo, mat, name) {
+    var m = new T.InstancedMesh(geo, mat, 1);
+    m.instanceColor = new T.InstancedBufferAttribute(new Float32Array([1, 1, 1]), 3);
+    m.name = name;
+    return m;
+  }
   function makeWand(SL3D, colorHex, tier, detail) {
     var K = SL3D.kit(tier), T = K.THREE, hex = memberHex(K, colorHex), crowd = detail === 'crowd', g = wandGeos(K, crowd ? 'crowd' : 'hero', hex);
     var root3 = new T.Group();
     root3.name = 'wand';
-    var handle = new T.Mesh(g.handle, K.mat('toon')), bulb = new T.Mesh(g.bulb, K.mat('state')), halo = null;
-    handle.name = 'handle'; bulb.name = 'bulb';
+    var handle = one(T, g.handle, K.mat('toon'), 'handle'), bulb = one(T, g.bulb, K.mat('state'), 'bulb'), halo = null;
     root3.add(handle, bulb);
-    if (g.halo) { halo = new T.Mesh(g.halo, haloMaterial(K)); halo.name = 'halo'; halo.renderOrder = 2; root3.add(halo); }
+    if (g.halo) { halo = one(T, g.halo, haloMaterial(K), 'halo'); halo.renderOrder = 2; root3.add(halo); }
     var disposed = false;
     root3.userData = {
       kind: 'wand', color: hex, tip: g.tip, points: WAND.points,
@@ -1793,8 +1793,7 @@
       map: K.tex.emojiFace(emoji), vertexColors: false, transparent: true, alphaTest: 0.05,
       polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1
     });
-    meshes.face = new T.Mesh(data.face, faceMat);
-    meshes.face.name = 'face';
+    meshes.face = one(T, data.face, faceMat, 'face');
     bones.head.add(meshes.face);
     if (K.tier !== 'LOW' && K.outlines !== false && quality(SL3D).outlines) {
       meshes.outline = skinnedMesh(T, data.skin, hullMaterial(K), sk.skeleton, group, 'outline');
@@ -1809,6 +1808,16 @@
     bones.head.add(top);
     var pose = restAvatar({}), o2 = {}, seed = (rigSeq++ * 2654435761) >>> 0, phase = (seed % 997) / 997, wand = null, showK = 0, disposed = false;
     var _q = new T.Quaternion(), _e = new T.Euler(), _v = new T.Vector3();
+    /* the Spark Stick exists from the start, hidden: the mount's compile pre-warms it, so the first
+       Showtime or dance (setWand(true)) compiles nothing mid-transition */
+    function addWand() {
+      wand = makeWand(SL3D, hex, K.tier);
+      wand.rotation.set(70 * DEG, 0, (pose.twirl || 0) * DEG);
+      wand.userData.setShow(showK);
+      wand.visible = false;
+      hand.add(wand);
+    }
+    addWand();
     var unsub = typeof SL3D.onQuality === 'function' ? SL3D.onQuality(function (q) { if (meshes.outline && q && q.outlines === false) meshes.outline.visible = false; }) : null;
     function rot(b, x, y, z, order) { b.rotation.set(x * DEG, y * DEG, z * DEG, order || 'XYZ'); }
     function setPose(p) {
@@ -1831,12 +1840,7 @@
       setPose: setPose,
       /* the Spark Stick in the right hand (Showtime, dances) */
       setWand: function (on) {
-        if (on && !wand) {
-          wand = makeWand(SL3D, hex, K.tier);
-          wand.rotation.set(70 * DEG, 0, (pose.twirl || 0) * DEG);
-          wand.userData.setShow(showK);
-          hand.add(wand);
-        }
+        if (on && !wand && !disposed) addWand();
         if (wand) wand.visible = !!on;
         return av;
       },

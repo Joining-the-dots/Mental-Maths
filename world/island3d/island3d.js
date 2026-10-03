@@ -89,6 +89,12 @@
      · env.wakeAt(x, z): a copy's lights join the 'city wakes up' ripple (its show k = k × wake).
      · Paths: SLModelsGarden.pathPose(mask, uid, {}, PATH_LAYOUTS[tier]) gives each copy its piece,
        stateKey and yaw (one layout per piece on LOW and MID, 3 on HIGH), so the path cells join up.
+   PERF (the merged layer, kit MERGED LAYER): every item batch joins one K.merger(), committed each
+     frame after the batches and before every compile, so the parts it accepts (toon, 'state', neon,
+     glow — not matcaps, maps or glass) of every copy draw in one call per material: the item draw
+     calls no longer grow with the island or its path pieces (the lab's max island: LOW 58 / 64,
+     MID and HIGH 66 / 73 golden hour / Showtime, from 163–190). The adaptive ladder's 'decor' step
+     (a CPU-bound device) rests every item idle at its rest pose, as reduced motion does.
 
    SIBLINGS (wave C, feature-detected; built-in fallbacks keep the island whole without them).
    The controller drives every sibling through the ISLAND PROTOCOL below. buildSystem wraps a
@@ -440,8 +446,10 @@
     if (!m) return typeof c === 'string' && c ? c : null;
     return '#' + (m[1].length === 3 ? m[1].replace(/(.)/g, '$1$1') : m[1]).toUpperCase();
   }
-  /* auto-tiled path layouts per tier: each (piece, layout) is its own batch (2 draw calls), so the
-     draw-call-bound LOW and MID tiers keep one layout per piece; HIGH shows all three */
+  /* auto-tiled path layouts per tier: each (piece, layout) is its own batch and template. Their
+     tiles and LED plates draw in the merged layer (0 calls by day, 1 at Showtime, however many
+     pieces), so a layout now costs only a template build and a batch's bookkeeping: LOW and MID
+     keep one per piece for that CPU; HIGH shows all three */
   var PATH_LAYOUTS = { LOW: 1, MID: 1, HIGH: 3 };
   /* one path copy's look from its neighbour mask: the garden models' own pose (the piece, a free
      quarter-turn for the symmetric pieces and a stone / plank layout, hashed from the uid) when
@@ -1097,15 +1105,16 @@
         K.setSelPulse(reduced ? 0.5 : 0.5 + 0.5 * Math.sin(clockT * 9.42477796));
         if (!reduced) busy = true;
       }
-      /* idles */
-      var i, rec;
+      /* idles (reduced motion, or the 'decor' quality step: once after each sync, at rest) */
+      var i, rec, still = reduced || decorRest;
       for (i = 0; i < recList.length; i++) {
         rec = recList[i];
         if (!rec.idleOn || rec.badIdle || rec.hidden) continue;
-        if (reduced) { if (!rec.idlePending) continue; }
+        if (still) { if (!rec.idlePending) continue; }
         else if (!rec.inView && !rec.act) continue;
         rec.idlePending = false;
         fill(rec, dt);
+        if (decorRest) rec.a.reduced = true;        /* the model's own rest pose (fill restores it next call) */
         var r;
         try { r = rec.model.idle(rec.a); } catch (e) { modelError(rec, 'idle', e); continue; }
         if (r !== false) busy = true;
@@ -1125,6 +1134,7 @@
         if (rec.dead || (!rec.act && !rec.animOn && !rec.rootDirty)) { rec.inLive = false; live[i] = live[live.length - 1]; live.length--; }
       }
       for (i = 0; i < batchList.length; i++) batchList[i].batch.commit();
+      commitMerged();
       /* siblings */
       var ctx = frameCtx(dt);
       if (sys.actors && xcall('actors', 'update', dt, clockT, ctx)) busy = true;
@@ -1199,11 +1209,40 @@
       matHooks[id] = h;
       return h;
     }
+    /* the merged layer (perf): every eligible part of every copy draws in one skinned mesh per
+       material (kit MERGED LAYER), so the draw calls no longer grow with the island; committed
+       once a frame after the batches, and before every compile so its programs are pre-warmed */
+    var merged = null;
+    function mergedLayer() {
+      if (merged || typeof K.merger !== 'function' || !itemsRoot) return merged;
+      try { merged = K.merger({ name: 'items:merged' }); itemsRoot.add(merged.group); } catch (e) { issue('merger: ' + errText(e)); merged = null; }
+      return merged;
+    }
+    function commitMerged() {
+      if (!merged) return;
+      try { merged.commit(); } catch (e) { issue('merger commit: ' + errText(e)); }
+    }
+    function disposeMerged() {
+      if (!merged) return;
+      try { merged.dispose(); } catch (e) { issue('merger dispose: ' + errText(e)); }
+      merged = null;
+    }
+    /* the adaptive ladder's 'decor' step (a CPU-bound device): every item idle settles once at its
+       rest pose, as under reduced motion, and then rests — no per-frame idles, bones or colour
+       chases; taps, acts and the Showtime mix still play */
+    var decorRest = false;
+    function qualityItems(q) {
+      var rest = !!(q && q.decor === false);
+      if (rest === decorRest) return;
+      decorRest = rest;
+      for (var i = 0; i < recList.length; i++) recList[i].idlePending = true;
+      wake();
+    }
     function batchFor(id, sk, st) {
       var key = batchKey(id, sk), b = batches.get(key);
       if (b) return b;
       var tpl = K.templates.get(id, sk, tier, st);
-      var batch = K.batch(tpl, { material: matHook(id) });
+      var batch = K.batch(tpl, { material: matHook(id), merge: mergedLayer() || undefined });
       itemsRoot.add(batch.group);
       b = { key: key, id: id, sk: sk, tpl: tpl, batch: batch, n: 0 };
       batches.set(key, b); batchList.push(b);
@@ -1736,6 +1775,7 @@
       buildSrList(view);
       /* reduced motion: idle once after each sync */
       for (var i = 0; i < recList.length; i++) recList[i].idlePending = true;
+      commitMerged();                       /* new merged groups exist before any compile sees the scene */
       if (newTemplates && readyFired && lease) { newTemplates = false; lease.compile(scene, camera); }
       firstSync = false;
       anchorsDirty = true;
@@ -2715,6 +2755,7 @@
         stageEncore: encoreLive() ? encoreLock.uid : null, debugGrid: DEBUG.grid, seeded: user.seed != null,
         camera: rig ? rig.info() : null, beat: { bpm: beat.bpm, bar: beat.bar, music: !!beat.music }, issues: issues.slice()
       };
+      try { if (merged) out.merged = merged.info(); } catch (e) {}      /* {groups, calls, entries, vertices, holes, bones} */
       try { if (layers.city && typeof layers.city.info === 'function') out.city = layers.city.info(); } catch (e) {}
       try { if (layers.life && typeof layers.life.info === 'function') out.life = layers.life.info(); } catch (e) {}
       try { if (env) out.env = env.info(); } catch (e) {}
@@ -2748,6 +2789,7 @@
       litMem = {};
       batchList.slice().forEach(function (b) { try { b.batch.dispose(); } catch (e) {} });
       batchList.length = 0; batches.clear();
+      disposeMerged();
       disposeSystems();
       if (env) { try { env.dispose(); } catch (e) { issue('env dispose: ' + errText(e)); } env = null; }    /* a v2 env takes its city and life with it */
       disposeLayers();
@@ -2809,8 +2851,10 @@
           xcall('fx', 'setQuality', q);
           xcall('actors', 'setQuality', q);
           xcall('edit', 'setQuality', q);
+          qualityItems(q);
         });
       }
+      qualityItems(SL3D.quality);
       lease.start();
     } catch (e) {
       fail('mount: ' + errText(e));

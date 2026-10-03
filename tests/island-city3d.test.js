@@ -67,9 +67,13 @@ test('city: building counts come from the tier budget (LOW 30, MID 60, HIGH 90) 
 
 test('city: one static build is quick (≤ 60 ms for the HIGH layout + geometry in Node)', () => {
   City.buildArrays(City.layout({ tier: 'HIGH', seed: 'warm-up' }));
-  const t0 = process.hrtime.bigint();
-  City.buildArrays(City.layout({ tier: 'HIGH', seed: 'timing' }));
-  const ms = Number(process.hrtime.bigint() - t0) / 1e6;
+  /* the best of three: the build's own cost, not a busy machine's (the suite runs its files in parallel) */
+  let ms = Infinity;
+  for (let i = 0; i < 3; i++) {
+    const t0 = process.hrtime.bigint();
+    City.buildArrays(City.layout({ tier: 'HIGH', seed: 'timing-' + i }));
+    ms = Math.min(ms, Number(process.hrtime.bigint() - t0) / 1e6);
+  }
   assert.ok(ms < 60, 'build took ' + ms.toFixed(1) + ' ms');
 });
 

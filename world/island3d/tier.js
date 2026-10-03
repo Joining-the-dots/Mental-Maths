@@ -7,7 +7,8 @@
    API
      SLTier.TIERS                       ['LOW', 'MID', 'HIGH']
      SLTier.BUDGETS[tier]               per-tier numbers (art bible performanceBudget)
-     SLTier.LADDER                      adaptive step-down order (pixelRatio shadows outlines particles life reflections cones)
+     SLTier.LADDER                      adaptive step-down order (outlines particles life decor | pixelRatio shadows reflections cones)
+     SLTier.STEP_KIND / stepKind(step)  'cpu' (draw calls, per-frame work) | 'gpu' (fill): which bottleneck a step relieves
      SLTier.facts(nav, extra)           navigator-like → {ios, android, touch, desktop, cores, maxTex, caveat, saved}
      SLTier.decide(facts)               → 'LOW' | 'MID' | 'HIGH'   (decided BEFORE the renderer exists)
      SLTier.explain(facts)              → {tier, why}
@@ -59,9 +60,20 @@
     }
   };
 
-  /* adaptive quality step-down order; never stepped back up within a session. Ambient
-     life (halved) and the sea reflections go before the Showtime cones. */
-  var LADDER = ['pixelRatio', 'shadows', 'outlines', 'particles', 'life', 'reflections', 'cones'];
+  /* adaptive quality step-down order; never stepped back up within a session. Each step relieves
+     the CPU (draw calls and per-frame work: the character hulls, particles, ambient life, the
+     decor idles) or the GPU (fill: pixel ratio, shadow sampling, the sea's light pillars, the
+     Showtime cones). AdaptiveQuality takes the next step of the kind the frames show is slow —
+     frame work over budget → the next CPU step, a slow cadence with cheap work → the next GPU
+     step — and any step left once that kind runs out, so a draw-call-bound device sheds draw
+     calls before it is ever judged for the 2D fallback (which still needs every step taken).
+     In LADDER order the CPU steps come first: the island's LOW / MID tiers are the CPU-bound ones. */
+  var LADDER = ['outlines', 'particles', 'life', 'decor', 'pixelRatio', 'shadows', 'reflections', 'cones'];
+  var STEP_KIND = {
+    outlines: 'cpu', particles: 'cpu', life: 'cpu', decor: 'cpu',
+    pixelRatio: 'gpu', shadows: 'gpu', reflections: 'gpu', cones: 'gpu'
+  };
+  function stepKind(step) { return STEP_KIND[step] || 'gpu'; }
 
   function parseTier(v) {
     if (typeof v !== 'string') return null;
@@ -130,7 +142,9 @@
   /* ---------------- AdaptiveQuality ----------------
      Rolling 120-frame averages of work time (update + render CPU) and of frame
      intervals. If they imply more than 24 ms per frame for 2 s, step down once
-     (at most one step per 2 s) along LADDER. A steady ~33 ms cadence with low
+     (at most one step per 2 s): the first step left in LADDER of the slow kind —
+     'cpu' when the average work is over 24 ms, else 'gpu' — or, once that kind
+     is used up, the first step left of any kind. A steady ~33 ms cadence with low
      variance and cheap work is a 30 Hz cap (iOS Low Power Mode), not slowness.
      After every step is taken, frame rates under 20 fps sustained for
      fallbackHoldMs give the 'fallback' verdict (the caller switches to 2D).
@@ -219,12 +233,14 @@
            while fresh frames roll in (a short first window is easily skewed) */
         if (slowSince < 0) slowSince = nowMs;
         if (nowMs - slowSince >= holdMs && nowMs - lastStepAt >= stepGapMs) {
-          var step = null;
-          for (var li = 0; li < ladder.length && step === null; li++) if (taken.indexOf(ladder[li]) < 0) step = ladder[li];
+          /* the bottleneck: the frame's own work (update + draw submission) or the cadence */
+          var kind = aw > slowMs ? 'cpu' : 'gpu', step = null, li;
+          for (li = 0; li < ladder.length && step === null; li++) if (taken.indexOf(ladder[li]) < 0 && stepKind(ladder[li]) === kind) step = ladder[li];
+          for (li = 0; li < ladder.length && step === null; li++) if (taken.indexOf(ladder[li]) < 0) step = ladder[li];
           taken.push(step);
           lastStepAt = nowMs;
           reset();                       /* judge the next step on fresh frames */
-          return { type: 'step', step: step, level: taken.length };
+          return { type: 'step', step: step, level: taken.length, kind: kind };
         }
         return null;
       }
@@ -298,7 +314,7 @@
   }
 
   return {
-    TIERS: TIERS, BUDGETS: BUDGETS, LADDER: LADDER,
+    TIERS: TIERS, BUDGETS: BUDGETS, LADDER: LADDER, STEP_KIND: STEP_KIND, stepKind: stepKind,
     facts: facts, decide: decide, explain: explain, budget: budget,
     lower: lower, minTier: minTier, parseTier: parseTier,
     AdaptiveQuality: AdaptiveQuality, FramePacer: FramePacer

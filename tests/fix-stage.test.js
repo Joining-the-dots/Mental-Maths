@@ -100,7 +100,7 @@ test('#34 sustained slowness still steps (no backdating: only after the average 
   const crawl = T.AdaptiveQuality();
   const rc = drive(crawl, { ms: 90000, interval: 300, work: 280 });
   const types = rc.actions.map(a => a.type);
-  assert.equal(types.filter(t => t === 'step').length, 5, 'every step');
+  assert.equal(types.filter(t => t === 'step').length, T.LADDER.length, 'every step');
   assert.equal(types[types.length - 1], 'fallback', 'then the 2D fallback');
   /* stalls separated by healthy frames are not sustained */
   const jank = T.AdaptiveQuality();

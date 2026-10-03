@@ -265,13 +265,6 @@
        .slw-twinkle  festoon and booth bulbs (v1 class)  .slw-smoke, .slw-flag (v1)
      ================================================================ */
 
-  /* v2 walls and door. A1 appends the same values to the WALL / DOOR literals
-     above (those two lines are LOCKED and test-parsed); filling in only what is
-     missing keeps the 2D art right in either merge order. */
-  function fillMissing(map, extra) { Object.keys(extra).forEach(function (k) { if (!map[k]) map[k] = extra[k]; }); }
-  fillMissing(WALL, { wall_concrete: '#a9a5b3', wall_gallery: '#eceaf2', wall_graphite: '#34303f', wall_midnight: '#232a57' });
-  fillMissing(DOOR, { door_glass: '#1b2438' });
-
   var NEON_DEFAULT = '#ff2e9a';               /* Neon Magenta, when no member colour is given */
   var SIGN_FONT = 'font-family="Unbounded, Outfit, Arial, sans-serif" font-weight="800" text-anchor="middle"';
   function n1(x) { return String(Math.round(x * 10) / 10); }

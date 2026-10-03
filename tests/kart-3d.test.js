@@ -38,17 +38,17 @@ test('kart-3d core: mirrors the logic constants, track maths and locked colours'
   assert.equal(C.kartHex('kart_unicorn'), '#ff8fd0');
 });
 
-test('kart-3d core: the light arc copies world-look DAY / SHOW (SOUNDCHECK warms the sun)', () => {
+test('kart-3d core: the light arc copies the world-look v1 DAY / SHOW_V1 arc (SOUNDCHECK warms the sun)', () => {
   for (const key of ['hemiSky', 'hemiGround', 'skyTop', 'skyMid', 'skyHorizon', 'seaShallow', 'seaDeep', 'foam', 'fogColor', 'rimColor']) {
     assert.equal(C.DAY[key], L.hex(L.DAY[key]), 'DAY ' + key);
-    assert.equal(C.SHOW[key], L.hex(L.SHOW[key]), 'SHOW ' + key);
+    assert.equal(C.SHOW[key], L.hex(L.SHOW_V1[key]), 'SHOW ' + key);
   }
-  for (const key of ['hemiIntensity', 'exposure', 'haloScale', 'haloOpacity', 'rimStrength']) { assert.equal(C.DAY[key], L.DAY[key]); assert.equal(C.SHOW[key], L.SHOW[key]); }
-  /* at Showtime the rim takes 40% of the member colour, exactly like the island's presetAt */
-  assert.equal(C.arcPreset(1, 'track_loop', {}, '#00B894').rimColor, L.presetAt(1, '#00B894').rimColor);
-  assert.equal(C.arcPreset(0.5, 'track_loop', {}, '#00B894').rimColor, L.presetAt(0.5, '#00B894').rimColor);
+  for (const key of ['hemiIntensity', 'exposure', 'haloScale', 'haloOpacity', 'rimStrength']) { assert.equal(C.DAY[key], L.DAY[key]); assert.equal(C.SHOW[key], L.SHOW_V1[key]); }
+  /* at Showtime the rim takes 40% of the member colour, like the island's v1 presetAt (the race keeps the v1 day→Showtime arc) */
+  assert.equal(C.arcPreset(1, 'track_loop', {}, '#00B894').rimColor, L.presetV1At(1, '#00B894').rimColor);
+  assert.equal(C.arcPreset(0.5, 'track_loop', {}, '#00B894').rimColor, L.presetV1At(0.5, '#00B894').rimColor);
   assert.equal(C.DAY.sunColor, '#FFE3C0'); assert.equal(C.DAY.sunIntensity, 2.2);
-  assert.equal(C.SHOW.sunColor, L.hex(L.SHOW.sunColor));
+  assert.equal(C.SHOW.sunColor, L.hex(L.SHOW_V1.sunColor));
   const day = C.arcPreset(0, 'track_loop'), half = C.arcPreset(0.5, 'track_loop'), enc = C.arcPreset(1, 'track_loop');
   assert.equal(day.skyTop, C.DAY.skyTop); assert.equal(enc.skyTop, C.SHOW.skyTop);
   assert.equal(day.encore, 0); assert.equal(half.encore, 0); assert.equal(enc.encore, 1);

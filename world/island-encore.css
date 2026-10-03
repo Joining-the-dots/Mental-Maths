@@ -24,7 +24,9 @@
 
    HOOKS (all optional — without them the island keeps its layout):
    .slw.showtime            Showtime HUD: night glow on the same panels
-   .slw.dusk                optional golden-hour tint on the 2D stage
+                            (2D stage: the night layer fades in over 1.6 s)
+   .slw.dusk                golden-hour haze on the 2D stage (the host sets it
+                            on every 2D .slw; the dusk sky replaces #7fd6ff)
    .slw-stagewrap.slw-is3d  3D stage: no sideways scroll; taller on phones
                             (2:3 portrait, full height when held sideways)
    .slw-3d                  island3d's persistent container holding
@@ -49,14 +51,19 @@
    html.sl-low              LOW tier: solid #15112A panels, no blur
    2D city buildings (world-art sprites; tapItem restarts `.go`):
      .slw-hatch .slw-pearls .slw-strip .slw-marquee .slw-onair .slw-eq
-     .slw-floor .slw-bean .slw-beam  → `.go` plays the act once (≤ 3 s)
+     .slw-floor .slw-bean  → `.go` plays the act once (≤ 3 s)
      .slw-neon (glows at Showtime; set color= to tint the glow),
-     .slw-win (lit at Showtime / dusk), .slw-beam (shown at Showtime)
+     .slw-win (lit at Showtime / dusk), .slw-beam (shown and sweeping
+     while .showtime is on — the toggle or the 8 s encore; its `.go` adds
+     nothing, so lifting .showtime never replays an act)
      Draw each hook group visible, in its rest pose, with NO transform=
      of its own (CSS animates `transform`; position it with an outer <g>).
      CSS dims .slw-onair and hides .slw-beam until their act / Showtime.
    game shell: .slg-ring    one expanding countdown ring; re-insert it
-                            each beat (inside .slg-count or beside it)
+                            each beat (inside .slg-count or beside it), at
+                            most 1.97 Hz (a faster count-in skips beats)
+               .slg-count.slg-rings   the shell draws the rings itself, so
+                            the CSS fallback ring stays off
    Optional custom properties, set from JS:
    --sle-member             the child's signature colour (u.color), on
                             .slw, .slg or html
@@ -455,20 +462,36 @@ html body .slw.showtime .slw-stagewrap {
 }
 /* edit and place modes: a dashed Star Gold frame (a shape change, not colour alone) */
 html body .slw.slw-edit .slw-stagewrap { border-style: dashed; border-color: #FFD23F; }
-/* the 2D fallback stage at Showtime: night over the ground and sea; items (z ≥ 2) stay lit */
-html body .slw.showtime .slw-stagewrap:not(.slw-is3d) .slw-stage::after,
-html body .slw.dusk .slw-stagewrap:not(.slw-is3d) .slw-stage::after {
+/* the 2D fallback stage: a Dusk Zenith → Dusk Horizon sky down to the horizon (the top
+   80 of the stage's 860 units), then the far bay under world-art's dusk island. It beats
+   the injected v1 sky blue (#7fd6ff). */
+html body .slw-stagewrap:not(.slw-is3d) {
+  background: linear-gradient(180deg, #2B1E5C 0%, #6A3D8F 5.5%, #FF9A7A 9.3%, #1E3F86 9.3%);
+}
+/* golden-hour haze (::before) and the Showtime night (::after) ALWAYS exist on the 2D
+   stage and only fade their opacity, over the same 1.6 s as the 3D blend and at an even
+   rate (linear: no steep middle), kept under reduced motion (a fade is not motion). So
+   toggling .showtime — the button or the 8 s encore — never jumps the stage's luminance:
+   even a bright beach under the darkest night stop moves < 0.2 in any 0.5 s. Items
+   (z ≥ 2) stay lit above both. */
+html body .slw-stagewrap:not(.slw-is3d) .slw-stage::before,
+html body .slw-stagewrap:not(.slw-is3d) .slw-stage::after {
   content: "";
   position: absolute;
   inset: 0;
   z-index: 1;
   pointer-events: none;
+  opacity: 0;
+  transition: opacity 1.6s linear;
+}
+html body .slw-stagewrap:not(.slw-is3d) .slw-stage::before {
+  background: linear-gradient(180deg, rgba(255, 154, 122, 0.16) 0%, rgba(255, 154, 122, 0) 30%, rgba(255, 214, 160, 0.08) 100%);
+}
+html body .slw-stagewrap:not(.slw-is3d) .slw-stage::after {
   background: linear-gradient(180deg, rgba(11, 10, 31, 0.6) 0%, rgba(30, 20, 80, 0.38) 45%, rgba(194, 51, 143, 0.14) 100%);
 }
-/* optional golden hour on the 2D stage */
-html body .slw.dusk:not(.showtime) .slw-stagewrap:not(.slw-is3d) .slw-stage::after {
-  background: linear-gradient(180deg, rgba(43, 30, 92, 0.32) 0%, rgba(255, 154, 122, 0.16) 55%, rgba(255, 214, 160, 0.1) 100%);
-}
+html body .slw.dusk .slw-stagewrap:not(.slw-is3d) .slw-stage::before { opacity: 1; }
+html body .slw.showtime .slw-stagewrap:not(.slw-is3d) .slw-stage::after { opacity: 1; }
 
 /* island labels (2D, and inside 3D anchors) */
 html body .slw-tag {
@@ -1304,6 +1327,9 @@ html body .slw-beam {
 html body .slw-hatch { transform-origin: 50% 0; }
 html body .slw-beam { transform-origin: 50% 0; opacity: 0; transition: opacity 0.6s ease-in-out; }
 html body .slw-onair { opacity: 0.5; transition: opacity 0.3s ease-out; }
+/* the Showtime glow and lit windows fade with the stage, never a hard switch */
+html body .slw-neon { transition: filter 0.6s ease-in-out; }
+html body .slw-win { transition: fill 0.6s ease-in-out; }
 html body .slw-hatch.go { animation: sleHatch 1.6s ease-in-out; }
 html body .slw-pearls.go { animation: slePearls 0.75s ease-in-out 2; }
 html body .slw-strip.go { animation: sleStrip 1.2s ease-out both; }
@@ -1311,17 +1337,22 @@ html body .slw-strip.go { animation: sleStrip 1.2s ease-out both; }
 html body .slw-marquee { animation: sleMarquee 8s linear infinite; }
 html body .slw-marquee.go { animation: sleMarquee 8s linear infinite, sleWipe 0.5s ease-out; }
 html body .slw-onair.go { animation: sleOnAir 3s ease-in-out; }
-html body .slw-eq.go { animation: sleEq 0.6s steps(1, end) 5; }
+/* the VU / EQ bars: smooth heights (no steps, never on/off), two peaks per 1.5 s, so no
+   pixel of a bar lights and goes dark faster than 1.33 Hz (≤ LED_CHASE_HZ) */
+html body .slw-eq.go { animation: sleEq 1.5s ease-in-out 2; }
 /* the light-up floor: an alternating checker chase at 1.33 Hz, never full contrast */
 html body .slw-floor.go > * { animation: sleFloor 0.75s steps(1, end) 4; }
 html body .slw-floor.go > :nth-child(even) { animation-delay: 0.375s; }
 html body .slw-bean.go { animation: sleBean 0.9s ease-in-out; }
-html body .slw-beam.go { animation: sleBeamOn 3s ease-in-out; }
-/* Showtime (and the 8 s encore): beams sweep, neon glows, windows light up */
+/* Showtime (and the 8 s encore): beams fade in and sweep, neon glows, windows light up.
+   The beams belong to .showtime alone — the encore's .slw-beam.go has no animation, so
+   when the host lifts .showtime the beams just fade out (nothing to replay) */
 html body .slw.showtime .slw-beam { opacity: 0.8; animation: sleBeam 4s ease-in-out infinite alternate; }
 html body .slw.showtime .slw-neon { filter: drop-shadow(0 0 4px currentColor) brightness(1.25); }
-html body .slw.showtime .slw-win { fill: #FFE9A8; }
+/* windows: Window Warm at golden hour, brighter at Showtime (the 2D .slw always carries
+   .dusk, so the Showtime fill comes after it and wins) */
 html body .slw.dusk .slw-win { fill: #FFD08A; }
+html body .slw.showtime .slw-win { fill: #FFE9A8; }
 
 /* ================================================================
    Game shell (.slg-*, world/games/shell.js): night stage, glass bar,
@@ -1599,7 +1630,7 @@ html body .slg .slg-count::before {
   background: radial-gradient(circle, var(--sle-member) 0%, transparent 68%);
   opacity: 0.35;
 }
-/* fallback ring: loops on the beat until the shell adds .slg-ring */
+/* fallback ring: loops on the beat (never faster than 1.97 Hz) until the shell adds .slg-ring */
 html body .slg .slg-count::after {
   content: "";
   position: absolute;
@@ -1613,11 +1644,13 @@ html body .slg .slg-count::after {
   opacity: 0;
   transform: translate(-50%, -50%) scale(0.35);
   animation: sleRing 1s ease-out infinite;
-  animation-duration: max(0.5s, var(--slg-beat, 1s));
+  animation-duration: max(0.51s, var(--slg-beat, 1s));
 }
+html body .slg .slg-count.slg-rings::after,
 html body .slg .slg-count:has(.slg-ring)::after,
 html body .slg .slg-mid:has(> .slg-ring) .slg-count::after { content: none; }
-/* one ring per beat: the shell re-inserts .slg-ring, which plays once */
+/* one ring per beat: the shell re-inserts .slg-ring, which plays once — at most 1.97 Hz,
+   so a faster count-in (Debut Run, 128 BPM) rings every other beat */
 html body .slg .slg-ring {
   position: absolute;
   left: 50%;
@@ -1732,16 +1765,17 @@ html.sl-low body {
   /* confetti physics becomes a 0.4 s sparkle fade in place */
   html body .slw-cannons::before { animation: sleSparkleFade 0.4s ease-out forwards; transform: translate(22%, -30%) scale(0.9); }
   html body .slw-cannons::after { animation: sleSparkleFade 0.4s ease-out forwards; transform: scaleX(-1) translate(22%, -30%) scale(0.9); }
-  /* 2D building acts jump to their end state */
+  /* 2D building acts jump to their end state (the beams: lit while .showtime is on,
+     dark again once the encore lifts it, like the 3D act's beams: 0) */
   html body .slw-hatch.go,
   html body .slw-pearls.go,
   html body .slw-strip.go,
   html body .slw-eq.go,
   html body .slw-floor.go > *,
-  html body .slw-bean.go,
-  html body .slw-beam.go { animation: none; }
+  html body .slw-bean.go { animation: none; }
   html body .slw-onair.go { animation: none; opacity: 1; }
-  html body .slw-beam.go { opacity: 0.8; }
+  /* a floating tap glyph (.slw-fx) is a sparkle that fades in place: no rise, no scale */
+  html body .slw-fx { animation: sleSparkleFade 0.4s ease-out forwards; transform: translate(-50%, -100%); }
   /* the golden hour ↔ Showtime glow swap is a short fade */
   html body .slw::before,
   html body .slw::after,
@@ -1870,8 +1904,3 @@ html.sl-low body {
   70% { transform: scale(0.98, 1.02); }
 }
 @keyframes sleBeam { from { transform: rotate(-8deg); } to { transform: rotate(8deg); } }
-@keyframes sleBeamOn {
-  0%, 100% { opacity: 0; transform: rotate(-8deg); }
-  20%, 80% { opacity: 0.8; }
-  50% { transform: rotate(8deg); }
-}

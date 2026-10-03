@@ -36,14 +36,28 @@
       '<linearGradient id="slwGrassLock" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#b8c7c0"/><stop offset="1" stop-color="#93a59d"/></linearGradient>' +
       '<radialGradient id="slwGlow"><stop offset="0" stop-color="#fff6a8" stop-opacity="0.95"/><stop offset="1" stop-color="#fff6a8" stop-opacity="0"/></radialGradient>' +
       '<radialGradient id="slwGlowCyan"><stop offset="0" stop-color="#9ffcff" stop-opacity="0.9"/><stop offset="1" stop-color="#9ffcff" stop-opacity="0"/></radialGradient>' +
+      /* v2 golden hour: the dusk bay (Deep Bay, as the 3D stage's backdrop) and Turf */
+      '<linearGradient id="slwSeaDusk" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1e3f86"/><stop offset="1" stop-color="#2c6fa3"/></linearGradient>' +
+      '<linearGradient id="slwTurf" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4fa36a"/><stop offset="1" stop-color="#3c8456"/></linearGradient>' +
       '</defs>', ' width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"');
   }
 
   /* ---------------- island ground ---------------- */
-  /* cellsByRegion: {regionKey: ['x,y', ...]}, unlocked: {regionKey:true} */
-  function island(cols, rows, cellsByRegion, unlocked) {
+  /* Two palettes. 'dusk' (the default) is the v2 golden hour that sits in the dark-glass
+     Encore frame: the Deep Bay under a Dusk Zenith sky (the sky is the stage's CSS
+     background), Lagoon shallows, Dune beaches, Turf grass and Wave Dusk lines at 0.6×
+     width — no white strokes. 'day' (opts.day) is the v1 cartoon island, byte-identical. */
+  var ISLE = {
+    day: { sea: 'url(#slwSea)', wave: 'stroke="#e8f8ff" stroke-width="4" stroke-linecap="round" opacity="0.7"', lock: '#f6e7bd', lockOp: '0.5', edge: '#ffffff', edgeOp: '0.7',
+      shallows: '', sand: '#f3dc9a', grass: 'url(#slwGrass)', tuft: '#4fa94a' },
+    dusk: { sea: 'url(#slwSeaDusk)', wave: 'stroke="#ffc7b0" stroke-width="2.4" stroke-opacity="0.5" stroke-linecap="round" opacity="0.7"', lock: '#b98f6e', lockOp: '0.45', edge: '#b8b2d6', edgeOp: '0.6',
+      shallows: '#3fb8d0', sand: '#e9c9a0', grass: 'url(#slwTurf)', tuft: '#2f7d57' }
+  };
+  /* cellsByRegion: {regionKey: ['x,y', ...]}, unlocked: {regionKey:true}, opts {day} */
+  function island(cols, rows, cellsByRegion, unlocked, opts) {
+    var P = opts && opts.day ? ISLE.day : ISLE.dusk;
     var W = cols * 100, H = rows * CH;
-    var sand = '', grass = '', lockSand = '', tufts = '', locked = {};
+    var sand = '', grass = '', lockSand = '', tufts = '', shallows = '', locked = {};
     Object.keys(cellsByRegion).forEach(function (rk) {
       var open = !!unlocked[rk];
       cellsByRegion[rk].forEach(function (ck) {
@@ -52,25 +66,28 @@
         var sRect = '<rect x="' + (x - 28) + '" y="' + (y - 24) + '" width="156" height="' + (CH + 48) + '" rx="48"/>';
         if (open) {
           sand += sRect;
+          /* dusk: a glowing Lagoon shelf around the beaches */
+          if (P.shallows) shallows += '<rect x="' + (x - 42) + '" y="' + (y - 36) + '" width="184" height="' + (CH + 72) + '" rx="60"/>';
           grass += '<rect x="' + (x - 15) + '" y="' + (y - 14) + '" width="130" height="' + (CH + 28) + '" rx="38"/>';
           /* a few grass tufts for texture (deterministic per cell) */
           var h = (cx * 73 + cy * 151) % 97;
-          tufts += '<path d="M' + (x + 20 + h % 50) + ' ' + (y + 30 + h % 30) + ' l4 -9 l4 9 m2 0 l4 -7 l4 7" fill="none" stroke="#4fa94a" stroke-width="2.5" stroke-linecap="round" opacity="0.55"/>';
+          tufts += '<path d="M' + (x + 20 + h % 50) + ' ' + (y + 30 + h % 30) + ' l4 -9 l4 9 m2 0 l4 -7 l4 7" fill="none" stroke="' + P.tuft + '" stroke-width="2.5" stroke-linecap="round" opacity="0.55"/>';
         } else { lockSand += sRect; locked[rk] = 1; }
       });
     });
     var waves = '';
     for (var i = 0; i < 9; i++) {
       var wx = (i * 197) % W, wy = 22 + ((i * 131) % (H - 30));
-      waves += '<path class="slw-wave" style="animation-delay:' + (i * 0.7).toFixed(1) + 's" d="M' + wx + ' ' + wy + ' q 14 -8 28 0 t 28 0" fill="none" stroke="#e8f8ff" stroke-width="4" stroke-linecap="round" opacity="0.7"/>';
+      waves += '<path class="slw-wave" style="animation-delay:' + (i * 0.7).toFixed(1) + 's" d="M' + wx + ' ' + wy + ' q 14 -8 28 0 t 28 0" fill="none" ' + P.wave + '/>';
     }
     return svg(W, H,
-      '<rect width="' + W + '" height="' + H + '" fill="url(#slwSea)"/>' + waves +
+      '<rect width="' + W + '" height="' + H + '" fill="' + P.sea + '"/>' + waves +
+      (shallows ? '<g fill="' + P.shallows + '" opacity="0.3">' + shallows + '</g>' : '') +
       /* locked land: a pale sandbar with a dotted edge — clearly "not yet" */
-      '<g fill="#f6e7bd" opacity="0.5">' + lockSand + '</g>' +
-      '<g fill="none" stroke="#ffffff" stroke-width="3" stroke-dasharray="2 10" stroke-linecap="round" opacity="0.7">' + lockSand + '</g>' +
+      '<g fill="' + P.lock + '" opacity="' + P.lockOp + '">' + lockSand + '</g>' +
+      '<g fill="none" stroke="' + P.edge + '" stroke-width="3" stroke-dasharray="2 10" stroke-linecap="round" opacity="' + P.edgeOp + '">' + lockSand + '</g>' +
       /* open land: sand ring, grass, tufts */
-      '<g fill="#f3dc9a">' + sand + '</g><g fill="url(#slwGrass)">' + grass + '</g>' + tufts,
+      '<g fill="' + P.sand + '">' + sand + '</g><g fill="' + P.grass + '">' + grass + '</g>' + tufts,
       ' preserveAspectRatio="none" class="slw-ground-svg"');
   }
 
@@ -256,12 +273,14 @@
        .slw-strip    photo strip (Photo Booth, act 'snap'; origin = top edge)
        .slw-pearls   boba pearls (act 'serve')      .slw-hatch  serving hatch (origin = top)
        .slw-screen   LED tower screen; data-prog="0..3" picks the visible
-                     .slw-prog.pN group (N > 0 ships display="none")
+                     .slw-prog.pN group (st.prog, default 0; the others ship
+                     display="none"); p1 is the active pet (st.pet) in pixels
        .slw-marquee  the child's name on the LED tower (scroll by -50%: the text repeats)
        .slw-onair    ON AIR lightbox, dim at rest (act 'record' lights it, steady)
        .slw-eq       EQ / VU bars (origin = bottom)  .slw-floor  dance-floor tiles
        .slw-bean     rooftop beanbags (origin = bottom)
-       .slw-beam     stage light beams, opacity 0 until Showtime / act 'encore'
+       .slw-beam     stage light beams, opacity 0 until Showtime (act 'encore' turns
+                     .showtime on for 8 s; the beams follow it, nothing else)
        .slw-twinkle  festoon and booth bulbs (v1 class)  .slw-smoke, .slw-flag (v1)
      ================================================================ */
 
@@ -726,7 +745,17 @@
      stripe pattern A/B/C. Words only from SIGN_WORDS plus the child's own name
      (st.name, LED tower marquee and stage wall); icons pass no name/member, so
      they are the same for every child. */
-  var PIX_PET = ['e......e', 'eb....be', 'bbbbbbbb', 'bkbbbbkb', 'bbllllbb', 'bblnnlbb', '.bbllbb.'];
+  /* the LED tower's pixel pets (8 × 8, drawn once in the locked PETCOL colours): each
+     species keeps its own silhouette, so the child's active crew member (st.pet) reads
+     on the screen — floppy ears, pointed ears, tall ears with pink insides, gold horns.
+     e dark · b body · l light · k Midnight Ink eye · n nose · i inner ear · h horn */
+  var PIX_PETS = {
+    pet_puppy: ['..bbbb..', '.bbbbbb.', 'ebkbbkbe', 'ebbbbbbe', 'ebllllbe', 'e.lnnl.e', '..llll..', '........'],
+    pet_kitten: ['e......e', 'ee....ee', 'bbbbbbbb', 'bkbbbbkb', 'bbbnnbbb', 'bbllllbb', '.bbllbb.', '..bbbb..'],
+    pet_bunny: ['.b....b.', '.bi..ib.', '.bi..ib.', '.bbbbbb.', 'bkbbbbkb', 'bbbnnbbb', '.bllllb.', '..bbbb..'],
+    pet_dragon: ['h......h', '.h....h.', '.bbbbbb.', 'bkbbbbkb', 'bbbbbbbb', 'bllllllb', 'bnllllnb', '.bbbbbb.']
+  };
+  function own(o, k) { return typeof k === 'string' && Object.prototype.hasOwnProperty.call(o, k); }
   function bldOpts(st, iconMode) {
     st = st || {};
     var v = iconMode ? 0 : Math.max(0, Math.min(2, st.variant | 0));
@@ -734,7 +763,9 @@
     return {
       v: v, flip: v === 1, acc: [member || '#8a5cff', '#ff2e9a', '#22e4ff'][v],
       name: iconMode ? '' : String(st.name == null ? '' : st.name).replace(/\s+/g, ' ').trim().slice(0, 12).toUpperCase(),
-      pet: !iconMode && PETCOL[st.pet] ? st.pet : 'pet_puppy', icon: !!iconMode
+      /* the active pet (the host passes st.pet) and the LED tower's show (st.prog 0..3, so
+         a redraw keeps the child's pick) */
+      pet: !iconMode && own(PETCOL, st.pet) ? st.pet : 'pet_puppy', prog: iconMode ? 0 : Math.max(0, Math.min(3, st.prog | 0)), icon: !!iconMode
     };
   }
   function signText(x, y, size, txt, fill) {
@@ -759,8 +790,9 @@
     return out + '</g>';
   }
   function pixelPet(petId, x0, y0, px) {
-    var c = PETCOL[petId] || PETCOL.pet_puppy, map = { e: c.dark, b: c.body, l: c.light, k: '#14101f', n: c.nose }, out = '';
-    PIX_PET.forEach(function (row, y) {
+    if (!own(PIX_PETS, petId)) petId = 'pet_puppy';
+    var c = PETCOL[petId], map = { e: c.dark, b: c.body, l: c.light, k: '#14101f', n: c.nose, i: '#f6b7c9', h: '#ffd23f' }, out = '';
+    PIX_PETS[petId].forEach(function (row, y) {
       for (var x = 0; x < row.length; x++) if (map[row[x]]) out += '<rect x="' + (x0 + x * px) + '" y="' + (y0 + y * px) + '" width="' + px + '" height="' + px + '" fill="' + map[row[x]] + '"/>';
     });
     return out;
@@ -818,12 +850,12 @@
     var screen;
     if (o.icon) screen = starField(66, 50);
     else {
-      var nm = o.name || 'ENCORE';
-      screen = '<g class="slw-screen" data-prog="0">' +
-        '<g class="slw-prog p0"><rect width="66" height="50" fill="#0e1626"/><g class="slw-marquee"><text x="4" y="31" ' + SIGN_FONT.replace('text-anchor="middle"', 'text-anchor="start"') + ' font-size="14" fill="#22e4ff">' + xmlEsc(nm + ' ✦ ' + nm + ' ✦') + '</text></g></g>' +
-        '<g class="slw-prog p1" display="none"><rect width="66" height="50" fill="#0e1626"/>' + pixelPet(o.pet, 13, 7, 5) + '</g>' +
-        '<g class="slw-prog p2" display="none"><rect width="66" height="50" fill="#0e1626"/>' + eqBars(6, 44, 8.4, 6, [20, 32, 26, 38, 22, 30, 16], ['#22e4ff', '#ff2e9a', '#8a5cff', '#c6ff3d']) + '</g>' +
-        '<g class="slw-prog p3" display="none">' + starField(66, 50) + '</g></g>';
+      var nm = o.name || 'ENCORE', hide = function (n) { return o.prog === n ? '' : ' display="none"'; };
+      screen = '<g class="slw-screen" data-prog="' + o.prog + '">' +
+        '<g class="slw-prog p0"' + hide(0) + '><rect width="66" height="50" fill="#0e1626"/><g class="slw-marquee"><text x="4" y="31" ' + SIGN_FONT.replace('text-anchor="middle"', 'text-anchor="start"') + ' font-size="14" fill="#22e4ff">' + xmlEsc(nm + ' ✦ ' + nm + ' ✦') + '</text></g></g>' +
+        '<g class="slw-prog p1"' + hide(1) + '><rect width="66" height="50" fill="#0e1626"/>' + pixelPet(o.pet, 13, 5, 5) + '</g>' +
+        '<g class="slw-prog p2"' + hide(2) + '><rect width="66" height="50" fill="#0e1626"/>' + eqBars(6, 44, 8.4, 6, [20, 32, 26, 38, 22, 30, 16], ['#22e4ff', '#ff2e9a', '#8a5cff', '#c6ff3d']) + '</g>' +
+        '<g class="slw-prog p3"' + hide(3) + '>' + starField(66, 50) + '</g></g>';
     }
     return shadow(50, 136, 26) +
       '<rect x="30" y="124" width="40" height="12" rx="2" fill="#8c8798" ' + SW2 + '/>' + stripeBand(34, 66, 130, o.v, o.acc) +
@@ -1018,12 +1050,20 @@
     if (id === 'pet_puppy') {
       out += '<path d="M' + (hx - 18) + ' ' + (hy - 10) + ' Q ' + (hx - 30) + ' ' + (hy + 4) + ' ' + (hx - 20) + ' ' + (hy + 18) + ' Q ' + (hx - 12) + ' ' + (hy + 8) + ' ' + (hx - 8) + ' ' + (hy - 6) + ' Z" fill="' + c.dark + '" ' + SW2 + '/>';
     }
-    /* face */
+    /* face, v2 'cool older sibling' (art bible: pet eyes and face): the muzzle and nose as
+       before, then .slw-face — a smaller almond eye in Midnight Ink rolled 8° outer-up under
+       an upper-lid line, one small upper-outer glint, and a side smirk. The blush shows only
+       in cheer (opts.cheer), at 0.3. Accessory anchors (hx, hy) are unchanged. */
+    var ex = hx + 4, ey = hy - 3, MI = '#14101f';
     out += '<ellipse cx="' + (hx + 12) + '" cy="' + (hy + 8) + '" rx="11" ry="8" fill="' + c.light + '"/>' +
-      '<circle cx="' + (hx + 4) + '" cy="' + (hy - 3) + '" r="3.8" fill="' + INK + '"/><circle cx="' + (hx + 5.3) + '" cy="' + (hy - 4.4) + '" r="1.3" fill="#fff"/>' +
       '<ellipse cx="' + (hx + 20) + '" cy="' + (hy + 5) + '" rx="4" ry="3" fill="' + c.nose + '"/>' +
-      '<path d="M' + (hx + 12) + ' ' + (hy + 12) + ' q 4 4 8 0" fill="none" stroke="' + INK + '" stroke-width="2" stroke-linecap="round"/>' +
-      '<circle cx="' + (hx - 4) + '" cy="' + (hy + 8) + '" r="3.5" fill="#ff9db8" opacity="0.6"/>';
+      '<g class="slw-face">' +
+      '<ellipse cx="' + ex + '" cy="' + ey + '" rx="3.3" ry="2.3" fill="' + MI + '" transform="rotate(8 ' + ex + ' ' + ey + ')"/>' +
+      '<path d="M' + n1(ex - 3.8) + ' ' + n1(ey - 1.9) + ' Q' + n1(ex - 0.2) + ' ' + n1(ey - 4) + ' ' + n1(ex + 3.9) + ' ' + n1(ey - 1.2) + '" fill="none" stroke="' + MI + '" stroke-width="1.6" stroke-linecap="round"/>' +
+      '<circle cx="' + n1(ex - 1.3) + '" cy="' + n1(ey - 0.9) + '" r="0.8" fill="#fff"/>' +
+      '<path d="M' + n1(hx + 19.5) + ' ' + n1(hy + 11.2) + ' Q' + n1(hx + 15) + ' ' + n1(hy + 13.2) + ' ' + n1(hx + 11) + ' ' + n1(hy + 10) + '" fill="none" stroke="' + MI + '" stroke-width="1.8" stroke-linecap="round"/>' +
+      (opts.cheer ? '<circle cx="' + (hx - 4) + '" cy="' + (hy + 8) + '" r="3.5" fill="#ff9db8" opacity="0.3"/>' : '') +
+      '</g>';
     if (id === 'pet_kitten') out += '<path d="M' + (hx + 16) + ' ' + (hy + 6) + ' l14 -3 M' + (hx + 16) + ' ' + (hy + 9) + ' l14 2" stroke="' + INK + '" stroke-width="1.3"/>';
     /* accessories */
     if (acc.neck === 'acc_scarf') out += '<path d="M' + (hx - 18) + ' ' + (hy + 14) + ' Q ' + hx + ' ' + (hy + 24) + ' ' + (hx + 14) + ' ' + (hy + 16) + ' L' + (hx + 14) + ' ' + (hy + 24) + ' Q ' + hx + ' ' + (hy + 32) + ' ' + (hx - 18) + ' ' + (hy + 22) + ' Z" fill="#4fc3f7" ' + SW2 + '/><path d="M' + (hx - 14) + ' ' + (hy + 22) + ' l-4 16 l8 0 z" fill="#ff6b6b" ' + SW2 + '/>';

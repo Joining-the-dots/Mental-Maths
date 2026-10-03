@@ -961,7 +961,7 @@ export function makePickups(ctx) {
 
 /* ================================================================
    FX — the pooled particle billboards (solid + additive), halos, blob
-   shadows and the in-world text stickers (PERFECT!, BOING!, +3 …)
+   shadows and the in-world text stickers (PERFECT!, BOUNCE!, +3 …)
    ================================================================ */
 function stickerAtlas(M) {
   const c = canvas2d(512, 512);

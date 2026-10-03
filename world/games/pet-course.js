@@ -96,7 +96,7 @@
   ];
   var LETTERS = 'ENCORE';
   var LETTER_HINT = ['REHEARSAL, at the top of a jump', 'VERSE, up high with a double jump', 'PRE-CHORUS, sliding under an LED gate',
-    'CHORUS, on top of a pink cushion', 'BOUNCE BRIDGE, BOING then double jump', 'FINAL CHORUS, up high with a double jump'];
+    'CHORUS, on top of a pink cushion', 'BOUNCE BRIDGE, bounce then double jump', 'FINAL CHORUS, up high with a double jump'];
 
   /* schedule segments: the 6 sections, the 2-beat run-out to the finish arch, the Encore,
      then an open end. Times are schedule time tau = t - lag. */
@@ -943,7 +943,7 @@
           case 'land': landSq = 0.08; if (fx && e.hard) fx.burst(px, GROUND, { n: 6, colors: [th.soil], speed: 140, life: 0.4, gravity: 300, size: 5, spread: 2.4, angle: -Math.PI / 2 }); break;
           case 'slide': case 'dive': if (fx) fx.burst(px - 30, GROUND - 10, { n: 6, colors: [NEON_CYAN, '#FFFFFF'], speed: 90, life: 0.5, gravity: 0, size: 4, shape: 'star', spread: 1, angle: Math.PI }); break;
           case 'boing':
-            if (fx) { fx.burst(px, feet, { n: 8, colors: [BUBBLEGUM, NEON_PINK], speed: 220, life: 0.7, gravity: 400, size: 7, shape: 'star' }); fx.text(px, feet - 40, 'BOING!', { color: BUBBLEGUM, size: 30, life: 0.7 }); }
+            if (fx) { fx.burst(px, feet, { n: 8, colors: [BUBBLEGUM, NEON_PINK], speed: 220, life: 0.7, gravity: 400, size: 7, shape: 'star' }); fx.text(px, feet - 40, 'BOUNCE!', { color: BUBBLEGUM, size: 30, life: 0.7 }); }
             break;
           case 'snack':
             if (fx) { fx.burst(e.x, e.y, { n: 3, colors: ['#FFFFFF', STAR_GOLD], speed: 140, life: 0.35, gravity: 0, size: 4, shape: 'star' }); fx.text(e.x, e.y - 18, '+' + (3 * s.mult), { color: s.mult >= 4 ? NEON_PINK : s.mult === 3 ? NEON_VIOLET : s.mult === 2 ? NEON_CYAN : '#FFFFFF', size: 20, life: 0.6 }); }

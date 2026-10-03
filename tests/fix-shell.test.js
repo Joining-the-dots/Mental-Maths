@@ -60,7 +60,8 @@ class El extends Target {
     super();
     this.ownerDocument = doc; this.nodeType = 1;
     this.localName = String(tag).toLowerCase(); this.tagName = this.localName.toUpperCase();
-    this.attrs = new Map(); this.childNodes = []; this.parentNode = null; this.style = {};
+    this.attrs = new Map(); this.childNodes = []; this.parentNode = null;
+    this.style = { setProperty(k, v) { this[k] = String(v); } };   /* custom properties (--slg-beat) */
     this.textWrites = 0; this.offsetTop = 0; this.offsetWidth = 0;
   }
   get children() { return this.childNodes.filter((n) => n.nodeType === 1); }
@@ -693,6 +694,73 @@ test('an HTML HUD replaces the text pill: round.hud() is not built every frame',
   assert.ok(updates >= 55, 'the HTML HUD still updates every draw');
   assert.equal(env.$('#slgHud').style.display, 'none');
   env.handle.exit();
+});
+
+/* ================================================================
+   flash safety: the count-in rings are a beat pulse (≤ 1.97 Hz)
+   ================================================================ */
+/* the moments (virtual ms) a fresh .slg-ring appears in the stage, frame by frame
+   (`seen` carries the rings already counted across calls) */
+function ringOnsets(env, ms, hz, seen) {
+  const mid = env.$('#slgMid'), at = [];
+  seen = seen || new Set();
+  for (let i = 0; i < Math.round(ms * hz / 1000); i++) {
+    env.clock.frame(1000 / hz);
+    mid.querySelectorAll('.slg-ring').forEach((r) => { if (!seen.has(r)) { seen.add(r); at.push(env.clock.now); } });
+  }
+  return at;
+}
+const gaps = (at) => at.slice(1).map((t, i) => t - at[i]);
+const COUNT_IN = (bpm) => ({ def3d: false, expect3d: false, def: { countIn: { beats: 4, bpm, labels: ['5', '6', '7', '8!'] } } });
+
+test('count-in rings: the Debut Run count-in (128 BPM) never pulses faster than 1.97 Hz', async () => {
+  const minGap = 1000 / 1.97;
+  for (const hz of [60, 120]) {
+    const env = await boot(COUNT_IN(128));
+    env.doc.getElementById('slgPlay').click();
+    assert.equal(env.qa.phase(), 'countdown');
+    const at = ringOnsets(env, 1500, hz);
+    assert.ok(at.length >= 2, hz + ' Hz: the count-in still rings (' + at.length + ')');
+    gaps(at).forEach((g) => assert.ok(g >= minGap, hz + ' Hz: rings ' + g.toFixed(1) + ' ms apart = ' + (1000 / g).toFixed(2) + ' Hz (beat 468.8 ms = 2.13 Hz)'));
+    /* each ring lives beside the digits, so the next label never wipes it mid-pulse */
+    const ring = env.$('#slgMid').querySelector('.slg-ring'), count = env.$('.slg-count');
+    assert.equal(ring.parentNode, env.$('#slgMid'));
+    assert.ok(count.classList.contains('slg-rings'), 'the CSS fallback ring is told to stay off');
+    assert.ok(env.$('#slgMid').querySelectorAll('.slg-ring').length === 1, 'one ring element at a time');
+    env.clock.seconds(1, hz);
+    assert.equal(env.qa.phase(), 'playing');
+    assert.equal(env.$('#slgMid').querySelectorAll('.slg-ring').length, 0, 'GO clears the ring');
+    env.handle.exit();
+  }
+  assert.equal(pureShell().BEAT_PULSE_HZ, 1.97, 'the cap is exported');
+});
+
+test('count-in rings: a slow count-in rings every beat; a quick resume waits; reduced motion has none', async () => {
+  /* 100 BPM (0.6 s beats, 1.67 Hz): one ring per beat, as the plan draws it */
+  const slow = await boot(COUNT_IN(100));
+  slow.doc.getElementById('slgPlay').click();
+  const at = ringOnsets(slow, 2350, 60);
+  assert.equal(at.length, 4, 'a ring on each of the 4 beats');
+  gaps(at).forEach((g) => assert.ok(Math.abs(g - 600) <= 17, 'beat-spaced: ' + g));
+  slow.handle.exit();
+  /* pause right after a ring and resume at once: the re-started count-in waits out the gap */
+  const env = await boot(COUNT_IN(128));
+  env.doc.getElementById('slgPlay').click();
+  const seen = new Set(), first = ringOnsets(env, 120, 60, seen);
+  assert.equal(first.length, 1);
+  env.doc.getElementById('slgPause').click();
+  assert.equal(env.qa.phase(), 'paused');
+  env.doc.getElementById('slgResume').click();
+  assert.equal(env.qa.phase(), 'countdown');
+  const again = first.concat(ringOnsets(env, 1500, 60, seen));
+  assert.ok(again.length >= 2, 'the resumed count-in rings again');
+  gaps(again).forEach((g) => assert.ok(g >= 1000 / 1.97, 'resume: rings ' + g.toFixed(1) + ' ms apart'));
+  env.handle.exit();
+  /* reduced motion: the digits only */
+  const red = await boot(Object.assign(COUNT_IN(128), { cfg: { reduced: true } }));
+  red.doc.getElementById('slgPlay').click();
+  assert.deepEqual(ringOnsets(red, 1500, 60), []);
+  red.handle.exit();
 });
 
 test('the text HUD, pad glow and count-down touch the DOM only on a change; no per-frame queries', async () => {

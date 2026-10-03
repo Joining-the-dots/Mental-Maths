@@ -13,6 +13,9 @@
   /* 3D draw rates: play at ~60 fps even on 90/120/144 Hz screens (the logic still
      steps every frame), menus/results at ~30 fps — the contract's numbers */
   var PLAY_FPS = 60, IDLE_FPS = 30;
+  /* count-in rings are a beat pulse: never more often than the art bible's 1.97 Hz
+     (118 BPM). A faster count-in (Debut Run, 128 BPM) rings every other beat. */
+  var BEAT_PULSE_HZ = 1.97, RING_GAP_MS = 1000 / BEAT_PULSE_HZ;
   window.SLGames = window.SLGames || {};
 
   function el(tag, cls, html) { var e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; }
@@ -306,7 +309,7 @@
       var round = null, raf = 0, last = 0, acc = 0, countT = 0, playSecAcc = 0, hardStop = Infinity, graceNote = false;
       var lastDt = 0, countIsStart = true, v3 = null, v3mod = null, v3failed = false, idleRaf = 0, idleLast = 0, hudObj = null;
       var playPace = makePacer(PLAY_FPS), idlePace = makePacer(IDLE_FPS), watch = makeFrameWatch(), lastDrawAt = 0, lastWork = 0, unsubQ = null;
-      var hudText = null, pads = [], countEl = null, countTxt = '';
+      var hudText = null, pads = [], countEl = null, countTxt = '', ringEl = null, ringAt = -Infinity;
       function countTotal() { return def.countIn ? def.countIn.beats * 60 / def.countIn.bpm : (def.countdown || 0); }
       function countLabel() {
         if (!def.countIn) return String(Math.max(1, Math.ceil(countT)));
@@ -597,14 +600,21 @@
           for (var i = 0; i < pads.length; i++) { var p = pads[i], st = round.padState(p.id) || ''; if (p.st !== st) { p.st = st; p.b.dataset.st = st; } }
         }
         if (phase === 'countdown') {
-          if (!countEl) { countEl = el('div', 'slg-count'); mid.appendChild(countEl); countTxt = null; }
+          /* .slg-rings: the shell draws the rings, so the CSS fallback ring stays off */
+          if (!countEl) { countEl = el('div', 'slg-count slg-rings'); mid.appendChild(countEl); countTxt = null; }
           var lbl = countLabel();
           if (lbl !== countTxt) {
             countTxt = lbl; countEl.textContent = lbl;
-            /* one ring per beat (the CSS plays it once; reduced motion keeps the digit only) */
-            if (!reduced) countEl.appendChild(el('span', 'slg-ring'));
+            /* a ring on the beat (the CSS plays it once), at most BEAT_PULSE_HZ — a resume
+               right after a ring waits too. It sits beside the digits, so the next label
+               never cuts it short; reduced motion keeps the digit only */
+            var nowR = performance.now();
+            if (!reduced && nowR - ringAt >= RING_GAP_MS) {
+              if (ringEl) ringEl.remove();
+              ringEl = el('span', 'slg-ring'); mid.insertBefore(ringEl, countEl); ringAt = nowR;
+            }
           }
-        } else if (countEl) { countEl.remove(); countEl = null; }
+        } else if (countEl) { countEl.remove(); countEl = null; if (ringEl) { ringEl.remove(); ringEl = null; } }
         if (round && round.events && round.events.length) round.events.length = 0;
       }
       function setHudText(t) {
@@ -821,5 +831,5 @@
     });
   }
 
-  window.SLGameShell = { define: define, rng: rng, svgImage: svgImage, STEP: STEP, makePacer: makePacer, makeFrameWatch: makeFrameWatch, verdict2d: verdict2d };
+  window.SLGameShell = { define: define, rng: rng, svgImage: svgImage, STEP: STEP, makePacer: makePacer, makeFrameWatch: makeFrameWatch, verdict2d: verdict2d, BEAT_PULSE_HZ: BEAT_PULSE_HZ };
 })();

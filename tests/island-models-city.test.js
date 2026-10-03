@@ -644,6 +644,53 @@ test('city flash safety: one lens bloom per 1.5 s, one program change per 0.5 s,
   }
 });
 
+test('safety-5: rapid re-taps never strobe the photo booth bulbs (a restart keeps the bulbs that are lit)', () => {
+  const K = mockK('MID'), models = CITY.factory(K), tpl = models.bld_photobooth.build(ctxOf('bld_photobooth', 'MID', 0, K));
+  const segs = [0, 1, 2, 3, 4, 5, 6, 7].map((i) => seg(tpl, 'bulb', i));
+  /* a bulb's level from its vertex colour: off (tok) → on (tok2) */
+  const level = (h, i) => {
+    const c = colourAt(h, 'lights', segs[i].start), off = lin(segs[i].tok), on = lin(segs[i].tok2);
+    let n = 0, d = 0;
+    for (let j = 0; j < 3; j++) { n += (c[j] - off[j]) * (on[j] - off[j]); d += (on[j] - off[j]) ** 2; }
+    return d ? n / d : 0;
+  };
+  const T = 3;
+  for (const show of [0, 1]) for (const cancelFirst of [true, false]) for (const gap of [0.15, 0.2, 0.5]) {
+    const tag = `show ${show}, ${cancelFirst ? 'cancel + restart (island3d runAct)' : 'restart'} every ${gap} s`;
+    const h = handle('strobe', tpl, { show });
+    models.bld_photobooth.show(h, show);
+    const drops = new Array(8).fill(0), prev = new Array(8).fill(null), every = Math.round(gap * 60);
+    let act = null, t0 = 0, lit0 = 0;
+    for (let f = 0; f <= Math.round((T + 0.1) * 60); f++) {
+      const t = f / 60;
+      h.t = t; tick(h);
+      if (f < T * 60 && f % every === 0) {
+        if (act && cancelFirst) act.cancel();
+        act = models.bld_photobooth.act(h, 'snap'); t0 = t;
+      }
+      models.bld_photobooth.idle(h);                 /* island3d's frame: idles, then the live acts */
+      act.update(h, t - t0);
+      for (let i = 0; i < 8; i++) {
+        const v = level(h, i);
+        if (prev[i] != null && prev[i] - v > 0.5) drops[i]++;          /* a lit bulb snapping dark */
+        prev[i] = v;
+      }
+      if (f === Math.round(T * 60) - 1) lit0 = level(h, 0);
+    }
+    for (let i = 0; i < 8; i++) assert.ok(drops[i] / T <= 2, `${tag}: bulb ${i} snaps dark ${drops[i]} times in ${T} s (≤ 2 Hz)`);
+    assert.ok(lit0 > 0.99, tag + ': the first third stays lit through the taps');
+  }
+  /* reduced motion keeps the instant end state (no held bulbs): the same lights as an idle booth */
+  const h = handle('calm', tpl, { reduced: true });
+  models.bld_photobooth.act(h, 'snap').update(h, 0);
+  const a = models.bld_photobooth.act(h, 'snap');
+  assert.equal(a.dur, 0);
+  a.update(h, 0);
+  const after = segs.map((s, i) => level(h, i));
+  models.bld_photobooth.idle(h);
+  assert.deepEqual(segs.map((s, i) => level(h, i)), after, 'reduced: a re-tap leaves the resting lights');
+});
+
 /* ---------------- lights ---------------- */
 test('city lights: the trim accent takes the child\'s member colour live; golden hour dims neon, Showtime lights it', () => {
   const K = mockK('MID'), models = CITY.factory(K);

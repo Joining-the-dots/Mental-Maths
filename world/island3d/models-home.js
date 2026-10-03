@@ -2155,10 +2155,20 @@
       }
     }
     /* the tower's initial: opened for island copies only (photocards and shop icons show the ✦),
-       tinted with the member colour and the sign's breath */
-    var signMat = null;
+       tinted with the member colour and the sign's breath. Its material is keyed to the live sign
+       atlas: SLIsland3D.dispose({keepKit: false}) disposes the kit's materials and atlases (the
+       next mount draws a new atlas for the child then playing) but never re-runs this factory, and
+       a material kept from the old atlas would show the previous child's initial. */
+    var signMat = null, signAt = null;
+    function signTex() {
+      try { var A = typeof K0.signAtlas === 'function' ? K0.signAtlas() : null; return (A && A.texture) || null; } catch (e) { return null; }
+    }
     function signMaterial() {
-      if (!signMat && typeof K0.variant === 'function') { try { signMat = K0.variant('sign', 'home-initial', {}); } catch (e) { signMat = null; } }
+      var key = signTex();
+      if (signMat && signAt === key) return signMat;
+      if (signAt !== key) { signAt = key; atlasName = null; atlasColour = null; }    /* a new atlas: fill its gap again */
+      signMat = null;
+      if (typeof K0.variant === 'function') { try { signMat = K0.variant('sign', 'home-initial', {}); } catch (e) { signMat = null; } }
       return signMat;
     }
     var GLINT_FX = { token: 'Gold Light', size: 0.2 };          /* the controller copies emit opts */

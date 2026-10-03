@@ -448,7 +448,7 @@
         var fixed = C.normalize(fu);
         if (granted) C.ensureWorld(fu).tutSeen.cityV2 = true;     /* a brand-new island starts in the city */
         return { ok: granted || fixed };
-      }).then(function () { draw(); maybeIntro(); });
+      }).then(function () { draw(); maybeIntro(); maybeBoot3D(); });   /* a migrated save still gets its 3D island */
       root.innerHTML = '<div class="slw-loading">Building your island…</div>';
       return;
     }

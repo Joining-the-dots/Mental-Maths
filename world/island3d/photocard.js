@@ -589,6 +589,7 @@
     var IS = root.SLIsland3D;
     if (!IS || typeof IS.ensure !== 'function') return 'no stage';
     try { if (typeof IS.failed === 'function' && IS.failed()) return '3D failed'; } catch (e) { /* ignore */ }
+    /* the stage's own rule (ver, ?3d=1, REMEMBER_DAYS): never a copy that could disagree */
     try { if (typeof IS.remembered === 'function' && IS.remembered()) return 'remembered 2D'; } catch (e) { /* ignore */ }
     return null;
   }

@@ -7,7 +7,12 @@
      strikes do (stage.js ContextLossPolicy);
    - #15 a holder stacked under a game hears about a loss/restore it missed when it
      is handed the renderer back (stage.js contextDue);
-   - #41 pagehide parks the shared renderer instead of disposing it (source guard). */
+   - #41 pagehide parks the shared renderer instead of disposing it (source guard);
+   - device fallbacks (branch fix5/device), run in a fake browser below: a 2D record
+     expires after REMEMBER_DAYS (stage, shell and photocards agree); a performance
+     fallback above LOW saves LOW and ends 3D for the session only, and only the
+     island's own loop at LOW remembers 2D (never a game's frames); forget() ("Try 3D
+     again") clears the record, the pending demotion and the strikes so 3D boots again. */
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -305,4 +310,256 @@ test('#9 photocards: a context lost after the page was hidden does not count tow
   const src = fs.readFileSync(path.join(__dirname, '..', 'world', 'island3d', 'photocard.js'), 'utf8');
   assert.match(src, /var routine = g\.away \|\| !!document\.hidden;\s*\n\s*if \(!routine\) lostCount\+\+;/);
   assert.match(src, /if \(document\.hidden && gpu\) gpu\.away = true;/);
+});
+
+/* ================================================================
+   device fallbacks: the stage runtime in a fake browser (no GPU)
+   One page session = stage.js run against a fake window, THREE, GL context and one
+   virtual clock that Date, performance.now and the timers all read.
+   ================================================================ */
+const STAGE_SRC = fs.readFileSync(path.join(__dirname, '..', 'world', 'island3d', 'stage.js'), 'utf8');
+const PHOTO_SRC = fs.readFileSync(path.join(__dirname, '..', 'world', 'island3d', 'photocard.js'), 'utf8');
+const SHELL_SRC = fs.readFileSync(path.join(__dirname, '..', 'world', 'games', 'shell.js'), 'utf8');
+const T0 = Date.UTC(2026, 9, 3, 12);
+function memStore(init) {
+  const m = new Map(Object.entries(init || {}));
+  return { getItem: (k) => (m.has(k) ? m.get(k) : null), setItem: (k, v) => { m.set(k, String(v)); }, removeItem: (k) => { m.delete(k); }, _m: m };
+}
+function events() {
+  const map = {};
+  return {
+    on: (t, fn) => { (map[t] = map[t] || []).push(fn); },
+    off: (t, fn) => { map[t] = (map[t] || []).filter((f) => f !== fn); },
+    fire: (t, e) => (map[t] || []).slice().forEach((fn) => fn(e))
+  };
+}
+function pageSession(o) {
+  o = o || {};
+  const clock = { now: o.now != null ? o.now : T0, timers: [], seq: 0 };
+  const local = o.local || memStore(o.localInit), session = o.session || memStore(o.sessionInit);
+  const GL = { MAX_TEXTURE_SIZE: 0x0D33, getParameter: () => 16384, getExtension: () => null };
+  function canvas() { const ev = events(); return { style: {}, parentNode: null, addEventListener: ev.on, removeEventListener: ev.off, fire: ev.fire, getContext: () => GL }; }
+  const renderers = [];
+  function WebGLRenderer() {
+    this.domElement = canvas(); this.shadowMap = {}; this.loop = null; this.pr = 1; this.disposed = false;
+    this.info = { render: { calls: 0, triangles: 0 }, memory: { geometries: 0, textures: 0 }, programs: [] };
+    renderers.push(this);
+  }
+  Object.assign(WebGLRenderer.prototype, {
+    setPixelRatio(v) { this.pr = v; }, getPixelRatio() { return this.pr; }, setSize() {}, render() {}, setClearColor() {},
+    setAnimationLoop(fn) { this.loop = fn; }, dispose() { this.disposed = true; }, forceContextLoss() {}
+  });
+  const THREE = { WebGLRenderer, SRGBColorSpace: 'srgb', NeutralToneMapping: 7, PCFShadowMap: 1 };
+  const doc = {
+    hidden: false, baseURI: 'https://x.test/', currentScript: { src: 'https://x.test/world/island3d/stage.js?v=1' },
+    head: { appendChild(s) { Promise.resolve().then(() => s.onerror()); } },   /* the optional island3d files: "not built yet" */
+    createElement: (tag) => (tag === 'canvas' ? canvas() : { style: {} }), addEventListener() {}
+  };
+  const win = {
+    document: doc, localStorage: local, sessionStorage: session, location: { search: o.search || '' }, SL_WORLD_VER: '1',
+    navigator: o.navigator || { userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)', platform: 'Win32', maxTouchPoints: 0, hardwareConcurrency: 8 },
+    performance: { now: () => clock.now }, devicePixelRatio: 1,
+    WebGL2RenderingContext: function WebGL2RenderingContext() {}, slLoad3D: () => Promise.resolve(THREE),
+    SLTier: T, SLKit: { create: () => ({ kit: () => ({}), setOutlines() {}, dispose() {}, stats: () => ({}), issues: [] }) },
+    addEventListener() {}
+  };
+  const setT = (fn, ms) => { const id = ++clock.seq; clock.timers.push({ id, at: clock.now + (Number(ms) || 0), fn }); return id; };
+  const clearT = (id) => { clock.timers = clock.timers.filter((t) => t.id !== id); };
+  class FakeDate extends Date { static now() { return clock.now; } }
+  /* stage.js imports its two addons through new Function('u', 'return import(u)') */
+  function FakeFunction() { return (u) => Promise.resolve(/RoundedBox/.test(u) ? { RoundedBoxGeometry: function () {} } : {}); }
+  new Function('self', 'window', 'document', 'setTimeout', 'clearTimeout', 'Date', 'Function', STAGE_SRC)(win, win, doc, setT, clearT, FakeDate, FakeFunction);
+  return {
+    clock, local, session, win, doc, renderers, IS: win.SLIsland3D, SL3D: win.SL3D,
+    /* run the timers due within ms of virtual time */
+    advance(ms) {
+      const end = clock.now + ms;
+      for (;;) {
+        const due = clock.timers.filter((t) => t.at <= end).sort((a, b) => a.at - b.at || a.id - b.id)[0];
+        if (!due) break;
+        clock.timers = clock.timers.filter((t) => t !== due);
+        clock.now = Math.max(clock.now, due.at);
+        due.fn();
+      }
+      clock.now = Math.max(clock.now, end);
+    },
+    /* the next page session on this device: same storage, later clock */
+    next(p) { return pageSession(Object.assign({ local, now: clock.now + 3600e3 }, p)); }
+  };
+}
+const boot3d = (s) => s.IS.boot({ ver: '1', deadlineMs: 8000 });
+/* a game drawing its own frames (Lease.sample, 'held') at ~3 fps until the stage gives up */
+function crawlHeld(s, L) { for (let i = 0; i < 1000 && !s.IS.failed(); i++) { s.clock.now += 300; L.sample(280); } }
+/* the island's own paced loop ('loop') at ~3 fps: 280 ms of frame work every 300 ms */
+function islandLease(s, fails) {
+  const L = s.SL3D.lease('island', { frame: () => { s.clock.now += 280; return true; }, onFail: (r) => fails.push('island:' + r) });
+  L.start();
+  return L;
+}
+function crawlLoop(s, L) { for (let i = 0; i < 1000 && !s.IS.failed(); i++) { s.clock.now += 20; L.renderer.loop(); } }
+const saved = (s) => { const r = s.local.getItem('slTier3d'); return r ? JSON.parse(r).tier : null; };
+const record = (s) => { const r = s.local.getItem('slIsland3D'); return r ? JSON.parse(r) : null; };
+
+test('device-2: a HIGH device too slow in a game saves LOW and is 2D for this session only; the next session is 3D at LOW', async () => {
+  const s1 = pageSession();
+  assert.equal(await boot3d(s1), true);
+  assert.equal(s1.SL3D.tier, 'HIGH');
+  const fails = [];
+  s1.SL3D.lease('island', { onFail: (r) => fails.push('island:' + r) });
+  const game = s1.SL3D.lease('kart', { onFail: (r) => fails.push('kart:' + r) });
+  crawlHeld(s1, game);
+  assert.equal(s1.IS.failed(), 'performance', 'every step taken, still < 20 fps');
+  assert.deepEqual(fails, ['island:performance', 'kart:performance'], 'the game and the island under it go 2D now');
+  assert.deepEqual(s1.SL3D.quality.steps.slice().sort(), T.LADDER.slice().sort());
+  assert.equal(record(s1), null, 'a game never remembers 2D');
+  assert.equal(saved(s1), 'LOW');
+  assert.ok(Number.isFinite(JSON.parse(s1.local.getItem('slTier3d')).at), 'a dated save: it expires like any other');
+  /* rewards-world disable3D asks to remember the island's 'performance' failure: the stage's verdict stands */
+  s1.IS.remember2D('performance');
+  assert.equal(record(s1), null);
+  assert.equal(s1.IS.remembered('1'), null);
+  /* another cause is still remembered as before */
+  s1.IS.remember2D('lost-twice');
+  assert.equal(record(s1).why, 'lost-twice');
+  s1.local.removeItem('slIsland3D');
+
+  const s2 = s1.next();
+  assert.equal(await boot3d(s2), true, 'the next session tries 3D again');
+  assert.equal(s2.SL3D.tier, 'LOW');
+  assert.match(s2.SL3D.tierWhy, /saved LOW/);
+});
+
+test('device-2: the island\'s own loop above LOW is a session-only fallback too; at LOW it remembers 2D', async () => {
+  const s1 = pageSession({ navigator: { userAgent: 'Mozilla/5.0 (Macintosh)', platform: 'MacIntel', maxTouchPoints: 5, hardwareConcurrency: 8 } });
+  assert.equal(await boot3d(s1), true);
+  assert.equal(s1.SL3D.tier, 'MID', 'an iPad');
+  const fails = [];
+  crawlLoop(s1, islandLease(s1, fails));
+  assert.deepEqual(fails, ['island:performance']);
+  assert.equal(record(s1), null, 'MID: not remembered');
+  assert.equal(saved(s1), 'LOW');
+  s1.IS.remember2D('performance');                         /* rewards-world, as above */
+  assert.equal(record(s1), null);
+
+  const s2 = s1.next();
+  assert.equal(await boot3d(s2), true);
+  assert.equal(s2.SL3D.tier, 'LOW');
+  assert.deepEqual(s2.SL3D.quality.steps, [], 'a fresh ladder at LOW');
+  const f2 = [];
+  crawlLoop(s2, islandLease(s2, f2));
+  assert.deepEqual(f2, ['island:performance']);
+  const rec = record(s2);
+  assert.equal(rec.why, 'performance', 'slow even at LOW: 2D for this device');
+  assert.equal(rec.at, s2.clock.now);
+  s2.IS.remember2D('performance');
+  assert.equal(record(s2).at, rec.at, 'the adapter\'s echo changes nothing');
+
+  const s3 = s2.next();
+  assert.ok(s3.IS.remembered('1'));
+  assert.equal(await boot3d(s3), false, 'remembered: no 3D next session');
+  /* …until it is a week old */
+  const s4 = s2.next({ now: s2.clock.now + 8 * 24 * 3600e3 });
+  assert.equal(s4.IS.remembered('1'), null);
+  assert.equal(record(s4), null, 'the stale record is cleared');
+  assert.equal(await boot3d(s4), true);
+});
+
+test('device-2: a game at LOW never remembers 2D for the island', async () => {
+  const s1 = pageSession({ localInit: { slTier3d: S.savedTierRaw('LOW', T0 - 3600e3) } });
+  assert.equal(await boot3d(s1), true);
+  assert.equal(s1.SL3D.tier, 'LOW');
+  const fails = [];
+  islandLease(s1, fails);
+  const game = s1.SL3D.lease('penalty', { onFail: (r) => fails.push('penalty:' + r) });
+  crawlHeld(s1, game);
+  assert.deepEqual(fails, ['island:performance', 'penalty:performance']);
+  s1.IS.remember2D('performance');
+  assert.equal(record(s1), null, 'held frames: this session only');
+  assert.equal(await boot3d(s1.next()), true);
+});
+
+test('forget() ("Try 3D again"): clears the record, the pending demotion and the strikes, so the next boot is 3D', async () => {
+  /* remembered in an earlier session (as an installed app sees it on launch) */
+  const rec = JSON.stringify({ off: true, why: 'performance', ver: '1', at: T0 - 3600e3 });
+  const pend = JSON.stringify({ tier: 'MID', sid: 'old', at: T0 - 3600e3 });
+  const s1 = pageSession({ localInit: { slIsland3D: rec, slTier3dPend: pend, slTier3d: S.savedTierRaw('LOW', T0 - 3600e3) }, sessionInit: { slGlLost: JSON.stringify([T0 - 60000, T0 - 30000]) } });
+  assert.equal(await boot3d(s1), false, 'remembered');
+  s1.IS.forget();
+  assert.equal(s1.local.getItem('slIsland3D'), null);
+  assert.equal(s1.local.getItem('slTier3dPend'), null);
+  assert.equal(s1.session.getItem('slGlLost'), null);
+  assert.equal(saved(s1), 'LOW', 'the measured tier stays: the retry runs at LOW');
+  assert.equal(await boot3d(s1), true, 'maybeBoot3D boots 3D');
+  assert.equal(s1.SL3D.tier, 'LOW');
+
+  /* failed earlier in THIS page session: the session verdict is lifted with a fresh judge */
+  const s2 = pageSession();
+  await boot3d(s2);
+  const game = s2.SL3D.lease('kart', {});
+  crawlHeld(s2, game);
+  assert.equal(s2.IS.failed(), 'performance');
+  game.release();
+  assert.equal(await boot3d(s2), false);
+  s2.IS.forget();
+  assert.equal(s2.IS.failed(), null);
+  assert.equal(await boot3d(s2), true);
+  const fails = [];
+  const L = islandLease(s2, fails);
+  assert.ok(L && L.active, 'a lease again');
+  const t = s2.clock.now;
+  crawlLoop(s2, L);
+  assert.deepEqual(fails, ['island:performance'], 'still slow: 2D again, judged afresh');
+  assert.ok(s2.clock.now - t < 15000, 'every step was already taken: only the fallback hold is left');
+  assert.equal(record(s2), null, 'HIGH: still this session only');
+});
+
+test('forget() waits while a holder still sits on a lost context, then lifts the context verdict', async () => {
+  const s = pageSession();
+  await boot3d(s);
+  const fails = [];
+  const L = islandLease(s, fails);
+  const canvas = s.renderers[0].domElement;
+  canvas.fire('webglcontextlost', { preventDefault() {} });
+  s.advance(6000);                                          /* not restored within 6 s of visible time: a strike */
+  assert.equal(s.IS.failed(), 'context');
+  assert.deepEqual(fails, ['island:context']);
+  assert.equal(JSON.parse(s.session.getItem('slGlLost')).length, 1);
+  s.IS.forget();
+  assert.equal(s.session.getItem('slGlLost'), null, 'the strikes go');
+  assert.equal(s.IS.failed(), 'context', 'the lost renderer is still held: the verdict stays');
+  L.release();                                              /* rewards-world disposes the 3D island */
+  assert.equal(s.renderers[0].disposed, true, 'nobody holds the lost renderer: dropped');
+  s.IS.forget();
+  assert.equal(s.IS.failed(), null);
+  assert.equal(await boot3d(s), true);
+  const L2 = s.SL3D.lease('island', {});
+  assert.ok(L2 && L2.active);
+  assert.equal(s.renderers.length, 2, 'a fresh renderer (and context)');
+});
+
+test('device-1: the remembered record expires the same way for the stage, the games and the photocards', () => {
+  const DAY = 24 * 3600e3;
+  const shell = (() => { const w = {}; new Function('window', 'document', SHELL_SRC)(w, { createElement: () => ({ style: {} }) }); return w.SLGameShell; })();
+  const cases = [
+    ['an hour old', -3600e3, '', true],
+    ['six days old', -6 * DAY, '', true],
+    ['eight days old', -8 * DAY, '', false],
+    ['a month old', -30 * DAY, '', false],
+    ['undated', null, '', false],
+    ['two days ahead', 2 * DAY, '', false],
+    ['?3d=1', -3600e3, '?3d=1', false]
+  ];
+  for (const [name, age, search, twoD] of cases) {
+    const now = Date.now();                                 /* the shell reads the real clock */
+    const r = { off: true, why: 'performance', ver: '1' };
+    if (age != null) r.at = now + age;
+    const s = pageSession({ now, search, localInit: { slIsland3D: JSON.stringify(r) } });
+    /* the games before stage.js loads (the stored record), then with it */
+    const stored = shell.verdict2d({ localStorage: s.local, SL_WORLD_VER: '1', location: { search } });
+    assert.equal(stored != null, twoD, name + ': games without stage.js');
+    new Function('self', 'window', 'document', PHOTO_SRC)(s.win, s.win, s.doc);
+    assert.equal(s.win.SLPhotocard.info().blocked === 'remembered 2D', twoD, name + ': photocards');
+    assert.equal(!!s.IS.remembered('1'), twoD, name + ': the island');
+    assert.equal(shell.verdict2d(s.win) != null, twoD, name + ': games with stage.js');
+  }
 });

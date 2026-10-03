@@ -3,7 +3,8 @@
    virtual clock (no GPU, no browser):
      - sheets scroll from their top (results / tutorial / menu on short screens)
      - the top bar keeps 🔊 ⏸ 🏝️ Exit on screen (the HUD pill gives way)
-     - games honour the stage's 2D verdict before opening a WebGL context
+     - games honour the stage's 2D verdict before opening a WebGL context, and its
+       stored record expires as the stage's does (REMEMBER_DAYS)
      - the shell's frame-rate watchdog (sustained < 20 fps → the same round in 2D)
      - results focus their main button after the tap guard and announce the result
      - the portrait "turn sideways" hint lives in the sheets, not over game HUDs
@@ -372,7 +373,7 @@ test('verdict2d: the stage verdict (failed / remembered) and its stored record w
   assert.equal(V({ SLIsland3D: { failed: () => null, remembered: () => null } }), null);
   assert.equal(V({ SLIsland3D: { failed() { throw new Error('x'); }, remembered() { throw new Error('y'); } } }), null, 'a broken stage never blocks');
   assert.equal(V({ SLIsland3D: {} }), null, 'an old stage without the API');
-  const rec = (v) => storage({ slIsland3D: JSON.stringify({ off: true, why: 'performance', ver: v }) });
+  const rec = (v) => storage({ slIsland3D: JSON.stringify({ off: true, why: 'performance', ver: v, at: Date.now() }) });
   assert.equal(V({ localStorage: rec('1'), SL_WORLD_VER: '1', location: { search: '' } }), 'remembered:performance');
   assert.equal(V({ localStorage: rec('1'), SL_WORLD_VER: '2', location: { search: '' } }), null, 'stale after a version bump');
   assert.equal(V({ localStorage: rec('1'), SL_WORLD_VER: '1', location: { search: '?x=1&3d=1' } }), null, '?3d=1 lets a parent retry');
@@ -387,7 +388,7 @@ test('a game honours the stage 2D verdict: no 3D load, no view, no second WebGL 
   const cases = [
     ['failed this session', { island: { failed: () => 'performance', remembered: () => null } }],
     ['remembered 2D', { island: { failed: () => null, remembered: () => ({ off: true, why: 'context', ver: '1' }) } }],
-    ['remembered, stage.js absent', { local: { slIsland3D: JSON.stringify({ off: true, why: 'performance', ver: '1' }) } }]
+    ['remembered, stage.js absent', { local: { slIsland3D: JSON.stringify({ off: true, why: 'performance', ver: '1', at: Date.now() }) } }]
   ];
   for (const [name, o] of cases) {
     const env = await boot(Object.assign({ expect3d: false }, o));
@@ -408,9 +409,42 @@ test('a game honours the stage 2D verdict: no 3D load, no view, no second WebGL 
   assert.equal(ok.$('#slgCanvas').style.opacity, '0');
   ok.handle.exit();
   /* ?3d=1 beats a stored record */
-  const retry = await boot({ search: '?3d=1', local: { slIsland3D: JSON.stringify({ off: true, why: 'performance', ver: '1' }) } });
+  const retry = await boot({ search: '?3d=1', local: { slIsland3D: JSON.stringify({ off: true, why: 'performance', ver: '1', at: Date.now() }) } });
   assert.equal(retry.qa.view(), '3d');
   retry.handle.exit();
+  /* …and so does a week: an installed home-screen app (no address bar) gets 3D back */
+  const week = await boot({ local: { slIsland3D: JSON.stringify({ off: true, why: 'performance', ver: '1', at: Date.now() - 8 * 24 * 3600e3 }) } });
+  assert.equal(week.loads, 1);
+  assert.equal(week.qa.view(), '3d');
+  week.handle.exit();
+});
+
+test('verdict2d without stage.js expires the stored record exactly as stage.js rememberedFrom does', () => {
+  const S = require('../world/island3d/stage.js'), shell = pureShell(), DAY = 24 * 3600e3, now = Date.now();
+  assert.equal(shell.REMEMBER_DAYS, S.REMEMBER_DAYS, 'one expiry: the shell mirrors the stage');
+  const dated = (at, extra) => JSON.stringify(Object.assign({ off: true, why: 'performance', ver: '1', at }, extra));
+  const cases = [
+    ['an hour old', dated(now - 3600e3)],
+    ['six days old', dated(now - 6 * DAY)],
+    ['eight days old', dated(now - 8 * DAY)],
+    ['a month old', dated(now - 30 * DAY)],
+    ['undated', JSON.stringify({ off: true, why: 'performance', ver: '1' })],
+    ['a junk date', dated('soon')],
+    ['an hour ahead', dated(now + 3600e3)],
+    ['two days ahead', dated(now + 2 * DAY)],
+    ['another version', dated(now, { ver: '0' })],
+    ['off: false', dated(now, { off: false })],
+    ['garbage', '{bad'],
+    ['?3d=1', dated(now), '?tab=world&3d=1']
+  ];
+  for (const [name, raw, search] of cases) {
+    const stage = !!S.rememberedFrom(raw, '1', search || '', now).rec;
+    const v = shell.verdict2d({ localStorage: storage({ slIsland3D: raw }), SL_WORLD_VER: '1', location: { search: search || '' } });
+    assert.equal(v != null, stage, name + ': the shell and the stage agree');
+  }
+  /* the expected outcomes, so a shared mistake cannot pass */
+  const twoD = cases.filter(([n, raw, s]) => S.rememberedFrom(raw, '1', s || '', now).rec).map(([n]) => n);
+  assert.deepEqual(twoD, ['an hour old', 'six days old', 'an hour ahead']);
 });
 
 test('a verdict that lands after the 3D module loaded still stops the view mounting', async () => {

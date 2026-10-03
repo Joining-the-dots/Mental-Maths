@@ -14,12 +14,15 @@
      K.G                             geometry kit bound to the tier (see makeG below)
      K.mat(key)                      'toon' | 'gold' | 'chrome' | 'pearl' | 'smoked' | 'gunmetal' | 'foil'
                                      (matcaps, one program) | 'glass' | 'neon:<Token>' | 'glow:<Token>' |
-                                     'state' | 'led' | 'sign' (the atlases on the emoji-face basic+map
-                                     program) | 'ink' | 'outline[:w]' | 'line[:Token]' | 'blob'
+                                     'state' | 'led' | 'sign' | 'blob' (one instanced basic + map program, which
+                                     the avatar's emoji face shares) | 'ink' | 'outline[:w]' | 'line[:Token]'
      K.variant(key, name, patch)     a cached sibling material (e.g. a transparent ghost) sharing the program
      K.ctx(id, st, stateKey?)        the ctx given to build(): {id, look, st, stateKey, tier, G, col, fp, K}
      K.template(ctx)                 → TemplateBuilder: .part() .pivot() .anchor() .hit() .done() → Template
-     K.batch(template, opts)         → ItemBatch (instanced, one InstancedMesh per part)
+     K.batch(template, opts)         → ItemBatch (instanced, one InstancedMesh per part; opts.merge: a merger)
+     K.merger(opts)                  → the merged layer (perf): every eligible part of every batch that joins it
+                                     draws in one rigid-skinned mesh per material — the island's item draw
+                                     calls stop growing with the island (see MERGED LAYER)
      K.instantiate(template, opts)   → THREE.Group (a ready-to-add copy, used by SL3D.make)
      K.templates.get(id, stateKey, tier, st) / K.parts.get(key, tier, fn)   memo caches
      K.placeholder(ctx)              a rounded slab of the look height in the item's base colour
@@ -35,7 +38,8 @@
                                      Unbounded 800 once document.fonts has it (Outfit / system-ui until then).
                                      A word outside SIGN_WORDS throws in QA mode and draws nothing otherwise.
      K.tex.{ramp, halo, blob, sparkles, matcap, emojiFace, banner, fontReady, release}, K.ATLAS
-     K.billboards(opts), K.blobs(capacity)   base pools for halos/particles and blob shadows
+     K.billboards(opts), K.blobs(capacity)   base pools for halos/particles and blob shadows (the blobs carry white
+                                     instance colours: they draw with the LED / sign program)
      K.setRim(color, strength), K.setShow(k), K.setOutlines(on), K.setSelPulse(p), K.setGrid({baseY})
      K.issues (QA log), K.dispose()
 
@@ -342,12 +346,32 @@
 
   /* ---------------- shader program families (≤ 12 programs on LOW) ----------------
      Every K.mat key maps to a family; keys in one family share one compiled program. The v2
-     matcaps join the v1 matcap family and the LED / sign atlases join the emoji face's. */
+     matcaps join the v1 matcap family; the LED / sign atlases, the emoji face (an
+     InstancedMesh(1) since perf) and the blob shadows (instance colour + alphaTest + a
+     pre-tone-mapped colour) all share the instanced basic + map program. */
   var PROGRAM_FAMILY = {
     toon: 'toon', gold: 'matcap', chrome: 'matcap', pearl: 'matcap', smoked: 'matcap', gunmetal: 'matcap', foil: 'matcap',
     glass: 'matcap-transparent', neon: 'basic', ink: 'basic', glow: 'basic-additive', state: 'basic-vertex',
-    led: 'basic-map', sign: 'basic-map', emoji: 'basic-map', blob: 'basic-blob', line: 'line', outline: 'outline'
+    led: 'basic-map', sign: 'basic-map', emoji: 'basic-map', blob: 'basic-map', line: 'line', outline: 'outline'
   };
+  /* three's NeutralToneMapping (Khronos PBR Neutral) of a linear colour at an exposure: what a
+     tone-mapped material shows, so a toneMapped:false one can show the same colour (the blob
+     shadows join the toneMapped:false map program this way) */
+  var BLOB_EXPOSURE = 1.05;        /* the golden hour preset's exposure (Showtime's 1.10 moves a 22% blob < 0.1%) */
+  function neutralTone(rgb, exposure, out) {
+    out = out || [0, 0, 0];
+    var e = exposure > 0 ? exposure : 1, r = rgb[0] * e, g = rgb[1] * e, b = rgb[2] * e;
+    var x = Math.min(r, g, b), off = x < 0.08 ? x - 6.25 * x * x : 0.04;
+    r -= off; g -= off; b -= off;
+    var peak = Math.max(r, g, b), start = 0.8 - 0.04;
+    if (peak >= start) {
+      var d = 1 - start, np = 1 - d * d / (peak + d - start), k = 1 - 1 / (0.15 * (peak - np) + 1);
+      r = r * np / peak; g = g * np / peak; b = b * np / peak;
+      r += (np - r) * k; g += (np - g) * k; b += (np - b) * k;
+    }
+    out[0] = r; out[1] = g; out[2] = b;
+    return out;
+  }
   function programFamily(key) {
     var b = String(key || 'toon').split(':')[0];
     return Object.prototype.hasOwnProperty.call(PROGRAM_FAMILY, b) ? PROGRAM_FAMILY[b] : null;
@@ -1239,7 +1263,13 @@
         case 'outline':
           return outlineMat(arg && isFinite(parseFloat(arg)) ? parseFloat(arg) : OUTLINE_W);
         case 'blob':
-          return new THREE.MeshBasicMaterial({ color: col('Blob Shadow'), map: tex.blob(), transparent: true, opacity: 0.22, depthWrite: false, name: 'blob' });
+          /* the LED / sign program (instance colour, alphaTest, not tone-mapped): the colour is
+             Blob Shadow already tone-mapped, so it reads exactly as before; alphaTest 0.002 only
+             drops the invisible rim (< 0.05% darkening) */
+          m = new THREE.MeshBasicMaterial({ color: col('Blob Shadow'), map: tex.blob(), transparent: true, opacity: 0.22, depthWrite: false, alphaTest: 0.002, toneMapped: false, name: 'blob' });
+          var nt = neutralTone([m.color.r, m.color.g, m.color.b], BLOB_EXPOSURE);
+          m.color.setRGB(nt[0], nt[1], nt[2]);
+          return m;
         default:
           warn('unknown material key "' + key + '" (using toon)');
           return null;
@@ -1544,7 +1574,9 @@
     /* ================================================================
        ITEM BATCH — every placed copy of one (id, stateKey): one InstancedMesh
        per part (capacity 4, doubling), instanceColor always allocated so all
-       static items share one toon program. Static parts are written on add /
+       static items share one toon program. With opts.merge the parts the merged
+       layer accepts draw there instead (their InstancedMesh stays out of the scene;
+       hulls stay here) — the API below is the same either way. Static parts are written on add /
        move only; pivoted parts while their idle or act runs; the reserved
        pivot 'root' (alias 'sway' when the template has none) moves the whole
        copy (squish, sway, drop-in). perCopy parts are one InstancedMesh(1)
@@ -1557,7 +1589,8 @@
          pivot(uid, name) → Matrix4 to write;  setPivot(uid, name, rotDeg[], pos[], scale)
          resetPivots(uid), commit(), anchorWorld(uid, name, outV3), worldPos(uid, outV3)
          copyGeometry(uid, part), basePositions(part), has(uid), uids(), count, dispose()
-       opts: {capacity, material(matKey, part) → Material override, castShadow = true, outlines = true}
+       opts: {capacity, material(matKey, part) → Material override, castShadow = true, outlines = true,
+              merge: a K.merger() — its eligible parts draw there (see MERGED LAYER), the rest here}
        ================================================================ */
     function ItemBatch(K, tpl, o) {
       if (!isTemplate(tpl)) throw new Error('K.batch needs a Template (K.template(ctx)…done())');
@@ -1574,11 +1607,20 @@
       this._charHull = charHull(tpl.id);
       this._selOnly = !this._charHull;
       this._castShadow = o.castShadow !== false;
+      this._mg = o.merge && o.merge.isMerger && !o.merge.disposed ? o.merge : null;
       this._dirty = []; this._structural = false; this._disposed = false;
-      this._slots = []; this._copyParts = [];
+      this._slots = []; this._copyParts = []; this._copyMg = []; this._merged = false;
       for (var i = 0; i < tpl.parts.length; i++) {
         var p = tpl.parts[i];
-        if (p.perCopy) this._copyParts.push(p); else this._slots.push(this._makeSlot(p, this.cap));
+        if (p.perCopy) {
+          var cg = this._mg ? this._mg.groupFor(this._mat(p), false, p.receiveShadow) : null;
+          this._copyParts.push(p); this._copyMg.push(cg);
+          if (cg) this._merged = true;
+        } else {
+          var sl = this._makeSlot(p, this.cap);
+          this._slots.push(sl);
+          if (sl.mg) this._merged = true;
+        }
       }
       ref(tpl, 1);
       batches.add(this);
@@ -1595,7 +1637,10 @@
       mesh.frustumCulled = !p.pivot;
       if (p.pivot) mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       mesh.count = 0; mesh.visible = false;
-      this.group.add(mesh);
+      /* a merged part never draws here: its mesh stays out of the scene graph, so a compile never
+         warms a program nothing draws (its hull, if any, still lives here) */
+      var mg = this._mg ? this._mg.groupFor(mesh.material, mesh.castShadow, mesh.receiveShadow) : null;
+      if (!mg) this.group.add(mesh);
       var out = null;
       if (p.outline && this._wantOutlines) {
         out = newIM(p.geo, mat('outline:' + hullWidth(p, this._charHull)), cap);
@@ -1606,7 +1651,43 @@
         out.count = 0; out.visible = false;
         this.group.add(out);
       }
-      return { part: p, mesh: mesh, outline: out, m: false, c: false };
+      return { part: p, mesh: mesh, outline: out, m: false, c: false, mg: mg };
+    };
+    /* the merged layer: a bone per pivot the copy's merged parts hang on ('' = its root) and one
+       entry per merged part (rec.ms[slot], rec.mc[copy part]) */
+    function mergeBone(mg, rec, pivot) {
+      var key = pivot || '';
+      if (rec.mb[key] == null) rec.mb[key] = mg._allocBone();
+      return rec.mb[key];
+    }
+    ItemBatch.prototype._mergeIn = function (rec) {
+      var mg = this._mg, k;
+      rec.mb = {}; rec.ms = []; rec.mc = null;
+      for (k = 0; k < this._slots.length; k++) {
+        var s = this._slots[k];
+        rec.ms.push(s.mg ? mg._add(s.mg, rec, s.part, s.part.geo, false, mergeBone(mg, rec, s.part.pivot)) : null);
+      }
+      if (rec.copies) {
+        rec.mc = [];
+        for (k = 0; k < rec.copies.length; k++) {
+          var c = rec.copies[k], cg = this._copyMg[k];
+          rec.mc.push(cg ? mg._add(cg, rec, c.part, c.mesh.geometry, true, mergeBone(mg, rec, c.part.pivot)) : null);
+          if (cg) c.mesh.visible = false;
+        }
+      }
+    };
+    ItemBatch.prototype._mergeScale = function (rec) {
+      var k;
+      for (k = 0; k < rec.ms.length; k++) if (rec.ms[k]) this._mg._rescale(rec.ms[k], rec);
+      if (rec.mc) for (k = 0; k < rec.mc.length; k++) if (rec.mc[k]) this._mg._rescale(rec.mc[k], rec);
+    };
+    ItemBatch.prototype._mergeOut = function (rec) {
+      var mg = this._mg, k;
+      if (!mg || !rec.mb) return;
+      for (k = 0; k < rec.ms.length; k++) if (rec.ms[k]) mg._remove(rec.ms[k]);
+      if (rec.mc) for (k = 0; k < rec.mc.length; k++) if (rec.mc[k]) mg._remove(rec.mc[k]);
+      if (!mg.disposed) for (var key in rec.mb) mg._freeBone(rec.mb[key]);
+      rec.mb = null; rec.ms = null; rec.mc = null;
     };
     /* is any copy highlighted? (selection-only hulls draw nothing otherwise) */
     ItemBatch.prototype._anyHl = function () {
@@ -1624,7 +1705,9 @@
       im.name = old.name; im.castShadow = old.castShadow; im.receiveShadow = old.receiveShadow;
       im.frustumCulled = old.frustumCulled; im.visible = old.visible; im.renderOrder = old.renderOrder;
       im.count = old.count;
-      group.remove(old); group.add(im);
+      var inGraph = old.parent === group;                  /* a merged slot's mesh stays out of it */
+      group.remove(old);
+      if (inGraph) group.add(im);
       old.dispose();
       return im;
     }
@@ -1656,6 +1739,7 @@
         var j = normJitter(jitter, _jit);
         rec.jYaw = j.yaw; rec.sx = j.sx; rec.sy = j.sy; rec.sz = j.sz; rec.lean = j.lean; rec.leanAxis = j.leanAxis;
         rec.tint = j.tl !== 1 || j.th !== 0 ? tintMul(j.tl, j.th, rec.tint || [1, 1, 1]) : null;
+        if (rec.mb) this._mergeScale(rec);                    /* merged vertices carry the scale */
       }
       if (place.yaw != null) rec.yaw = place.yaw * DEG;
       jitterQuat(rec.yaw / DEG + rec.jYaw, rec.lean, rec.leanAxis, _jq);
@@ -1672,20 +1756,21 @@
         uid: uid, i: i, x: 0, y: 0, fp: null, pos: new THREE.Vector3(), yaw: 0,
         jYaw: 0, sx: 1, sy: 1, sz: 1, lean: 0, leanAxis: 0, tint: null,
         item: new THREE.Matrix4(), root: new THREE.Matrix4(), rootAnim: false, piv: {},
-        hidden: false, hl: 0, state: {}, copies: null, dirty: 0
+        hidden: false, hl: 0, state: {}, copies: null, dirty: 0, mb: null, ms: null, mc: null
       };
       this.template.pivotOrder.forEach(function (n) { rec.piv[n] = new THREE.Matrix4(); });
       this.recs[i] = rec; this.index.set(uid, i);
       this._place(rec, place, o && o.jitter);
       if (this._copyParts.length) {
-        rec.copies = this._copyParts.map(function (p) {
+        rec.copies = this._copyParts.map(function (p, k) {
           var mm = newIM(p.geo.clone(), self._mat(p), 1);
           mm.count = 1; mm.name = p.name + ':' + uid;
           mm.castShadow = false; mm.receiveShadow = p.receiveShadow; mm.frustumCulled = false;
-          self.group.add(mm);
+          if (!self._copyMg[k]) self.group.add(mm);         /* merged: only its geometry is used */
           return { part: p, mesh: mm };
         });
       }
+      if (this._merged) this._mergeIn(rec);
       this._writeColors(rec);
       this._mark(rec, 2);
       this._structural = true;
@@ -1706,6 +1791,7 @@
       var i = this.index.get(uid);
       if (i == null) return false;
       var rec = this.recs[i], last = this.n - 1, self = this;
+      this._mergeOut(rec);
       if (rec.copies) rec.copies.forEach(function (c) { self.group.remove(c.mesh); c.mesh.geometry.dispose(); c.mesh.dispose(); });
       this.index.delete(uid);
       rec.i = -1;
@@ -1764,7 +1850,7 @@
       return out;
     };
     ItemBatch.prototype._write = function (rec, lvl) {
-      var i = rec.i, k, s, p;
+      var i = rec.i, k, s, p, mg = rec.mb ? this._mg : null;
       if (rec.rootAnim) _base.multiplyMatrices(rec.item, rec.root); else _base.copy(rec.item);
       for (k = 0; k < this._slots.length; k++) {
         s = this._slots[k]; p = s.part;
@@ -1772,14 +1858,17 @@
         if (rec.hidden) _w.copy(ZERO);
         else if (p.pivot) this._chain(rec, p.pivot, _base, _w);
         else _w.copy(_base);
-        _w.toArray(s.mesh.instanceMatrix.array, i * 16);
-        s.m = true;
+        if (s.mg) { if (mg) mg._bone(rec.mb[p.pivot || ''], _w, rec, rec.ms[k]); }   /* the merged part rides its bone */
+        else _w.toArray(s.mesh.instanceMatrix.array, i * 16);
+        if (!s.mg || s.outline) s.m = true;
         if (s.outline) (this._selOnly && !rec.hl ? ZERO : _w).toArray(s.outline.instanceMatrix.array, i * 16);
       }
       if (rec.copies) {
         for (k = 0; k < rec.copies.length; k++) {
           var c = rec.copies[k];
-          if (c.part.pivot) this._chain(rec, c.part.pivot, _base, _w); else _w.copy(_base);
+          if (rec.hidden) _w.copy(ZERO);
+          else if (c.part.pivot) this._chain(rec, c.part.pivot, _base, _w); else _w.copy(_base);
+          if (mg && rec.mc[k]) { mg._bone(rec.mb[c.part.pivot || ''], _w, rec, rec.mc[k]); continue; }
           _w.toArray(c.mesh.instanceMatrix.array, 0);
           c.mesh.instanceMatrix.needsUpdate = true;
           c.mesh.visible = !rec.hidden;
@@ -1793,7 +1882,8 @@
       for (k = 0; k < this._slots.length; k++) {
         s = this._slots[k]; p = s.part;
         if (p.stateColor) stateColorInto(p.stateColor, rec.state[p.stateColor.key], _c); else baseColorInto(rec, _c);
-        _c.toArray(s.mesh.instanceColor.array, i * 3);
+        if (rec.ms && rec.ms[k]) this._mg._color(rec.ms[k], _c);       /* baked into the merged vertex colours */
+        else _c.toArray(s.mesh.instanceColor.array, i * 3);
         if (s.outline) { (rec.hl ? goldC() : inkC()).toArray(s.outline.instanceColor.array, i * 3); }
         s.c = true;
       }
@@ -1801,6 +1891,7 @@
         for (k = 0; k < rec.copies.length; k++) {
           var cp = rec.copies[k];
           if (cp.part.stateColor) stateColorInto(cp.part.stateColor, rec.state[cp.part.stateColor.key], _c); else baseColorInto(rec, _c);
+          if (rec.mc && rec.mc[k]) { this._mg._color(rec.mc[k], _c); continue; }
           _c.toArray(cp.mesh.instanceColor.array, 0);
           cp.mesh.instanceColor.needsUpdate = true;
         }
@@ -1814,14 +1905,18 @@
       for (k = 0; k < this._slots.length; k++) {
         var s = this._slots[k], sc = s.part.stateColor;
         if (!sc || sc.key !== key) continue;
-        stateColorInto(sc, value, _c).toArray(s.mesh.instanceColor.array, i * 3);
+        stateColorInto(sc, value, _c);
+        if (rec.ms && rec.ms[k]) { this._mg._color(rec.ms[k], _c); continue; }
+        _c.toArray(s.mesh.instanceColor.array, i * 3);
         s.mesh.instanceColor.needsUpdate = true;
       }
       if (rec.copies) {
         for (k = 0; k < rec.copies.length; k++) {
           var cp = rec.copies[k], sc2 = cp.part.stateColor;
           if (!sc2 || sc2.key !== key) continue;
-          stateColorInto(sc2, value, _c).toArray(cp.mesh.instanceColor.array, 0);
+          stateColorInto(sc2, value, _c);
+          if (rec.mc && rec.mc[k]) { this._mg._color(rec.mc[k], _c); continue; }
+          _c.toArray(cp.mesh.instanceColor.array, 0);
           cp.mesh.instanceColor.needsUpdate = true;
         }
       }
@@ -1856,15 +1951,15 @@
       this._dirty.length = 0;
       for (k = 0; k < this._slots.length; k++) {
         s = this._slots[k];
-        if (s.m) { s.mesh.instanceMatrix.needsUpdate = true; if (s.outline) s.outline.instanceMatrix.needsUpdate = true; s.m = false; }
-        if (s.c) { s.mesh.instanceColor.needsUpdate = true; if (s.outline) s.outline.instanceColor.needsUpdate = true; s.c = false; }
+        if (s.m) { if (!s.mg) s.mesh.instanceMatrix.needsUpdate = true; if (s.outline) s.outline.instanceMatrix.needsUpdate = true; s.m = false; }
+        if (s.c) { if (!s.mg) s.mesh.instanceColor.needsUpdate = true; if (s.outline) s.outline.instanceColor.needsUpdate = true; s.c = false; }
       }
       if (this._structural) {
         this._structural = false;
         for (k = 0; k < this._slots.length; k++) {
           s = this._slots[k];
-          s.mesh.count = this.n; s.mesh.visible = this.n > 0;
-          if (this.n && s.mesh.frustumCulled) {
+          s.mesh.count = this.n; s.mesh.visible = this.n > 0 && !s.mg;
+          if (this.n && s.mesh.frustumCulled && !s.mg) {
             s.mesh.computeBoundingSphere();
             s.mesh.boundingSphere.radius += 0.25;    /* room for squish / sway */
           }
@@ -1917,6 +2012,7 @@
       this._disposed = true;
       var self = this;
       this.recs.forEach(function (rec) {
+        self._mergeOut(rec);
         if (rec.copies) rec.copies.forEach(function (c) { c.mesh.geometry.dispose(); c.mesh.dispose(); });
       });
       this._slots.forEach(function (s) { s.mesh.dispose(); if (s.outline) s.outline.dispose(); });
@@ -1925,6 +2021,327 @@
       this.recs = []; this.index.clear(); this.n = 0;
       ref(this.template, -1);
       batches.delete(self);
+    };
+
+    /* ================================================================
+       MERGED LAYER (perf) — the island's item draw calls, one per material instead of one per
+       part of every (id, stateKey). K.merger({name, additive = true}) → Merger
+         {group (add it to the scene), commit() once a frame after the batches' commits,
+          info() → {groups, calls, entries, vertices, bones}, dispose()}
+         K.batch(tpl, {merge: merger}) joins it.
+       Every eligible part of every copy — static, pivoted and perCopy alike — is baked into ONE
+       rigid-skinned mesh per (material, castShadow, receiveShadow). Each vertex rides one bone:
+       the copy's root or the pivot its part hangs on, whose matrix is exactly the transform the
+       batch would have written into its InstancedMesh, × the copy's jitter scale⁻¹ (the
+       vertices are baked pre-scaled, so normals stay exact at rest and a moved copy only moves
+       its bones). Instance colours (state colours, jitter tints) are baked into the vertex
+       colours and re-baked for that copy's range when they change; perCopy geometry is copied
+       in when its attributes' versions move. Hidden copies get a zero bone.
+       Programs: skinned toon and skinned 'state' are the pet rigs' own programs. A material
+       without vertex colours ('neon:*', 'glow:*') draws through a cached vertex-colour twin
+       that follows its colour, opacity and visibility, so neon joins skinned 'state';
+       additive parts (glow, beams) share one skinned additive program and casters on the
+       shadow tiers one skinned depth program. Maps, matcaps, normal-blend transparency,
+       hulls and custom shaders stay in their batches.
+       Structural changes (copies added or removed, a re-jitter) rebuild only the groups they
+       touch, at the next commit(); a frame without them allocates nothing.
+       ================================================================ */
+    var BASE_OBC = THREE.Material.prototype.onBeforeCompile, BASE_CPK = THREE.Material.prototype.customProgramCacheKey;
+    var IDENT = new THREE.Matrix4(), mergers = new Set(), twins = new Map();
+    /* how a material merges: 'toon' | 'basic' | 'additive' | null (stays in its batch) */
+    function mergeClass(m, additive) {
+      if (!m || !m.isMaterial || m.map || m.alphaMap || m.alphaTest > 0 || m.side !== THREE.FrontSide || m.wireframe || m.flatShading) return null;
+      if (m.isMeshToonMaterial) return m.vertexColors && !m.transparent && m.fog && m.onBeforeCompile === rimPatch && m.customProgramCacheKey === toonKey ? 'toon' : null;
+      if (!m.isMeshBasicMaterial || m.toneMapped !== false || !m.fog || m.envMap || m.lightMap || m.aoMap || m.specularMap) return null;
+      if (m.onBeforeCompile !== BASE_OBC || m.customProgramCacheKey !== BASE_CPK) return null;
+      if (!m.transparent && m.blending === THREE.NormalBlending) return 'basic';
+      if (additive && m.transparent && m.blending === THREE.AdditiveBlending && !m.depthWrite) return 'additive';
+      return null;
+    }
+    /* the material a merged group draws with: the part's own, or its vertex-colour twin */
+    function twinOf(m) {
+      if (m.vertexColors) return m;
+      var t = twins.get(m);
+      if (t) return t;
+      t = m.clone();
+      t.vertexColors = true; t.name = (m.name || 'mat') + '#merged';
+      twins.set(m, t); allMats.add(t);
+      return t;
+    }
+    function Merger(o) {
+      o = o || {};
+      this.isMerger = true; this.disposed = false;
+      this.additive = o.additive !== false;
+      this.group = new THREE.Group();
+      this.group.name = o.name || 'merged';
+      this.groups = new Map(); this.list = [];
+      /* bone 0 stays zero: a removed copy's vertices are pointed at it (a hole until compaction) */
+      this.skel = null; this.cap = 0; this.free = []; this.top = 1; this.boneDirty = false;
+      this._growBones(64);
+      mergers.add(this);
+    }
+    Merger.prototype._growBones = function (cap) {
+      var bones = [];
+      for (var i = 0; i < cap; i++) bones.push(new THREE.Bone());
+      var sk = new THREE.Skeleton(bones), self = this;
+      sk.computeBoneTexture();
+      if (this.skel) { sk.boneMatrices.set(this.skel.boneMatrices.subarray(0, this.cap * 16)); this.skel.dispose(); }
+      /* the matrices are written straight into boneMatrices: upload them only when a bone moved */
+      sk.update = function () { if (self.boneDirty && this.boneTexture) { this.boneTexture.needsUpdate = true; self.boneDirty = false; } };
+      this.skel = sk; this.cap = cap; this.boneDirty = true;
+      for (var g = 0; g < this.list.length; g++) if (this.list[g].mesh) this.list[g].mesh.bind(sk, IDENT);
+    };
+    Merger.prototype._allocBone = function () {
+      if (this.free.length) return this.free.pop();
+      if (this.top >= this.cap) this._growBones(this.cap * 2);
+      return this.top++;
+    };
+    Merger.prototype._freeBone = function (i) {
+      var e = this.skel.boneMatrices, b = i * 16;
+      for (var k = 0; k < 16; k++) e[b + k] = 0;
+      this.free.push(i); this.boneDirty = true;
+    };
+    /* bone i = m × diag(1/sx, 1/sy, 1/sz) (the copy's jitter scale, baked into its vertices); e: the
+       entry riding it, whose normals follow a non-rigid bone (see _bend) */
+    Merger.prototype._bone = function (i, m, rec, e) {
+      var o = this.skel.boneMatrices, s = m.elements, b = i * 16, ix = 1 / rec.sx, iy = 1 / rec.sy, iz = 1 / rec.sz;
+      o[b] = s[0] * ix; o[b + 1] = s[1] * ix; o[b + 2] = s[2] * ix; o[b + 3] = s[3] * ix;
+      o[b + 4] = s[4] * iy; o[b + 5] = s[5] * iy; o[b + 6] = s[6] * iy; o[b + 7] = s[7] * iy;
+      o[b + 8] = s[8] * iz; o[b + 9] = s[9] * iz; o[b + 10] = s[10] * iz; o[b + 11] = s[11] * iz;
+      o[b + 12] = s[12]; o[b + 13] = s[13]; o[b + 14] = s[14]; o[b + 15] = s[15];
+      this.boneDirty = true;
+      if (e) this._bend(e, s, rec);
+    };
+    /* skinning turns a normal by the bone itself, an InstancedMesh by its inverse transpose: the
+       same while the bone is a rotation (× a uniform scale), which it is at rest. Under a non-rigid
+       bone (a tap squish, a squash-and-stretch pivot) the entry's normals are re-baked as
+       S·(WᵀW)⁻¹·n, which the bone W·S⁻¹ turns into W⁻ᵀ·n exactly (W = the copy's whole transform);
+       back to rigid, they are re-baked at rest. Under BEND_TOL of anisotropy (≈ 0.9° at worst: the
+       flowers' 2% bob) the bone counts as rigid. */
+    var BEND_TOL = 0.015;
+    Merger.prototype._bend = function (e, s, rec) {
+      var ix = 1 / rec.sx, iy = 1 / rec.sy, iz = 1 / rec.sz;
+      var g00 = s[0] * s[0] + s[1] * s[1] + s[2] * s[2], g11 = s[4] * s[4] + s[5] * s[5] + s[6] * s[6], g22 = s[8] * s[8] + s[9] * s[9] + s[10] * s[10];
+      var g01 = s[0] * s[4] + s[1] * s[5] + s[2] * s[6], g02 = s[0] * s[8] + s[1] * s[9] + s[2] * s[10], g12 = s[4] * s[8] + s[5] * s[9] + s[6] * s[10];
+      /* A = W·S⁻¹: rigid when AᵀA is a multiple of I */
+      var a00 = g00 * ix * ix, a11 = g11 * iy * iy, a22 = g22 * iz * iz, mean = (a00 + a11 + a22) / 3;
+      if (!(mean > 1e-12)) return;                           /* collapsed (hidden, stored away): nothing is lit */
+      var tol = 2 * BEND_TOL * mean;
+      var rigid = Math.abs(a00 - mean) < tol && Math.abs(a11 - mean) < tol && Math.abs(a22 - mean) < tol &&
+        Math.abs(g01 * ix * iy) < tol && Math.abs(g02 * ix * iz) < tol && Math.abs(g12 * iy * iz) < tol;
+      if (rigid) {
+        if (!e.bend) return;
+        e.bend = null;
+      } else {
+        /* (WᵀW)⁻¹ up to its (positive) determinant — the normals are normalised anyway */
+        var c00 = g11 * g22 - g12 * g12, c01 = g02 * g12 - g01 * g22, c02 = g01 * g12 - g02 * g11;
+        var c11 = g00 * g22 - g02 * g02, c12 = g01 * g02 - g00 * g12, c22 = g00 * g11 - g01 * g01;
+        var B = e.bendM || (e.bendM = new Float64Array(9));
+        B[0] = rec.sx * c00; B[1] = rec.sx * c01; B[2] = rec.sx * c02;
+        B[3] = rec.sy * c01; B[4] = rec.sy * c11; B[5] = rec.sy * c12;
+        B[6] = rec.sz * c02; B[7] = rec.sz * c12; B[8] = rec.sz * c22;
+        e.bend = B;
+      }
+      var g = e.g;
+      if (g.dirty || !g.mesh) return;                        /* the rebuild bakes them */
+      var na = g.mesh.geometry.getAttribute('normal');
+      bakeNormals(e, na.array);
+      markRange(na, e.rN, e);
+    };
+    /* the group a part of material m joins, or null (it stays in its batch) */
+    Merger.prototype.groupFor = function (m, cast, recv) {
+      if (this.disposed || !mergeClass(m, this.additive)) return null;
+      var key = m.uuid + '|' + (cast ? 1 : 0) + (recv ? 1 : 0), g = this.groups.get(key);
+      if (g) return g;
+      g = { key: key, base: m, draw: twinOf(m), vcol: !!m.vertexColors, cast: !!cast, recv: !!recv, entries: [], copies: [],
+            dirty: true, mesh: null, cap: 0, used: 0, holes: 0 };
+      this.groups.set(key, g); this.list.push(g);
+      return g;
+    };
+    /* adds, removals and re-jitters are incremental: a new copy is appended into the group's spare
+       capacity, a removed one is pointed at the zero bone 0 (a hole), a re-jittered one is re-baked in
+       place — only that copy's ranges are uploaded. A full rebuild (compaction, 25% headroom) runs
+       when the capacity runs out or holes pass a quarter of the group. */
+    var HOLES_MAX = 0.25;
+    Merger.prototype._add = function (g, rec, part, geo, perCopy, bone) {
+      var e = { g: g, rec: rec, part: part, geo: geo, perCopy: perCopy, bone: bone, start: 0, count: geo.getAttribute('position').count,
+                cr: 1, cg: 1, cb: 1, sx: rec.sx, sy: rec.sy, sz: rec.sz, pv: -1, nv: -1, cv: -1, bend: null, bendM: null,
+                rP: { start: 0, count: 0 }, rN: { start: 0, count: 0 }, rC: { start: 0, count: 0 }, rI: { start: 0, count: 0 }, rW: { start: 0, count: 0 } };
+      g.entries.push(e);
+      if (perCopy) g.copies.push(e);
+      if (g.dirty || !g.mesh || g.used + e.count > g.cap) { g.dirty = true; return e; }
+      e.start = g.used; g.used += e.count;
+      var mg = g.mesh.geometry;
+      bakeEntry(g, e, mg.getAttribute('position').array, mg.getAttribute('normal').array, mg.getAttribute('color').array,
+        mg.getAttribute('skinIndex').array, mg.getAttribute('skinWeight').array, e.bone);
+      markAll(mg, e);
+      mg.setDrawRange(0, g.used);
+      return e;
+    };
+    Merger.prototype._remove = function (e) {
+      var g = e.g, i = g.entries.indexOf(e);
+      if (i < 0) return;
+      g.entries.splice(i, 1);
+      if (e.perCopy) { i = g.copies.indexOf(e); if (i >= 0) g.copies.splice(i, 1); }
+      if (g.dirty || !g.mesh) return;
+      g.holes += e.count;
+      if (g.holes > HOLES_MAX * g.used) { g.dirty = true; return; }
+      var si = g.mesh.geometry.getAttribute('skinIndex'), A = si.array;
+      for (var v = e.start; v < e.start + e.count; v++) A[v * 4] = 0;   /* the zero bone: collapsed */
+      markRange(si, e.rI, e);
+    };
+    /* a copy's jitter scale changed: its vertices are re-baked in place */
+    Merger.prototype._rescale = function (e, rec) {
+      if (e.sx === rec.sx && e.sy === rec.sy && e.sz === rec.sz) return;
+      e.sx = rec.sx; e.sy = rec.sy; e.sz = rec.sz;
+      var g = e.g;
+      if (g.dirty || !g.mesh) return;
+      var mg = g.mesh.geometry, pa = mg.getAttribute('position'), na = mg.getAttribute('normal');
+      bakePositions(e, pa.array); bakeNormals(e, na.array);
+      markRange(pa, e.rP, e); markRange(na, e.rN, e);
+    };
+    Merger.prototype._color = function (e, c) {
+      if (e.cr === c.r && e.cg === c.g && e.cb === c.b) return;
+      e.cr = c.r; e.cg = c.g; e.cb = c.b;
+      var g = e.g;
+      if (g.dirty || !g.mesh) return;                        /* the rebuild bakes it */
+      var ca = g.mesh.geometry.getAttribute('color');
+      bakeColors(g, e, ca.array);
+      markRange(ca, e.rC, e);
+    };
+    /* one entry's vertices changed: upload just its range (a reused range object: three only reads
+       it and clears the list after the upload) */
+    function markRange(attr, r, e) {
+      r.start = e.start * attr.itemSize; r.count = e.count * attr.itemSize;
+      attr.updateRanges.push(r);
+      attr.needsUpdate = true;
+    }
+    function markAll(geo, e) {
+      markRange(geo.getAttribute('position'), e.rP, e); markRange(geo.getAttribute('normal'), e.rN, e);
+      markRange(geo.getAttribute('color'), e.rC, e); markRange(geo.getAttribute('skinIndex'), e.rI, e);
+      markRange(geo.getAttribute('skinWeight'), e.rW, e);
+    }
+    /* positions pre-scaled by the copy's jitter scale */
+    function bakePositions(e, P) {
+      var pa = e.geo.getAttribute('position').array, o = e.start * 3, n = e.count * 3;
+      if (e.sx === 1 && e.sy === 1 && e.sz === 1) { P.set(pa.subarray(0, n), o); return; }
+      for (var i = 0; i < n; i += 3) { P[o + i] = pa[i] * e.sx; P[o + i + 1] = pa[i + 1] * e.sy; P[o + i + 2] = pa[i + 2] * e.sz; }
+    }
+    /* normals: S⁻¹·n at rest (exact under the rigid bone), the bend correction under a non-rigid one */
+    function bakeNormals(e, N) {
+      var na = e.geo.getAttribute('normal').array, o = e.start * 3, n = e.count * 3, B = e.bend, i, x, y, z, l;
+      if (!B && e.sx === 1 && e.sy === 1 && e.sz === 1) { N.set(na.subarray(0, n), o); return; }
+      var ix = 1 / e.sx, iy = 1 / e.sy, iz = 1 / e.sz;
+      for (i = 0; i < n; i += 3) {
+        if (B) {
+          x = B[0] * na[i] + B[1] * na[i + 1] + B[2] * na[i + 2];
+          y = B[3] * na[i] + B[4] * na[i + 1] + B[5] * na[i + 2];
+          z = B[6] * na[i] + B[7] * na[i + 1] + B[8] * na[i + 2];
+        } else { x = na[i] * ix; y = na[i + 1] * iy; z = na[i + 2] * iz; }
+        l = Math.sqrt(x * x + y * y + z * z) || 1;
+        N[o + i] = x / l; N[o + i + 1] = y / l; N[o + i + 2] = z / l;
+      }
+    }
+    /* vertex colour = the part's own (vertex-colour materials) × the copy's instance colour */
+    function bakeColors(g, e, C) {
+      var o = e.start * 3, n = e.count * 3, ca = g.vcol ? e.geo.getAttribute('color') : null, a = ca ? ca.array : null, i;
+      if (a && e.cr === 1 && e.cg === 1 && e.cb === 1) { C.set(a.subarray(0, n), o); return; }
+      for (i = 0; i < n; i += 3) {
+        C[o + i] = a ? a[i] * e.cr : e.cr; C[o + i + 1] = a ? a[i + 1] * e.cg : e.cg; C[o + i + 2] = a ? a[i + 2] * e.cb : e.cb;
+      }
+    }
+    function bakeEntry(g, e, P, N, C, SI, SW, bone) {
+      bakePositions(e, P); bakeNormals(e, N); bakeColors(g, e, C);
+      for (var v = e.start, end = e.start + e.count; v < end; v++) { SI[v * 4] = bone; SW[v * 4] = 255; }
+      if (e.perCopy) { e.pv = versionOf(e.geo, 'position'); e.nv = versionOf(e.geo, 'normal'); e.cv = versionOf(e.geo, 'color'); }
+    }
+    function versionOf(geo, name) { var a = geo.getAttribute(name); return a ? a.version : -1; }
+    Merger.prototype._rebuild = function (g) {
+      var list = g.entries, n = 0, k, e;
+      for (k = 0; k < list.length; k++) { e = list[k]; e.start = n; n += e.count; }
+      g.dirty = false; g.used = n; g.holes = 0;
+      var old = g.mesh ? g.mesh.geometry : null;
+      if (!n) {
+        if (g.mesh) { this.group.remove(g.mesh); g.mesh = null; }
+        if (old) old.dispose();
+        g.cap = 0;
+        return;
+      }
+      var cap = g.cap = Math.ceil(n * 1.25) + 64;
+      var P = new Float32Array(cap * 3), N = new Float32Array(cap * 3), C = new Float32Array(cap * 3);
+      var SI = new Uint16Array(cap * 4), SW = new Uint8Array(cap * 4);
+      for (k = 0; k < list.length; k++) bakeEntry(g, list[k], P, N, C, SI, SW, list[k].bone);
+      var geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(P, 3));
+      geo.setAttribute('normal', new THREE.BufferAttribute(N, 3));
+      geo.setAttribute('color', new THREE.BufferAttribute(C, 3));
+      geo.setAttribute('skinIndex', new THREE.BufferAttribute(SI, 4));
+      geo.setAttribute('skinWeight', new THREE.BufferAttribute(SW, 4, true));
+      ['position', 'normal', 'color', 'skinIndex', 'skinWeight'].forEach(function (nm) { geo.getAttribute(nm).setUsage(THREE.DynamicDrawUsage); });
+      geo.setDrawRange(0, n);
+      if (!g.mesh) {
+        var mesh = new THREE.SkinnedMesh(geo, g.draw);
+        mesh.name = 'merged:' + (g.base.name || 'mat') + (g.cast ? ':cast' : '') + (g.recv ? '' : ':norecv');
+        mesh.bindMode = THREE.DetachedBindMode || 'detached';   /* the bind matrix stays identity */
+        mesh.bind(this.skel, IDENT);
+        mesh.frustumCulled = false;                          /* it spans the island */
+        mesh.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0, 0), 40);   /* never CPU-skinned for sorting */
+        mesh.castShadow = g.cast; mesh.receiveShadow = g.recv;
+        mesh.matrixAutoUpdate = false;
+        g.mesh = mesh;
+        this.group.add(mesh);
+      } else g.mesh.geometry = geo;
+      if (old) old.dispose();
+    };
+    /* perCopy parts (CPU waves, LED chases written into the copy's own geometry): copy what moved */
+    Merger.prototype._copies = function (g) {
+      var geo = g.mesh.geometry, pa = geo.getAttribute('position'), na = geo.getAttribute('normal'), ca = geo.getAttribute('color');
+      for (var k = 0; k < g.copies.length; k++) {
+        var e = g.copies[k], pv = versionOf(e.geo, 'position'), nv = versionOf(e.geo, 'normal'), cv = versionOf(e.geo, 'color');
+        if (pv !== e.pv) { e.pv = pv; bakePositions(e, pa.array); markRange(pa, e.rP, e); }
+        if (nv !== e.nv) { e.nv = nv; bakeNormals(e, na.array); markRange(na, e.rN, e); }
+        if (cv !== e.cv && g.vcol) { e.cv = cv; bakeColors(g, e, ca.array); markRange(ca, e.rC, e); }
+      }
+    };
+    /* a group whose material is hidden (glow by day) is never uploaded: its pending ranges are
+       capped, and the next upload is then a whole one */
+    var RANGE_CAP = 48, ATTRS = ['position', 'normal', 'color', 'skinIndex', 'skinWeight'];
+    Merger.prototype.commit = function () {
+      if (this.disposed) return this;
+      for (var i = 0; i < this.list.length; i++) {
+        var g = this.list[i];
+        if (g.draw !== g.base) {                             /* a twin follows its material (glow fades, member colours) */
+          if (!g.draw.color.equals(g.base.color)) g.draw.color.copy(g.base.color);
+          g.draw.opacity = g.base.opacity; g.draw.visible = g.base.visible;
+        }
+        if (g.dirty) { this._rebuild(g); continue; }
+        if (!g.mesh) continue;
+        if (g.copies.length) this._copies(g);
+        var geo = g.mesh.geometry;
+        for (var a = 0; a < ATTRS.length; a++) { var at = geo.getAttribute(ATTRS[a]); if (at.updateRanges.length > RANGE_CAP) at.clearUpdateRanges(); }
+      }
+      return this;
+    };
+    Merger.prototype.info = function () {
+      var out = { groups: 0, calls: 0, entries: 0, vertices: 0, holes: 0, bones: this.top - 1 - this.free.length };
+      for (var i = 0; i < this.list.length; i++) {
+        var g = this.list[i];
+        out.entries += g.entries.length;
+        if (!g.mesh) continue;
+        out.groups++; out.vertices += g.used - g.holes; out.holes += g.holes;
+        if (g.draw.visible) out.calls++;
+      }
+      return out;
+    };
+    Merger.prototype.dispose = function () {
+      if (this.disposed) return;
+      this.disposed = true;
+      for (var i = 0; i < this.list.length; i++) { var g = this.list[i]; if (g.mesh) g.mesh.geometry.dispose(); g.mesh = null; g.entries.length = 0; g.copies.length = 0; }
+      this.list.length = 0; this.groups.clear();
+      if (this.group.parent) this.group.parent.remove(this.group);
+      this.group.clear();
+      if (this.skel) { this.skel.dispose(); this.skel = null; }
+      mergers.delete(this);
     };
 
     /* ================================================================
@@ -2129,7 +2546,7 @@
       var cap = Math.max(1, capacity | 0 || 16);
       var geo = new THREE.PlaneGeometry(1, 1);
       geo.rotateX(-Math.PI / 2);
-      var mesh = new THREE.InstancedMesh(geo, mat('blob'), cap);
+      var mesh = newIM(geo, mat('blob'), cap);            /* white instance colours: the shared map program */
       mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       mesh.frustumCulled = false; mesh.count = 0; mesh.renderOrder = 1; mesh.name = 'blobs';
       var free = [], used = new Uint8Array(cap), hi = 0, dirty = false;
@@ -2195,6 +2612,7 @@
       K.ctx = function (id, st, stateKey) { return ctxFor(K, id, st, stateKey); };
       K.template = function (ctx) { return new TemplateBuilder(K, ctx || K.ctx('item', {})); };
       K.batch = function (tpl, o) { return new ItemBatch(K, tpl, o); };
+      K.merger = function (o) { return new Merger(o); };
       K.instantiate = function (tpl, o) { return instantiate(K, tpl, o); };
       K.placeholder = function (ctx) { return placeholder(K, ctx || K.ctx('item', {})); };
       K.templates = {
@@ -2223,6 +2641,8 @@
     /* ---------------- disposal ---------------- */
     function dispose() {
       Array.from(batches).forEach(function (b) { b.dispose(); });
+      Array.from(mergers).forEach(function (m) { m.dispose(); });
+      twins.clear();
       Array.from(pools).forEach(function (p) { p.dispose(); });
       tcache.forEach(function (e) { disposeTemplate(e.tpl); });
       tcache.clear();
@@ -2263,6 +2683,6 @@
     SIGN: SIGN, SIGN_WORDS: SIGN_WORDS_FALLBACK, signCell: signCell, signRect: signRect, checkSignWord: checkSignWord,
     signName: signName, signInitial: signInitial,
     normJitter: normJitter, jitterQuat: jitterQuat, tintMul: tintMul,
-    PROGRAM_FAMILY: PROGRAM_FAMILY, programFamily: programFamily
+    PROGRAM_FAMILY: PROGRAM_FAMILY, programFamily: programFamily, neutralTone: neutralTone
   };
 }));

@@ -119,8 +119,9 @@ test('adaptive quality: steps down in ladder order, at most once per 2 s, and ne
   const r = drive(aq, { ms: 30000, interval: 33.4, work: 28 });
   const steps = r.actions.filter(a => a.type === 'step');
   assert.deepEqual(steps.map(a => a.step), T.LADDER);
-  /* ambient life and the sea reflections shed before the Showtime cones */
-  assert.deepEqual(T.LADDER, ['pixelRatio', 'shadows', 'outlines', 'particles', 'life', 'reflections', 'cones']);
+  /* perf-5: the CPU steps (draw calls, per-frame work) first, then the GPU (fill) steps; ambient
+     life and the sea reflections still shed before the Showtime cones */
+  assert.deepEqual(T.LADDER, ['outlines', 'particles', 'life', 'decor', 'pixelRatio', 'shadows', 'reflections', 'cones']);
   assert.ok(steps[0].at >= 2000, 'first step only after 2 s of slow frames');
   for (let i = 1; i < steps.length; i++) assert.ok(steps[i].at - steps[i - 1].at >= 2000, 'one step per 2 s');
   assert.equal(r.actions.filter(a => a.type === 'fallback').length, 0, '30 fps is slow but not < 20 fps: no fallback');
@@ -132,7 +133,7 @@ test('adaptive quality: steps down in ladder order, at most once per 2 s, and ne
 
 test('adaptive quality: falls back only after every step, and only once', () => {
   const aq = T.AdaptiveQuality();
-  const r = drive(aq, { ms: 40000, interval: 80, work: 75 });   /* ~12 fps from the start */
+  const r = drive(aq, { ms: 50000, interval: 80, work: 75 });   /* ~12 fps from the start (8 steps × ~4.6 s, then 3 s) */
   const types = r.actions.map(a => a.type);
   const fb = types.indexOf('fallback');
   assert.ok(fb > 0, 'fallback happens');
@@ -170,9 +171,39 @@ test('adaptive quality: healthy frames, idle pacing at 30 fps, pauses and skippe
   assert.equal(aq2.stats().samples, 0);
   /* LOW has no shadows or outlines: those steps start taken */
   const aq3 = T.AdaptiveQuality({ skip: ['shadows', 'outlines'] });
-  const steps = drive(aq3, { ms: 20000, interval: 33.4, work: 28 }).actions.filter(a => a.type === 'step').map(a => a.step);
-  assert.deepEqual(steps, ['pixelRatio', 'particles', 'life', 'reflections', 'cones']);
+  const steps = drive(aq3, { ms: 25000, interval: 33.4, work: 28 }).actions.filter(a => a.type === 'step').map(a => a.step);
+  assert.deepEqual(steps, ['particles', 'life', 'decor', 'pixelRatio', 'reflections', 'cones']);
   assert.ok(aq3.has('shadows') && aq3.done);
+});
+
+/* perf-5: no step used to shed draw calls or frame work, so a draw-call-bound device walked the
+   whole fragment-only ladder and was remembered as 2D. Each step now names the bottleneck it
+   relieves, and the controller takes the next step of the kind the frames say is slow. */
+test('perf-5: adaptive quality steps the bottleneck the frames show (CPU work → CPU steps, slow cadence → GPU steps)', () => {
+  assert.deepEqual(T.LADDER.map(T.stepKind), ['cpu', 'cpu', 'cpu', 'cpu', 'gpu', 'gpu', 'gpu', 'gpu']);
+  assert.equal(T.STEP_KIND.decor, 'cpu', 'the decor idles are per-frame work');
+  /* CPU-bound: 28 ms of update + draw submission at 33 ms — the CPU steps come first */
+  const cpu = drive(T.AdaptiveQuality(), { ms: 16000, interval: 33.4, work: 28 }).actions.filter(a => a.type === 'step');
+  assert.deepEqual(cpu.map(a => a.step).slice(0, 4), ['outlines', 'particles', 'life', 'decor']);
+  assert.ok(cpu.every(a => a.kind === 'cpu'));
+  /* GPU-bound: cheap work (6 ms) but a 40 ms cadence — pixel ratio first, then the fill steps */
+  const gpu = drive(T.AdaptiveQuality(), { ms: 16000, interval: 40, work: 6 }).actions.filter(a => a.type === 'step');
+  assert.deepEqual(gpu.map(a => a.step).slice(0, 4), ['pixelRatio', 'shadows', 'reflections', 'cones']);
+  assert.ok(gpu.every(a => a.kind === 'gpu'));
+  /* once its kind runs out, any step left is taken (the fallback still needs every step) */
+  const aq = T.AdaptiveQuality();
+  const r = drive(aq, { ms: 40000, interval: 40, work: 6 });
+  assert.deepEqual(r.actions.filter(a => a.type === 'step').map(a => a.step),
+    ['pixelRatio', 'shadows', 'reflections', 'cones', 'outlines', 'particles', 'life', 'decor']);
+  assert.equal(aq.done, true);
+  /* a CPU-bound LOW device (no shadows, no hulls) sheds particles, life and the decor idles before
+     any fill step, and only then can the 2D fallback come */
+  const low = T.AdaptiveQuality({ skip: ['shadows', 'outlines'] });
+  const rl = drive(low, { ms: 50000, interval: 80, work: 75 });
+  const kinds = rl.actions.map(a => a.type === 'step' ? a.step : a.type);
+  assert.deepEqual(kinds.slice(0, 3), ['particles', 'life', 'decor']);
+  assert.equal(kinds[kinds.length - 1], 'fallback');
+  assert.equal(kinds.indexOf('fallback'), T.LADDER.length - 2, 'after every step that tier can take');
 });
 
 /* ---------------- frame pacer ---------------- */

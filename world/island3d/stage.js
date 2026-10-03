@@ -17,8 +17,10 @@
      .defineApi(name, factory(K, SL3D) → value)        e.g. 'makeRig', 'makeAvatar', 'makeWand', 'makeFanBlob'
    …and once ready:
      .THREE, .addons {RoundedBoxGeometry, BufferGeometryUtils}, .tier, .budget, .quality, .models, .missing
-       quality {pixelRatio, shadows, outlines, particleScale, lifeScale, reflections, cones, steps[]}:
-       the adaptive LADDER's live state (onQuality listeners hear every step)
+       quality {pixelRatio, shadows, outlines, particleScale, lifeScale, reflections, cones, decor, steps[]}:
+       the adaptive LADDER's live state (onQuality listeners hear every step). The ladder takes
+       CPU steps (outlines, particles, life, decor) when the frame work is over budget and GPU
+       steps (pixelRatio, shadows, reflections, cones) when the cadence is (SLTier.AdaptiveQuality)
      .kit(tier) → K                     (kit.js; one K per tier sharing materials and caches)
      .make(id, st, tier) → Object3D     one catalogue item / kart / ball (placeholder if its model is missing);
                                         st.variant (a building's or a home shape's trim) is passed through
@@ -546,7 +548,7 @@
       SL3D.budget = Tier.budget(tier, root.devicePixelRatio || 1);
       SL3D.quality = {
         pixelRatio: SL3D.budget.pixelRatio, shadows: !!SL3D.budget.shadows, outlines: !!SL3D.budget.outlines,
-        particleScale: 1, lifeScale: 1, reflections: true, cones: true, steps: []
+        particleScale: 1, lifeScale: 1, reflections: true, cones: true, decor: true, steps: []
       };
       var skip = [];
       if (!SL3D.budget.shadows) skip.push('shadows');
@@ -715,6 +717,7 @@
         if (hub) hub.setOutlines(false);
       } else if (step === 'particles') q.particleScale = 0.5;
       else if (step === 'life') q.lifeScale = 0.5;                 /* life3d halves its boats, birds and lanterns */
+      else if (step === 'decor') q.decor = false;                  /* the island's item idles rest (as under reduced motion) */
       else if (step === 'reflections') q.reflections = false;      /* env drops the sea light pillars */
       else if (step === 'cones') q.cones = false;
       log('quality step ' + q.steps.length + ': ' + step + ' (' + (src || '?') + ')');

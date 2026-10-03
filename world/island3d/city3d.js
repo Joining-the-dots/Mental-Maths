@@ -41,14 +41,15 @@
    light fades in, nothing pops, nothing flashes (every rate is in FREQS, all
    ≤ 2 Hz). Reduced motion: the wheel and barges are still, boards hold a
    static gradient and every change is its end state at once.
-   LOW fallback (opts.fallback, or LOW with the renderer already at its program
-   budget): the shared toon program (InstancedMesh count 1, like env's layers)
-   plus 'state' window strips; LED boards become slow solid colour fades.
+   LOW fallback (every LOW city, or opts.fallback === true): the shared toon program
+   (InstancedMesh count 1, like env's layers) plus 'state' window strips — no 'city'
+   program; LED boards become slow solid colour fades.
 
    FOR THE ENVIRONMENT (env.js mounts it when window.SLCity3D exists)
-     var city = SLCity3D.create(K, SL3D, {tier, member, reduced, name, seed, show, fallback, programs})
+     var city = SLCity3D.create(K, SL3D, {tier, member, reduced, name, seed, show, fallback})
                                         show: the starting k (no ripple); fallback: true forces / false forbids
-                                        the LOW fallback; programs: renderer.info.programs.length when known
+                                        the LOW fallback (the tier decides otherwise); a legacy `programs`
+                                        option is ignored
        scene.add(city.group)            (env adds it to its own group)
      city.update(dt, k) → animating     once per frame; k = env's light mix (0 golden hour … 1 Showtime).
                                         A rising k past 0.25 starts the wake ripple. false = still
@@ -1101,6 +1102,17 @@
     return B.arrays();
   }
 
+  /* ---------------- which build (pure) ----------------
+     LOW draws the toon + 'state' fallback, every time: the 'city' program would be a 13th on a
+     12-program tier. The tier alone decides — the old gate read renderer.info.programs at create
+     time, which is 0 on a mount's fresh renderer, so the fallback never ran on a first open and
+     ran on later ones (perf-6). force: true forces it, false forbids it (QA, the lab). */
+  function fallbackFor(tier, force) {
+    if (force === true) return true;
+    if (force === false) return false;
+    return parseTier(tier) === 'LOW';
+  }
+
   /* ---------------- fallback window strips (pure) ----------------
      the LOW toon fallback draws lit windows as 'state' quads: a few floor bands per façade
      facing the island, each switched by its own threshold (hash < lit fraction) */
@@ -1228,10 +1240,7 @@
       uN3: { value: col('Laser Lime', '#C6FF3D') }, uMember: { value: memberCol },
       uLed: { value: led ? led.texture : null }, uHero: { value: heroTex }
     };
-    var programsNow = typeof opts.programs === 'number' ? opts.programs : (function () {
-      try { var inf = SL3D && SL3D.info ? SL3D.info() : null; return inf && inf.lease ? inf.lease.programs : 0; } catch (e) { return 0; }
-    }());
-    var useFallback = opts.fallback === true || (opts.fallback !== false && tier === 'LOW' && budget.programs > 0 && programsNow >= budget.programs);
+    var useFallback = fallbackFor(tier, opts.fallback);
     if (!U.uLed.value) useFallback = true;
 
     var owned = { geos: [], mats: [], meshes: [] };
@@ -1724,7 +1733,7 @@
     LIT: LIT, WAKE: WAKE, HAZE: HAZE, HERO_MUL: HERO_MUL, NEIGHBOUR_DIFF: NEIGHBOUR_DIFF, FLANK: FLANK, TWIST_DEG: TWIST_DEG,
     /* pure helpers */
     quayZ: quayZ, quayCurve: quayCurve, curveAt: curveAt, heightEnvelope: heightEnvelope, counts: counts,
-    layout: layout, buildArrays: buildArrays, windowStrips: windowStrips, deckY: deckY, roosts: roosts,
+    layout: layout, buildArrays: buildArrays, windowStrips: windowStrips, fallbackFor: fallbackFor, deckY: deckY, roosts: roosts,
     heroWords: heroWords, signName: signName, cellDistance: cellDistance, inExclusion: inExclusion, linear: linear, fnv: fnv,
     SHADERS: { CITY_VERT: CITY_VERT, CITY_FRAG: CITY_FRAG }
   };

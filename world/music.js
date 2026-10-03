@@ -24,6 +24,7 @@
          layer(name, on), key(semitones), drop(), sync(seconds),
          layers(n), lowpass(hz, sec), duck(level, ms), clock(), track() }
      SLMusic.island('island_day'|'island_showtime'|'shop'), SLMusic.stopAll(ms),
+         ('island_day' is the golden-hour loop; 'golden' / 'golden_hour' / 'dusk' are aliases for it)
      SLMusic.duck(level, ms), SLMusic.enabled(), SLMusic.setEnabled(on),
      SLMusic.clock() -> {bpm, t0, beat, playing, track}, SLMusic.preload(track)
 
@@ -59,8 +60,10 @@
 
   /* ---------------- tracks (art bible: BPM / key / mood / progression) ---------------- */
   var TRACKS = {
-    island_day: { bpm: 100, key: 'F major', bars: 16, chords: ['Bb', 'C', 'Am', 'Dm'], level: 3, island: true,
-      mood: 'sunny bubblegum synth-pop with a tropical lilt, calm enough to build to' },
+    /* golden hour (Encore City v2): the same 16 bars at 100 BPM in F major, now IVmaj7-V7-iiim7-vim7
+       city-pop under a warm electric-piano lead, with plucks where the marimba and steel drum were */
+    island_day: { bpm: 100, key: 'F major', bars: 16, chords: ['Bbmaj7', 'C7', 'Am7', 'Dm7'], level: 3, island: true,
+      mood: 'golden-hour city-pop: a warm electric piano, plucked answers and a bouncing octave bass, calm enough to build to' },
     island_showtime: { bpm: 118, key: 'Bb major', bars: 16, chords: ['Eb', 'F', 'Dm', 'Gm'], level: 3, island: true,
       mood: 'dreamy evening synth-pop with plucky arpeggios, airy pumping pads and a soft-punchy kick' },
     shop: { bpm: 92, key: 'D major', bars: 16, chords: ['Gmaj7', 'A', 'F#m7', 'Bm7'], level: 3, island: true, swing: 0.16, bassDur: 0.3,
@@ -75,14 +78,18 @@
       mood: 'bright driving electro-pop and future-bass, not aggressive' }
   };
   var TRACK_IDS = Object.keys(TRACKS);
-  var ISLAND_ALIAS = { day: 'island_day', island: 'island_day', island_day: 'island_day', showtime: 'island_showtime',
+  var ISLAND_ALIAS = { day: 'island_day', island: 'island_day', island_day: 'island_day', golden: 'island_day',
+    golden_hour: 'island_day', goldenhour: 'island_day', dusk: 'island_day', showtime: 'island_showtime',
     island_showtime: 'island_showtime', night: 'island_showtime', shop: 'shop' };
 
   /* ---------------- patterns (16 steps per bar; every list is steps 0-15) ---------------- */
   var FOUR = [0, 4, 8, 12], OFF8 = [2, 6, 10, 14], EVEN = [0, 2, 4, 6, 8, 10, 12, 14], ODD = [1, 3, 5, 7, 9, 11, 13, 15];
   var ALL16 = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
   var PATTERNS = {
-    island_day: { kick: FOUR, clap: [4, 12], hat: OFF8, bass: [0, 3, 8, 11], steel: [7], chime: [12, 13, 14, 15] },
+    /* golden hour: four-on-the-floor under a syncopated octave bass (bassUp = up an octave), off-beat
+       electric-piano chords (comp), plucked answers (pick) and an EP run up into the loop (run) */
+    island_day: { kick: FOUR, clap: [4, 12], hat: OFF8, bass: [0, 3, 6, 8, 11, 14], bassUp: [6, 14], comp: [2, 10],
+      pick: [11, 14], run: [12, 13, 14, 15] },
     island_showtime: { kick: FOUR, clap: [4, 12], hat: OFF8, ohat: OFF8, bass: [0, 3, 8, 11], chime: [12, 13, 14, 15] },
     shop: { kick: [0, 7, 10], clap: [4, 12], hat: EVEN, bass: [0, 8], keys: [0, 10] },
     course: { kick: FOUR, kickHalf: [0, 8], clap: [4, 12], clapHalf: [8], hat: ODD, ohat: OFF8, bass: EVEN, bassOct: true,
@@ -91,18 +98,20 @@
     kart: { kick: FOUR, clap: [4, 12], hat: ALL16, ohat: OFF8, bass: OFF8, stab: [0, 3, 6, 10], roll: [12, 13, 14, 15] }
   };
   /* original melodies as rhythm (steps) + chord-tone indices (0 root, 1 third,
-     2 fifth, 3 root+8ve ...), alternating A/B by bar so they follow the chords */
+     2 fifth, then the 7th of a 7th chord, then the next octave ...), alternating A/B
+     by bar so they follow the chords */
   var MELODY = {
-    island_day: { inst: 'pluck', lo: 53, d: 0.32, A: { s: [0, 3, 6, 10, 12], n: [4, 3, 4, 5, 4] }, B: { s: [0, 3, 6, 8], n: [3, 2, 1, 2] } },
+    island_day: { inst: 'epiano', lo: 57, d: 0.42, A: { s: [0, 3, 6, 10, 12, 14], n: [5, 4, 3, 4, 2, 3] }, B: { s: [0, 2, 6, 8], n: [4, 5, 4, 3] } },
     shop: { inst: 'bell', lo: 62, d: 0.9, A: { s: [0, 8], n: [4, 3] }, B: { s: [0, 8], n: [5, 4] } },
     course: { inst: 'bell', lo: 60, d: 0.32, A: { s: [0, 2, 4, 7, 10, 12], n: [3, 4, 5, 4, 3, 2] }, B: { s: [0, 3, 6, 8, 12], n: [5, 4, 3, 4, 3] } },
     kart: { inst: 'lead', lo: 57, d: 0.16, A: { s: [0, 3, 6, 8, 11, 14], n: [3, 5, 4, 3, 4, 2] }, B: { s: [0, 3, 6, 10, 12], n: [5, 4, 3, 2, 3] } }
   };
-  var REG = { bass: 40, pad: 55, keys: 57, arp: 60, steel: 55, chime: 55, stab: 60, horn: 55, fill: 60 };
+  var REG = { bass: 40, pad: 55, keys: 57, arp: 60, steel: 55, chime: 55, stab: 60, horn: 55, fill: 60, pick: 60, run: 57 };
   var MIX = { kick: 0.9, tom: 0.5, clap: 0.35, hat: 0.12, ohat: 0.12, bass: 0.24, pad: 0.06, keys: 0.05, arp: 0.07, lead: 0.07,
-    steel: 0.05, chime: 0.05, brass: 0.05, slide: 0.05, riser: 0.06, swell: 0.08, hey: 0.3, crackle: 0.012, tap: 0.3 };
+    steel: 0.05, chime: 0.05, brass: 0.05, slide: 0.05, riser: 0.06, swell: 0.08, hey: 0.3, crackle: 0.012, tap: 0.3,
+    comp: 0.04, pick: 0.05, run: 0.055 };
   var MIX_TRACK = {
-    island_day: { kick: 0.75, clap: 0.28, hat: 0.1, lead: 0.085 },
+    island_day: { kick: 0.72, clap: 0.26, hat: 0.1, bass: 0.22, lead: 0.09, arp: 0.06 },
     island_showtime: { kick: 0.85, clap: 0.3, ohat: 0.1, arp: 0.06 },
     shop: { kick: 0.55, clap: 0.16, hat: 0.08, bass: 0.2 },
     course: { lead: 0.06 },
@@ -120,7 +129,7 @@
   /* priority under the voice cap: drums and bass are never the ones dropped */
   var PRI = { kick: 10, tom: 10, count: 10, bass: 9, clap: 8, roll: 7, lead: 7, pad: 6, stab: 6, arp: 5, accent: 5,
     hat: 4, hey: 4, fx: 3, crackle: 1 };
-  var TAIL = { brass: 0.16, swell: 0.1, bell: 0.05, pluck: 0.02, keys: 0.02, lead: 0.08, slide: 0.08, pad: 0.15, riser: 0.05 };
+  var TAIL = { brass: 0.16, swell: 0.1, bell: 0.05, pluck: 0.02, keys: 0.02, lead: 0.08, slide: 0.08, pad: 0.15, riser: 0.05, epiano: 0.12 };
 
   /* ---------------- harmony ---------------- */
   var PC = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
@@ -270,7 +279,10 @@
     var T = TRACKS[id], L = st.level | 0, lb = mod(bar, T ? T.bars : 16), p;
     switch (id) {
       case 'island_day':
-        p = { kick: 1, clap: 1, hat: 1, bass: 1, lead: lb < 8, arp: lb >= 8, arpRate: 8, steel: lb % 2 === 1, chime: lb === T.bars - 1 };
+        /* the electric piano sings bars 1-8 and plucks arpeggiate bars 9-16; EP chords comp on the
+           off-beats throughout, plucks answer the short phrase on odd bars, an EP run turns the loop */
+        p = { kick: 1, clap: 1, hat: 1, bass: 1, comp: 1, lead: lb < 8, arp: lb >= 8, arpRate: 8, pick: lb < 8 && lb % 2 === 1,
+          run: lb === T.bars - 1 };
         break;
       case 'island_showtime':
         p = { kick: 1, clap: 1, ohat: 1, bass: 1, arp: 1, arpRate: 16, pad: 1, pump: 1, chime: lb % 4 === 3 };
@@ -348,15 +360,17 @@
       if (id === 'course' && st.theme === 'snow') out.push(ev('sleigh', 0, V.hat, 0.1, PRI.hat));
       else out.push(ev('hat', 0, V.hat, 0.035, PRI.hat));
     }
-    /* bass: one root per chord; course bounces root/octave on the even steps */
+    /* bass: one root per chord; course bounces root/octave on the even steps, golden hour on its bassUp steps */
     if (p.bass && on(P.bass)) {
       var bm = placeRoot(ch.root, REG.bass) + tr;
-      if (P.bassOct && P.bass.indexOf(k) % 2 === 1) bm += 12;
+      if ((P.bassOct && P.bass.indexOf(k) % 2 === 1) || on(P.bassUp)) bm += 12;
       out.push(ev('bass', bm, V.bass, T.bassDur || 0.2, PRI.bass));
     }
     /* chords: one per bar */
     if (p.pad && k === 0) out.push(ev('pad', up(padNotes(ch, REG.pad)), V.pad, 240 / bpm * 0.98, PRI.pad));
     if (p.keys && on(P.keys)) out.push(ev('keys', up(padNotes(ch, REG.keys)), V.keys, 0.8, PRI.pad));
+    /* electric-piano comping: short rootless 3-5-7 voicings on the off-beats */
+    if (p.comp && on(P.comp)) out.push(ev('epiano', up(padNotes(ch, REG.keys)), V.comp, 0.3, PRI.pad));
     if (p.stab && on(P.stab)) {
       var lo = id === 'penalty' ? REG.horn : REG.stab;
       out.push(ev('brass', up([chordTone(ch, 0, lo), chordTone(ch, 1, lo), chordTone(ch, 2, lo)]), V.brass, T.stabDur || 0.12, PRI.stab));
@@ -378,6 +392,9 @@
     /* accents and ear candy */
     if (p.steel && on(P.steel)) out.push(ev('bell', chordTone(ch, 4, REG.steel) + tr, V.steel, 0.22, PRI.accent));
     if (p.chime && on(P.chime)) out.push(ev('bell', chordTone(ch, 3 + P.chime.indexOf(k), REG.chime) + tr, V.chime, 0.45, PRI.accent));
+    /* plucked answers (the chord's root then fifth, an octave up) and the EP run up the chord into the next loop */
+    if (p.pick && on(P.pick)) out.push(ev('pluck', chordTone(ch, 4 + 2 * P.pick.indexOf(k), REG.pick) + tr, V.pick, 0.14, PRI.accent));
+    if (p.run && on(P.run)) out.push(ev('epiano', chordTone(ch, 3 + P.run.indexOf(k), REG.run) + tr, V.run, 0.24, PRI.accent));
     if (p.fill && on(P.fill)) out.push(ev('slide', [chordTone(ch, 0, REG.fill) + tr, chordTone(ch, 3, REG.fill) + tr + 7], V.slide, 0.3, PRI.fx));
     if (p.riser && k === 0) out.push(ev('riser', 0, V.riser, 240 / bpm, PRI.fx));
     if (p.crowd && on(P.crowd)) out.push(ev('swell', 0, V.swell, 4 * sd, PRI.fx));
@@ -676,6 +693,26 @@
             if (o.detune) o.detune.setValueAtTime(cents, t);
             o.connect(lp); o.start(t); o.stop(t + dur + 0.2);
           });
+        });
+        lp.connect(g); g.connect(out);
+      },
+      /* electric piano: per note a sine carrier FM'd by a 1:1 sine whose index falls 1.2 -> 0.2 (a warm
+         bark that mellows) and a faint 14:1 tine ping (60 ms), all under one envelope and a 2.6 kHz lowpass */
+      epiano: function (c, out, t, freqs, dur, v) {
+        var lp = c.createBiquadFilter(), g = c.createGain(), hold = Math.min(0.5, Math.max(0.05, dur)), end = t + dur;
+        lp.type = 'lowpass'; lp.frequency.value = 2600; lp.Q.value = 0.5;
+        g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(v, t + 0.006);
+        g.gain.exponentialRampToValueAtTime(Math.max(v * 0.4, 1e-4), t + hold);
+        g.gain.exponentialRampToValueAtTime(Math.max(v * 0.003, 1e-4), end + 0.12); g.gain.linearRampToValueAtTime(0, end + 0.13);
+        freqs.forEach(function (f) {
+          var car = c.createOscillator(), mod = c.createOscillator(), mg = c.createGain(), tine = c.createOscillator(), tg = c.createGain();
+          car.type = 'sine'; car.frequency.setValueAtTime(f, t);
+          mod.type = 'sine'; mod.frequency.setValueAtTime(f, t);
+          mg.gain.setValueAtTime(f * 1.2, t); mg.gain.exponentialRampToValueAtTime(f * 0.2, t + 0.3);
+          tine.type = 'sine'; tine.frequency.setValueAtTime(f * 14, t);
+          tg.gain.setValueAtTime(f * 0.5, t); tg.gain.exponentialRampToValueAtTime(Math.max(f * 0.005, 1e-4), t + 0.06);
+          mod.connect(mg); mg.connect(car.frequency); tine.connect(tg); tg.connect(car.frequency); car.connect(lp);
+          [car, mod, tine].forEach(function (o) { o.start(t); o.stop(end + 0.15); });
         });
         lp.connect(g); g.connect(out);
       },
@@ -1106,6 +1143,7 @@
         case 'sleigh': INST.sleigh(c, out, t, e.v); return;
         case 'bass': INST.bass(c, out, t, midiHz(e.m), e.d, e.v); return;
         case 'pad': INST.pad(c, d.padGain, t, e.m.map(midiHz), e.d, e.v); return;
+        case 'epiano': INST.epiano(c, out, t, [].concat(e.m).map(midiHz), e.d, e.v); return;
         case 'hey': INST.hey(c, out, t, e.v); return;
         case 'riser': INST.riser(c, out, t, e.d, e.v); return;
         case 'crackle': INST.crackle(c, out, t, e.v); return;

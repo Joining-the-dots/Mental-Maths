@@ -104,7 +104,7 @@ const oscCount = ctx => ctx.starts.filter(s => s.kind === 'osc').length;
    ================================================================ */
 test('tracks match the art bible: BPM, key, mood, progression', () => {
   const want = {
-    island_day: [100, 'F major', ['Bb', 'C', 'Am', 'Dm']], island_showtime: [118, 'Bb major', ['Eb', 'F', 'Dm', 'Gm']],
+    island_day: [100, 'F major', ['Bbmaj7', 'C7', 'Am7', 'Dm7']], island_showtime: [118, 'Bb major', ['Eb', 'F', 'Dm', 'Gm']],
     shop: [92, 'D major', ['Gmaj7', 'A', 'F#m7', 'Bm7']], course: [128, 'C major', ['F', 'G', 'Em', 'Am']],
     penalty: [112, 'G major', ['C', 'D', 'Bm', 'Em']], kart: [140, 'A minor', ['Am', 'F', 'C', 'G']]
   };
@@ -164,7 +164,9 @@ test('every pattern step is within 0-15, and every melody too', () => {
 test('art-bible patterns: day/showtime/shop/course/penalty/kart drum and bass steps', () => {
   const P = M.PATTERNS;
   assert.deepEqual(P.island_day.kick, [0, 4, 8, 12]); assert.deepEqual(P.island_day.clap, [4, 12]);
-  assert.deepEqual(P.island_day.hat, [2, 6, 10, 14]); assert.deepEqual(P.island_day.bass, [0, 3, 8, 11]);
+  assert.deepEqual(P.island_day.hat, [2, 6, 10, 14]); assert.deepEqual(P.island_day.bass, [0, 3, 6, 8, 11, 14]);
+  assert.deepEqual(P.island_day.bassUp, [6, 14]); assert.deepEqual(P.island_day.comp, [2, 10]);
+  assert.deepEqual(P.island_day.pick, [11, 14]); assert.deepEqual(P.island_day.run, [12, 13, 14, 15]);
   assert.deepEqual(P.island_showtime.ohat, [2, 6, 10, 14]);
   assert.deepEqual(P.shop.kick, [0, 7, 10]); assert.deepEqual(P.shop.clap, [4, 12]); assert.deepEqual(P.shop.bass, [0, 8]);
   assert.deepEqual(P.shop.hat, [0, 2, 4, 6, 8, 10, 12, 14]);
@@ -202,7 +204,7 @@ test('one chord per bar: every pitched note in a bar belongs to that bar\'s chor
         const bar = Math.floor(s / 16), ch = M.chordAt(id, st, bar), tr = st.transpose | 0;
         const pcs = ch.iv.map(i => (ch.root + i + tr) % 12);
         for (const e of evs) {
-          if (['bass', 'pad', 'keys', 'brass', 'pluck'].includes(e.i)) {
+          if (['bass', 'pad', 'keys', 'brass', 'pluck', 'epiano'].includes(e.i)) {
             for (const m of [].concat(e.m)) assert.ok(pcs.includes(((m % 12) + 12) % 12), `${id} bar ${bar} step ${s % 16} ${e.i} ${m} not in ${ch.name}`);
           }
           if (e.i === 'bass') assert.equal(((e.m % 12) + 12) % 12, (ch.root + tr) % 12, `${id} bass plays the chord root`);
@@ -220,16 +222,65 @@ test('pads change exactly once per bar (on the downbeat)', () => {
   }
 });
 
-test('island day: arp in 8ths on bars 9-16 only, melody on bars 1-8', () => {
-  const arp = [], lead = [];
+test('golden hour (island_day): EP melody on bars 1-8, pluck arp in 8ths on bars 9-16, EP comping, plucked answers and a run into the loop', () => {
+  const arp = new Set(), lead = new Set(), comp = new Set(), pick = new Set(), run = [], seen = new Set();
   playBars('island_day', null, 16, (s, evs) => {
-    const bar = Math.floor(s / 16);
-    if (evs.some(e => e.i === 'pluck' && e.d === 0.22)) arp.push(bar);
-    if (evs.some(e => e.i === 'pluck' && e.d === 0.32)) lead.push(bar);
+    const bar = Math.floor(s / 16), k = s % 16;
+    for (const e of evs) {
+      seen.add(e.i);
+      if (e.i === 'pluck' && e.d === 0.22) arp.add(bar);
+      if (e.i === 'pluck' && e.d === 0.14) pick.add(bar);
+      if (e.i === 'epiano' && e.d === 0.42) lead.add(bar);
+      if (e.i === 'epiano' && Array.isArray(e.m)) { comp.add(bar); assert.ok([2, 10].includes(k), 'EP chords comp on the off-beats'); assert.equal(e.m.length, 3); }
+      if (e.i === 'epiano' && e.d === 0.24) run.push([bar, k, e.m]);
+    }
   });
-  assert.ok(arp.length && arp.every(b => b >= 8), 'arp only on bars 9-16');
-  assert.ok(lead.length && lead.every(b => b < 8), 'melody only on bars 1-8');
+  assert.deepEqual([...lead].sort((a, b) => a - b), [0, 1, 2, 3, 4, 5, 6, 7], 'the electric-piano melody sings bars 1-8');
+  assert.deepEqual([...arp].sort((a, b) => a - b), [8, 9, 10, 11, 12, 13, 14, 15], 'plucks arpeggiate bars 9-16');
+  assert.equal(comp.size, 16, 'EP chords in every bar');
+  assert.deepEqual([...pick].sort((a, b) => a - b), [1, 3, 5, 7], 'plucked answers on the odd melody bars');
+  assert.deepEqual(run.map(r => [r[0], r[1]]), [[15, 12], [15, 13], [15, 14], [15, 15]], 'one EP run up into the loop');
+  for (let i = 1; i < run.length; i++) assert.ok(run[i][2] > run[i - 1][2], 'the run climbs');
+  /* the v1 marimba lead and steel-drum / chime bells are gone; showtime keeps its own band */
+  assert.ok(!seen.has('bell') && !seen.has('lead'), 'no bells and no square lead at golden hour');
+  assert.equal(M.MELODY.island_day.inst, 'epiano');
   assert.deepEqual(stepsOf('island_day', null, 1, 'kick'), [0, 4, 8, 12]);
+  /* the bass bounces up an octave on the push steps */
+  const bass = [];
+  playBars('island_day', null, 1, (s, evs) => evs.filter(e => e.i === 'bass').forEach(e => bass.push([s, e.m])));
+  assert.deepEqual(bass.map(b => b[0]), [0, 3, 6, 8, 11, 14]);
+  assert.deepEqual(bass.map(b => b[1] - bass[0][1]), [0, 0, 12, 0, 0, 12]);
+});
+
+test('golden hour: the same bar length and clock (16 bars, 2.4 s a bar, 38.4 s a loop); the island context aliases', () => {
+  assert.equal(M.TRACKS.island_day.bars, 16);
+  close(M.barDur(M.TRACKS.island_day.bpm), 2.4, 1e-12);
+  close(M.loopSeconds(M.TRACKS.island_day.bpm, M.TRACKS.island_day.bars), 38.4, 1e-9);
+  assert.ok(/golden-hour city-pop/.test(M.TRACKS.island_day.mood));
+  for (const c of ['golden', 'golden_hour', 'GoldenHour', 'dusk', 'day', 'island_day']) assert.equal(M.islandTrack(c), 'island_day', c);
+  for (const c of ['showtime', 'night', 'island_showtime']) assert.equal(M.islandTrack(c), 'island_showtime', c);
+  assert.equal(M.islandTrack('nope'), null);
+  /* Showtime is untouched: its pattern, arrangement and harmony */
+  assert.deepEqual(M.PATTERNS.island_showtime, { kick: [0, 4, 8, 12], clap: [4, 12], hat: [2, 6, 10, 14], ohat: [2, 6, 10, 14], bass: [0, 3, 8, 11], chime: [12, 13, 14, 15] });
+  assert.deepEqual(M.parts('island_showtime', { level: 3, layers: {} }, 3), { kick: 1, clap: 1, ohat: 1, bass: 1, arp: 1, arpRate: 16, pad: 1, pump: 1, chime: true });
+  assert.equal(M.MELODY.island_showtime, undefined);
+});
+
+test('engine: the golden-hour electric piano is an FM voice (1:1 modulator + 14:1 tine into the carrier) with clean envelopes', async () => {
+  const r = rig(); r.eng._gesture();
+  r.eng.island('golden'); await flush();
+  assert.equal(r.eng.state().track, 'island_day');
+  r.run(4);
+  const oscs = r.ctx.starts.filter(s => s.kind === 'osc');
+  /* a tine is an oscillator 14x a carrier, whose gain feeds that carrier's frequency */
+  const tines = oscs.filter(s => oscs.some(o => o !== s && Math.abs(o.f * 14 - s.f) < 1e-6 && o.node.type === 'sine'));
+  assert.ok(tines.length >= 4, 'EP notes played (' + tines.length + ')');
+  const fmGains = r.ctx.nodes.filter(n => n.kind === 'gain' && n.outs.some(o => o && o.constructor && o.constructor.name === 'FakeParam'));
+  assert.ok(fmGains.length >= 2 * tines.length, 'every EP note has a modulator and a tine into its carrier frequency');
+  for (const t of tines) {
+    const car = oscs.find(o => Math.abs(o.f * 14 - t.f) < 1e-6);
+    assert.ok(car.f > 100 && car.f < 1200, 'EP notes sit in a warm register (' + car.f.toFixed(1) + ' Hz)');
+  }
 });
 
 test('course layers follow hype: x1 kick/bass/clap, x2 + hats, x3 + 16th arp, FEVER + pad/open hats/bell lead and +2 semitones', () => {

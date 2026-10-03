@@ -891,6 +891,8 @@ html body .slw-grid {
 html body .slw-grid > .slw-card {
   aspect-ratio: 3 / 4;   /* at least 3:4; grows taller when the content needs it */
   align-self: stretch;   /* aspect-ratio items don't stretch by default: keep rows even */
+  width: 100%;           /* the track sets the width; a stretched height must never widen the card past it */
+  min-width: 0;
   gap: 5px;
   padding: 8px 8px 10px;
   background: var(--sle-card);

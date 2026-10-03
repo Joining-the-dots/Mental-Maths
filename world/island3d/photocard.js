@@ -18,15 +18,17 @@
            data-pc="<catalogue id>"  data-st='<style JSON>' (optional)
            data-pck="<SLIslandLook.stateKey>" (optional; used when data-st is absent)
          and swaps its SVG for a 256² transparent PNG, progressively: memory hit →
-         now; Cache Storage 'sl-pc-<LOOK_VERSION>' hit → next tick; otherwise a
-         queued render. The SVG stays in place (visibility hidden) to keep the
-         layout, and the <img data-pc-img> is laid over it. Resolves with how
-         many elements got a PNG. Call it after every paint (cheap and idempotent).
+         now; Cache Storage 'sl-pc-<LOOK_VERSION>' (sl-pc-2 for Encore City) hit →
+         next tick; otherwise a queued render. The SVG stays in place (visibility
+         hidden) to keep the layout, and the <img data-pc-img> is laid over it.
+         Resolves with how many elements got a PNG. Call it after every paint
+         (cheap and idempotent).
      turntable(host, id, st, opts) → stop()
-         A live, slowly turning (0.15 rev/s) stage riser (r 0.7, #FFF0FA top,
-         Neon Pink ring) with 2 crossing spot cones, for the shop detail sheet and
-         purchase debuts. The canvas covers host (made position:relative when
-         static) and crossfades over host's SVG on its first frame. Drag to turn.
+         A live, slowly turning (0.15 rev/s) stage riser (a Gunmetal disc r 0.7
+         with a Neon Magenta ring) with 2 crossing spot cones (Neon Magenta, LED
+         Cyan), for the shop detail sheet and purchase debuts. The canvas covers
+         host (made position:relative when static) and crossfades over host's SVG
+         on its first frame. Drag to turn.
          opts {debut: true → one 360° turn over 1.2 s + a sparkle burst,
                reduced (default: prefers-reduced-motion) → a still riser and
                  still spotlights (drag still works) and a sparkle fade,
@@ -38,25 +40,38 @@
          stop.ready        Promise<boolean> — true once the 3D view shows, false on failure
      prewarm(ids, {st}) → Promise<number>   ids: ['tree_oak', {id, st}, …]; low priority
      url(id, st) → Promise<string|null>     the icon's object URL (renders when needed)
+     setUser({color})                       the child's member colour (the studio rim); icons are
+                                            cached per rim colour, so siblings never share a tint
      clear() → Promise                      drop the memory + Cache Storage icons, cancel the queue
      dispose()                              stop every turntable, free the renderer now
-     info()                                 QA counters (renders, hits, queue, gpu, …)
+     info()                                 QA counters (renders, hits, queue, gpu, member, …)
 
    WHAT RENDERS (SLIslandLook.resolveStyle decides the state)
-     style items (wall_*, roof_*, door_*, detail_*) → the player's own house wearing
-       that style (data-st = the house style {wall, roof, door, details});
+     style items (wall_*, roof_*, door_*, detail_*, shape_*) → the player's own house
+       wearing that style, on the player's CURRENT shape (data-st {wall, roof, door,
+       details, shape}) with trim variant 0 — the per-child trim never reaches an icon;
+     city buildings (bld_*) → always trim variant 0, and every LED screen shows the
+       look's photocard program (the screen tower's star field);
      accessories (acc_*) → the player's active pet wearing it (data-st {pet, acc});
      pets → the pet with st.acc; land_* → a little land diorama built here;
      everything else → SL3D.make(id, st). A missing model (placeholder) keeps the SVG.
      Turntables animate the item with its model's idle(a) and pets with
      SL3D.makeRig(…).play('idle') (the static template when makeRig is missing).
+     NO NAMES in a photocard: an LED window on the name program becomes the star
+     field and a sign cell holding the child's name or initial is hidden (the neon
+     tower's blade keeps only its ✦), so the shared icon cache never holds a name.
+     Models see a.photocard = true, a.member = the rim hex and a.screen = the LED
+     program to show, to pick their non-personal look themselves.
 
    LOOK: FOV 30 at 28° elevation; icons at 25° yaw (3/4 from the front-left)
    with the item filling 80% of the frame (framed on its sampled vertices, so
-   round items fill it as well as boxy ones); Day lights (SLIslandLook.DAY hemi +
-   sun, Day rim); no shadow map — a soft blob shadow. While a photocard renders,
-   the shared kit's rim and Showtime mix are held at Day and then restored, so
-   an icon never depends on what the island was doing.
+   round items fill it as well as boxy ones); the STUDIO preset (hemi Studio
+   Sky / Studio Ground at 1.4, a Studio Key light of 2.2 from (−5, 8, 9), the
+   member colour as the rim at 0.45); a transparent clear, so the PNG sits on
+   the dark CSS image well; no shadow map — a soft blob shadow. While a
+   photocard renders, the shared kit's rim and Showtime mix are held at the
+   studio look and then restored, so an icon never depends on what the island
+   was doing.
    ================================================================ */
 (function (root, factory) {
   var hasDom = typeof window !== 'undefined' && typeof document !== 'undefined' && !!document.createElement;
@@ -69,7 +84,7 @@
   /* a second copy of this file (stage injection + the app) must not start a second engine */
   if (HAS_DOM && root.SLPhotocard && root.SLPhotocard.__pc) return root.SLPhotocard;
 
-  var VERSION = 1;
+  var VERSION = 2;
   var DEG = Math.PI / 180, TAU = Math.PI * 2;
   var OUT = 256;                       /* icon PNG size */
   var BUF = 512;                       /* the offscreen drawing buffer: icons render 2× and downsample */
@@ -79,16 +94,28 @@
     rps: 0.15, start: -25, fill: 0.86, frameMs: 31, riserR: 0.7, riserH: 0.16, itemR: 0.6, itemH: 1.45,
     flyDur: 2, flyFrom: { yaw: -40, elev: 12, dist: 0.75 }, dragDegPerPx: 0.6, resumeAfter: 1.5
   };
-  var RISER_TOP = '#FFF0FA';
+  /* the photocard STUDIO light (art bible v2): a cool hemisphere, one warm key from the
+     front-right and the child's member colour as the rim; '@member' = the setUser colour */
+  var STUDIO = { hemiSky: 'Studio Sky', hemiGround: 'Studio Ground', hemiIntensity: 1.4, keyColor: 'Studio Key', keyIntensity: 2.2,
+                 keyPos: [-5, 8, 9], rim: '@member', rimStrength: 0.45, exposure: 1.0 };
+  /* the renderer clears to fully transparent: the PNG and the turntable sit on the dark CSS well */
+  var CLEAR = { color: 0x000000, alpha: 0 };
+  /* the turntable riser: a Gunmetal disc (the gunmetal matcap; vertex tones for a toon fallback),
+     a Neon Magenta rim ring and two crossing spot cones */
+  var RISER = { mat: 'gunmetal', top: 'Gunmetal Mid', side: 'Gunmetal', base: 'Gunmetal Deep', ring: 'Neon Magenta',
+                cones: ['Neon Magenta', 'LED Cyan'], coneAlpha: 0.2 };
   var MEM_MAX = 160, STORE_MAX = 400, TRIM_EVERY = 24, PMAX = 40, CANVAS_MAX = 3;
   var CACHE_PREFIX = 'sl-pc-';
   var ID_RE = /^[a-z][a-z0-9_]{1,47}$/;
-  var SLOTS = ['wall', 'roof', 'door', 'course', 'ball', 'stadium', 'kart'];
+  var SLOTS = ['wall', 'roof', 'door', 'shape', 'course', 'ball', 'stadium', 'kart'];
   var ACC_SLOTS = ['hat', 'neck', 'face', 'back'];
-  /* the Day preset, for when world-look.js is not loaded (same values) */
-  var DAY_FALLBACK = { hemiSky: 'Hemi Sky Day', hemiGround: 'Hemi Ground Day', hemiIntensity: 1.9, sunColor: 'Sun Day', sunIntensity: 2.4,
-                       sunPos: [-7, 14, 9], exposure: 1.0, rimColor: 'Cloud White', rimStrength: 0.28 };
-  var SPARKLE_TOKENS = ['Star Gold', 'Neon Pink', 'Holo Blue', 'Cloud White'];
+  var SPARKLE_TOKENS = ['Star Gold', 'Neon Magenta', 'LED Cyan', 'Bone White'];
+  /* the kit's atlas layouts (SLKit.LED / SLKit.SIGN), for reading which cell a screen or sign shows */
+  var LED_LAYOUT = { w: 512, h: 256, stripW: 256, cellH: 64, cols: 2 };
+  var LED_PROGRAMS = ['eq', 'wave', 'spark', 'gradient', 'stars', 'encore', 'showtime', 'name'];
+  var SIGN_LAYOUT = { w: 512, h: 256, cellW: 256, cellH: 64, cols: 2, userCell: 7 };
+  /* display fonts a texture waits for before an icon is drawn (and cached for good) */
+  var FONT_BAGEL = '400 48px "Bagel Fat One"', FONT_DISPLAY = '800 48px "Unbounded"';
 
   /* ================================================================
      PURE HELPERS (no DOM, no THREE; exported for Node tests)
@@ -123,7 +150,8 @@
     }
     return { id: id, st: st, pck: typeof pck === 'string' && pck.trim() ? pck.trim() : null };
   }
-  /* keep only the style fields a photocard uses, with ids that exist in LOOK for that slot */
+  /* keep only the style fields a photocard uses, with ids that exist in LOOK for that slot. The
+     trim variant is never kept: every photocard renders trim 0, so no icon depends on the child */
   function cleanSt(st, L) {
     var out = {}, LOOK = L && L.LOOK;
     if (!st || typeof st !== 'object') return out;
@@ -155,18 +183,22 @@
     k.slice(2).split(',').forEach(function (a) { var e = a && LOOK[a]; if (e && e.socket && ACC_SLOTS.indexOf(e.socket) >= 0) out[e.socket] = a; });
     return out;
   }
-  /* the inverse of SLIslandLook.stateKey: a style object that gives the same key */
+  /* the inverse of SLIslandLook.stateKey: a style object that gives the same key. A house key
+     without the '|s:<shape>|v:<n>' suffix is the cottage (its key stays the exact v1 string);
+     a city building's key is 'v:<n>' */
   function stFromKey(id, key, L) {
     var LOOK = L && L.LOOK, e = LOOK && LOOK[id];
     if (!e || typeof key !== 'string' || !key || key === 'base') return {};
     function ok(v, slot) { return typeof v === 'string' && LOOK[v] && LOOK[v].slot === slot ? v : undefined; }
     function pack(o) { var r = {}; for (var k in o) if (o[k] !== undefined) r[k] = o[k]; return r; }
     if (id === 'house_cottage' || e.kind === 'style') {
-      var m = /^([a-z0-9_]+)\|([a-z0-9_]+)\|([a-z0-9_]+)\|d:([a-z0-9_,]*)$/.exec(key);
+      var m = /^([a-z0-9_]+)\|([a-z0-9_]+)\|([a-z0-9_]+)\|d:([a-z0-9_,]*)(?:\|s:([a-z0-9_]+)\|v:(\d+))?$/.exec(key);
       if (!m) return {};
       var det = m[4] ? m[4].split(',').filter(function (x) { return LOOK[x] && LOOK[x].part === 'detail'; }) : [];
-      return pack({ wall: ok(m[1], 'wall'), roof: ok(m[2], 'roof'), door: ok(m[3], 'door'), details: det });
+      return pack({ wall: ok(m[1], 'wall'), roof: ok(m[2], 'roof'), door: ok(m[3], 'door'), details: det,
+                    shape: ok(m[5] || 'shape_cottage', 'shape'), variant: m[6] != null ? +m[6] : undefined });
     }
+    if (e.kind === 'building') { var v = /^v:(\d+)$/.exec(key); return v ? { variant: +v[1] } : {}; }
     if (id === 'att_course') return pack({ course: ok(key, 'course') });
     if (id === 'att_pitch') { var p = key.split('|'); return pack({ ball: ok(p[0], 'ball'), stadium: ok(p[1], 'stadium') }); }
     if (id === 'att_kart') return pack({ kart: ok(key, 'kart') });
@@ -185,15 +217,17 @@
     if (!ks.length) return 'base';
     return '{' + ks.map(function (k) { return k + ':' + stableKey(o[k]); }).join(',') + '}';
   }
-  /* what actually renders for (id, st): {id, src, st, stateKey, key, kind}.
-     Styles render the house and accessories the pet, so equal pictures share a key. */
+  /* what actually renders for (id, st): {id, src, st, stateKey, key, kind, screen}.
+     Styles render the house (on the player's own shape) and accessories the pet, so equal
+     pictures share a key. Houses and buildings always render trim 0, and screen is the LED
+     program a building shows in a photocard (LOOK show.screen.photocard, e.g. 'stars'). */
   function renderSpec(id, st, L) {
     if (typeof id !== 'string' || !ID_RE.test(id)) return null;
     var s = cleanSt(st, L), LOOK = L && L.LOOK;
     if (!LOOK || typeof L.resolveStyle !== 'function' || typeof L.stateKey !== 'function') {
       var k0 = stableKey(s);
-      var kind0 = /^pet_/.test(id) ? 'pet' : /^land_/.test(id) ? 'land' : /^acc_/.test(id) ? 'acc' : '';
-      return { id: id, src: id, st: s, stateKey: k0, key: id + '#' + k0, kind: kind0 };
+      var kind0 = /^pet_/.test(id) ? 'pet' : /^land_/.test(id) ? 'land' : /^acc_/.test(id) ? 'acc' : /^bld_/.test(id) ? 'building' : '';
+      return { id: id, src: id, st: s, stateKey: k0, key: id + '#' + k0, kind: kind0, screen: kind0 === 'building' ? 'stars' : null };
     }
     var e = LOOK[id];
     if (!e) return null;
@@ -201,8 +235,99 @@
     if (e.kind === 'style') rid = 'house_cottage';
     else if (e.kind === 'acc') { rid = LOOK[rst.pet] && LOOK[rst.pet].kind === 'pet' ? rst.pet : 'pet_puppy'; rst = { acc: rst.acc || {} }; }
     if (!LOOK[rid]) return null;
+    var re = LOOK[rid];
+    if (rid === 'house_cottage' || re.kind === 'building') rst = pinTrim(rst);
     var sk = String(L.stateKey(rid, rst));
-    return { id: rid, src: id, st: rst, stateKey: sk, key: rid + '#' + sk, kind: LOOK[rid].kind };
+    var scr = re.kind === 'building' ? ((re.show && re.show.screen && re.show.screen.photocard) || null) : null;
+    return { id: rid, src: id, st: rst, stateKey: sk, key: rid + '#' + sk, kind: re.kind, screen: scr };
+  }
+  /* a copy of a resolved house / building state on trim 0 */
+  function pinTrim(rst) {
+    var o = {};
+    for (var k in rst) if (Object.prototype.hasOwnProperty.call(rst, k)) o[k] = rst[k];
+    o.variant = 0;
+    return o;
+  }
+  /* the icon cache key: the render key plus the studio rim colour ('@rrggbb'), so two children
+     with different member colours never share a tinted icon; no member → the bare key */
+  function iconKey(key, member) {
+    var m = typeof member === 'string' && /^#?([0-9a-f]{6})$/i.exec(member.trim());
+    return m ? key + '@' + m[1].toLowerCase() : key;
+  }
+  /* the STUDIO preset resolved for one render: token colours as '#RRGGBB' (through L.hex when
+     world-look is loaded), the rim = the member colour, else the look's member fallback */
+  function studioLights(L, member) {
+    function hx(tok) { try { return L && typeof L.hex === 'function' ? L.hex(tok) : null; } catch (e) { return null; } }
+    var m = typeof member === 'string' && /^#?([0-9a-f]{6})$/i.exec(member.trim());
+    return {
+      hemiSky: hx(STUDIO.hemiSky), hemiGround: hx(STUDIO.hemiGround), hemiIntensity: STUDIO.hemiIntensity,
+      keyColor: hx(STUDIO.keyColor), keyIntensity: STUDIO.keyIntensity, keyPos: STUDIO.keyPos.slice(),
+      rim: m ? '#' + m[1].toUpperCase() : hx('@member'), rimStrength: STUDIO.rimStrength, exposure: STUDIO.exposure
+    };
+  }
+  /* which LED program a screen texture window shows (texture offset ox, oy; flipY) → index | -1 */
+  function ledProgramAt(ox, oy, layout) {
+    var A = layout || LED_LAYOUT, col = Math.floor((+ox || 0) * A.w / A.stripW + 1e-6);
+    var row = Math.round(((1 - (+oy || 0)) * A.h - A.cellH) / A.cellH);
+    if (col < 0 || col >= A.cols || row < 0 || row >= Math.round(A.h / A.cellH)) return -1;
+    return row * A.cols + col;
+  }
+  /* which sign-atlas cell a sign texture window starts in → index | -1 (userCell = name + initial) */
+  function signCellAt(ox, oy, layout) {
+    var A = layout || SIGN_LAYOUT, col = Math.floor((+ox || 0) * A.w / A.cellW + 1e-6);
+    var row = Math.round(((1 - (+oy || 0)) * A.h - A.cellH) / A.cellH);
+    if (col < 0 || col >= A.cols || row < 0 || row >= Math.round(A.h / A.cellH)) return -1;
+    return row * A.cols + col;
+  }
+
+  /* No names in a photocard (the shared icon cache must never hold one). On a built copy (its
+     own meshes; the template's shared materials are never edited): every LED screen of a look
+     with a photocard program shows that program (the screen tower's star field), any other LED
+     window on the name program becomes the star field, and a sign window on the name / initial
+     cell is hidden (the neon tower's blade keeps its ✦). Swapped-in materials are photocard
+     siblings of the kit's 'led' / 'sign' materials (K.variant: the same programs). Needs only
+     obj.traverse, the meshes' materials and K, so it runs in Node tests on plain objects. */
+  function atlasKind(m, K) {
+    var nm = String(m.name || '');
+    if (/^led(#|$)/.test(nm)) return 'led';
+    if (/^sign(#|$)/.test(nm)) return 'sign';
+    if (nm || !m.map || !m.map.source) return '';
+    try {
+      if (typeof K.ledAtlas === 'function' && m.map.source === K.ledAtlas().texture.source) return 'led';
+      if (typeof K.signAtlas === 'function' && m.map.source === K.signAtlas().texture.source) return 'sign';
+    } catch (e) { /* no atlases: nothing to compare */ }
+    return '';
+  }
+  function ledPhotocardMat(K, program) {
+    var led = K.ledAtlas(), m = K.variant('led', 'pc:' + program, { map: led.view(program, 0) });
+    led.setWindow(m.map, program, 0);                        /* a turntable's idle may have scrolled it */
+    return m;
+  }
+  function depersonalise(obj, spec, K) {
+    if (!obj || typeof obj.traverse !== 'function' || !K) return 0;
+    var SK = root && root.SLKit, ledL = (SK && SK.LED) || LED_LAYOUT, signL = (SK && SK.SIGN) || SIGN_LAYOUT;
+    var nameProg = LED_PROGRAMS.indexOf('name'), screen = spec && spec.screen, hidden = null, n = 0;
+    function hide() { return hidden || (hidden = K.variant('sign', 'pc:hidden', { visible: false })); }
+    obj.traverse(function (o) {
+      if (!o.isMesh || !o.material) return;
+      var list = Array.isArray(o.material) ? o.material.slice() : [o.material], changed = false;
+      for (var i = 0; i < list.length; i++) {
+        var m = list[i], map = m && m.map;
+        if (!map || !map.offset) continue;
+        var kind = atlasKind(m, K);
+        if (kind === 'led') {
+          var prog = ledProgramAt(map.offset.x, map.offset.y, ledL), want = screen || (prog === nameProg ? 'stars' : null);
+          if (!want || m.name === 'led#pc:' + want) continue;
+          try { list[i] = ledPhotocardMat(K, want); } catch (e) { try { list[i] = hide(); } catch (e2) { o.visible = false; } }
+          changed = true;
+        } else if (kind === 'sign' && signCellAt(map.offset.x, map.offset.y, signL) === signL.userCell) {
+          try { list[i] = hide(); } catch (e) { o.visible = false; }
+          changed = true;
+        }
+      }
+      if (changed) { o.material = Array.isArray(o.material) ? list : list[0]; n++; }
+    });
+    return n;
   }
   function cacheName(lookVersion) { return CACHE_PREFIX + (lookVersion == null ? 0 : lookVersion); }
   /* a same-origin URL for the Cache Storage entry (never fetched; only matched) */
@@ -391,18 +516,28 @@
       get size() { return m.size; }
     };
   }
-  /* items whose banner texture waits for Bagel Fat One */
-  function needsFont(id) { return id === 'att_course' || /^course_/.test(id || ''); }
+  /* the display fonts an item's textures are drawn in: the PET COURSE banner (Bagel Fat One,
+     Unbounded once the banner moves to it) and the city buildings' signs and screens (Unbounded) */
+  function fontsFor(id) {
+    id = id || '';
+    if (id === 'att_course' || /^course_/.test(id)) return [FONT_BAGEL, FONT_DISPLAY];
+    if (/^bld_/.test(id)) return [FONT_DISPLAY];
+    return [];
+  }
+  function needsFont(id) { return fontsFor(id).length > 0; }
 
   var PURE = {
-    VERSION: VERSION, OUT: OUT, BUF: BUF, IDLE_MS: IDLE_MS, CAM: CAM, TT: TT, RISER_TOP: RISER_TOP, CACHE_PREFIX: CACHE_PREFIX,
+    VERSION: VERSION, OUT: OUT, BUF: BUF, IDLE_MS: IDLE_MS, CAM: CAM, TT: TT, STUDIO: STUDIO, CLEAR: CLEAR, RISER: RISER,
+    CACHE_PREFIX: CACHE_PREFIX, LED_LAYOUT: LED_LAYOUT, LED_PROGRAMS: LED_PROGRAMS, SIGN_LAYOUT: SIGN_LAYOUT,
     parseSpec: parseSpec, cleanSt: cleanSt, stFromKey: stFromKey, stableKey: stableKey, renderSpec: renderSpec,
+    iconKey: iconKey, studioLights: studioLights, ledProgramAt: ledProgramAt, signCellAt: signCellAt, depersonalise: depersonalise,
     cacheName: cacheName, cacheUrl: cacheUrl, staleCaches: staleCaches, trimCount: trimCount,
     basis: basis, camPos: camPos, boxPoints: boxPoints, fitView: fitView,
     turntableAngle: turntableAngle, beamSway: beamSway, sizeFor: sizeFor, fitScale: fitScale,
     sparkleAt: sparkleAt, glintAt: glintAt, debutPose: debutPose, alphaRamp: alphaRamp, lru: lru,
-    hash: hash, rnd: rnd, needsFont: needsFont
+    hash: hash, rnd: rnd, needsFont: needsFont, fontsFor: fontsFor
   };
+  [STUDIO, STUDIO.keyPos, CLEAR, RISER, RISER.cones, LED_LAYOUT, LED_PROGRAMS, SIGN_LAYOUT].forEach(Object.freeze);
   var api = { __pc: VERSION };
   Object.keys(PURE).forEach(function (k) { api[k] = PURE[k]; });
 
@@ -414,6 +549,7 @@
     api.turntable = function () { return noStop; };
     api.prewarm = function () { return Promise.resolve(0); };
     api.url = function () { return Promise.resolve(null); };
+    api.setUser = function () { return api; };
     api.clear = function () { return Promise.resolve(); };
     api.dispose = function () {};
     api.info = function () { return { dom: false }; };
@@ -432,7 +568,9 @@
   function errText(e) { return e && e.message ? e.message : String(e); }
   function Look() { return root.SLIslandLook || null; }
   function lookVersion() { var l = Look(); return l && l.LOOK_VERSION != null ? l.LOOK_VERSION : 0; }
-  function dayPreset() { var l = Look(); return (l && l.DAY) || DAY_FALLBACK; }
+  /* the child's member colour (setUser), '#RRGGBB' or null */
+  var member = null;
+  function memberHex() { return member; }
   function reducedPref() {
     try { return !!(root.matchMedia && root.matchMedia('(prefers-reduced-motion: reduce)').matches); } catch (e) { return false; }
   }
@@ -486,9 +624,9 @@
     try { r = S.createRenderer({ alpha: true, pixelRatio: 1, width: BUF, height: BUF, shadows: false, antialias: S.tier !== 'LOW' }); } catch (e) { r = null; }
     if (!r) { off = true; log('no renderer: SVG icons for this session'); return null; }
     var c = r.domElement;
-    r.setClearColor(0x000000, 0);
+    r.setClearColor(CLEAR.color, CLEAR.alpha);           /* transparent: the PNG sits on the dark CSS well */
     r.autoClear = true;
-    r.toneMappingExposure = dayPreset().exposure || 1;
+    r.toneMappingExposure = STUDIO.exposure;
     var g = { r: r, canvas: c, onLost: null, away: !!document.hidden };
     g.onLost = function () {
       if (gpu !== g) return;
@@ -528,11 +666,12 @@
   }
 
   /* ---------------- shared JS resources (live as long as the renderer is wanted) ---------------- */
-  function makeLights(T, K, D) {
-    var hemi = new T.HemisphereLight(K.col(D.hemiSky), K.col(D.hemiGround), D.hemiIntensity);
-    var sun = new T.DirectionalLight(K.col(D.sunColor), D.sunIntensity);
-    var sp = D.sunPos || DAY_FALLBACK.sunPos;
-    sun.position.set(sp[0], sp[1], sp[2]);
+  /* the STUDIO hemisphere + key (the rim is the kit's shared rim uniform, held per render) */
+  function makeLights(T, K) {
+    var hemi = new T.HemisphereLight(K.col(STUDIO.hemiSky), K.col(STUDIO.hemiGround), STUDIO.hemiIntensity);
+    var sun = new T.DirectionalLight(K.col(STUDIO.keyColor), STUDIO.keyIntensity);
+    var kp = STUDIO.keyPos;
+    sun.position.set(kp[0], kp[1], kp[2]);
     sun.target.position.set(0, 0, 0);
     sun.castShadow = false;
     return { hemi: hemi, sun: sun };
@@ -542,9 +681,9 @@
   }
   function ensureRes() {
     if (res) return res;
-    var T = S.THREE, K = S.kit(S.tier), D = dayPreset();
+    var T = S.THREE, K = S.kit(S.tier);
     var scene = new T.Scene();
-    var lights = makeLights(T, K, D);
+    var lights = makeLights(T, K);
     scene.add(lights.hemi, lights.sun, lights.sun.target);
     var blobGeo = new T.PlaneGeometry(1, 1);
     blobGeo.rotateX(-Math.PI / 2);
@@ -556,15 +695,15 @@
     coneGeo.translate(0, -0.5, 0);
     var ramp = new T.DataTexture(alphaRamp(64), 1, 64, T.RGBAFormat);
     ramp.magFilter = T.LinearFilter; ramp.minFilter = T.LinearFilter; ramp.generateMipmaps = false; ramp.needsUpdate = true;
-    var coneMats = ['Neon Pink', 'Neon Cyan'].map(function (tok) {
-      return new T.MeshBasicMaterial({ color: K.col(tok), map: ramp, transparent: true, opacity: 0.22, depthWrite: false,
+    var coneMats = RISER.cones.map(function (tok) {
+      return new T.MeshBasicMaterial({ color: K.col(tok), map: ramp, transparent: true, opacity: RISER.coneAlpha, depthWrite: false,
         side: T.DoubleSide, toneMapped: false, fog: false, name: 'pc:cone' });
     });
     res = {
       T: T, K: K, scene: scene, lights: lights, blob: blob, blobGeo: blobGeo, coneGeo: coneGeo, ramp: ramp, coneMats: coneMats,
       cam: new T.PerspectiveCamera(CAM.fov, 1, 0.05, 100), box: new T.Box3(), box2: new T.Box3(),
       v: new T.Vector3(), v2: new T.Vector3(), m: new T.Matrix4(), mi: new T.Matrix4(), down: new T.Vector3(0, -1, 0),
-      rim: K.col(D.rimColor || 'Cloud White'), savedRim: new T.Color(), pts: [], view: {}
+      rim: new T.Color(), rimFor: '', savedRim: new T.Color(), pts: [], view: {}
     };
     return res;
   }
@@ -578,19 +717,30 @@
     R.coneMats.forEach(function (m) { m.dispose(); });
   }
 
-  /* hold the shared kit at its Day look while a photocard renders (the island may be at Showtime) */
+  /* hold the shared kit at the studio look while a photocard renders (the island may be at
+     Showtime): the member-colour rim at 0.45 and the Showtime mix at 0, restored afterwards */
   var heldShow = 0, heldRimS = 0;
   function showNow(K) {
     try { var m = K.mat('glow:Neon Pink'); return m && m.visible ? clamp01(m.opacity / 0.45) : 0; } catch (e) { return 0; }
   }
-  function holdDay(R) {
+  /* the rim Color for a member hex (null → the look's member fallback); re-made only on change */
+  function studioRim(R, member) {
+    var hex = studioLights(Look(), member).rim;
+    if (hex !== R.rimFor) {
+      R.rimFor = hex;
+      if (hex) R.rim.copy(R.K.rgb(hex));
+      else R.rim.copy(R.K.col((Look() && Look().MEMBER_FALLBACK) || 'Bubblegum'));
+    }
+    return R.rim;
+  }
+  function holdStudio(R, member) {
     var K = R.K, u = K.uniforms;
     if (u && u.uRimColor) { R.savedRim.copy(u.uRimColor.value); heldRimS = u.uRimStrength.value; }
-    K.setRim(R.rim, dayPreset().rimStrength != null ? dayPreset().rimStrength : 0.28);
+    K.setRim(studioRim(R, member), STUDIO.rimStrength);
     heldShow = showNow(K);
     if (heldShow > 0.001) K.setShow(0);
   }
-  function releaseDay(R) {
+  function releaseStudio(R) {
     var K = R.K;
     K.setRim(R.savedRim, heldRimS);
     if (heldShow > 0.001) K.setShow(heldShow);
@@ -683,11 +833,13 @@
   }
 
   /* ---------------- specs, the DOM swap ---------------- */
+  /* the render spec, keyed for the icon caches by the render key plus the studio rim colour */
   function specOf(id, st, pck) {
     var Lk = Look();
     if (!st && pck && Lk && Lk.LOOK) st = stFromKey(id, pck, Lk);
     var spec = renderSpec(id, st || {}, Lk);
     if (spec && !(Lk && Lk.LOOK) && pck) { spec.stateKey = pck; spec.key = id + '#' + pck; }
+    if (spec) { spec.member = memberHex(); spec.key = iconKey(spec.key, spec.member); }
     return spec;
   }
   function specOfEl(el) {
@@ -739,7 +891,7 @@
       storeGet(spec.key).then(function (blob) {
         if (jobs.get(spec.key) !== job) return;
         if (blob) { stats.storeHits++; finish(job, blob); return; }
-        (needsFont(spec.id) ? fontGate() : Promise.resolve()).then(function () { enqueue(job); });
+        fontGate(fontsFor(spec.id)).then(function () { enqueue(job); });
       });
     } else if (prio < job.prio) {
       job.prio = prio;
@@ -772,41 +924,53 @@
     scheduleQuiet();
   }
   function failQueue() { renderQ.slice().forEach(function (j) { finish(j, null); }); renderQ.length = 0; }
-  var fontP = null;
-  function fontGate() {
-    if (fontP) return fontP;
+  /* wait (once per font, at most 1.5 s) for the display fonts an icon's textures use, so a
+     cached icon is not drawn in a fallback face for good */
+  var fontWait = {};
+  function fontGate(list) {
     var F = document.fonts;
-    if (!F || typeof F.load !== 'function') return (fontP = Promise.resolve());
-    fontP = Promise.race([
-      F.load('400 48px "Bagel Fat One"').catch(function () { return null; }),
-      new Promise(function (r) { setTimeout(r, 1500); })
-    ]).then(function () { return null; });
-    return fontP;
+    if (!list || !list.length || !F || typeof F.load !== 'function') return Promise.resolve();
+    return Promise.all(list.map(function (spec) {
+      if (!fontWait[spec]) {
+        fontWait[spec] = Promise.race([
+          Promise.resolve().then(function () { return F.load(spec); }).catch(function () { return null; }),
+          new Promise(function (r) { setTimeout(r, 1500); })
+        ]).then(function () { return null; });
+      }
+      return fontWait[spec];
+    })).then(function () { return null; });
   }
 
   /* ---------------- building one item ---------------- */
-  /* the land photocard: a little diorama in the region's LOOK colours on a sea puddle */
+  /* the land photocard: a small organic islet in the region's LOOK colours on a lagoon puddle —
+     round, layered, off-centre tiers (no square tiles: the v2 island has no grid in play) */
   function landGeo(K, id) {
     return K.parts.get('pc:land|' + id, K.tier, function (Kt) {
       var G = Kt.G, Lk = Look(), c = (Lk && Lk.LOOK && Lk.LOOK[id] && Lk.LOOK[id].colors) || {}, list = [];
-      var meadow = id === 'land_meadow', top = c.top || (meadow ? 'Meadow Hill' : 'Cove Sand'), side = c.side || (meadow ? 'Grass Side' : 'Wet Sand');
-      function tile(w, h, d, x, y, z) {
-        var g = G.t(G.slab(w, h, d, 0.08), { p: [x, y + h / 2, z] });
-        return G.paintBy(g, function (v) { return v.ny > 0.6 ? top : v.ny < -0.6 ? [side, 'shade'] : side; });
+      var meadow = id === 'land_meadow', top = c.top || (meadow ? 'Hill Moss' : 'Dune'), side = c.side || (meadow ? 'Cliff Rock' : 'Wet Dune');
+      var rad = Kt.tier === 'LOW' ? 20 : 32;
+      /* one tier: a tapered disc squashed to an oval; the flat top in the top colour, the bank in
+         the side colour (shaded toward the water) */
+      function tier(rTop, rBot, h, x, y, z, sx, sz) {
+        var g = G.t(G.tube(rTop, rBot, h, { radial: rad }), { s: [sx, 1, sz], p: [x, y + h / 2, z] });
+        return G.paintBy(g, function (v) { return v.ny > 0.6 ? top : v.y < y + h * 0.45 ? [side, 'shade'] : side; });
       }
-      list.push(G.paintBy(G.t(G.tube(1.12, 1.16, 0.05, { radial: 32 }), { p: [0, 0.025, 0] }), function (v) { return v.ny > 0.6 ? 'Sea Shallow' : 'Sea Deep'; }));
-      list.push(G.paint(G.t(G.ring(0.98, 0.035), { r: [90, 0, 0], p: [0, 0.055, 0] }), 'Foam'));
-      [[-0.47, 0.25], [0.47, 0.25], [0, -0.5]].forEach(function (p) { list.push(tile(0.92, 0.26, 0.92, p[0], 0.04, p[1])); });
+      function dot(geo, tok, s, p, r) { list.push(G.paint(G.t(geo, { s: s, r: r, p: p }), tok)); }
+      list.push(G.paintBy(G.t(G.tube(1.12, 1.16, 0.05, { radial: 32 }), { p: [0, 0.025, 0] }), function (v) { return v.ny > 0.6 ? 'Lagoon' : 'Deep Bay'; }));
+      list.push(G.paint(G.t(G.ring(0.97, 0.028), { s: [1.04, 0.92, 1], r: [90, 0, 0], p: [0, 0.055, 0] }), 'Foam Dusk'));
       if (meadow) {
-        list.push(tile(0.7, 0.22, 0.7, 0, 0.3, -0.5));
+        list.push(tier(0.8, 0.96, 0.18, 0.02, 0.04, 0.04, 1.06, 0.95));
+        list.push(tier(0.46, 0.58, 0.2, -0.18, 0.22, -0.2, 1.1, 0.92));
         var fl = [c.w1 || 'Cloud White', c.w2 || 'Tulip Yellow', c.w3 || 'Tulip Pink'];
-        [[-0.6, 0.31, 0.4], [-0.35, 0.31, 0.05], [0.3, 0.31, 0.45], [0.62, 0.31, 0.12], [-0.12, 0.53, -0.42], [0.18, 0.53, -0.6]].forEach(function (p, i) {
-          list.push(G.paint(G.t(G.puff(0.04), { p: p }), fl[i % 3]));
+        [[0.55, 0.23, 0.35], [0.62, 0.23, -0.1], [0.15, 0.23, 0.62], [-0.55, 0.23, 0.42], [-0.12, 0.43, -0.12], [-0.32, 0.43, -0.32]].forEach(function (p, i) {
+          dot(G.puff(0.04), fl[i % 3], 1, p);
         });
       } else {
-        list.push(G.paint(G.t(G.puff(0.055), { s: [1, 0.5, 1.2], p: [-0.5, 0.32, 0.4] }), c.shell || 'Blossom Light'));
-        list.push(G.paint(G.t(G.puff(0.045), { s: [1.2, 0.5, 1], p: [0.25, 0.32, -0.42] }), c.shell || 'Blossom Light'));
-        list.push(G.paint(G.t(G.star(0.11, 0.045), { r: [-90, 0, 20], p: [0.45, 0.32, 0.3] }), c.starfish || 'Peach Coral'));
+        list.push(tier(0.78, 0.98, 0.14, 0.04, 0.04, 0.02, 1.08, 0.94));
+        list.push(tier(0.34, 0.5, 0.12, -0.28, 0.17, -0.22, 1.2, 0.9));
+        dot(G.puff(0.055), c.shell || 'Blossom Light', [1, 0.5, 1.2], [0.45, 0.19, 0.35]);
+        dot(G.puff(0.045), c.shell || 'Blossom Light', [1.2, 0.5, 1], [0.18, 0.19, 0.62]);
+        dot(G.star(0.11, 0.045), c.starfish || 'Peach Coral', 1, [0.55, 0.2, -0.08], [-90, 0, 20]);
       }
       var merged = G.merge(list);
       list.forEach(function (g) { g.dispose(); });
@@ -840,11 +1004,14 @@
   };
   var NO_PETS = { active: function () { return null; }, perform: function () { return 0; } };
   function noop() {}
+  /* beyond the island's handle: photocard = true (pick the non-personal look: no name, no
+     initial), member = the studio rim colour, screen = the LED program to show (or null) */
   function Handle(obj, tpl, spec, uid) {
     this.uid = uid; this.id = spec.id; this.object = obj; this.template = tpl || null; this.batch = null;
     this.stateKey = (tpl && tpl.stateKey) || spec.stateKey; this.st = spec.st;
     this.t = 0; this.dt = 0; this.phase = (hash(uid) % 1000) / 1000; this.rand = (hash(uid + ':r') % 1000) / 1000;
     this.reduced = false; this.beat = 0; this.bar = 0; this.bpm = 100; this.show = 0; this.lit = 0; this.music = null;
+    this.photocard = true; this.member = studioLights(Look(), spec.member).rim; this.screen = spec.screen || null;
     this.pets = NO_PETS; this._piv = {}; this._base = {}; this._emit = null;
   }
   Handle.prototype.pivot = function (name) {
@@ -896,9 +1063,10 @@
     out.handle.reduced = !live || !!o.reduced;            /* icons always take the still pose */
     out.handle._emit = live && o.emit ? o.emit : null;
     settle(out);
+    depersonalise(obj, spec, K);
     return out;
   }
-  /* the Day look once (show k = 0), and the static pose for icons / reduced motion */
+  /* the studio look once (show k = 0), and the static pose for icons / reduced motion */
   function settle(b) {
     var m = b.model, a = b.handle;
     if (!m || !a) return;
@@ -989,8 +1157,8 @@
       cam.position.set(v.px, v.py, v.pz); cam.up.set(0, 1, 0); cam.lookAt(v.tx, v.ty, v.tz);
       cam.updateProjectionMatrix();
       R.scene.add(obj);
-      holdDay(R);
-      try { g.r.setViewport(0, 0, BUF, BUF); g.r.render(R.scene, cam); } finally { releaseDay(R); }
+      holdStudio(R, job.spec.member);                      /* the rim the icon's cache key names */
+      try { g.r.setViewport(0, 0, BUF, BUF); g.r.render(R.scene, cam); } finally { releaseStudio(R); }
       if (gpuLost()) { lost = true; throw new Error('context lost'); }
       var ctx = cv.getContext('2d');
       ctx.clearRect(0, 0, OUT, OUT);
@@ -1019,11 +1187,13 @@
      ================================================================ */
   var uidSlots = [];
   function takeSlot() { var i = 0; while (uidSlots[i]) i++; uidSlots[i] = true; return i; }
+  /* the riser: a Gunmetal disc (drawn with the gunmetal matcap; the vertex tones carry the same
+     look if the kit falls back to toon) with a Neon Magenta ring round its top edge */
   function riserParts(K) {
     return K.parts.get('pc:riser', K.tier, function (Kt) {
-      var G = Kt.G, top = Kt.has('Riser Top') ? Kt.col('Riser Top') : Kt.rgb(RISER_TOP), H = TT.riserH, R = TT.riserR;
+      var G = Kt.G, H = TT.riserH, R = TT.riserR;
       var body = G.t(G.tube(R, R + 0.04, H, { radial: Kt.tier === 'LOW' ? 28 : 44 }), { p: [0, H / 2, 0] });
-      G.paintBy(body, function (v) { return v.ny > 0.6 ? top : v.ny < -0.6 ? ['Holo Pink', 'shade'] : (v.y < H * 0.35 ? ['Holo Pink', 'shade'] : 'Holo Pink'); });
+      G.paintBy(body, function (v) { return v.ny > 0.6 ? RISER.top : v.ny < -0.6 || v.y < H * 0.35 ? RISER.base : RISER.side; });
       var ring = G.t(G.ring(R + 0.006, 0.022), { r: [90, 0, 0], p: [0, H, 0] });
       return { body: body, ring: ring };
     });
@@ -1109,11 +1279,11 @@
   }
   function buildTT(tt) {
     var R = ensureRes(), T = R.T, K = R.K;
-    var sc = new T.Scene(), lights = makeLights(T, K, dayPreset());
+    var sc = new T.Scene(), lights = makeLights(T, K);
     sc.add(lights.hemi, lights.sun, lights.sun.target);
     var cam = new T.PerspectiveCamera(CAM.fov, 1, 0.05, 80);
     var spin = new T.Group(), fit = new T.Group(), rp = riserParts(K);
-    var body = new T.Mesh(rp.body, K.mat('toon')), ring = new T.Mesh(rp.ring, K.mat('neon:Neon Pink'));
+    var body = new T.Mesh(rp.body, K.mat(RISER.mat)), ring = new T.Mesh(rp.ring, K.mat('neon:' + RISER.ring));
     body.name = 'pc:riser'; ring.name = 'pc:ring';
     var blob = new T.Mesh(R.blobGeo, K.mat('blob'));
     blob.renderOrder = 1; blob.position.y = TT.riserH + 0.004;
@@ -1405,8 +1575,8 @@
     var g = ensureGpu();
     if (!g) return false;
     var R = res;
-    holdDay(R);
-    try { g.r.setViewport(0, 0, tt.w, tt.h); g.r.render(tt.sc, tt.cam); } finally { releaseDay(R); }
+    holdStudio(R, memberHex());                            /* a live view follows the current child */
+    try { g.r.setViewport(0, 0, tt.w, tt.h); g.r.render(tt.sc, tt.cam); } finally { releaseStudio(R); }
     if (gpuLost()) return false;
     var ctx = tt.ctx;
     ctx.clearRect(0, 0, tt.w, tt.h);
@@ -1541,11 +1711,20 @@
     disposeRes();
     releaseCanvases();
   }
+  /* the child whose colour lights the studio rim: {color: '#hex'} (anything else → the look's
+     member fallback). Icons are keyed by it, so the next fill() picks up that child's set; live
+     turntables switch on their next frame. */
+  function setUser(u) {
+    var c = u && typeof u.color === 'string' ? /^#?([0-9a-f]{6})$/i.exec(u.color.trim()) : null;
+    var next = c ? '#' + c[1].toUpperCase() : null;
+    if (next !== member) { member = next; tts.forEach(function (t) { t.dirty = true; }); if (tts.length) wake(); }
+    return api;
+  }
   function info() {
     var out = {
       version: VERSION, look: lookVersion(), ready: !!S, off: off, blocked: blocked(), gpu: !!gpu, res: !!res,
       queue: renderQ.length, jobs: jobs.size, memory: mem.size, turntables: tts.length, contextLosses: lostCount,
-      canvases: canvasTotal, stats: {}
+      canvases: canvasTotal, member: member, stats: {}
     };
     for (var k in stats) out.stats[k] = stats[k];
     if (gpu) { try { var m = gpu.r.info.memory; out.geometries = m.geometries; out.textures = m.textures; out.programs = gpu.r.info.programs ? gpu.r.info.programs.length : 0; } catch (e) { /* ignore */ } }
@@ -1556,6 +1735,7 @@
   api.turntable = turntable;
   api.prewarm = prewarm;
   api.url = url;
+  api.setUser = setUser;
   api.clear = clear;
   api.dispose = dispose;
   api.info = info;

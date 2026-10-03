@@ -1,10 +1,13 @@
 'use strict';
-/* My Island 3D — photocards (world/island3d/photocard.js, island chunk 12): the pure
-   layer — [data-pc] parsing, style → render spec and cache keys (styles render the
-   house, accessories the pet), the stateKey inverse, the icon / turntable framing
-   maths, turntable motion, sparkles, the cone ramp, the LRU — plus the Node no-op
-   API, a browser-style classic-script load and static source rules. The WebGL path
-   runs only in the browser (island3d_lab.html). */
+/* My Island 3D — photocards (world/island3d/photocard.js, island chunk 12; Encore City
+   v2 chunk B11): the pure layer — [data-pc] parsing, style → render spec and cache keys
+   (styles render the house on the player's own shape at trim 0, buildings render trim 0,
+   accessories the pet), the stateKey inverse (shape-suffixed house keys, building keys),
+   the STUDIO preset, the transparent clear, the Gunmetal riser, the per-rim icon key,
+   the no-names pass over LED screens and signs, the icon / turntable framing maths,
+   turntable motion, sparkles, the cone ramp, the LRU — plus the Node no-op API, a
+   browser-style classic-script load and static source rules. The WebGL path runs only
+   in the browser (island3d_lab.html). */
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -16,6 +19,7 @@ const C = require('../world/world-core.js');
 const M = require('../world/island3d/motion.js');
 const G3 = require('../world/island3d/grid3d.js');
 const S = require('../world/island3d/stage.js');
+const KIT = require('../world/island3d/kit.js');
 
 const SRC_PATH = path.join(__dirname, '..', 'world', 'island3d', 'photocard.js');
 const SRC = fs.readFileSync(SRC_PATH, 'utf8');
@@ -24,13 +28,18 @@ const IDS = C.CATALOG.map((it) => it.id);
 const STYLES = C.CATALOG.filter((it) => it.kind === 'style').map((it) => it.id);
 const ACCS = C.CATALOG.filter((it) => it.kind === 'acc').map((it) => it.id);
 const PETS = C.CATALOG.filter((it) => it.kind === 'pet').map((it) => it.id);
+const SHAPES = STYLES.filter((x) => /^shape_/.test(x));
+const BUILDINGS = IDS.filter((x) => L.LOOK[x] && L.LOOK[x].kind === 'building');
 const ST_SAMPLES = [
   {},
   { wall: 'wall_pink', roof: 'roof_castle', door: 'door_gold', details: { detail_flag: true, detail_lights: true } },
   { wall: 'wall_mint', roof: 'roof_candy', door: 'door_green', details: ['detail_chimney', 'detail_windowbox', 'detail_chimney'] },
-  { course: 'course_snow', ball: 'ball_gold', stadium: 'stadium_night', kart: 'kart_unicorn' },
+  { wall: 'wall_graphite', roof: 'roof_thatch', door: 'door_glass', shape: 'shape_tower', variant: 1, details: ['detail_neon'] },
+  { wall: 'wall_sky', roof: 'roof_blue', door: 'door_red', shape: 'shape_cottage', variant: 1 },
+  { shape: 'shape_dome', roof: 'roof_castle', variant: 2, name: 'Mia', member: '#22AAFF' },
+  { course: 'course_snow', ball: 'ball_gold', stadium: 'stadium_night', kart: 'kart_unicorn', variant: 2 },
   { pet: 'pet_dragon', acc: { hat: 'acc_crown', back: 'acc_cape' } },
-  { pet: 'pet_kitten', acc: { neck: 'acc_scarf', face: 'acc_shades' } }
+  { pet: 'pet_kitten', acc: { neck: 'acc_scarf', face: 'acc_shades', hat: 'acc_cap' } }
 ];
 /* a seeded RNG for property tests */
 function rng(seed) { let s = seed >>> 0; return () => { s = (s + 0x6D2B79F5) >>> 0; let t = s; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
@@ -68,6 +77,10 @@ test('cleanSt keeps only known ids in their own slots; details become a sorted u
   assert.deepEqual(P.cleanSt({ details: ['detail_flag', 'detail_flag', 'detail_chimney'] }, L).details, ['detail_chimney', 'detail_flag']);
   assert.deepEqual(P.cleanSt(null, L), {});
   assert.deepEqual(P.cleanSt({ pet: 'tree_oak', acc: 'acc_crown' }, L), {});
+  /* v2: the shape slot is kept (validated); the trim variant, the name and the member never are */
+  assert.deepEqual(P.cleanSt({ shape: 'shape_villa', variant: 1, name: 'Mia', member: '#22AAFF', seed: 7 }, L), { shape: 'shape_villa' });
+  assert.deepEqual(P.cleanSt({ shape: 'wall_pink' }, L), {}, 'a shape must be a shape');
+  assert.deepEqual(P.cleanSt({ shape: 'shape_treehouse' }, L), {}, 'an unknown (future) shape is dropped');
 });
 
 /* ---------------- render specs and keys ---------------- */
@@ -85,22 +98,62 @@ test('renderSpec: every CATALOG id with every style sample resolves to something
   assert.equal(P.renderSpec('Bad Id', {}, L), null);
 });
 
-test('renderSpec: style items render the player\'s own house wearing that style', () => {
-  const st = { wall: 'wall_sky', roof: 'roof_thatch', door: 'door_red', details: { detail_windowbox: true } };
-  STYLES.forEach((id) => {
-    const sp = P.renderSpec(id, st, L);
-    assert.equal(sp.id, 'house_cottage', id);
-    const slot = L.LOOK[id].slot;
-    if (slot === 'detail') assert.ok(sp.st.details.includes(id) || (id === 'detail_flag' && sp.st.roof === 'roof_castle'), id);
-    else assert.equal(sp.st[slot], id, id + ' replaces the ' + slot);
-    ['wall', 'roof', 'door'].filter((k) => k !== slot).forEach((k) => assert.equal(sp.st[k], st[k], id + ' keeps the player\'s ' + k));
-    /* the same picture as the house in that state: one cached PNG */
-    assert.equal(sp.key, P.renderSpec('house_cottage', sp.st, L).key, id);
+test('renderSpec: style items render the player\'s own house, on the player\'s own shape, at trim 0', () => {
+  ['shape_cottage', 'shape_loft', 'shape_tower', undefined].forEach((shape) => {
+    const st = { wall: 'wall_sky', roof: 'roof_thatch', door: 'door_red', details: { detail_windowbox: true }, shape, variant: 1 };
+    const own = shape || L.SLOT_DEFAULTS.shape;
+    STYLES.forEach((id) => {
+      const sp = P.renderSpec(id, st, L);
+      assert.equal(sp.id, 'house_cottage', id);
+      assert.equal(sp.kind, 'house');
+      const slot = L.LOOK[id].slot;
+      if (slot === 'detail') assert.ok(sp.st.details.includes(id) || (id === 'detail_flag' && sp.st.roof === 'roof_castle'), id);
+      else assert.equal(sp.st[slot], id, id + ' replaces the ' + slot);
+      ['wall', 'roof', 'door'].filter((k) => k !== slot).forEach((k) => assert.equal(sp.st[k], st[k], id + ' keeps the player\'s ' + k));
+      if (slot !== 'shape') assert.equal(sp.st.shape, own, id + ' previews on the player\'s current shape (' + own + ')');
+      assert.equal(sp.st.variant, 0, id + ': trim 0, never the child\'s trim');
+      /* the same picture as the house in that state: one cached PNG */
+      assert.equal(sp.key, P.renderSpec('house_cottage', sp.st, L).key, id);
+      assert.equal(sp.stateKey, L.stateKey('house_cottage', sp.st));
+      /* the cottage keeps its exact v1 key; every other shape carries its shape and trim 0 */
+      if (sp.st.shape === 'shape_cottage') assert.ok(!/\|s:/.test(sp.stateKey), id + ' cottage key is the v1 key');
+      else assert.ok(sp.stateKey.endsWith('|s:' + sp.st.shape + '|v:0'), id + ' ' + sp.stateKey);
+    });
   });
   /* the castle drops the rooftop flag, so detail_flag on a castle is the plain castle house */
   const castle = { wall: 'wall_cream', roof: 'roof_castle', door: 'door_blue' };
   assert.equal(P.renderSpec('detail_flag', castle, L).key, P.renderSpec('house_cottage', castle, L).key);
-  assert.equal(P.renderSpec('roof_red', {}, L).key, 'house_cottage#wall_cream|roof_red|door_blue|d:', 'defaults without a style');
+  assert.equal(P.renderSpec('roof_red', {}, L).key, 'house_cottage#wall_cream|roof_red|door_blue|d:|s:shape_loft|v:0', 'defaults: the City loft');
+  assert.equal(P.renderSpec('roof_red', { shape: 'shape_cottage' }, L).key, 'house_cottage#wall_cream|roof_red|door_blue|d:', 'the cottage: the v1 key');
+  /* a shape item shows that shape wearing the player's walls, roof, door and extras */
+  const mine = { wall: 'wall_lilac', roof: 'roof_candy', door: 'door_gold', details: ['detail_lights'], shape: 'shape_cottage' };
+  SHAPES.forEach((id) => {
+    const sp = P.renderSpec(id, mine, L);
+    assert.deepEqual([sp.st.shape, sp.st.wall, sp.st.roof, sp.st.door, sp.st.details], [id, 'wall_lilac', 'roof_candy', 'door_gold', ['detail_lights']], id);
+  });
+});
+
+test('renderSpec: previews of shapes and city buildings are child-independent (trim 0, no name, no member, no seed)', () => {
+  const kids = [{}, { variant: 1, name: 'Mia', member: '#22AAFF', seed: 11 }, { variant: 2, name: 'Zac', member: '#FF2E9A', seed: 99, profileKey: 'zac' }];
+  const base = { wall: 'wall_concrete', roof: 'roof_blue', door: 'door_glass', details: ['detail_neon'] };
+  SHAPES.concat(BUILDINGS).forEach((id) => {
+    const keys = new Set(kids.map((k) => P.renderSpec(id, Object.assign({}, base, k), L).key));
+    assert.equal(keys.size, 1, id + ' looks the same for every child with the same style');
+  });
+  assert.ok(BUILDINGS.length === 7, 'the seven city buildings');
+  BUILDINGS.forEach((id) => {
+    const sp = P.renderSpec(id, { variant: 2 }, L);
+    assert.equal(sp.id, id); assert.equal(sp.kind, 'building');
+    assert.deepEqual(sp.st, { variant: 0 }, id + ' always renders trim 0');
+    assert.equal(sp.stateKey, 'v:0'); assert.equal(sp.key, id + '#v:0');
+    assert.equal(sp.stateKey, L.stateKey(id, { variant: 0 }));
+  });
+  /* the LED Screen Tower shows the star field in every photocard; the look table says so */
+  assert.equal(L.LOOK.bld_ledtower.show.screen.photocard, 'stars');
+  assert.equal(P.renderSpec('bld_ledtower', { variant: 1, name: 'Mia' }, L).screen, 'stars');
+  ['tree_oak', 'house_cottage', 'roof_red', 'pet_puppy', 'acc_cap'].forEach((id) => assert.equal(P.renderSpec(id, {}, L).screen, null, id));
+  /* without world-look a building still falls back to the star field */
+  assert.equal(P.renderSpec('bld_ledtower', { variant: 1 }, null).screen, 'stars');
 });
 
 test('renderSpec: accessories render on the active pet (puppy by default); pets wear their acc', () => {
@@ -148,28 +201,55 @@ test('stFromKey inverts SLIslandLook.stateKey for every id (data-pck alone gives
   const walls = Object.keys(L.LOCKED.WALL), roofs = STYLES.filter((x) => /^roof_/.test(x)), doors = Object.keys(L.LOCKED.DOOR);
   const details = STYLES.filter((x) => /^detail_/.test(x));
   const samples = ST_SAMPLES.slice();
-  for (let i = 0; i < 60; i++) {
+  for (let i = 0; i < 80; i++) {
     const acc = {};
     ACCS.forEach((a) => { if (r() < 0.4) acc[L.LOOK[a].socket] = a; });
     samples.push({ wall: pick(walls), roof: pick(roofs), door: pick(doors), details: details.filter(() => r() < 0.5),
+      shape: pick(SHAPES), variant: Math.floor(r() * 3),
       course: pick(['course_meadow', 'course_beach', 'course_snow', 'course_candy']), ball: pick(['ball_classic', 'ball_planet']),
       stadium: pick(['stadium_day', 'stadium_snow']), kart: pick(['kart_red', 'kart_lime']), pet: pick(PETS), acc });
   }
+  let suffixed = 0, cottages = 0;
   IDS.forEach((id) => samples.forEach((st) => {
     const key = L.stateKey(id, st);
     const back = P.stFromKey(id, key, L);
     assert.equal(L.stateKey(id, back), key, id + ' ' + key);
     assert.equal(P.renderSpec(id, back, L).key, P.renderSpec(id, st, L).key, id + ' renders the same');
+    if (/\|s:shape_[a-z]+\|v:\d$/.test(key)) suffixed++; else if (/\|d:[a-z_,]*$/.test(key)) cottages++;
   }));
+  assert.ok(suffixed > 100 && cottages > 50, 'both key forms were round-tripped (' + suffixed + ' / ' + cottages + ')');
+  /* the shape suffix and the building trim parse back exactly */
+  assert.deepEqual(P.stFromKey('house_cottage', 'wall_pink|roof_red|door_glass|d:detail_neon|s:shape_tower|v:1', L),
+    { wall: 'wall_pink', roof: 'roof_red', door: 'door_glass', details: ['detail_neon'], shape: 'shape_tower', variant: 1 });
+  assert.deepEqual(P.stFromKey('roof_blue', 'wall_cream|roof_blue|door_blue|d:', L),
+    { wall: 'wall_cream', roof: 'roof_blue', door: 'door_blue', details: [], shape: 'shape_cottage' }, 'a key without the suffix is the cottage');
+  assert.deepEqual(P.stFromKey('bld_dance', 'v:2', L), { variant: 2 });
+  assert.deepEqual(P.stFromKey('bld_dance', 'v:x', L), {});
   assert.deepEqual(P.stFromKey('house_cottage', 'garbage', L), {});
-  assert.deepEqual(P.stFromKey('house_cottage', 'wall_x|roof_red|door_blue|d:tree_oak', L), { roof: 'roof_red', door: 'door_blue', details: [] });
+  assert.deepEqual(P.stFromKey('house_cottage', 'wall_x|roof_red|door_blue|d:tree_oak', L), { roof: 'roof_red', door: 'door_blue', details: [], shape: 'shape_cottage' });
+  assert.deepEqual(P.stFromKey('house_cottage', 'wall_pink|roof_red|door_blue|d:|s:shape_nope|v:1', L),
+    { wall: 'wall_pink', roof: 'roof_red', door: 'door_blue', details: [], variant: 1 }, 'an unknown shape falls back to the default');
   assert.deepEqual(P.stFromKey('tree_oak', 'base', L), {});
   assert.deepEqual(P.stFromKey('nope', 'x', L), {});
 });
 
+test('data-pck from the island (any shape, any trim) gives the child-independent trim-0 picture', () => {
+  ['shape_loft', 'shape_villa', 'shape_tower', 'shape_dome'].forEach((shape) => [0, 1].forEach((variant) => {
+    const st = { wall: 'wall_midnight', roof: 'roof_castle', door: 'door_glass', details: ['detail_neon', 'detail_lights'], shape, variant };
+    const key = L.stateKey('house_cottage', st);
+    assert.ok(key.endsWith('|s:' + shape + '|v:' + variant));
+    const sp = P.renderSpec('house_cottage', P.stFromKey('house_cottage', key, L), L);
+    assert.equal(sp.stateKey, L.stateKey('house_cottage', Object.assign({}, st, { variant: 0 })), shape + ' v' + variant);
+  }));
+  BUILDINGS.forEach((id) => [0, 1, 2].forEach((v) => assert.equal(P.renderSpec(id, P.stFromKey(id, 'v:' + v, L), L).key, id + '#v:0')));
+});
+
 /* ---------------- Cache Storage naming ---------------- */
-test('cache naming: sl-pc-<LOOK_VERSION>, same-origin keys, stale sweeps and trims', () => {
+test('cache naming: sl-pc-<LOOK_VERSION> (sl-pc-2 for Encore City), same-origin keys, stale sweeps and trims', () => {
+  assert.equal(L.LOOK_VERSION, 2, 'Encore City bumped the look version');
+  assert.equal(P.cacheName(L.LOOK_VERSION), 'sl-pc-2', 'the v1 icons (sl-pc-1) are swept, never shown');
   assert.equal(P.cacheName(L.LOOK_VERSION), 'sl-pc-' + L.LOOK_VERSION);
+  assert.ok(/cacheName\(lookVersion\(\)\)/.test(SRC), 'the Cache Storage name follows SLIslandLook.LOOK_VERSION');
   assert.equal(P.CACHE_PREFIX, 'sl-pc-', 'sw.js keeps every sl-pc-* cache on activate');
   const u = P.cacheUrl('https://x.test/app/index.html', 'house_cottage#wall_pink|roof_red|door_blue|d:');
   assert.ok(u.startsWith('https://x.test/app/__sl-pc/'));
@@ -179,6 +259,151 @@ test('cache naming: sl-pc-<LOOK_VERSION>, same-origin keys, stale sweeps and tri
   assert.deepEqual(P.staleCaches(['sl-pc-1', 'sl-pc-2', 'sl-v99', 'other', 7], 'sl-pc-2'), ['sl-pc-1']);
   assert.equal(P.trimCount(450, 400), 50);
   assert.equal(P.trimCount(10, 400), 0);
+});
+
+test('iconKey: icons are cached per studio rim colour (siblings never share a tint); no member → the bare key', () => {
+  const k = P.renderSpec('bld_boba', {}, L).key;
+  assert.equal(P.iconKey(k, '#22AAFF'), 'bld_boba#v:0@22aaff');
+  assert.equal(P.iconKey(k, '22aaff'), P.iconKey(k, '#22AAFF'), 'case and # never split the cache');
+  assert.notEqual(P.iconKey(k, '#22AAFF'), P.iconKey(k, '#FF2E9A'));
+  for (const bad of [null, undefined, '', 'red', '#12345', 7, {}]) assert.equal(P.iconKey(k, bad), k);
+  assert.ok(!/[A-Z]/.test(P.iconKey(k, '#ABCDEF').split('@')[1]));
+  assert.ok(/spec\.key = iconKey\(spec\.key, spec\.member\)/.test(SRC), 'every icon request is keyed by its rim');
+  assert.ok(/holdStudio\(R, job\.spec\.member\)/.test(SRC), 'an icon renders with the rim its key names');
+});
+
+/* ---------------- the STUDIO preset, the clear and the riser ---------------- */
+test('STUDIO preset: Studio Sky / Ground hemi at 1.4, a Studio Key of 2.2 from (−5, 8, 9), the member rim at 0.45', () => {
+  assert.deepEqual(Object.assign({}, P.STUDIO, { keyPos: P.STUDIO.keyPos.slice() }), {
+    hemiSky: 'Studio Sky', hemiGround: 'Studio Ground', hemiIntensity: 1.4, keyColor: 'Studio Key', keyIntensity: 2.2,
+    keyPos: [-5, 8, 9], rim: '@member', rimStrength: 0.45, exposure: 1.0
+  });
+  assert.ok(Object.isFrozen(P.STUDIO) && Object.isFrozen(P.STUDIO.keyPos), 'a shared constant');
+  const s = P.studioLights(L, '#22aaff');
+  assert.equal(s.hemiSky, L.PALETTE_V2['Studio Sky']); assert.equal(s.hemiSky, '#B9B0FF');
+  assert.equal(s.hemiGround, L.PALETTE_V2['Studio Ground']); assert.equal(s.hemiGround, '#2A2240');
+  assert.equal(s.keyColor, L.PALETTE_V2['Studio Key']); assert.equal(s.keyColor, '#FFE2C8');
+  assert.deepEqual([s.hemiIntensity, s.keyIntensity, s.rimStrength, s.exposure], [1.4, 2.2, 0.45, 1.0]);
+  assert.deepEqual(s.keyPos, [-5, 8, 9]);
+  assert.equal(s.rim, '#22AAFF', 'the rim is the child\'s member colour');
+  /* the key light comes from the front-right and above: it lights the 3/4 face the icon camera sees */
+  const B = P.basis(P.CAM.yaw, P.CAM.elev), kp = s.keyPos, len = Math.hypot(...kp);
+  assert.ok((kp[0] * B.D.x + kp[1] * B.D.y + kp[2] * B.D.z) / len > 0.4, 'the key faces the camera side');
+  /* no member yet → the look's member fallback (never a name, never a random colour) */
+  assert.equal(P.studioLights(L, null).rim, L.hex('@member', {}));
+  assert.equal(P.studioLights(L, 'nope').rim, L.PALETTE[L.MEMBER_FALLBACK]);
+  /* the art bible's v2 photocard line names exactly these values */
+  const bible = JSON.stringify(JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'docs', 'island3d', 'v2', 'plan-v2.json'), 'utf8')).artBibleV2);
+  assert.ok(/Photocard STUDIO preset: hemi Studio Sky \/ Studio Ground at 1\.4; key Studio Key 2\.2 from \(-5, 8, 9\); rim = member colour at 0\.45/.test(bible));
+  /* the kit's rim and Showtime mix are held at the studio look during a render, then restored */
+  assert.ok(/function holdStudio\(R, member\)/.test(SRC) && /K\.setRim\(studioRim\(R, member\), STUDIO\.rimStrength\)/.test(SRC));
+  assert.ok(/releaseStudio\(R\)/.test(SRC) && /K\.setShow\(0\)/.test(SRC));
+  assert.ok(/new T\.HemisphereLight\(K\.col\(STUDIO\.hemiSky\), K\.col\(STUDIO\.hemiGround\), STUDIO\.hemiIntensity\)/.test(SRC));
+  assert.ok(/new T\.DirectionalLight\(K\.col\(STUDIO\.keyColor\), STUDIO\.keyIntensity\)/.test(SRC));
+  assert.ok(!/\bDAY\b|dayPreset/.test(SRC.replace(/\/\*[\s\S]*?\*\//g, '')), 'no golden-hour or v1 day light in a photocard');
+});
+
+test('transparent clear: the renderer clears to alpha 0 so the PNG and the turntable sit on the dark CSS well', () => {
+  assert.deepEqual(Object.assign({}, P.CLEAR), { color: 0x000000, alpha: 0 });
+  assert.ok(Object.isFrozen(P.CLEAR));
+  assert.ok(/S\.createRenderer\(\{ alpha: true,/.test(SRC), 'an alpha drawing buffer');
+  assert.ok(/r\.setClearColor\(CLEAR\.color, CLEAR\.alpha\)/.test(SRC), 'cleared to fully transparent');
+  const code = SRC.replace(/\/\*[\s\S]*?\*\//g, '');
+  assert.ok(!/\.background\s*=/.test(code), 'no scene background behind an icon or a turntable');
+  assert.ok(/ctx\.clearRect\(0, 0, OUT, OUT\)/.test(code) && /ctx\.clearRect\(0, 0, tt\.w, tt\.h\)/.test(code), 'the 2D copies start transparent too');
+  assert.ok(/r\.toneMappingExposure = STUDIO\.exposure/.test(code));
+});
+
+test('the riser: a Gunmetal disc r 0.7 (gunmetal matcap) with a Neon Magenta ring and two crossing cones', () => {
+  assert.equal(P.TT.riserR, 0.7);
+  assert.equal(P.RISER.mat, 'gunmetal');
+  assert.ok(L.MATCAPS.gunmetal, 'the look has the gunmetal matcap');
+  assert.equal(KIT.programFamily(P.RISER.mat), KIT.programFamily('chrome'), 'it shares the one matcap program');
+  ['top', 'side', 'base'].forEach((k) => assert.ok(/^Gunmetal/.test(P.RISER[k]) && L.PALETTE_V2[P.RISER[k]], k));
+  assert.equal(P.RISER.ring, 'Neon Magenta'); assert.equal(L.PALETTE_V2['Neon Magenta'], '#FF2E9A');
+  assert.deepEqual(P.RISER.cones.slice(), ['Neon Magenta', 'LED Cyan']);
+  P.RISER.cones.forEach((t) => assert.ok(L.PALETTE_V2[t], t + ' is a v2 neon token'));
+  assert.ok(P.RISER.coneAlpha > 0 && P.RISER.coneAlpha <= 0.22, 'soft beams');
+  assert.ok(/K\.mat\(RISER\.mat\)/.test(SRC) && /K\.mat\('neon:' \+ RISER\.ring\)/.test(SRC));
+  assert.ok(/RISER\.cones\.map/.test(SRC));
+  assert.equal(P.RISER_TOP, undefined, 'the v1 pink riser top is gone');
+  const code = SRC.replace(/\/\*[\s\S]*?\*\//g, '');
+  for (const t of ['Riser Top', 'Holo Pink', "'Neon Pink'", "'Neon Cyan'", "'Holo Blue'", "'Sea Shallow'", "'Sea Deep'", "'Foam'"]) assert.ok(!code.includes(t), 'no v1 token ' + t);
+  assert.ok(/SPARKLE_TOKENS = \['Star Gold', 'Neon Magenta', 'LED Cyan', 'Bone White'\]/.test(code), 'debut sparkles in the v2 neon set');
+});
+
+/* ---------------- no names in a photocard ---------------- */
+test('atlas cells: ledProgramAt / signCellAt read the kit\'s own windows (every program and phase; the name + initial cell)', () => {
+  assert.deepEqual(P.LED_PROGRAMS.slice(), KIT.LED_PROGRAMS);
+  ['w', 'h', 'stripW', 'cellH', 'cols'].forEach((k) => assert.equal(P.LED_LAYOUT[k], KIT.LED[k], 'LED ' + k));
+  ['w', 'h', 'cellW', 'cellH', 'cols', 'userCell'].forEach((k) => assert.equal(P.SIGN_LAYOUT[k], KIT.SIGN[k], 'SIGN ' + k));
+  KIT.LED_PROGRAMS.forEach((p, i) => [0, 0.25, 0.5, 0.999].forEach((ph) => {
+    const w = KIT.ledWindow(p, ph);
+    assert.equal(P.ledProgramAt(w.ox, w.oy), i, p + ' @' + ph);
+    assert.equal(P.ledProgramAt(w.ox, w.oy, KIT.LED), i);
+  }));
+  KIT.SIGN_WORDS.forEach((word, i) => { const r = KIT.signRect(word); assert.equal(P.signCellAt(r.u0, r.v0), i, word); });
+  for (const u of [':name', ':initial']) { const r = KIT.signRect(u); assert.equal(P.signCellAt(r.u0, r.v0), KIT.SIGN.userCell, u); }
+  assert.equal(P.ledProgramAt(1.2, 0), -1); assert.equal(P.signCellAt(0, 2), -1);
+});
+
+/* a fake kit + copy: just the fields depersonalise() reads */
+function fakeKit() {
+  const made = [], ledTex = { source: { id: 'led' } }, signTex = { source: { id: 'sign' } };
+  const view = (p) => { const w = KIT.ledWindow(p, 0); return { source: ledTex.source, offset: { x: w.ox, y: w.oy, set(x, y) { this.x = x; this.y = y; } }, repeat: { set() {} } }; };
+  const variants = new Map();
+  const K = {
+    ledAtlas: () => ({ texture: ledTex, view, setWindow(t, p, ph) { const w = KIT.ledWindow(p, ph); t.offset.set(w.ox, w.oy); return t; } }),
+    signAtlas: () => ({ texture: signTex }),
+    variant(key, name, patch) { const vk = key + '#' + name; if (!variants.has(vk)) { const m = Object.assign({ name: vk, visible: true }, patch); variants.set(vk, m); made.push(vk); } return variants.get(vk); }
+  };
+  const ledMat = (name, prog, ph) => { const w = KIT.ledWindow(prog, ph || 0); return { name, map: { source: ledTex.source, offset: { x: w.ox, y: w.oy } } }; };
+  const signMat = (name, word) => { const r = KIT.signRect(word); return { name, map: { source: signTex.source, offset: { x: r.u0, y: r.v0 } } }; };
+  const mesh = (material) => ({ isMesh: true, visible: true, material });
+  const group = (kids) => ({ traverse(fn) { kids.forEach(fn); } });
+  return { K, made, ledMat, signMat, mesh, group };
+}
+test('depersonalise: the screen tower shows its star field, a name window turns to stars, the name / initial sign cells hide', () => {
+  const F = fakeKit();
+  const tower = F.mesh(F.ledMat('led#p:name', 'name', 0.4));
+  const other = F.mesh(F.ledMat('led#p:eq', 'eq', 0.2));
+  const nameScreen = F.mesh(F.ledMat('led', 'name', 0));
+  const initial = F.mesh(F.signMat('sign#w::INITIAL', ':initial'));
+  const word = F.mesh(F.signMat('sign#w:PHOTO', 'PHOTO'));
+  const plain = F.mesh({ name: 'toon' });
+  const multi = F.mesh([{ name: 'toon' }, F.signMat('sign', ':name')]);
+  /* the LED tower: every screen shows the photocard program, whatever the template drew */
+  assert.equal(P.depersonalise(F.group([tower, other]), { screen: 'stars' }, F.K), 2);
+  assert.equal(tower.material.name, 'led#pc:stars'); assert.equal(other.material.name, 'led#pc:stars');
+  assert.equal(P.ledProgramAt(tower.material.map.offset.x, tower.material.map.offset.y), KIT.LED_PROGRAMS.indexOf('stars'));
+  /* any other look: only a name window changes; an EQ screen keeps its program */
+  const eq = F.mesh(F.ledMat('led#p:eq', 'eq', 0.2)), eqMat = eq.material;
+  assert.equal(P.depersonalise(F.group([eq, nameScreen, initial, word, plain, multi]), { screen: null }, F.K), 3);
+  assert.equal(eq.material, eqMat, 'non-personal programs stay as built');
+  assert.equal(nameScreen.material.name, 'led#pc:stars', 'a name marquee becomes the star field');
+  assert.equal(initial.material.name, 'sign#pc:hidden'); assert.equal(initial.material.visible, false, 'the initial is not drawn');
+  assert.equal(word.material.name, 'sign#w:PHOTO', 'whitelisted words stay');
+  assert.equal(plain.material.name, 'toon');
+  assert.equal(multi.material[0].name, 'toon'); assert.equal(multi.material[1].visible, false, 'only the name group of a multi-material mesh hides');
+  /* the swapped-in materials are photocard siblings, made once (never the kit's shared ones) */
+  assert.deepEqual(F.made.sort(), ['led#pc:stars', 'sign#pc:hidden']);
+  /* an unnamed material is recognised by its atlas source */
+  const anon = F.mesh(F.ledMat('', 'name', 0));
+  P.depersonalise(F.group([anon]), {}, F.K);
+  assert.equal(anon.material.name, 'led#pc:stars');
+  /* junk in, nothing thrown */
+  assert.equal(P.depersonalise(null, {}, F.K), 0);
+  assert.equal(P.depersonalise(F.group([F.mesh(null)]), {}, F.K), 0);
+  assert.ok(/settle\(out\);\s*depersonalise\(obj, spec, K\);/.test(SRC), 'every built copy (icons and turntables) goes through it');
+  assert.ok(/this\.photocard = true; this\.member = /.test(SRC) && /this\.screen = spec\.screen/.test(SRC), 'models see a.photocard, a.member and a.screen');
+});
+
+test('fontsFor: icons wait for the display fonts their textures use (PET COURSE banner, city signs)', () => {
+  assert.deepEqual(P.fontsFor('att_course'), ['400 48px "Bagel Fat One"', '800 48px "Unbounded"']);
+  assert.deepEqual(P.fontsFor('course_snow'), P.fontsFor('att_course'));
+  BUILDINGS.forEach((id) => assert.deepEqual(P.fontsFor(id), ['800 48px "Unbounded"'], id));
+  assert.deepEqual(P.fontsFor('tree_oak'), []); assert.deepEqual(P.fontsFor(undefined), []);
+  assert.ok(/fontGate\(fontsFor\(spec\.id\)\)/.test(SRC));
 });
 
 /* ---------------- framing ---------------- */
@@ -337,10 +562,12 @@ test('lru: recency order, eviction, replacement and clear all hand the old value
   assert.equal(c.get('x'), undefined);
 });
 
-test('needsFont: only the PET COURSE banner items wait for Bagel Fat One', () => {
+test('needsFont: the PET COURSE banner items and the city buildings (signs, screens) wait for a display font', () => {
   assert.equal(P.needsFont('att_course'), true);
   assert.equal(P.needsFont('course_snow'), true);
+  assert.equal(P.needsFont('bld_recording'), true);
   assert.equal(P.needsFont('tree_oak'), false);
+  assert.equal(P.needsFont('house_cottage'), false, 'the neon tower\'s initial never shows in a photocard, so houses need no font');
   assert.equal(P.needsFont(undefined), false);
 });
 
@@ -354,13 +581,14 @@ test('in Node the browser entry points exist and do nothing (the SVG icons stay)
   assert.equal(typeof stop, 'function');
   assert.equal(await stop.ready, false);
   stop(); stop.set('roof_red', {}); stop.debut(); stop.stop();
+  assert.equal(P.setUser({ color: '#22AAFF' }), P, 'setUser is chainable and harmless in Node');
   P.dispose();
   assert.deepEqual(P.info(), { dom: false });
+  assert.equal(P.VERSION, 2);
   assert.equal(P.OUT, 256, '256² PNGs');
   assert.equal(P.IDLE_MS, 30000, 'the renderer is disposed after 30 s idle');
   assert.deepEqual([P.CAM.fov, P.CAM.elev, P.CAM.yaw, P.CAM.fill], [30, 28, 25, 0.8]);
   assert.equal(P.TT.riserR, 0.7);
-  assert.equal(P.RISER_TOP, L.EXTRA['Riser Top'], 'the riser top is the look table\'s Riser Top');
 });
 
 /* ---------------- browser-style load ---------------- */
@@ -382,7 +610,14 @@ test('browser load: a classic script that installs window.SLPhotocard once and n
   const { ctx, listeners } = browserLoad();
   const api = ctx.SLPhotocard;
   assert.ok(api && api.__pc, 'window.SLPhotocard');
-  ['fill', 'turntable', 'prewarm', 'url', 'clear', 'dispose', 'info'].forEach((k) => assert.equal(typeof api[k], 'function', k));
+  ['fill', 'turntable', 'prewarm', 'url', 'setUser', 'clear', 'dispose', 'info'].forEach((k) => assert.equal(typeof api[k], 'function', k));
+  /* the member colour lights the rim and keys the icons; junk clears it */
+  assert.equal(api.info().member, null);
+  assert.equal(api.setUser({ color: '#22aaff' }), api);
+  assert.equal(api.info().member, '#22AAFF');
+  api.setUser({ color: 'pink' });
+  assert.equal(api.info().member, null);
+  api.setUser(null);
   assert.ok(listeners.includes('win:pagehide') && listeners.includes('doc:visibilitychange'));
   /* a second copy (stage injection + the app) reuses the first engine */
   vm.runInContext(SRC, ctx, { filename: 'photocard.js' });
@@ -413,7 +648,8 @@ test('source rules: classic script, THREE only through SL3D, no point/spot light
   assert.ok(/\.makeRig\(/.test(SRC) && /S\.make\(/.test(SRC), 'uses SL3D.make and makeRig');
   assert.ok(!/setInterval\(/.test(SRC), 'no free-running timers');
   assert.ok(!/localStorage\.setItem/.test(SRC), 'reads the kill switch, never writes device state');
-  assert.ok(!/#[0-9a-fA-F]{6}'/.test(SRC.replace("RISER_TOP = '#FFF0FA'", '')), 'no raw hex colours besides the riser fallback');
+  assert.ok(!/#[0-9a-fA-F]{6}\b/.test(SRC.replace(/\/\*[\s\S]*?\*\//g, '')), 'no raw hex colours: every colour is a look token (or the child\'s member colour)');
+  assert.ok(!/fillText|strokeText/.test(SRC), 'a photocard draws no words of its own (texture text comes only from the kit atlases)');
 });
 
 test('stage.js loads photocard.js as the SLPhotocard global; the architecture names it', () => {

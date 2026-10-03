@@ -7,12 +7,16 @@
      top-right   SVG minimap (track + every racer) and the 🎥 camera button
      right edge  the HYPE WAND: a light stick — 8 pips in the signature colour
                  and a ✦ sparkle bulb (never the reward-points star emoji)
-     centre      pop words (≤ 2 at once; big = Bagel Fat One, small = Baloo 2)
+     centre      pop words (≤ 2 at once; big = Unbounded 800, small = Outfit 800)
      WRONG WAY   the shell-style banner
    Short screens (≤ 600 px tall — every phone held sideways): the right edge has
    no room between the map + 🎥 button and the pads, so the wand lies flat in
    the top centre under the lap pips instead (WAND_ROW_MAX_H).
-   Glass panels by day; dark glass with white text on the Encore lap.
+   ENCORE CITY skin (v2): night-glass panels (rgba(22,18,40,.72), a 1px
+   rgba(255,255,255,.12) edge; solid #15112A on html.sl-low or without
+   backdrop-filter), flat 12px chips, Outfit 700/800 tabular numbers, white /
+   Star Gold text (≥ 4.5:1 even over the bright day track); the Encore lap adds
+   a magenta edge glow.
    Every DOM write happens only when its value changes. The decorative parts
    are aria-hidden one by one; the 🎥 button stays in the accessibility tree.
 
@@ -26,55 +30,66 @@
 export const WAND_ROW_MAX_H = 600;
 /* the wand's bulb: a puffy four-point ✦ sparkle (light-stick style) */
 export const SPARKLE = 'M12 1.5C12.9 7.6 16.4 11.1 22.5 12C16.4 12.9 12.9 16.4 12 22.5C11.1 16.4 7.6 12.9 1.5 12C7.6 11.1 11.1 7.6 12 1.5Z';
+/* the island's type tokens (world/island-encore.css), with the same fallbacks when that sheet is absent */
+const UI_FONT = 'var(--sle-ui,"Outfit",system-ui,-apple-system,"Segoe UI",sans-serif)';
+const DISPLAY_FONT = 'var(--sle-display,"Unbounded","Outfit",system-ui,sans-serif)';
 export const CSS = [
-  '.k3d-hud{position:absolute;inset:0;pointer-events:none;z-index:2;font-family:"Baloo 2",system-ui,sans-serif;color:#2B2140;overflow:hidden;}',
+  '.k3d-hud{position:absolute;inset:0;pointer-events:none;z-index:2;font-family:' + UI_FONT + ';font-variant-numeric:tabular-nums;color:#FFFFFF;overflow:hidden;}',
   '.k3d-hud.off{display:none;}',
-  '.k3d-glass{background:rgba(255,255,255,.78);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);box-shadow:0 3px 12px rgba(19,12,46,.18);}',
-  '.k3d-hud.night .k3d-glass{background:rgba(26,18,64,.72);color:#fff;}',
+  /* night glass, as on the island; solid where blur is missing or on the LOW tier */
+  '.k3d-glass{background:rgba(22,18,40,.72);-webkit-backdrop-filter:blur(16px) saturate(1.3);backdrop-filter:blur(16px) saturate(1.3);border:1px solid rgba(255,255,255,.12);',
+  '  box-shadow:0 8px 24px rgba(0,0,0,.4),inset 0 1px 0 rgba(255,255,255,.08);}',
+  '@supports not ((backdrop-filter:blur(2px)) or (-webkit-backdrop-filter:blur(2px))){.k3d-glass{background:#15112A;}}',
+  'html.sl-low .k3d-glass{background:#15112A;-webkit-backdrop-filter:none;backdrop-filter:none;}',
+  /* the Encore lap: the same glass with a magenta edge glow */
+  '.k3d-hud.night .k3d-glass{border-color:rgba(255,95,176,.35);box-shadow:0 8px 24px rgba(0,0,0,.4),0 0 16px rgba(255,46,154,.2),inset 0 1px 0 rgba(255,255,255,.08);}',
   '.k3d-tl{position:absolute;left:10px;top:10px;display:flex;flex-direction:column;align-items:flex-start;gap:6px;}',
-  '.k3d-chip{font-weight:800;font-size:clamp(14px,2.4vmin,19px);padding:3px 12px;border-radius:999px;white-space:nowrap;}',
-  '.k3d-place{font-size:clamp(20px,4.2vmin,34px);line-height:1.1;padding:2px 14px;}',
-  '.k3d-chip.ahead{background:#7BD88F;color:#163a20;}.k3d-chip.behind{background:#FF6B6B;color:#fff;}',
+  '.k3d-chip{font-weight:800;font-size:clamp(14px,2.4vmin,19px);padding:3px 12px;border-radius:12px;white-space:nowrap;}',
+  '.k3d-place{font-size:clamp(20px,4.2vmin,34px);line-height:1.1;padding:2px 14px;color:#FFD23F;}',
+  /* pacer splits: solid dark chips (the sign leads: − ahead, + behind; never colour alone) */
+  '.k3d-chip.ahead{background:#0F2A1D;color:#5BE39A;border:1px solid rgba(46,204,113,.6);}',
+  '.k3d-chip.behind{background:#2E1220;color:#FF8A96;border:1px solid rgba(255,90,106,.6);}',
   '.k3d-chip:empty{display:none;}',
   '.k3d-tc{position:absolute;left:50%;top:10px;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:6px;}',
-  '.k3d-pips{display:flex;gap:8px;padding:5px 10px;border-radius:999px;}',
-  '.k3d-pip{width:15px;height:15px;border-radius:50%;border:2px solid #3B2F4A;background:rgba(255,255,255,.55);box-sizing:border-box;}',
-  '.k3d-pip.done{background:#7BD88F;}.k3d-pip.cur{box-shadow:0 0 0 3px #FFD23F;}',
-  '.k3d-hud.night .k3d-pip{border-color:#fff;}',
-  '.k3d-banner{font-family:"Bagel Fat One","Baloo 2",sans-serif;font-size:clamp(28px,6.5vmin,56px);line-height:1;white-space:nowrap;',
-  '  background:linear-gradient(180deg,#FFD23F,#FF5FA2);-webkit-background-clip:text;background-clip:text;color:transparent;',
-  '  filter:drop-shadow(0 3px 0 #3B2F4A);opacity:0;transition:opacity .25s;}',
+  '.k3d-pips{display:flex;gap:8px;padding:5px 10px;border-radius:12px;}',
+  '.k3d-pip{width:15px;height:15px;border-radius:50%;border:2px solid rgba(255,255,255,.8);background:rgba(255,255,255,.1);box-sizing:border-box;}',
+  '.k3d-pip.done{background:#2ECC71;border-color:#2ECC71;}.k3d-pip.cur{box-shadow:0 0 0 3px #FFD23F;}',
+  '.k3d-banner{font-family:' + DISPLAY_FONT + ';font-weight:800;letter-spacing:-.01em;font-size:clamp(28px,6.5vmin,56px);line-height:1;white-space:nowrap;',
+  '  background:linear-gradient(180deg,#FFFFFF 0%,#FFE27A 58%,#FFD23F 100%);-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-stroke:1.5px rgba(20,16,31,.55);',
+  '  filter:drop-shadow(0 3px 0 rgba(14,11,26,.6)) drop-shadow(0 0 14px rgba(255,46,154,.5));opacity:0;transition:opacity .25s;}',
   '.k3d-banner.on{opacity:1;}',
   '.k3d-tr{position:absolute;right:10px;top:10px;display:flex;flex-direction:column;align-items:flex-end;gap:6px;}',
   '.k3d-map{border-radius:12px;padding:5px;line-height:0;}',
   '.k3d-map svg{display:block;width:clamp(96px,17vmin,150px);height:auto;overflow:visible;}',
-  '.k3d-cam{pointer-events:auto;min-width:44px;min-height:44px;border-radius:14px;border:2px solid rgba(59,47,74,.25);font:inherit;font-weight:800;',
-  '  font-size:15px;padding:4px 12px;cursor:pointer;color:inherit;touch-action:manipulation;}',
+  '.k3d-cam{pointer-events:auto;min-width:44px;min-height:44px;border-radius:12px;font:inherit;font-weight:700;',
+  '  font-size:15px;padding:4px 12px;cursor:pointer;color:#FFFFFF;touch-action:manipulation;transition:transform .16s ease-out;}',
+  '.k3d-cam:active{transform:scale(.97);}',
   '.k3d-cam:focus-visible{outline:3px solid #FFD23F;outline-offset:2px;}',
   '.k3d-wand{position:absolute;right:14px;top:46%;transform:translateY(-50%);display:flex;flex-direction:column;align-items:center;gap:3px;',
   '  padding:8px 6px 6px;border-radius:999px;}',
   /* the bulb: an outline ✦ until the wand is full (shape + glow, never colour alone), then the signature colour */
-  '.k3d-bulb{display:block;width:26px;height:26px;overflow:visible;fill:rgba(59,47,74,.14);stroke:rgba(59,47,74,.55);stroke-width:1.8;stroke-linejoin:round;}',
-  '.k3d-hud.night .k3d-bulb{fill:rgba(255,255,255,.12);stroke:rgba(255,255,255,.7);}',
-  '.k3d-bulb.full,.k3d-hud.night .k3d-bulb.full{fill:currentColor;stroke:#FFFFFF;}',
+  '.k3d-bulb{display:block;width:26px;height:26px;overflow:visible;fill:rgba(255,255,255,.12);stroke:rgba(255,255,255,.7);stroke-width:1.8;stroke-linejoin:round;}',
+  '.k3d-bulb.full{fill:currentColor;stroke:#FFFFFF;}',
   '.k3d-bulb.full{animation:k3dBulb 1s ease-in-out infinite alternate;}',
-  '.k3d-wpip{width:16px;height:13px;border-radius:7px;background:rgba(59,47,74,.15);transition:background .15s;}',
-  '.k3d-hud.night .k3d-wpip{background:rgba(255,255,255,.18);}',
+  '.k3d-wpip{width:16px;height:13px;border-radius:7px;background:rgba(255,255,255,.14);box-shadow:inset 0 0 0 1px rgba(255,255,255,.1);transition:background .15s;}',
   '.k3d-wpip.pop{animation:k3dPip .25s cubic-bezier(.34,1.56,.64,1);}',
-  '.k3d-handle{width:12px;height:28px;border-radius:6px;background:#fff;border:2px solid rgba(59,47,74,.3);}',
+  /* the stick's handle: Midnight Ink with a Gunmetal collar, like the island's Spark Stick */
+  '.k3d-handle{width:12px;height:28px;border-radius:6px;background:#14101F;border:2px solid #5A5F72;box-sizing:border-box;}',
   /* out of the flow (so the hidden tag never widens the wand): beside the bulb, on the screen side */
   '.k3d-spot{position:absolute;right:calc(100% + 6px);top:10px;white-space:nowrap;',
-  '  font-family:"Bagel Fat One","Baloo 2",sans-serif;font-size:13px;color:#FFD23F;filter:drop-shadow(0 1px 0 #3B2F4A);opacity:0;}',
+  '  font-family:' + UI_FONT + ';font-weight:800;letter-spacing:.06em;font-size:13px;color:#FFD23F;',
+  '  filter:drop-shadow(0 1px 0 #14101F) drop-shadow(0 0 4px rgba(14,11,26,.8));opacity:0;}',
   '.k3d-spot.on{opacity:1;}',
   '.k3d-word{position:absolute;left:50%;top:33%;transform:translate(-50%,-50%);white-space:nowrap;pointer-events:none;',
-  '  font-family:"Bagel Fat One","Baloo 2",sans-serif;font-size:calc(clamp(30px,7vmin,64px) * var(--k3ds,1));line-height:1;',
-  '  -webkit-text-stroke:2px #3B2F4A;paint-order:stroke fill;filter:drop-shadow(0 4px 0 rgba(59,47,74,.55));animation:k3dPop .9s ease-out forwards;}',
-  '.k3d-word.small{font-family:"Baloo 2",sans-serif;font-weight:800;font-size:clamp(22px,4.6vmin,40px);top:43%;}',
+  '  font-family:' + DISPLAY_FONT + ';font-weight:800;letter-spacing:-.01em;font-size:calc(clamp(28px,6.5vmin,60px) * var(--k3ds,1));line-height:1;',
+  '  -webkit-text-stroke:2px #14101F;paint-order:stroke fill;filter:drop-shadow(0 4px 0 rgba(14,11,26,.55)) drop-shadow(0 0 12px rgba(14,11,26,.45));',
+  '  animation:k3dPop .9s ease-out forwards;}',
+  '.k3d-word.small{font-family:' + UI_FONT + ';font-weight:800;font-size:clamp(22px,4.6vmin,40px);top:43%;}',
   '.k3d-word.b2{top:52%;}',
-  '.k3d-wrong{position:absolute;left:50%;top:24%;transform:translateX(-50%);background:#FF8A8A;color:#3B2F4A;font-weight:800;',
-  '  border-radius:999px;padding:6px 18px;font-size:clamp(17px,3.4vmin,26px);box-shadow:0 4px 14px rgba(0,0,0,.25);white-space:nowrap;}',
+  '.k3d-wrong{position:absolute;left:50%;top:24%;transform:translateX(-50%);background:#FF5A6A;color:#14101F;font-weight:800;',
+  '  border-radius:12px;padding:6px 18px;font-size:clamp(17px,3.4vmin,26px);box-shadow:0 0 0 1px rgba(255,255,255,.35),0 8px 20px rgba(0,0,0,.35);white-space:nowrap;}',
   '.k3d-wrong[hidden]{display:none;}',
-  '@keyframes k3dPop{0%{transform:translate(-50%,-50%) scale(.45);opacity:0;}16%{transform:translate(-50%,-50%) scale(1.1);opacity:1;}',
+  '@keyframes k3dPop{0%{transform:translate(-50%,-50%) scale(.6);opacity:0;}16%{transform:translate(-50%,-50%) scale(1.04);opacity:1;}',
   '  30%{transform:translate(-50%,-50%) scale(1);}78%{opacity:1;}100%{transform:translate(-50%,-62%) scale(1);opacity:0;}}',
   '@keyframes k3dFade{0%{opacity:0;}15%{opacity:1;}78%{opacity:1;}100%{opacity:0;}}',
   '@keyframes k3dPip{0%{transform:scale(1);}50%{transform:scale(1.25);}100%{transform:scale(1);}}',
@@ -191,7 +206,7 @@ export function makeHud(mid, o) {
     let c = dots[i];
     if (!c) {
       c = document.createElementNS(SVG, 'circle');
-      c.setAttribute('stroke', '#3B2F4A'); c.setAttribute('stroke-width', '1.5');
+      c.setAttribute('stroke', '#14101F'); c.setAttribute('stroke-width', '1.5');
       svg.appendChild(c); dots[i] = c;
     }
     if (c._r !== r) { c._r = r; c.setAttribute('r', String(r)); }

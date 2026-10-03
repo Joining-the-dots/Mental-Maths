@@ -35,8 +35,9 @@ test('camera: the default view frames every unlocked-land corner inside NDC ±0.
     const r = new Cam.Rig({ aspect, land });
     r.update(0);
     const p = r.pose;
-    assert.equal(p.yaw, 0); assert.equal(p.elev, 52); assert.equal(p.zoom, 1);
-    const fit = G.fitCamera({ land, aspect, yaw: 0, elev: 52 });
+    assert.equal(p.yaw, 0); assert.equal(p.elev, 48); assert.equal(p.zoom, 1);
+    assert.equal(p.ty, Cam.TARGET_Y);
+    const fit = G.fitCamera({ land, aspect, yaw: 0, elev: 48 });
     assert.ok(near(p.tx, fit.target.x) && near(p.tz, fit.target.z), 'target = land centre');
     assert.ok(near(p.dist, fit.dist, 1e-9));
     for (const c of corners(land)) {
@@ -61,21 +62,66 @@ test('camera: projectPose agrees with SLGrid3D.project and groundAt inverts it',
 });
 
 /* ---------------- clamps ---------------- */
-test('camera: yaw ±35°, elevation 40–67°, zoom 0.75–1.6 (2.2 on portrait phones)', () => {
+test('camera: yaw ±35°, elevation 34–67° in play (40 while editing), zoom 0.75–1.6 (2.45 on portrait phones)', () => {
   const r = rigWith();
   r.orbitBy(500, 500);
   assert.equal(r.goal.yaw, 35); assert.equal(r.goal.elev, 67);
   r.orbitBy(-900, -900);
-  assert.equal(r.goal.yaw, -35); assert.equal(r.goal.elev, 40);
+  assert.equal(r.goal.yaw, -35); assert.equal(r.goal.elev, 34, 'a deliberate low drag shows more of the city');
   r.zoomBy(100); assert.equal(r.goal.zoom, 1.6);
   assert.equal(r.zoomBy(2), false, 'no change at the limit');
   r.zoomBy(0.001); assert.equal(r.goal.zoom, 0.75);
+  /* editing: the floor is 40 (the edit tilt itself is 62) */
+  const ed = rigWith();
+  ed.setMode('edit'); ed.goal.elev = 10; ed.clampGoal();
+  assert.equal(ed.goal.elev, 40);
+  assert.equal(Cam.LIMITS.elevDefault, 48); assert.equal(Cam.LIMITS.editElev, 62); assert.equal(Cam.LIMITS.fov, 30, 'FOV unchanged');
   const phone = rigWith({ touch: true, aspect: 0.8 });
-  assert.equal(phone.zoomMax(), 2.2);
-  phone.zoomBy(100); assert.equal(phone.goal.zoom, 2.2);
+  assert.equal(phone.zoomMax(), 2.45);
+  phone.zoomBy(100); assert.equal(phone.goal.zoom, 2.45);
   assert.equal(rigWith({ touch: false, aspect: 0.8 }).zoomMax(), 1.6, 'a narrow desktop window is not a phone');
   assert.equal(rigWith({ touch: true, aspect: 1.5 }).zoomMax(), 1.6, 'a landscape tablet keeps 1.6');
   assert.ok(Cam.isPhone(true, 0.6) && !Cam.isPhone(true, 1.2) && !Cam.isPhone(false, 0.6));
+});
+
+test('camera: portrait phones start zoomed to 1.75 (finger-sized cells) and every zoom level stays reachable', () => {
+  /* the 375 px phone: a ≈359 px wide 2:3 stage, width-limited */
+  const W = 359, H = 538.5, cellPx = (r) => {
+    const c = G.cellCenter(7, 5), y = G.surfaceY(7, 5);
+    const a = Cam.projectPose({ x: c.x - 0.5, y, z: c.z }, r.pose), b = Cam.projectPose({ x: c.x + 0.5, y, z: c.z }, r.pose);
+    const d = Cam.projectPose({ x: c.x, y, z: c.z - 0.5 }, r.pose), e = Cam.projectPose({ x: c.x, y, z: c.z + 0.5 }, r.pose);
+    return { w: (b.x - a.x) / 2 * W, h: (d.y - e.y) / 2 * H };
+  };
+  const r = new Cam.Rig({ aspect: W / H, land: G.landFrom(['home']), touch: true });
+  r.resize(W, H); r.update(0);
+  assert.equal(r.homeZoom(), 1.75); assert.equal(r.home.zoom, 1.75);
+  assert.equal(r.pose.zoom, 1.75, 'the very first frame is already the phone view');
+  const c1 = cellPx(r);
+  assert.ok(c1.w >= 42 && c1.w <= 50 && c1.h >= 30 && c1.h <= 38, `home-only cells ≈ 45 × 33 px (${c1.w.toFixed(1)} × ${c1.h.toFixed(1)})`);
+  r.zoomBy(0.5); settle(r);
+  r.command('reset'); settle(r);
+  assert.ok(near(r.pose.zoom, 1.75, 1e-6), 'reset returns to the phone home zoom');
+  /* all land, zoomed all the way in: still finger-sized */
+  const all = new Cam.Rig({ aspect: W / H, land: G.landFrom(['home', 'cove', 'meadow']), touch: true, reduced: true });
+  all.resize(W, H); all.zoomBy(100); all.update(0);
+  assert.equal(all.pose.zoom, 2.45);
+  const c2 = cellPx(all);
+  assert.ok(c2.w >= 42 && c2.h >= 30, `all land at 2.45: ${c2.w.toFixed(1)} × ${c2.h.toFixed(1)}`);
+  /* a desktop or a landscape tablet keeps the v1 framing */
+  assert.equal(Cam.homeZoomFor(false, 0.6), 1); assert.equal(Cam.homeZoomFor(true, 1.4), 1); assert.equal(Cam.homeZoomFor(true, 0.66), 1.75);
+  /* turning the phone sideways: an untouched view follows the new home zoom; a moved one is kept */
+  const t = new Cam.Rig({ aspect: W / H, land: ['home'], touch: true });
+  t.resize(W, H); t.update(0);
+  t.resize(H, W);
+  assert.equal(t.goal.zoom, 1, 'landscape: the v1 fit');
+  t.resize(W, H); t.zoomBy(1.2);
+  const z = t.goal.zoom;
+  t.resize(H, W);
+  assert.equal(t.goal.zoom, Math.min(z, 1.6), 'the child’s own zoom is kept (inside the landscape clamp)');
+  /* phones still zoom into place mode at ≥ 1.4 (the 1.75 home view already is) */
+  const pl = rigWith({ touch: true, aspect: 0.66 });
+  pl.zoomBy(1 / 2); pl.setMode('place');
+  assert.equal(pl.goal.zoom, 1.4);
 });
 
 test('camera: panning is clamped to the land, tighter when zoomed out', () => {
@@ -90,12 +136,42 @@ test('camera: panning is clamped to the land, tighter when zoomed out', () => {
   assert.ok(lim2.x > lim1.x && near(Math.abs(r.goal.tx - r.home.tx), lim2.x, 1e-9));
   r.zoomBy(1 / 1.6);
   assert.ok(Math.abs(r.goal.tx - r.home.tx) <= lim1.x + 1e-9, 'zooming back out pulls the target home');
+  assert.ok(Math.abs(r.goal.tz - r.home.tz) <= lim1.z + 1e-9);
+});
+
+test('camera: zoomed in past 1.2 the target may glide 2.5 u further toward the city (-z) only', () => {
+  assert.equal(Cam.backPanFor(1, 'play'), 0);
+  assert.equal(Cam.backPanFor(1.2, 'play'), 0);
+  assert.equal(Cam.backPanFor(1.6, 'play'), 2.5);
+  assert.equal(Cam.backPanFor(2.45, 'play'), 2.5, 'never more than 2.5 u');
+  assert.equal(Cam.backPanFor(1.6, 'edit'), 0, 'editing keeps the land framed');
+  assert.equal(Cam.backPanFor(1.6, 'place'), 0);
+  let prev = 0;
+  for (let z = 1.2; z <= 1.5 + 1e-9; z += 0.01) { const v = Cam.backPanFor(z, 'play'); assert.ok(v >= prev - 1e-12, 'ramps smoothly'); prev = v; }
+  const b = Cam.boundsOf(['home']);
+  const r = rigWith({ w: 800, h: 450 });
+  r.zoomBy(1.6);
+  const pl = Cam.panLimit(b, 1.6);
+  r.panBy(0, 1e6);                                      /* drag down: the view travels back over the bay */
+  assert.ok(near(r.goal.tz, r.home.tz - pl.z - 2.5, 1e-9), 'the city side: + 2.5 u');
+  r.panBy(0, -2e6);
+  assert.ok(near(r.goal.tz, r.home.tz + pl.z, 1e-9), 'the front is unchanged');
+  r.panBy(1e6, 0);
+  assert.ok(near(Math.abs(r.goal.tx - r.home.tx), pl.x, 1e-9), 'the sides are unchanged');
+  /* zooming back out glides the target home */
+  r.panBy(0, 2e6);
+  r.zoomBy(1 / 1.6);
+  assert.ok(r.goal.tz >= r.home.tz - Cam.panLimit(b, 1).z - 1e-9);
+  /* edit mode clamps the target back over the land */
+  const e = rigWith({ w: 800, h: 450 });
+  e.zoomBy(1.6); e.panBy(0, 1e6); e.setMode('edit');
+  assert.ok(near(e.goal.tz, e.home.tz - pl.z, 1e-9));
 });
 
 test('camera: a pan moves the content with the finger at the target depth', () => {
-  for (const yaw of [-30, 0, 25]) for (const elev of [42, 52, 62]) {
+  for (const yaw of [-30, 0, 25]) for (const elev of [38, 48, 62]) {
     const r = rigWith({ w: 800, h: 450, reduced: true });
-    r.zoomBy(1.6); r.orbitBy(yaw, elev - 52); r.update(0);
+    r.zoomBy(1.6); r.orbitBy(yaw, elev - 48); r.update(0);
     const P = { x: r.pose.tx, y: r.pose.ty, z: r.pose.tz };
     const before = Cam.projectPose(P, r.pose);
     r.panBy(12, -9); r.update(0);
@@ -132,23 +208,25 @@ test('camera: edit and place tilt to yaw 0 / 62° (no orbit) and restore the pla
   r.setMode('play');
   assert.deepEqual({ yaw: r.goal.yaw, elev: r.goal.elev, zoom: r.goal.zoom }, before);
   const phone = rigWith({ touch: true, aspect: 0.75 });
+  phone.zoomBy(1 / 1.75);
   phone.setMode('place');
   assert.equal(phone.goal.zoom, 1.4, 'place mode on phones zooms to 1.4×');
   const drag = rigWith({ touch: true, aspect: 0.75 });
+  drag.zoomBy(1 / 1.75);
   drag.setMode('edit'); drag.setMode('place', { keepZoom: true });
-  assert.equal(drag.goal.zoom, 1, 'a drag carrying an item into place mode keeps the zoom');
+  assert.ok(near(drag.goal.zoom, 1), 'a drag carrying an item into place mode keeps the zoom');
 });
 
 test('camera: reset and commands', () => {
   const r = rigWith();
   assert.ok(r.command('right')); assert.equal(r.goal.yaw, 15);
   r.command('left'); r.command('left'); assert.equal(r.goal.yaw, -15);
-  r.command('up'); assert.equal(r.goal.elev, 57);
+  r.command('up'); assert.equal(r.goal.elev, 53);
   r.command('in'); assert.ok(near(r.goal.zoom, 1.25));
   r.command('out'); assert.ok(near(r.goal.zoom, 1));
   assert.equal(r.command('nope'), false);
   r.command('reset');
-  assert.deepEqual([r.goal.yaw, r.goal.elev, r.goal.zoom, r.goal.tx, r.goal.tz], [0, 52, 1, r.home.tx, r.home.tz]);
+  assert.deepEqual([r.goal.yaw, r.goal.elev, r.goal.zoom, r.goal.tx, r.goal.tz], [0, 48, 1, r.home.tx, r.home.tz]);
 });
 
 /* ---------------- motion ---------------- */
@@ -220,7 +298,7 @@ test('camera: a land unlock reframes smoothly onto the bigger island', () => {
   settle(r);
   const tx0 = r.cur.tx;
   r.setLand(['home', 'cove']);
-  const fit = G.fitCamera({ land: ['home', 'cove'], aspect: 16 / 9, yaw: 0, elev: 52 });
+  const fit = G.fitCamera({ land: ['home', 'cove'], aspect: 16 / 9, yaw: 0, elev: 48 });
   assert.ok(near(r.goal.tx, fit.target.x));
   r.update(1 / 60);
   assert.ok(r.cur.tx > tx0 && r.cur.tx < r.goal.tx, 'eases, no cut');
@@ -229,7 +307,7 @@ test('camera: a land unlock reframes smoothly onto the bigger island', () => {
 });
 
 /* ---------------- stage-cam moves ---------------- */
-test('camera: crane 52° → 40° toward the region over 1.4 s, hold 1.5 s, back over 1.0 s', async () => {
+test('camera: crane 48° → 40° toward the region over 1.4 s, hold 1.5 s, back over 1.0 s', async () => {
   const r = rigWith();
   settle(r);
   let done = false;
@@ -242,7 +320,7 @@ test('camera: crane 52° → 40° toward the region over 1.4 s, hold 1.5 s, back
   await p;
   assert.equal(done, true);
   assert.equal(r.move, null);
-  assert.ok(near(r.pose.elev, 52, 1e-6), 'back to the user view');
+  assert.ok(near(r.pose.elev, 48, 1e-6), 'back to the user view');
   const red = rigWith({ reduced: true });
   red.crane({ x: 6.5, z: 0 }); red.update(0.01);
   assert.equal(red.move.k, 1, 'reduced motion: a static cut toward the region');
@@ -268,34 +346,144 @@ test('camera: the launch push-in arrives in 0.7 s, holds, and releases', async (
   assert.ok(near(r.pose.zoom, 1, 1e-9));
 });
 
-test('camera: the reveal starts high and wide and settles on the default view', () => {
-  const r = rigWith();
-  settle(r);
-  r.reveal(); r.update(1 / 60);
-  assert.ok(r.pose.elev > 64 && r.pose.zoom < 0.85, 'starts high and wide');
-  settle(r, 2);
-  assert.equal(r.move, null);
-  assert.ok(near(r.pose.elev, 52, 1e-9) && near(r.pose.yaw, 0, 1e-9));
-  const red = rigWith({ reduced: true });
-  red.reveal(); red.update(1 / 60);
-  assert.equal(red.move, null, 'no reveal under reduced motion');
+test('camera: the skyline hero shot — elev 14, yaw -16, target raised to 2.0 and 1.5 u toward the city, zoom 0.8', () => {
+  const S = Cam.SKYLINE;
+  assert.deepEqual([S.elev, S.yaw, S.ty, S.dz, S.zoom, S.hold, S.ease], [14, -16, 2.0, -1.5, 0.8, 0.9, 1.8]);
+  assert.ok(S.drift > 0 && S.drift / (S.hold + S.ease) < 1, 'the shot creeps, well under 1°/s');
+  for (const aspect of [0.66, 1, 16 / 9, 2.4]) {
+    const r = rigWith({ aspect, w: aspect * 600, h: 600 });
+    settle(r);
+    let done = false;
+    r.skyline().then((ok) => { done = ok; });
+    r.update(0);
+    const p = r.pose;
+    assert.equal(r.move.kind, 'skyline');
+    assert.ok(near(p.elev, 14) && near(p.yaw, -16) && near(p.zoom, 0.8) && near(p.ty, 2.0), 'on mount it starts in the pose');
+    assert.ok(near(p.tx, r.home.tx) && near(p.tz, r.home.tz - 1.5));
+    /* at elev 14 the top ray is above the horizontal: the dusk sky, the towers and the wheel show */
+    const top = Cam.topRayDeg(p);
+    assert.ok(top >= 0 && near(top, Cam.LIMITS.fov / 2 - 14, 1e-9), `top ray ${top}°`);
+    assert.ok(Cam.topRayDeg({ yaw: 0, elev: 48, fov: 30 }) < -30, 'the play view never shows the horizon');
+    /* the Lantern Bridge (−3.2, −4.45 → −8.2) and the Halo Wheel rim (14.5, −6.2, d 3.2) are in front of the camera */
+    for (const q of [{ x: -3.2, y: 0.5, z: -6.3 }, { x: 0, y: 6, z: -14 }]) assert.ok(Cam.projectPose(q, p).depth > 0);
+    void done;
+  }
 });
 
-test('camera: the Showtime orbit sways ±8° on alternate sides, never while editing or reduced', () => {
+test('camera: the skyline holds 0.9 s, eases home over 1.8 s (ty interpolated), and resolves', async () => {
+  const r = rigWith();
+  settle(r);
+  let done = null;
+  r.skyline().then((ok) => { done = ok; });
+  const log = [];
+  for (let t = 0; t < 3; t += 1 / 60) { r.update(1 / 60); log.push([r.t, r.move ? r.move.k : 0, r.pose.ty, r.pose.elev, r.version]); }
+  const t0 = log[0][0] - 1 / 60;
+  const at = (sec) => log.find((e) => e[0] - t0 >= sec);
+  assert.equal(at(0.85)[1], 1, 'held');
+  for (let i = 1; i < 50; i++) assert.ok(log[i][4] > log[i - 1][4], 'the held shot still creeps (never a frozen frame)');
+  assert.ok(near(at(0.85)[2], 2.0) && near(at(0.85)[3], 14));
+  const mid = at(0.9 + 0.9);
+  assert.ok(mid[1] > 0.4 && mid[1] < 0.6, 'half way through the 1.8 s ease');
+  assert.ok(near(mid[2], Cam.TARGET_Y + (2.0 - Cam.TARGET_Y) * mid[1], 1e-9), 'ty = lerp(0.3, 2.0, k)');
+  assert.ok(mid[3] > 14 && mid[3] < 48);
+  for (let i = 1; i < log.length; i++) assert.ok(log[i][2] <= log[i - 1][2] + 1e-12, 'ty only descends');
+  await Promise.resolve();
+  assert.equal(done, true);
+  assert.equal(r.move, null);
+  assert.ok(near(r.pose.ty, Cam.TARGET_Y) && near(r.pose.elev, 48) && near(r.pose.yaw, 0) && near(r.pose.zoom, 1), 'the user view');
+  /* the stage encore eases in first, optionally centred toward the stage */
+  const e = rigWith();
+  settle(e);
+  e.skyline({ easeIn: 1, at: { x: 4, z: 0 } }); e.update(0);
+  assert.ok(near(e.move.k, 0), 'no cut at the encore');
+  for (let i = 0; i < 30; i++) e.update(1 / 60);
+  assert.ok(e.move.k > 0.3 && e.move.k < 0.7);
+  for (let i = 0; i < 40; i++) e.update(1 / 60);
+  assert.equal(e.move.k, 1);
+  assert.ok(near(e.move.tx, (e.home.tx + 4) / 2));
+});
+
+test('camera: a drag (or any camera input) hands the skyline back; a held finger freezes it; reduced motion skips it', async () => {
+  const r = rigWith({ w: 800, h: 450 });
+  settle(r);
+  r.skyline(); r.update(1 / 60);
+  r.orbitBy(10, 0);                                     /* the child grabs the camera */
+  assert.equal(r.move.relT >= 0, true, 'released');
+  assert.equal(r.goal.yaw, 10, 'the drag still lands in the user view');
+  for (let i = 0; i < 20; i++) r.update(1 / 60);
+  assert.ok(r.move && r.move.k < 0.8, 'eases out rather than cutting');
+  settle(r, 2);
+  assert.equal(r.move, null);
+  assert.ok(near(r.pose.yaw, 10, 1e-6));
+  for (const input of [(x) => x.panBy(5, 0), (x) => x.zoomBy(1.1), (x) => x.command('reset'), (x) => x.focusOn({ x: 0, z: 0 })]) {
+    const q = rigWith({ w: 800, h: 450 });
+    settle(q); q.skyline(); q.update(1 / 60);
+    input(q);
+    settle(q, 1);
+    assert.equal(q.move, null, 'every camera input ends it');
+  }
+  /* other moves are not skippable */
+  const c = rigWith(); settle(c); c.crane({ x: 6, z: 0 }); c.update(1 / 60);
+  assert.equal(c.interrupt(), false); c.orbitBy(5, 0);
+  assert.equal(c.move.kind, 'crane');
+  /* a finger down holds the shot still (a tap picks what it saw), the release hands it back */
+  const f = rigWith();
+  settle(f);
+  f.skyline(); f.update(1 / 60);
+  for (let i = 0; i < 60; i++) f.update(1 / 60);       /* into the ease */
+  f.freeze(true);
+  const k0 = f.move.k, v0 = f.version;
+  for (let i = 0; i < 30; i++) f.update(1 / 60);
+  assert.equal(f.move.k, k0, 'frozen');
+  assert.equal(f.version, v0, 'nothing moves under the finger');
+  assert.ok(f.interrupt());
+  settle(f, 1);
+  assert.equal(f.move, null);
+  /* a lost pointer never strands it */
+  const g = rigWith(); settle(g); g.skyline(); g.freeze(true);
+  settle(g, 6);
+  assert.equal(g.move, null);
+  /* reduced motion: skipped — the user view is simply there */
+  const red = rigWith({ reduced: true });
+  let ok = null;
+  red.skyline().then((v) => { ok = v; }); red.update(1 / 60);
+  assert.equal(red.move, null);
+  await Promise.resolve();
+  assert.equal(ok, true);
+  const late = rigWith(); settle(late); late.skyline(); late.update(1 / 60);
+  late.setReduced(true);
+  assert.equal(late.move, null, 'turning reduced motion on ends it at once');
+  assert.equal(typeof late.reveal, 'function', 'reveal() is kept as the hero shot');
+});
+
+test('camera: the Showtime orbit sways ±8° on alternate sides and dips the view 6° (floor 40), never while editing or reduced', () => {
   const r = rigWith();
   settle(r);
   r.showOrbit(true);
-  let max = 0, min = 0;
-  for (let t = 0; t < 16; t += 1 / 30) { r.update(1 / 30); max = Math.max(max, r.orbitYaw); min = Math.min(min, r.orbitYaw); }
+  let max = 0, min = 0, low = 99;
+  for (let t = 0; t < 16; t += 1 / 30) {
+    r.update(1 / 30);
+    max = Math.max(max, r.orbitYaw); min = Math.min(min, r.orbitYaw); low = Math.min(low, r.pose.elev);
+    assert.ok(near(r.pose.elev, 48 - 6 * Math.abs(r.orbitYaw) / 8, 1e-9), 'the dip follows the sway');
+  }
   assert.ok(near(max, 8, 0.05) && near(min, -8, 0.05), `${min}..${max}`);
+  assert.ok(near(low, 42, 0.05), `dips to ${low}`);
+  assert.equal(Cam.orbitDip(8, 48), 6);
+  assert.equal(Cam.orbitDip(-8, 43), 3, 'never below 40');
+  assert.equal(Cam.orbitDip(8, 36), 0, 'a view already lower keeps its elevation');
+  assert.equal(Cam.orbitDip(4, 60), 3);
+  assert.equal(Cam.orbitDip(0, 60), 0);
   r.setMode('edit');
   settle(r, 3);
   assert.ok(Math.abs(r.pose.yaw) < 0.01, 'edit keeps yaw 0');
+  assert.ok(near(r.pose.elev, 62, 0.01), 'and no dip');
   r.setMode('play'); r.showOrbit(false); settle(r, 4);
   assert.ok(Math.abs(r.orbitYaw) < 0.01, 'eases out when Showtime ends');
+  assert.ok(near(r.pose.elev, 48, 0.01));
   const red = rigWith({ reduced: true });
   red.showOrbit(true); settle(red, 4);
   assert.equal(red.orbitYaw, 0);
+  assert.equal(red.pose.elev, 48);
 });
 
 test('camera: the dance push-in returns after the 8 counts; shake decays and is off when reduced', () => {
@@ -460,5 +648,31 @@ test('camera: pure helpers', () => {
   assert.ok(near(gb.D.x, cb.Dx) && near(gb.R.z, cb.Rz) && near(gb.U.x, cb.Ux) && near(gb.U.y, cb.Uy));
   const d = Cam.panDelta(10, 0, 500, 20, 30, 0, 52, {});
   assert.ok(d.x < 0 && near(d.z, 0), 'dragging right moves the target left');
-  assert.equal(Cam.zoomMaxFor(true, 0.7), 2.2);
+  assert.equal(Cam.zoomMaxFor(true, 0.7), 2.45);
+  assert.equal(Cam.homeZoomFor(true, 0.7), 1.75);
+  assert.ok(near(Cam.topRayDeg({ yaw: 30, elev: 20, fov: 30 }), -5, 1e-9), 'yaw never changes the top ray');
+});
+
+test('gesture: Controls tells the scene when the last finger lifts or is cancelled', (t) => {
+  /* a minimal element: enough for Controls' listeners */
+  const L = {}, el = {
+    addEventListener: (k, f) => { L[k] = f; }, removeEventListener: () => {}, getBoundingClientRect: () => ({ left: 0, top: 0, width: 800, height: 450 }),
+    setPointerCapture() {}, releasePointerCapture() {}, hasPointerCapture: () => true, isConnected: true
+  };
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const rig = rigWith({ w: 800, h: 450 }), log = [];
+  const ctl = Cam.Controls(el, rig, { input: () => log.push('input'), up: () => log.push('up'), tap: () => log.push('tap') });
+  const ev = (id, x, y) => ({ pointerId: id, pointerType: 'touch', button: 0, clientX: x, clientY: y, preventDefault() {} });
+  L.pointerdown(ev(1, 100, 100)); L.pointerdown(ev(2, 200, 100));
+  L.pointerup(ev(2, 200, 100));
+  assert.deepEqual(log, ['input', 'input'], 'one finger is still down');
+  L.pointerup(ev(1, 100, 100));
+  assert.deepEqual(log, ['input', 'input', 'up']);
+  log.length = 0;
+  L.pointerdown(ev(3, 100, 100)); L.pointercancel(ev(3, 100, 100));
+  assert.deepEqual(log, ['input', 'up']);
+  log.length = 0;
+  L.pointerdown(ev(4, 100, 100)); ctl.cancel(); ctl.cancel();
+  assert.deepEqual(log, ['input', 'up'], 'cancel() lifts once');
+  ctl.dispose();
 });

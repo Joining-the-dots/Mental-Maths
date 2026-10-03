@@ -8,12 +8,18 @@
    Rules never live here: which cells are land, valid or an entrance
    comes from the view (SLWorldCore.canPlace via rewards-world).
 
-   var edit = SLEdit3D.create(K, SL3D, {scene, reduced, camera?, canvas?, fx?, items?, sfx?})
+   var edit = SLEdit3D.create(K, SL3D, {scene, reduced, camera?, canvas?, fx?, items?, sfx?, jitter?})
      (scene given → scene.add(edit.group) is done for you)
-     edit.show(cells, state)          the cell overlay: ONE instanced mesh of rounded (dashed) squares
+     edit.show(cells, state)          the cell overlay: ONE instanced mesh of rounded (dashed) squares, the
+                                      ONLY grid on the organic island (play mode has none). The squares sit
+                                      at pad height + 0.012 (terrain pads are exactly SLGrid3D.surfaceY, so
+                                      they lie flush); the overlay fades in over 0.2 s when it appears (a cut
+                                      under reduced motion) and hides at once
         cells  the land to outline: a land set {'c,r': 1} | ['c,r', …] | [{c, r}] | a world |
                region names ['home', 'cove'] | null (keep the last land)
-        state  null | 'edit' | 'grid'                → every land cell white dashed (0.55)
+        state  null | 'edit' | 'grid'                → every land cell white dashed (0.55) over a faint
+                                                       Cloud White 0.07 wash (GRID_WASH): the buildable
+                                                       zone reads as a lighter quilt over the island
                the placement {id, uid, x, y, ok, reason, cells, entrance} (view.placing merged with
                C.canPlace) → footprint valid (Success 0.45, Neon Cyan edge) or invalid (Error 0.42,
                pulsing at 1.5 Hz), entrance cells Star Gold 0.25 (dashed), the rest white dashed
@@ -25,9 +31,10 @@
                                       usual 0.22; it glides between cells (also over the sea, where its
                                       cells read invalid). ghost(null) removes it. The controller hides the
                                       real copy of an item being moved (ItemBatch.hide) as before.
-     edit.select(uid | null)          the selected copy's outline hull turns Star Gold and pulses 0.018 ↔
-                                      0.03 u at 1.5 Hz (MID/HIGH, via the batch + K.setSelPulse), plus a
-                                      gold footprint ring on every tier (LOW has no hulls)
+     edit.select(uid | null)          the selected copy's selection hull turns Star Gold and pulses 0.02 ↔
+                                      0.03 u at 1.5 Hz (MID/HIGH, via the batch + K.setSelPulse; architecture
+                                      has no other hull), plus a gold footprint ring on every tier (LOW has
+                                      no hulls)
      edit.drop(uid[, target])         after a confirmed placement: the copy falls 1.2 u (0.22 s inQuad),
                                       squashes (y 0.8 / xz 1.12, 0.08 s), rebounds outBack (0.25 s) and
                                       kicks up a 6-puff dust ring (SLMotion 'dropIn'); reduced: a sparkle.
@@ -49,9 +56,12 @@
            Vector3 / [x, y, z] (a world point) | function () → one of these | null (bottom centre)
    fx      an SLFx3D instance for dust / sparkles / the flight sparkle (else a private one is made)
    sfx     (name, vol, step) → plays the drop's 'chip' + 'pop' and the store's 'whoosh' (else silent)
+   jitter  (uid, id) → the copy's placement jitter ({yaw, sx, sy, sz, lean, leanAxis}), so a borrowed
+           drop / store copy stands exactly like the batch copy (the controller knows the neighbours);
+           default SLIslandLook.jitter2(uid, id)
 
    COST: the overlay is one draw call (custom ShaderMaterial: rounded-square SDF, dashes along each
-   side, the 1.5 Hz pulse from a uniform — no per-frame writes); the ghost is the template's parts
+   side, the grid wash, the 1.5 Hz pulse and the fade from uniforms — no per-frame buffer writes); the ghost is the template's parts
    with transparent K.variant materials (+ one blob); drops / stores borrow a K.instantiate copy for
    0.55 / 0.75 s. Nothing allocates per frame.
    ================================================================ */
@@ -89,6 +99,10 @@
   /* overlay geometry (u): a cell outline is 0.9 square (a 0.1 gap between neighbours) */
   var CELL = { half: 0.45, radius: 0.14, width: 0.045, lift: 0.012, ringInset: 0.04, ringRadius: 0.2, ringWidth: 0.06,
     dashPerU: 3, duty: 0.5, margin: 0.06 };
+  /* v2: the faint wash inside every plain grid square (the only grid on the organic island) and
+     the overlay's fade-in when it appears */
+  var GRID_WASH = { token: 'Cloud White', opacity: 0.07 };
+  var FADE_SEC = 0.2;
   var SEA_Y = -0.32;
   var GREY = [0.62, 0.62, 0.66];        /* the invalid ghost's tint */
   var GHOST_RIM = { strength: 0.85, pulse: 0.35, power: 1.8 };
@@ -124,9 +138,13 @@
       case 'invalid': return { fill: Ei.token, fillA: Ei.opacity, edge: Ei.token, edgeA: 0.85, dashed: 0, pulse: 1, width: 0.055, hz: safeHz(Ei.hz || 1.5) };
       case 'entrance': return { fill: Ee.token, fillA: Ee.opacity, edge: Ee.token, edgeA: 0.8, dashed: 1, pulse: 0, width: 0.045, hz: 0 };
       case 'select': return { fill: Es.token, fillA: 0.12, edge: Es.token, edgeA: 0.95, dashed: 0, pulse: 1, width: CELL.ringWidth, hz: safeHz(Es.hz || 1.5) };
-      default: return { fill: null, fillA: 0, edge: Eg.token, edgeA: Eg.opacity, dashed: 1, pulse: 0, width: CELL.width, hz: 0 };
+      /* the grid square has no fill of its own: the shader lays the shared GRID_WASH inside it */
+      default: return { fill: null, fillA: 0, edge: Eg.token, edgeA: Eg.opacity, dashed: 1, pulse: 0, width: CELL.width, hz: 0,
+        wash: GRID_WASH.token, washA: GRID_WASH.opacity };
     }
   }
+  /* the overlay's opacity t s after it appeared: 0 → 1 over FADE_SEC (reduced motion: already 1) */
+  function overlayFade(t, reduced) { return reduced ? 1 : clamp01(t / FADE_SEC); }
   var KEY_RE = /^-?\d+,-?\d+$/;
   function keyOf(e) {
     if (typeof e === 'string') return KEY_RE.test(e) ? e : null;
@@ -336,6 +354,8 @@
        iPos   xyz centre on the cell top, w = corner radius (u)
        iShape half x, half z (u), stroke width (u), flags (1 dashed + 2 pulsing)
        iFill  rgb (linear) + alpha    iEdge  rgb + alpha
+       uWash  the faint fill of a dashed square with no fill of its own (the grid state)
+       uFade  the whole overlay's opacity (the 0.2 s fade-in)
      ================================================================ */
   var CELL_VERT = [
     '#include <common>',
@@ -366,6 +386,8 @@
     'uniform float uHz;',
     'uniform float uDashPerU;',
     'uniform float uDuty;',
+    'uniform float uWash;',
+    'uniform float uFade;',
     'varying vec2 vP;',
     'varying vec4 vShape;',
     'varying vec4 vFill;',
@@ -397,10 +419,11 @@
     '    band *= 1.0 - smoothstep(uDuty * 0.5 - kw, uDuty * 0.5 + kw, k);',
     '  }',
     '  float pulse = 1.0 - pulsing * uPulse * 0.4 * (0.5 - 0.5 * cos(6.28318530718 * uHz * uTime));',
+    '  float own = vFill.a > 0.0 ? vFill.a : uWash * dashed;',
     '  float ea = vEdge.a * band * pulse;',
-    '  float fa = vFill.a * inside * pulse;',
+    '  float fa = own * inside * pulse;',
     '  float a = ea + fa * (1.0 - ea);',
-    '  if (a < 0.003) discard;',
+    '  if (a * uFade < 0.003) discard;',
     '  vec3 col = (vEdge.rgb * ea + vFill.rgb * fa * (1.0 - ea)) / a;',
     '  #ifdef USE_FOG',
     '    #ifdef FOG_EXP2',
@@ -410,7 +433,7 @@
     '    #endif',
     '    col = mix(col, fogColor, fogF);',
     '  #endif',
-    '  gl_FragColor = vec4(col, a);',
+    '  gl_FragColor = vec4(col, a * uFade);',
     '  #include <colorspace_fragment>',
     '}'
   ].join('\n');
@@ -430,7 +453,8 @@
       reduced: !!opts.reduced, t: 0, disposed: false,
       camera: opts.camera && opts.camera.isCamera ? opts.camera : null, canvas: opts.canvas || null,
       items: opts.items || null, fx: opts.fx || null, sfx: typeof opts.sfx === 'function' ? opts.sfx : null,
-      extAt: -1e9, selfAt: 0, pulseOn: false
+      jitter: typeof opts.jitter === 'function' ? opts.jitter : null,
+      extAt: -1e9, selfAt: 0, pulseOn: false, fadeT: FADE_SEC
     };
     var privFx = null;
 
@@ -483,7 +507,8 @@
     cg.instanceCount = 0;
     var cu = T.UniformsUtils.merge([T.UniformsLib.fog, {
       uTime: { value: 0 }, uPulse: { value: state.reduced ? 0 : 1 }, uHz: { value: STYLE.invalid.hz || 1.5 },
-      uMargin: { value: CELL.margin }, uDashPerU: { value: CELL.dashPerU }, uDuty: { value: CELL.duty }
+      uMargin: { value: CELL.margin }, uDashPerU: { value: CELL.dashPerU }, uDuty: { value: CELL.duty },
+      uWash: { value: GRID_WASH.opacity }, uFade: { value: 1 }
     }]);
     var cm = new T.ShaderMaterial({
       name: 'edit3d:cells', uniforms: cu, vertexShader: CELL_VERT, fragmentShader: CELL_FRAG,
@@ -497,20 +522,22 @@
 
     var ov = { list: [], land: null, sig: '', ring: null, n: 0 };
     function writeInst(k, x, y, z, hx, hz, radius, st) {
-      var o = k * 4, f = st.fill ? colorOf(st.fill) : WHITE, e = colorOf(st.edge);
+      var o = k * 4, f = st.fill ? colorOf(st.fill) : st.wash ? colorOf(st.wash) : WHITE, e = colorOf(st.edge);
       aPos.array[o] = x; aPos.array[o + 1] = y; aPos.array[o + 2] = z; aPos.array[o + 3] = radius;
       aShape.array[o] = hx; aShape.array[o + 1] = hz; aShape.array[o + 2] = st.width; aShape.array[o + 3] = (st.dashed ? 1 : 0) + (st.pulse ? 2 : 0);
       aFill.array[o] = f.r; aFill.array[o + 1] = f.g; aFill.array[o + 2] = f.b; aFill.array[o + 3] = st.fill ? st.fillA : 0;
       aEdge.array[o] = e.r; aEdge.array[o + 1] = e.g; aEdge.array[o + 2] = e.b; aEdge.array[o + 3] = st.edgeA;
     }
     function rebuildOverlay() {
-      var n = 0, L = ov.list;
+      var n = 0, L = ov.list, was = ov.n;
       for (var i = 0; i < L.length && n < CAP_CELLS - 1; i++) {
         var q = L[i];
         writeInst(n++, q.c - 7.5, cellTopOf(q.c, q.r, q.land) + CELL.lift, q.r - 4.5, CELL.half, CELL.half, CELL.radius, STYLE[q.s] || STYLE.grid);
       }
       var R = ov.ring;
       if (R) writeInst(n++, R.x, R.y + CELL.lift * 1.5, R.z, R.hx, R.hz, CELL.ringRadius, STYLE.select);
+      /* the grid appearing fades in (tick advances it); reduced motion shows it at once */
+      if (!was && n) { state.fadeT = 0; cu.uFade.value = overlayFade(0, state.reduced); }
       ov.n = n;
       cg.instanceCount = n;
       cellsMesh.visible = n > 0;
@@ -562,10 +589,21 @@
       var m = SL3D && SL3D.models ? SL3D.models[id] : null;
       return m && typeof m.material === 'function' ? m.material : null;
     }
+    /* the copy's placement jitter in degrees and per-axis scale (the host's, else jitter2 without
+       neighbours, else the v1 grid jitter) → {yaw, sx, sy, sz, lean, leanAxis} */
+    var _jt = { yaw: 0, sx: 1, sy: 1, sz: 1, lean: 0, leanAxis: 0 };
     function jitterOf(uid, id) {
-      var Gr = grid();
-      try { if (Gr && typeof Gr.jitter === 'function') return Gr.jitter(uid, id); } catch (e) {}
-      return { yaw: 0, scale: 1 };
+      var j = null, L = look(), Gr = grid();
+      try {
+        if (state.jitter) j = state.jitter(uid, id);
+        if (!j && L && typeof L.jitter2 === 'function') j = L.jitter2(uid, id, null);
+        if (!j && Gr && typeof Gr.jitter === 'function') { var g = Gr.jitter(uid, id); j = { yaw: g.yawDeg, sx: g.scale, sy: g.scale, sz: g.scale }; }
+      } catch (e) { j = null; }
+      function num(v, d) { return typeof v === 'number' && isFinite(v) ? v : d; }
+      _jt.yaw = num(j && j.yaw, 0); _jt.lean = num(j && j.lean, 0); _jt.leanAxis = num(j && j.leanAxis, 0);
+      var s = num(j && j.scale, 1);
+      _jt.sx = num(j && j.sx, s); _jt.sy = num(j && j.sy, s); _jt.sz = num(j && j.sz, s);
+      return _jt;
     }
     function fxNow() {
       if (state.fx) return state.fx;
@@ -752,7 +790,7 @@
     var TR = [];
     for (var ti = 0; ti < MAX_TRANS; ti++) {
       TR.push({ on: false, type: '', uid: null, batch: null, copy: null, t: 0, dur: 0, cue: false, wait: 0,
-        base: new T.Vector3(), top: new T.Vector3(), yaw: 0, scale: 1, fp: [1, 1], ndc: { x: 0, y: -1.15, world: false },
+        base: new T.Vector3(), top: new T.Vector3(), yaw: 0, sx: 1, sy: 1, sz: 1, fp: [1, 1], ndc: { x: 0, y: -1.15, world: false },
         from: [0, 0, 0], to: [0, 0, 0], trail: 0, key: 'edit3d:flight:' + ti, ghostPos: null });
     }
     var _out = {}, _fl = {}, _flightOpt = { cell: 'sparkle', token: 'Star Gold', size: 0.4, alpha: 1, glow: true };
@@ -763,17 +801,24 @@
       return TR[0];
     }
     function busyWith(uid) { for (var i = 0; i < TR.length; i++) if (TR[i].on && TR[i].uid === uid) finish(TR[i]); }
-    /* a standalone copy of the batch's template where the placed copy stands */
+    /* a standalone copy of the batch's template where the placed copy stands, turned, leaned and
+       scaled exactly like it (the kit's jitter quaternion) */
+    var _jq = [0, 0, 0, 1];
     function borrow(tr, b, uid) {
       var tpl = b.template, mm = modelMaterial(tpl.id);
       var obj = K.instantiate(tpl, { castShadow: false, material: mm ? function (mk, part) { return mm(mk, part); } : undefined });
       obj.name = 'edit3d:' + tr.type;
       b.worldPos(uid, tr.base);
-      var j = jitterOf(uid, tpl.id);
-      tr.yaw = j.yaw || 0; tr.scale = j.scale || 1;
+      var j = jitterOf(uid, tpl.id), KitApi = root.SLKit;
+      tr.yaw = j.yaw * DEG; tr.sx = j.sx; tr.sy = j.sy; tr.sz = j.sz;
       tr.fp = b.fp || [1, 1];
       b.anchorWorld(uid, 'top', tr.top);
-      obj.position.copy(tr.base); obj.rotation.set(0, tr.yaw, 0); obj.scale.setScalar(tr.scale);
+      obj.position.copy(tr.base);
+      if (KitApi && typeof KitApi.jitterQuat === 'function' && obj.quaternion) {
+        KitApi.jitterQuat(j.yaw, j.lean, j.leanAxis, _jq);
+        obj.quaternion.set(_jq[0], _jq[1], _jq[2], _jq[3]);
+      } else obj.rotation.set(0, tr.yaw, 0);
+      obj.scale.set(tr.sx, tr.sy, tr.sz);
       hookAll(obj);
       group.add(obj);
       tr.copy = obj;
@@ -841,7 +886,7 @@
       tr.t += dt;
       dropPose(Math.min(tr.t, tr.dur), false, _out);
       tr.copy.position.set(tr.base.x, tr.base.y + _out.dy, tr.base.z);
-      tr.copy.scale.set(tr.scale * _out.sxz, tr.scale * _out.sy, tr.scale * _out.sxz);
+      tr.copy.scale.set(tr.sx * _out.sxz, tr.sy * _out.sy, tr.sz * _out.sxz);
       if (!tr.cue && tr.t >= 0.22) {
         tr.cue = true;
         _dustOpt.radius = Math.max(tr.fp[0], tr.fp[1]) * 0.5;
@@ -909,8 +954,8 @@
       tr.t += dt;
       storePose(Math.min(tr.t, tr.dur), false, _out);
       if (tr.copy) {
-        var s = Math.max(0.001, _out.s) * tr.scale;
-        tr.copy.scale.set(s, s, s);
+        var s = Math.max(0.001, _out.s);
+        tr.copy.scale.set(s * tr.sx, s * tr.sy, s * tr.sz);
         if (_out.s <= 0.001 && tr.t >= 0.25) { tr.copy.userData.dispose(); if (tr.copy.parent) tr.copy.parent.remove(tr.copy); tr.copy = null; }
       }
       if (!tr.cue && tr.t >= 0.25) {
@@ -936,6 +981,11 @@
       if (camera && camera.isCamera) state.camera = camera;
       cu.uTime.value = state.t;
       var anim = false;
+      if (state.fadeT < FADE_SEC) {                     /* the grid's 0.2 s fade-in */
+        state.fadeT = state.reduced ? FADE_SEC : state.fadeT + dt;
+        cu.uFade.value = overlayFade(state.fadeT, state.reduced);
+        if (state.fadeT < FADE_SEC) anim = true;
+      }
       if (GH.obj) {
         placeGhost(dt);
         if (inRender) GH.obj.updateMatrixWorld(true);
@@ -985,11 +1035,13 @@
       if (o.camera && o.camera.isCamera) state.camera = o.camera;
       if (o.canvas) state.canvas = o.canvas;
       if (o.sfx !== undefined) state.sfx = typeof o.sfx === 'function' ? o.sfx : null;
+      if (o.jitter !== undefined) state.jitter = typeof o.jitter === 'function' ? o.jitter : null;
       if (SEL.uid != null && !SEL.batch) select(SEL.uid);
     }
     function setReduced(on) {
       state.reduced = !!on;
       cu.uPulse.value = state.reduced ? 0 : 1;
+      if (state.reduced) { state.fadeT = FADE_SEC; cu.uFade.value = 1; }
       if (privFx) privFx.setReduced(state.reduced);
       if (GH.obj) { GH.pos.copy(GH.to); GH.ground = GH.toGround; placeGhost(0); }
       if (state.reduced) for (var i = 0; i < TR.length; i++) finish(TR[i]);
@@ -1006,7 +1058,7 @@
       return {
         cells: ov.list.length, instances: ov.n, ring: !!ov.ring, ghost: GH.id, ghostValid: GH.valid, selected: SEL.uid,
         selectedFound: !!SEL.batch, transitions: busy, reduced: state.reduced, driven: perfNow() - state.extAt < 250,
-        privateFx: !!privFx
+        privateFx: !!privFx, fade: Math.round(cu.uFade.value * 1000) / 1000
       };
     }
     function dispose() {
@@ -1039,8 +1091,9 @@
     VERSION: VERSION, MAX_FLASH_HZ: MAX_FLASH_HZ, create: create,
     /* data (read-only use) */
     CELL: CELL, STATE_NAMES: STATE_NAMES, EDIT_FALLBACK: EDIT_FALLBACK, GHOST_RIM: GHOST_RIM, CAP_CELLS: CAP_CELLS,
+    GRID_WASH: GRID_WASH, FADE_SEC: FADE_SEC,
     /* pure helpers */
-    normState: normState, stateStyle: stateStyle, landKeys: landKeys, cellStates: cellStates, isPlacement: isPlacement,
+    normState: normState, stateStyle: stateStyle, overlayFade: overlayFade, landKeys: landKeys, cellStates: cellStates, isPlacement: isPlacement,
     cellPulse: cellPulse, selPulse: selPulse, rimPulse: rimPulse, dashOn: dashOn, ghostPose: ghostPose,
     footCenter: footCenter, groundOf: groundOf, toNdc: toNdc, flightPoint: flightPoint, dropPose: dropPose, storePose: storePose,
     SHADERS: { CELL_VERT: CELL_VERT, CELL_FRAG: CELL_FRAG }

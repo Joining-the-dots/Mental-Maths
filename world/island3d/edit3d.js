@@ -61,17 +61,20 @@
            default SLIslandLook.jitter2(uid, id)
 
    COST: the overlay is one draw call (custom ShaderMaterial: rounded-square SDF, dashes along each
-   side, the grid wash, the 1.5 Hz pulse and the fade from uniforms — no per-frame buffer writes); the ghost is the template's parts
+   side, the grid wash, the 1.5 Hz pulse and the fade from uniforms — no per-frame buffer writes) and
+   no program of its own: it draws through fx3d's sprite program (SLFx3D.overlayProgram, uPass 1), which
+   play mode has compiled already, so entering edit mode compiles nothing for it; the ghost is the template's parts
    with transparent K.variant materials (+ one blob); drops / stores borrow a K.instantiate copy for
    0.55 / 0.75 s. Nothing allocates per frame.
    ================================================================ */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) {
-    module.exports = factory(root, require('./grid3d.js'), require('./motion.js'), require('../world-look.js'), require('../world-core.js'));
+    module.exports = factory(root, require('./grid3d.js'), require('./motion.js'), require('../world-look.js'), require('../world-core.js'),
+      function () { return require('./fx3d.js'); });
   } else {
-    root.SLEdit3D = factory(root, null, null, null, null);
+    root.SLEdit3D = factory(root, null, null, null, null, null);
   }
-}(typeof self !== 'undefined' ? self : typeof globalThis !== 'undefined' ? globalThis : this, function (root, G0, M0, L0, C0) {
+}(typeof self !== 'undefined' ? self : typeof globalThis !== 'undefined' ? globalThis : this, function (root, G0, M0, L0, C0, F0) {
   'use strict';
 
   var VERSION = 1;
@@ -83,6 +86,13 @@
   function motion() { return M0 || root.SLMotion || null; }
   function look() { return L0 || root.SLIslandLook || null; }
   function core() { return C0 || root.SLWorldCore || null; }
+  function fxModule() { try { return (F0 && F0()) || root.SLFx3D || null; } catch (e) { return root.SLFx3D || null; } }
+  /* the cell overlay draws through fx3d's sprite program (SLFx3D.overlayProgram joins CELL_VERT / CELL_FRAG
+     with the fx sprite shader, uPass 1 = a cell): no program of its own; null without fx3d */
+  function cellProgram() {
+    var F = fxModule();
+    return F && typeof F.overlayProgram === 'function' ? F.overlayProgram(CELL_VERT, CELL_FRAG) : null;
+  }
 
   /* world-look EDIT (fallback copy for a standalone kit) */
   var EDIT_FALLBACK = {
@@ -510,8 +520,15 @@
       uMargin: { value: CELL.margin }, uDashPerU: { value: CELL.dashPerU }, uDuty: { value: CELL.duty },
       uWash: { value: GRID_WASH.opacity }, uFade: { value: 1 }
     }]);
+    /* fx3d's sprite program (see cellProgram): uPass picks the cell pass, and uMap binds the sprite
+       sampler to a real texture (this pass never samples it) */
+    var CP = cellProgram();
+    if (CP) {
+      cu.uPass = { value: CP.pass.cell };
+      try { cu.uMap = { value: K.tex && typeof K.tex.sparkles === 'function' ? K.tex.sparkles() : null }; } catch (e) { cu.uMap = { value: null }; }
+    }
     var cm = new T.ShaderMaterial({
-      name: 'edit3d:cells', uniforms: cu, vertexShader: CELL_VERT, fragmentShader: CELL_FRAG,
+      name: 'edit3d:cells', uniforms: cu, vertexShader: CP ? CP.vert : CELL_VERT, fragmentShader: CP ? CP.frag : CELL_FRAG,
       transparent: true, depthWrite: false, depthTest: true, fog: true, toneMapped: false,
       polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -4
     });

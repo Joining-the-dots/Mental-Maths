@@ -290,14 +290,22 @@ function mockKit(tier, tokensSeen, o) {
     BufferGeometry: function () { const g = geo(new Float32Array(0), new Float32Array(0)); g.painted = true; return g; },
     BufferAttribute: function (array, itemSize) { this.array = array; this.itemSize = itemSize; },
     MeshBasicMaterial: function (o) { Object.assign(this, o); this.isMeshBasicMaterial = true; },
-    Vector4: function (x, y, z, w) { Object.assign(this, { x, y, z, w }); }
+    Vector4: function (x, y, z, w) { Object.assign(this, { x, y, z, w }); },
+    CanvasTexture: function (c) { this.image = c; this.isTexture = true; this.version = 0; Object.defineProperty(this, 'needsUpdate', { set(v) { if (v) this.version++; } }); },
+    SRGBColorSpace: 'srgb', LinearFilter: 1006
   };
-  const parts = new Map();
+  const parts = new Map(), variants = new Map();
   const color = (hex) => ({ hex, copy(c) { this.hex = c.hex; return this; } });
   const atlas = { texture: { atlas: true }, words: [], rect(w) { atlas.words.push(w); return w === 'PET COURSE' ? ATLAS_RECT : null; } };
   const K = {
     THREE, tier, G,
-    col: (t) => color(L.hex(t)), rgb: (h) => color(String(h).toUpperCase()),
+    col: (t) => color(L.hex(t)), rgb: (h) => color(String(h).toUpperCase()), hex: (t) => L.hex(t),
+    /* the kit's K.variant: a sibling of a shared material (here only its key, name and patch matter) */
+    variant: o.noVariant ? undefined : (key, name, patch) => {
+      const k = key + '#' + name;
+      if (!variants.has(k)) variants.set(k, Object.assign({ isMeshBasicMaterial: true, variantOf: key, name: k, color: color('#FFFFFF'), toneMapped: false, transparent: true }, patch));
+      return variants.get(k);
+    },
     signAtlas: o.noAtlas ? undefined : () => atlas,
     tex: { banner: (text, opts) => ({ text, o: opts }), fontReady: () => Promise.resolve(true) },
     parts: { get: (key, t, fn) => { const k = key + '#' + t; if (!parts.has(k)) parts.set(k, fn(K)); return parts.get(k); } },
@@ -382,53 +390,85 @@ test('builders: the documented part names of the island attractions and the kart
   assert.equal(kart.pivots.wheelF.parent, 'steer');
   assert.ok(kart.anchors.seat && kart.pivots.seat);
   assert.equal(kart.parts.find((p) => p.name === 'glow').mat, 'neon:Neon Cyan');
-  /* the sign hook: the shared sign atlas's PET COURSE cell for the text part only, one material for every course */
+  /* the sign hook (fix3): the kit's shared sign program — a K.variant of 'sign', no shader patch, no program
+     key of its own — for the text part only, one material for every course */
   const m = M.att_course.material('toon', { name: 'text' });
-  assert.ok(m && m.isMeshBasicMaterial && m.map && m.map.atlas === true, 'the shared sign atlas texture');
-  assert.equal(m.color.hex, L.hex(L.LOOK.att_course.colors.text), 'white text (the LOOK text colour)');
+  assert.ok(m && m.isMeshBasicMaterial && m.variantOf === 'sign', 'a sibling of the kit\'s sign material (its program)');
+  assert.ok(!('onBeforeCompile' in m) && !('customProgramCacheKey' in m), 'no shader patch, no program key of its own');
   assert.equal(m.toneMapped, false);
+  assert.equal(m.alphaTest, 0.02); assert.equal(m.depthWrite, false);
   assert.equal(M.course_candy.material('toon', { name: 'text' }), m);
   assert.equal(M.att_course.material('toon', { name: 'body' }), null);
-  assert.equal(m.customProgramCacheKey(), 'att-sign');
 });
 
-test('course sign: atlas UVs from the arch position, a member-colour underline, the canvas fallback', () => {
-  const K = mockKit('MID', new Set()), M = A.models(K, null), m = M.att_course.material('toon', { name: 'text' });
-  /* the shader patch maps the PET COURSE cell and draws the underline */
-  const sh = {
-    uniforms: {},
-    vertexShader: '#include <common>\nvoid main() {\n#include <uv_vertex>\n}',
-    fragmentShader: '#include <common>\nvoid main() {\nvec4 diffuseColor = vec4(diffuse, opacity);\n#include <map_fragment>\n}'
+/* a canvas whose 2D context records the text and rectangles drawn (with their fill) */
+function signCanvas() {
+  const c = { width: 0, height: 0, ops: [] }, st = { fillStyle: '', font: '' };
+  const ctx = {
+    get fillStyle() { return st.fillStyle; }, set fillStyle(v) { st.fillStyle = v; },
+    get font() { return st.font; }, set font(v) { st.font = v; },
+    textAlign: '', textBaseline: '', save() {}, restore() {}, clearRect() { c.ops.push({ op: 'clear' }); },
+    measureText: (s) => ({ width: String(s).length * 22 }),
+    fillText(s, x, y) { c.ops.push({ op: 'text', s, x, y, fill: st.fillStyle, font: st.font }); },
+    fillRect(x, y, w, h) { c.ops.push({ op: 'rect', x, y, w, h, fill: st.fillStyle }); }
   };
-  m.onBeforeCompile(sh);
-  assert.ok(/vMapUv = uRect\.xy \+ uRect\.zw \* clamp\(vBand, 0\.0, 1\.0\)/.test(sh.vertexShader));
-  assert.ok(/varying vec2 vBand/.test(sh.vertexShader) && /varying vec2 vBand/.test(sh.fragmentShader));
-  assert.ok(/diffuseColor = vec4\(uMember, 1\.0\)/.test(sh.fragmentShader));
-  const R = sh.uniforms.uRect.value;
-  assert.deepEqual([R.x, R.y, R.z, R.w], [ATLAS_RECT.u0, ATLAS_RECT.v0, ATLAS_RECT.u1 - ATLAS_RECT.u0, ATLAS_RECT.v1 - ATLAS_RECT.v0]);
-  const U = sh.uniforms.uLine.value, Arch = sh.uniforms.uArc.value;
-  assert.deepEqual([Arch.x, Arch.y, Arch.z, Arch.w], [A.ARCH.cy, A.ARCH.rIn, A.ARCH.h, A.ARCH.textHalf]);
-  assert.ok(U.x > 0.1 && U.y > U.x && U.y <= 0.28 && U.z > 0 && U.z < 0.5, 'the underline sits low on the band, under the text baseline');
-  const strip = A.ARCH.strip * 1.25 / A.ARCH.h;
-  assert.ok(U.x > strip && 1 - strip > 0.65, 'clear of the LED strips at the band edges');
-  /* the member colour: the look fallback until the controller (or a handle) tells it */
-  assert.equal(sh.uniforms.uMember.value.hex, L.hex(A.X.member));
-  assert.equal(L.hex(A.X.member), L.hex(L.MEMBER_FALLBACK));
-  assert.equal(M.att_course.setUser({ color: '#4fc3f7' }), true);
-  assert.equal(sh.uniforms.uMember.value.hex, '#4FC3F7');
-  assert.equal(M.course_snow.setMember('nope'), false, 'not a colour: ignored');
-  assert.equal(sh.uniforms.uMember.value.hex, '#4FC3F7');
-  M.att_course.show({ uid: 'g', t: 0, show: 0, member: '#ff7043', pivot: () => null, state: () => {} }, 0);
-  assert.equal(sh.uniforms.uMember.value.hex, '#FF7043', 'a handle carrying the member colour sets it');
-  /* only SIGN_WORDS are asked of the atlas */
-  K.signAtlas().words.forEach((w) => assert.ok(L.SIGN_WORDS.includes(w), w));
-  /* without the atlas: the canvas banner in Unbounded 800 over the whole texture */
-  const K2 = mockKit('MID', new Set(), { noAtlas: true }), m2 = A.models(K2, null).att_course.material('toon', { name: 'text' });
-  assert.ok(m2.map.text === 'PET COURSE' && m2.map.o.font === 'Unbounded' && m2.map.o.weight === 800);
-  const sh2 = { uniforms: {}, vertexShader: '#include <common>\n#include <uv_vertex>', fragmentShader: '#include <common>\n#include <map_fragment>' };
-  m2.onBeforeCompile(sh2);
-  const R2 = sh2.uniforms.uRect.value;
-  assert.deepEqual([R2.x, R2.y, R2.z, R2.w], [0, 0, 1, 1]);
+  c.getContext = () => ctx;
+  return c;
+}
+function withDocument(fn) {
+  const prev = globalThis.document, made = [];
+  globalThis.document = { createElement: () => { const c = signCanvas(); made.push(c); return c; } };
+  try { return fn(made); } finally { if (prev === undefined) delete globalThis.document; else globalThis.document = prev; }
+}
+test('course sign (fix3): its own atlas-cell canvas — the LOOK text colour over the member-colour underline, uv baked from the arch', () => {
+  withDocument((made) => {
+    const K = mockKit('MID', new Set()), M = A.models(K, null), m = M.att_course.material('toon', { name: 'text' });
+    const c = made[made.length - 1], tex = m.map;
+    assert.ok(tex && tex.isTexture && tex.image === c, 'the sign\'s own canvas texture');
+    assert.deepEqual([c.width, c.height], [A.SIGN_TEX.w, A.SIGN_TEX.h], 'a sign-atlas cell (256 × 64)');
+    assert.deepEqual([c.width, c.height], [256, 64]);
+    assert.equal(tex.colorSpace, 'srgb'); assert.equal(tex.generateMipmaps, false);
+    /* drawn as K.signAtlas draws a word: centred, Unbounded 800 fitted to the cell less 16 px, in the text colour */
+    const txt = c.ops.filter((o) => o.op === 'text').pop();
+    assert.equal(txt.s, 'PET COURSE');
+    assert.equal(txt.fill, L.hex(L.LOOK.att_course.colors.text), 'the LOOK text colour');
+    assert.ok(/^800 \d+px "Unbounded", "Outfit"/.test(txt.font) && 'PET COURSE'.length * 22 <= 256 - 16 + 22, txt.font);
+    assert.deepEqual([txt.x, txt.y], [128, 34]);
+    /* the underline in the member colour: the look fallback until the controller (or a handle) tells it */
+    const under = () => c.ops.filter((o) => o.op === 'rect').pop();
+    const R = A.underlineRect(256, 64), U = A.ARCH.under;
+    assert.deepEqual([under().x, under().y, under().w, under().h], [R.x, R.y, R.w, R.h]);
+    assert.equal(under().fill, L.hex(A.X.member));
+    assert.equal(L.hex(A.X.member), L.hex(L.MEMBER_FALLBACK));
+    /* the band the old shader tested (v0 < v < v1, |u − ½| < half), in canvas pixels (v up from the bottom) */
+    assert.ok(Math.abs(R.y - (1 - U.v1) * 64) < 1e-9 && Math.abs(R.y + R.h - (1 - U.v0) * 64) < 1e-9 && Math.abs(R.x - (0.5 - U.half) * 256) < 1e-9 && Math.abs(R.w - 2 * U.half * 256) < 1e-9);
+    assert.ok(U.v0 > 0.1 && U.v1 > U.v0 && U.v1 <= 0.28 && U.half > 0 && U.half < 0.5, 'the underline sits low on the band, under the text baseline');
+    const strip = A.ARCH.strip * 1.25 / A.ARCH.h;
+    assert.ok(U.v0 > strip && 1 - strip > 0.65, 'clear of the LED strips at the band edges');
+    const v0 = tex.version;
+    assert.equal(M.att_course.setUser({ color: '#4fc3f7' }), true);
+    assert.equal(under().fill, '#4FC3F7'); assert.ok(tex.version > v0, 're-uploaded');
+    const v1 = tex.version;
+    assert.equal(M.course_snow.setMember('nope'), false, 'not a colour: ignored');
+    assert.equal(M.course_snow.setMember('#4FC3F7'), true);
+    assert.equal(tex.version, v1, 'the same colour: no redraw');
+    M.att_course.show({ uid: 'g', t: 0, show: 0, member: '#ff7043', pivot: () => null, state: () => {} }, 0);
+    assert.equal(under().fill, '#FF7043', 'a handle carrying the member colour sets it');
+    /* the text part's uv: the mapping the old shader computed per vertex from item-space position */
+    const tpl = M.att_course.build({ id: 'att_course', look: L.LOOK.att_course, st: L.resolveStyle('att_course', {}), stateKey: 'course_meadow', tier: 'MID', K, G: K.G });
+    const text = tpl.parts.find((p) => p.name === 'text'), P = text.geo.attrs.position.array, UV = text.geo.attrs.uv;
+    assert.ok(UV && UV.itemSize === 2 && UV.array.length === P.length / 3 * 2, 'a uv per vertex');
+    for (let i = 0, j = 0; i < P.length; i += 3, j += 2) {
+      const qx = P[i], qy = P[i + 1] - A.ARCH.cy, cl = (x) => Math.min(1, Math.max(0, x));
+      const u = cl(Math.atan2(qx, qy) / (2 * A.ARCH.textHalf) + 0.5), v = cl((Math.hypot(qx, qy) - A.ARCH.rIn) / A.ARCH.h);
+      assert.ok(Math.abs(UV.array[j] - u) < 1e-6 && Math.abs(UV.array[j + 1] - v) < 1e-6, 'vertex ' + i / 3);
+    }
+    assert.ok(tpl.parts.filter((p) => p.name !== 'text').every((p) => !p.geo.attrs.uv), 'only the text part carries uv');
+  });
+  /* without a DOM canvas: the kit's banner texture in the text colour (no underline to draw) */
+  const K2 = mockKit('MID', new Set()), m2 = A.models(K2, null).att_course.material('toon', { name: 'text' });
+  assert.ok(m2.map.text === 'PET COURSE' && m2.map.o.font === 'Unbounded' && m2.map.o.weight === 800 && m2.map.o.fill === L.LOOK.att_course.colors.text);
+  assert.equal(m2.variantOf, 'sign');
 });
 
 test('course gate: four-point ✦ sparks, an LED-strip arch and an LED-dot marquee', () => {

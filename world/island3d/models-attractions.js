@@ -60,12 +60,14 @@
    ('text', matKey 'toon', painted in the band colour so it is invisible
    without the hook). handler.material(matKey, part) returns the sign
    material for it (null otherwise) — pass it as opts.material to
-   K.batch / K.instantiate (the kit's documented override). Templates drop
-   uv, so the material maps the 'PET COURSE' cell of K.signAtlas() from the
-   item-space position on the arch, and paints the underline below it in the
+   K.batch / K.instantiate (the kit's documented override). The material is
+   a K.variant of 'sign' (the kit's shared sign program: no program of its
+   own) over this file's small canvas: 'PET COURSE' drawn as K.signAtlas
+   draws its words, in the LOOK text colour, over the underline in the
    child's member colour: model.setUser({color}) / setMember('#hex') (or a
-   handle carrying a.member / a.user.color) sets it; until then it is the
-   look's member fallback. One material (one program) serves every gate.
+   handle carrying a.member / a.user.color) redraws it; until then it is the
+   look's member fallback. The text part's uv is baked from its item-space
+   position on the arch (signUV). One material serves every gate.
    ================================================================ */
 (function (root, factory) {
   var api = factory(root);
@@ -503,7 +505,7 @@
     var starR = o.spark(A.starR, A.starR * 0.34, 0.04, c('star'), { p: [A.pillarX, A.starY, A.z] });
 
     var tc = withBudget(ctx, Math.max(budgetOf('att_course', 4000), ctx.look && ctx.look.tris || 0));
-    return K.template(tc)
+    return bakeSignUV(K, K.template(tc)
       .pivot('glow', [0, A.cy + A.rOut, A.z])
       .pivot('spin', [-A.pillarX, A.starY, A.z])
       .pivot('spin2', [A.pillarX, A.starY, A.z])
@@ -515,53 +517,93 @@
       .part('starR', [starR], 'toon', { pivot: 'spin2' })
       .anchor('spot', [0, 0.07, 0.05])
       .anchor('banner', [0, A.cy + A.rOut, A.z + 0.06])
-      .done();
+      .done());
   }
 
-  /* the PET COURSE sign: one material shared by every course and tier. It shows the 'PET COURSE'
-     cell of the shared sign atlas (K.signAtlas: Unbounded 800, white; the canvas banner when the kit
-     has no atlas) in the LOOK text colour, and draws the underline in the member colour. u runs
-     along the arch, v across it, both computed from item-space position. */
+  /* the PET COURSE sign: one material shared by every course and tier, drawn through the kit's sign
+     program (a K.variant of 'sign': instanced, map, alpha test — the program the signs, LED screens
+     and blob shadows already share), so the gate costs no shader program of its own. Its map is this
+     file's own small canvas the size of a sign-atlas cell: 'PET COURSE' in the LOOK text colour, drawn
+     exactly as K.signAtlas draws its words (Unbounded 800 once the font has loaded, Outfit / system-ui
+     until then), over the underline in the child's member colour (redrawn when that changes). The text
+     part's uv is baked on the CPU from its item-space position on the arch (signUV: the same per-vertex
+     mapping the sign's old custom shader computed). Without a DOM canvas: the kit's banner texture. */
+  var SIGN_TEX = { w: 256, h: 64, px: 46, minPx: 10, pad: 16 };     /* = a K.signAtlas cell and its fitText */
+  var SIGN_FONT = '800 48px "Unbounded"';
+  function signFont(px) { return '800 ' + px + 'px "Unbounded", "Outfit", system-ui, -apple-system, "Segoe UI", sans-serif'; }
+  /* the sign texture's UV of an item-space point on the arch band (u along it, v across, both 0..1) */
+  function signUV(x, y, out) {
+    out = out || {};
+    var qx = x, qy = y - ARCH.cy;
+    out.u = Math.min(1, Math.max(0, Math.atan2(qx, qy) / (2 * ARCH.textHalf) + 0.5));
+    out.v = Math.min(1, Math.max(0, (Math.sqrt(qx * qx + qy * qy) - ARCH.rIn) / ARCH.h));
+    return out;
+  }
+  /* the canvas rectangle (y down) the member underline fills: band v0..v1 above the inner edge (the
+     texture's bottom), |u − ½| ≤ half */
+  function underlineRect(w, h) {
+    var U = ARCH.under;
+    return { x: (0.5 - U.half) * w, y: (1 - U.v1) * h, w: 2 * U.half * w, h: (U.v1 - U.v0) * h };
+  }
+  function drawSign(ctx, textHex, memberHexNow) {
+    var W = SIGN_TEX.w, H = SIGN_TEX.h, size = SIGN_TEX.px, R = underlineRect(W, H);
+    ctx.clearRect(0, 0, W, H);
+    ctx.save();
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = textHex;
+    do { ctx.font = signFont(size); size -= 1; } while (size > SIGN_TEX.minPx && ctx.measureText('PET COURSE').width > W - SIGN_TEX.pad);
+    ctx.fillText('PET COURSE', W / 2, H / 2 + 2);
+    ctx.restore();
+    ctx.fillStyle = memberHexNow;
+    ctx.fillRect(R.x, R.y, R.w, R.h);
+  }
+  function hexOfToken(K, token) {
+    try { if (typeof K.hex === 'function') { var h = K.hex(token); if (h) return h; } } catch (e) {}
+    var L = root && root.SLIslandLook;
+    return (L && typeof L.hex === 'function' && L.hex(token)) || '#FFFFFF';
+  }
   var signRef = null;
   function bannerMaterial(K) {
     var e = K.parts.get('att:sign', 'MID', function () {
-      var T3 = K.THREE, atlas = null, r = null, tex;
-      try { atlas = typeof K.signAtlas === 'function' ? K.signAtlas() : null; r = atlas ? atlas.rect('PET COURSE') : null; } catch (err) { atlas = null; r = null; }
-      if (atlas && r) tex = atlas.texture;
-      else {
-        tex = K.tex.banner('PET COURSE', { w: 512, h: 128, font: 'Unbounded', weight: 800, fallback: 'Outfit', fill: 'Cloud White' });
-        r = { u0: 0, v0: 0, u1: 1, v1: 1 };
+      var T3 = K.THREE, doc = root && root.document, c = null, ctx = null, tex = null;
+      try { c = doc && typeof doc.createElement === 'function' ? doc.createElement('canvas') : null; } catch (err) { c = null; }
+      if (c) { c.width = SIGN_TEX.w; c.height = SIGN_TEX.h; ctx = typeof c.getContext === 'function' ? c.getContext('2d') : null; }
+      var entry = { mat: null, tex: null, ctx: null, hex: null, text: hexOfToken(K, tok('att_course', 'text', {})), own: false };
+      if (ctx) {
+        tex = new T3.CanvasTexture(c);
+        tex.colorSpace = T3.SRGBColorSpace; tex.generateMipmaps = false; tex.minFilter = T3.LinearFilter; tex.magFilter = T3.LinearFilter;
+        entry.ctx = ctx; entry.own = true;
+      } else {
+        tex = K.tex.banner('PET COURSE', { w: 512, h: 128, font: 'Unbounded', weight: 800, fallback: 'Outfit', fill: tok('att_course', 'text', {}) });
       }
-      var m = new T3.MeshBasicMaterial({ map: tex, color: K.col(tok('att_course', 'text', {})), transparent: true, depthWrite: false, alphaTest: 0.02, toneMapped: false, name: 'att-sign' });
-      var U = ARCH.under;
-      var uArc = { value: new T3.Vector4(ARCH.cy, ARCH.rIn, ARCH.h, ARCH.textHalf) };
-      var uRect = { value: new T3.Vector4(r.u0, r.v0, r.u1 - r.u0, r.v1 - r.v0) };
-      var uLine = { value: new T3.Vector4(U.v0, U.v1, U.half, 0) };
-      var uMember = { value: K.col(X.member) };
-      m.onBeforeCompile = function (sh) {
-        sh.uniforms.uArc = uArc; sh.uniforms.uRect = uRect; sh.uniforms.uLine = uLine; sh.uniforms.uMember = uMember;
-        sh.vertexShader = sh.vertexShader
-          .replace('#include <common>', '#include <common>\nuniform vec4 uArc;\nuniform vec4 uRect;\nvarying vec2 vBand;')
-          .replace('#include <uv_vertex>', '#include <uv_vertex>\n{ vec2 q = vec2(position.x, position.y - uArc.x);\n' +
-            '  vBand = vec2(atan(q.x, q.y) / (2.0 * uArc.w) + 0.5, (length(q) - uArc.y) / uArc.z); }\n' +
-            '#ifdef USE_MAP\n  vMapUv = uRect.xy + uRect.zw * clamp(vBand, 0.0, 1.0);\n#endif');
-        sh.fragmentShader = sh.fragmentShader
-          .replace('#include <common>', '#include <common>\nuniform vec4 uLine;\nuniform vec3 uMember;\nvarying vec2 vBand;')
-          .replace('#include <map_fragment>', '#include <map_fragment>\n' +
-            '  if (vBand.y > uLine.x && vBand.y < uLine.y && abs(vBand.x - 0.5) < uLine.z) diffuseColor = vec4(uMember, 1.0);');
-      };
-      m.customProgramCacheKey = function () { return 'att-sign'; };
-      return { mat: m, member: uMember, hex: null };
+      entry.tex = tex;
+      var patch = { map: tex, alphaTest: 0.02, depthWrite: false };
+      entry.mat = typeof K.variant === 'function' ? K.variant('sign', 'att-course', patch)
+        : new T3.MeshBasicMaterial({ map: tex, color: 0xffffff, transparent: true, depthWrite: false, alphaTest: 0.02, toneMapped: false, name: 'sign#att-course' });
+      redrawSign(entry, hexOfToken(K, X.member));
+      /* the display font: drawn again once it has loaded (the atlas does the same) */
+      try {
+        if (entry.own && K.tex && typeof K.tex.fontReady === 'function') {
+          K.tex.fontReady(SIGN_FONT, 60000).then(function (ok) { if (ok && signRef && signRef.e === entry) redrawSign(entry, entry.hex); });
+        }
+      } catch (err) {}
+      return entry;
     });
     if (!signRef || signRef.e !== e) {
-      /* the same kit with a new entry: its dispose cleared the parts cache (and the atlas this
-         material showed). The old material is this file's own, never on the kit's dispose list,
-         so it is freed here (another hub's entry is left alone: it may still be drawn) */
-      var old = signRef && signRef.K === K && signRef.e && signRef.e.mat;
-      if (old && old !== e.mat && typeof old.dispose === 'function') { try { old.dispose(); } catch (err) {} }
+      /* the same kit with a new entry: its dispose cleared the parts cache (and freed the kit's sign
+         variant). The old texture is this file's own, never on the kit's dispose list, so it is freed
+         here (another hub's entry is left alone: it may still be drawn) */
+      var old = signRef && signRef.K === K && signRef.e && signRef.e.own && signRef.e.tex;
+      if (old && old !== e.tex && typeof old.dispose === 'function') { try { old.dispose(); } catch (err) {} }
       signRef = { e: e, K: K }; applyMember();
     }
     return e.mat;
+  }
+  /* the sign canvas in the text colour with the underline in `hex` (only this file's own canvas) */
+  function redrawSign(entry, hex) {
+    entry.hex = hex;
+    if (!entry.ctx) return;
+    drawSign(entry.ctx, entry.text, hex);
+    entry.tex.needsUpdate = true;
   }
   /* the underline's member colour (a '#hex'); safe before the material exists (kept for it) */
   var memberHex = null;
@@ -570,14 +612,21 @@
     if (!h) return false;
     memberHex = h;
     var s = signRef;
-    if (s && s.e.hex !== h) {
-      s.e.hex = h;
-      var col = typeof s.K.rgb === 'function' ? s.K.rgb(h) : null;
-      if (col) s.e.member.value.copy(col);
-    }
+    if (s && s.e.hex !== h) redrawSign(s.e, h);
     return true;
   }
   function applyMember() { if (memberHex) setMember(memberHex); }
+  /* the text part's uv (the sign program reads it): signUV of every vertex, after the template is built */
+  function bakeSignUV(K, tpl) {
+    var T3 = K && K.THREE, uv = {};
+    (tpl && tpl.parts || []).forEach(function (p) {
+      if (p.name !== 'text' || !p.geo || typeof p.geo.setAttribute !== 'function' || !T3 || !T3.BufferAttribute) return;
+      var P = p.geo.getAttribute('position'), a = P.array, out = new Float32Array(a.length / 3 * 2);
+      for (var i = 0, j = 0; i < a.length; i += 3, j += 2) { signUV(a[i], a[i + 1], uv); out[j] = uv.u; out[j + 1] = uv.v; }
+      p.geo.setAttribute('uv', new T3.BufferAttribute(out, 2));
+    });
+    return tpl;
+  }
 
   /* ================================================================
      THE PITCH (att_pitch) AND THE MINI STADIUMS (stadium_*)
@@ -1166,6 +1215,7 @@
     IDS: IDS, ALL_IDS: ALL_IDS, COLORS: COLORS, X: X, SLOT_DEFAULTS: SLOT_DEFAULTS,
     ARCH: ARCH, PITCH: PITCH, KART: KART, PARKED: PARKED, GARAGE: GARAGE, TRACK: TRACK, BOLT: BOLT, ICO_DIRS: ICO_DIRS, MAX_BPM: MAX_BPM,
     pick: pick, slotToken: slotToken, tok: tok, arcMap: arcMap, bulbLayout: bulbLayout, chaseState: chaseState,
+    signUV: signUV, underlineRect: underlineRect, SIGN_TEX: SIGN_TEX,
     crowdLayout: crowdLayout, crowdPose: crowdPose, checkerLayout: checkerLayout, parkedPoint: parkedPoint,
     nearIco: nearIco, rainbowBand: rainbowBand, alignY: alignY, ovalPoint: ovalPoint,
     /* registration factories (need K; used by stage.js, and by QA harnesses) */

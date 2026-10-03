@@ -52,7 +52,8 @@
 
    DRAWING: one particle mesh (InstancedBufferGeometry quads + a small ShaderMaterial on the kit's
    sparkle atlas), one keyed 'marks' mesh (decals, controller sprites, emote bubbles) with the SAME
-   shader (one program), and the kit's halo billboard pool. Each sprite is either 'paper' (normal
+   shader (one program — which edit3d's cell overlay shares too: overlayProgram), and the kit's halo
+   billboard pool. Each sprite is either 'paper' (normal
    blend: confetti, petals, dust, hearts) or 'glow' (additive: sparkles, snow, fireworks) in the
    same draw call (premultiplied output: alpha 0 = additive), camera-facing or flat on the ground
    (splash rings, decals). Capacity per tier (LOW 128 / MID 256 / HIGH 512, halved by the adaptive
@@ -64,11 +65,12 @@
    ================================================================ */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) {
-    module.exports = factory(root, require('./motion.js'), require('../world-look.js'));
+    /* edit3d (whose cell overlay shares the sprite program) is looked up lazily: it requires this file */
+    module.exports = factory(root, require('./motion.js'), require('../world-look.js'), function () { return require('./edit3d.js'); });
   } else {
-    root.SLFx3D = factory(root, null, null);
+    root.SLFx3D = factory(root, null, null, null);
   }
-}(typeof self !== 'undefined' ? self : typeof globalThis !== 'undefined' ? globalThis : this, function (root, M0, L0) {
+}(typeof self !== 'undefined' ? self : typeof globalThis !== 'undefined' ? globalThis : this, function (root, M0, L0, E0) {
   'use strict';
 
   var VERSION = 1;
@@ -550,6 +552,57 @@
     '}'
   ].join('\n');
 
+  /* ---------------- ONE program for the fx sprites and the edit overlay's cells ----------------
+     edit3d's cell overlay is the same kind of draw (a transparent, fogged, un-tone-mapped quad list on
+     an InstancedBufferGeometry), so the two sources are joined into one whose main() runs the pass
+     uPass names (0 = an fx sprite, 1 = an edit cell): three keys programs on the source and the
+     material flags, so the sprite and cell materials share ONE compiled program — the hidden cell
+     overlay costs no program of its own in play, and entering edit mode compiles nothing.
+     overlayProgram(cellVert, cellFrag) → {vert, frag, pass} (memoised: both files ask for it).
+     joinPasses is env.js's: each part's main() becomes fnName(); shared chunk includes and identical
+     declarations appear once; a name declared twice differently throws. */
+  var SHARED_INCLUDE = /^#include <(common|fog_pars_vertex|fog_pars_fragment)>$/;
+  var DECL = /^(uniform|attribute|varying)\s+\w+\s+(\w+)/;
+  function joinPasses(parts) {
+    var head = [], seen = {}, body = [], calls = [];
+    parts.forEach(function (p, i) {
+      var lines = p[1].split('\n'), m = lines.indexOf('void main() {');
+      if (m < 0 || lines[lines.length - 1] !== '}') throw new Error('joinPasses: ' + p[0] + ' needs a last-line main()');
+      for (var j = 0; j < lines.length; j++) {
+        var ln = lines[j], d = j < m ? DECL.exec(ln) : null;
+        if (j < m && SHARED_INCLUDE.test(ln)) { if (head.indexOf(ln) < 0) head.push(ln); continue; }
+        if (d) {
+          if (seen[d[2]] != null && seen[d[2]] !== ln) throw new Error('joinPasses: ' + d[2] + ' is declared twice differently');
+          if (seen[d[2]] != null) continue;
+          seen[d[2]] = ln;
+        }
+        body.push(j === m ? 'void ' + p[0] + '() {' : ln);
+      }
+      calls.push((i ? '  else ' : '  ') + (i < parts.length - 1 ? 'if (uPass < ' + (i + 0.5).toFixed(1) + ') ' : '') + p[0] + '();');
+    });
+    return head.concat(['uniform float uPass;'], body, ['void main() {'], calls, ['}']).join('\n');
+  }
+  var OVERLAY_PASS = { sprite: 0, cell: 1 };
+  var overlayMemo = null;
+  function overlayProgram(cellVert, cellFrag) {
+    if (typeof cellVert !== 'string' || typeof cellFrag !== 'string') return null;
+    if (!overlayMemo || overlayMemo.cv !== cellVert || overlayMemo.cf !== cellFrag) {
+      overlayMemo = {
+        cv: cellVert, cf: cellFrag, pass: OVERLAY_PASS,
+        vert: joinPasses([['fxSpriteV', SPRITE_VERT], ['editCellV', cellVert]]),
+        frag: joinPasses([['fxSpriteF', SPRITE_FRAG], ['editCellF', cellFrag]])
+      };
+    }
+    return overlayMemo;
+  }
+  /* the joined program when edit3d is loaded (its cell shader), else the sprite shader alone */
+  function spriteProgram() {
+    var E = null;
+    try { E = (E0 && E0()) || root.SLEdit3D || null; } catch (e) { E = null; }
+    var S = E && E.SHADERS;
+    return (S && overlayProgram(S.CELL_VERT, S.CELL_FRAG)) || null;
+  }
+
   /* ================================================================
      create(K, SL3D, opts) → fx   (browser; THREE comes from K.THREE)
      ================================================================ */
@@ -630,11 +683,12 @@
     function tokenList(spec) { return typeof spec.tokens === 'string' ? TOKENS[spec.tokens] : spec.tokens; }
 
     /* ---------------- sprite buffers: one InstancedBufferGeometry per mesh ---------------- */
+    var OV = spriteProgram();
     function spriteMaterial(name) {
-      var u = T.UniformsUtils.merge([T.UniformsLib.fog, { uMap: { value: null }, uCells: { value: CELLS }, uAlphaMul: { value: 1 } }]);
+      var u = T.UniformsUtils.merge([T.UniformsLib.fog, { uMap: { value: null }, uCells: { value: CELLS }, uAlphaMul: { value: 1 }, uPass: { value: OVERLAY_PASS.sprite } }]);
       u.uMap.value = K.tex.sparkles();
       return new T.ShaderMaterial({
-        name: name, uniforms: u, vertexShader: SPRITE_VERT, fragmentShader: SPRITE_FRAG,
+        name: name, uniforms: u, vertexShader: OV ? OV.vert : SPRITE_VERT, fragmentShader: OV ? OV.frag : SPRITE_FRAG,
         transparent: true, depthWrite: false, depthTest: true, fog: true, toneMapped: false,
         blending: T.CustomBlending, blendEquation: T.AddEquation, blendSrc: T.OneFactor, blendDst: T.OneMinusSrcAlphaFactor
       });
@@ -1427,7 +1481,9 @@
     shakeOffset: shakeOffset, fireworkPlan: fireworkPlan, cannonPlan: cannonPlan, rng: rng, safeHz: safeHz,
     confettiCell: confettiCell, heartAllowed: heartAllowed, bloomAt: bloomAt, bloomAllowed: bloomAllowed,
     CONFETTI_MIX: CONFETTI_MIX, MIX_PATTERN: MIX_PATTERN, BLOOM: BLOOM, BLOOM_MAX: BLOOM_MAX, EMOTE_SLOTS: EMOTE_SLOTS,
-    SHADERS: { SPRITE_VERT: SPRITE_VERT, SPRITE_FRAG: SPRITE_FRAG }
+    SHADERS: { SPRITE_VERT: SPRITE_VERT, SPRITE_FRAG: SPRITE_FRAG },
+    /* the sprite + edit-cell program both files build their materials from */
+    overlayProgram: overlayProgram, OVERLAY_PASS: OVERLAY_PASS, joinPasses: joinPasses
   };
 
   /* the stage registry: SL3D.makeFx(opts) → create(K, SL3D, opts) once the stage is ready */

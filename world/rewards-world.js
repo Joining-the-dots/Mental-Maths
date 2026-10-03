@@ -1610,7 +1610,7 @@
     openItem: openItem,
     _qa: function () {
       try { if (localStorage.getItem('slQaMode') !== '1') return null; } catch (e) { return null; }
-      return { C: C, commit: commit, commitPurchase: commitPurchase, arcadeState: arcadeState, arcadeTick: arcadeTick, state: function () { return { mode: mode, placing: placing, selectedUid: selectedUid, running: running }; }, setServerOffset: function (ms) { timeAnchor = { at: Date.now() + ms, perf: perfNow(), server: true }; }, setArcadeCfg: function (cfg) { qaArcade = cfg || null; } };
+      return { C: C, commit: commit, commitPurchase: commitPurchase, arcadeState: arcadeState, arcadeTick: arcadeTick, stage: function () { return stage3d; }, state: function () { return { mode: mode, placing: placing, selectedUid: selectedUid, running: running }; }, setServerOffset: function (ms) { timeAnchor = { at: Date.now() + ms, perf: perfNow(), server: true }; }, setArcadeCfg: function (cfg) { qaArcade = cfg || null; } };
     }
   };
 })();

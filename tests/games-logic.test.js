@@ -49,11 +49,14 @@ test('course: a child who never jumps is curtain-called (real consequences, no f
   assert.ok(r.state.progress < 0.30, 'progress ' + (r.state.progress * 100).toFixed(0) + '%');
   assert.ok(C.validResult('course', r.result()));
   assert.equal(r.result().score, 0);
+  /* Timing rings (the old Fan support chip) only show where to jump: still 3 hearts, curtain-called at the same spot */
   const f = Course.newRound(api, 'course_meadow', { seed: 5, fan: true });
-  t = 0;
-  while (!f.done && t < 300) { f.step(STEP, {}); t += STEP; }
-  assert.equal(f.state.curtain, true, 'Fan support is still curtain-called');
-  assert.ok(f.state.progress < 0.35, 'Fan support progress ' + (f.state.progress * 100).toFixed(0) + '%');
+  assert.equal(f.state.hearts, 3);
+  let tf = 0;
+  while (!f.done && tf < 300) { f.step(STEP, {}); tf += STEP; }
+  assert.equal(f.state.curtain, true, 'Timing rings: still curtain-called');
+  assert.equal(f.state.progress, r.state.progress, 'Timing rings: the same progress (' + (f.state.progress * 100).toFixed(0) + '%)');
+  assert.equal(tf, t, 'Timing rings: the same run length');
 });
 
 test('course: double jump works and buffered jumps fire on landing', () => {

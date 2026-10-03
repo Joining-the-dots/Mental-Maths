@@ -431,12 +431,7 @@ function makeView(mid, opts, M, S, SL3D, K, hub, tier, budget, fail, built) {
         break;
       }
       case 'regrab': sparkles(M.worldX(e.x), M.worldY(e.y), 0.2, 3, 0xFFFFFF, 1.0, 0.3, 0.12); break;
-      case 'heal': {
-        const n = fans.count();
-        if (n > 0) { const k = (vt * 97 | 0) % n; zip('heart', fans.seats[k * 4], fans.seats[k * 4 + 3], fans.seats[k * 4 + 2], 0, -0.86, 0.86, 0.7); }
-        else zip('heart', px, cy + 0.6, 0.3, 0, -0.86, 0.86, 0.6);
-        break;
-      }
+      /* no 'heal': a lost heart never comes back (no heart floats from the fans to the HUD) */
       case 'door': {
         const d = doorWorldX(e.sec);
         if (d != null) {
@@ -642,7 +637,6 @@ function makeView(mid, opts, M, S, SL3D, K, hub, tier, budget, fail, built) {
       if (q.type === 'snack') P.snack(zOut.x, zOut.y, zOut.z, vt * 9, zOut.s);
       else if (q.type === 'star') { P.star(zOut.x, zOut.y, zOut.z, vt * 6, zOut.s); fx.halo(zOut.x, zOut.y, zOut.z, 0.7 * zOut.s, CYAN, 0.6); }
       else if (q.type === 'letter') P.card(q.li, zOut.x, zOut.y, zOut.z, reduced ? 0 : (1 - u) * Math.PI * 2, zOut.s * 1.1);
-      else if (q.type === 'heart') fx.halo(zOut.x, zOut.y, zOut.z, 0.5 * zOut.s, memberInt, 0.9);
     }
     P.end();
   }

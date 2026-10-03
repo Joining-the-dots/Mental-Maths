@@ -127,30 +127,26 @@ test('runner: the showcase autopilot gets E-N-C-O-R-E, all 10 glow stars and cle
 });
 
 /* ================= real consequences ================= */
-test('runner: a child who never jumps is curtain-called early with 0 points; Fan support is still no free ride', () => {
+test('runner: a child who never jumps is curtain-called early with 0 points; Timing rings change nothing about that', () => {
   for (let seed = 1; seed <= 100; seed++) {
     const { r, s, t } = play('course_meadow', { seed }, null);
     assert.equal(s.curtain, true, 'seed ' + seed + ' curtain call');
     assert.equal(s.phase, 'done');
+    assert.equal(s.bumps, 3, 'seed ' + seed + ': exactly 3 bumps, the 3rd ends the show');
     assert.ok(t <= 35, `seed ${seed}: curtain after ${t.toFixed(1)} s`);
     assert.ok(s.progress < 0.30, `seed ${seed}: reached ${(s.progress * 100).toFixed(0)}%`);
     assert.ok(C.validResult('course', r.result()));
     assert.equal(r.result().score, 0, 'seed ' + seed + ' scores nothing');
     assert.equal(Course.decodeExtra(r.result().extra).medal, 0, 'Trainee ribbon');
     assert.equal(r.summaryTitle(), 'CURTAIN CALL!');
+    /* Timing rings only show where to jump: the same 3 hearts, the same curtain at the same spot */
+    const f = play('course_meadow', { seed, fan: true }, null);
+    assert.equal(f.s.rings, true);
+    assert.equal(f.s.curtain, true, 'rings seed ' + seed + ' is curtain-called too');
+    assert.equal(f.s.bumps, 3);
+    assert.equal(f.s.progress, s.progress, 'rings seed ' + seed + ': the same progress');
+    assert.equal(f.t, t, 'rings seed ' + seed + ': the same run length');
   }
-  /* Fan support (5 hearts, refills + a free shield at each door): still curtain-called on every
-     seed and early on almost all; a run of lucky puddle-heavy Verses can carry it into the Chorus */
-  const prog = [];
-  for (let seed = 1; seed <= 100; seed++) {
-    const { s } = play('course_meadow', { seed, fan: true }, null);
-    assert.equal(s.curtain, true, 'fan seed ' + seed + ' is still curtain-called');
-    prog.push(s.progress);
-  }
-  prog.sort((a, b) => a - b);
-  assert.ok(prog[50] < 0.30, 'fan median progress ' + prog[50].toFixed(3));
-  assert.ok(prog.filter(p => p < 0.35).length >= 80, 'fan: before 35% on most seeds');
-  assert.ok(play('course_meadow', { seed: 5, fan: true }, null).s.progress < 0.35, 'the replaced test\'s seed 5 stays under 35%');
 });
 
 test('runner: a random masher is curtain-called on at least 90% of 100 seeds', () => {
@@ -159,16 +155,21 @@ test('runner: a random masher is curtain-called on at least 90% of 100 seeds', (
   assert.ok(curtains >= 90, 'masher curtain calls: ' + curtains);
 });
 
-test('runner: kid pilots — ±120 ms finishes ≥ 95%; Fan support ±150 ms ≥ 97% and ±250 ms ≥ 85%', () => {
-  function rate(J, fan) {
+/* 3 hearts, never regained (the parent: "too easy… only 3 lives and no getting lives back").
+   Measured on these 400 seeded kids (V4.53 → now): ±120 ms 99.25% → 97.5%; ±150 ms 90.25%
+   (100% with Fan support) → 61.75%; ±250 ms 6.75% (85.75% with Fan support) → 0.5%. */
+test('runner: kid pilots — ±120 ms still finishes ≥ 95%; ±150 ms is a real test (50-75%); ±250 ms almost never finishes', () => {
+  function rate(J, fan, seeds) {
     let fin = 0, n = 0;
-    VARIANTS.forEach((variant, vi) => { for (let k = 1; k <= 100; k++) { const seed = vi * 1000 + k; n++; if (play(variant, { seed, fan }, kid(J, seed)).s.finished) fin++; } });
+    VARIANTS.forEach((variant, vi) => { for (let k = 1; k <= (seeds || 100); k++) { const seed = vi * 1000 + k; n++; if (play(variant, { seed, fan }, kid(J, seed)).s.finished) fin++; } });
     return fin / n;
   }
-  const a = rate(120, false), b = rate(150, true), c = rate(250, true);
+  const a = rate(120, false), b = rate(150, false), c = rate(250, false);
   assert.ok(a >= 0.95, '±120 ms finish rate ' + a);
-  assert.ok(b >= 0.97, 'Fan ±150 ms finish rate ' + b);
-  assert.ok(c >= 0.85, 'Fan ±250 ms finish rate ' + c);
+  assert.ok(b >= 0.5 && b <= 0.75, '±150 ms finish rate ' + b + ' (V4.53: 90%, 100% with Fan support)');
+  assert.ok(c <= 0.05, '±250 ms finish rate ' + c + ' (V4.53 Fan support: 86%)');
+  /* Timing rings are a visual cue only: the same kids finish exactly as often */
+  assert.equal(rate(150, true, 25), rate(150, false, 25), 'rings never change the outcome');
 });
 
 test('runner: a bump costs exactly a heart, all Hype, 8 treats (−24) and two beats; a puddle halves Hype, spills 3 and costs one beat', () => {
@@ -400,6 +401,221 @@ test('runner: frame-rate independent — 30 fps and 144 fps give identical score
   for (const [seed, mode] of [[9, 'safe'], [21, 'showcase']]) assert.equal(runAt(30, seed, mode), runAt(144, seed, mode));
 });
 
+/* ================= three hearts, never regained =================
+   The parent played it: "too easy… only 3 lives and no getting lives back". Every run (any
+   variant, mode, course or start point) has exactly 3 hearts; nothing gives one back — not a
+   Stage Door, not a pickup, not Timing rings (the old Fan support) — and the 3rd lost heart ends
+   the show with the curtain call. Bubble-shield pickups stay: they block a bump, never add a heart. */
+const PLAIN = ['low', 'log', 'hedge', 'stack'];
+/* the safe autopilot, except it gives no input to the props of the listed sections until running
+   into one has really cost something there (a heart; in the Rehearsal a free bonk). A held
+   bubble shield can absorb a planned bump — then it simply tries the section's next plain prop. */
+function bumper(secs) {
+  const done = new Set();
+  let target = -1, cost = 0;
+  return (r) => {
+    const s = r.state, obs = r.course.obs;
+    if (target >= 0 && s.bumps + s.bonks > cost) { done.add(target); target = -1; }
+    if (s.phase === 'run') {
+      const i = nextObs(s, obs), o = i >= 0 ? obs[i] : null;
+      if (o && secs.includes(o.sec) && !done.has(o.sec) && (o.sec === 0 || PLAIN.includes(o.kind))) {
+        target = o.sec; cost = s.bumps + s.bonks;
+        if (s.sliding && s.slideHeld) r.input('slide', false);
+        return;
+      }
+    }
+    r.autopilot();
+  };
+}
+/* run to the end, checking every step: never more than 3 hearts, never a heart back, no heal */
+function watchHearts(r, pilot, tag) {
+  r.wantEvents = true; r.events = [];
+  const s = r.state, w = { heal: 0, freeShield: 0, doors: 0, doorsHurt: 0, bumpSecs: new Set(), bonkSecs: new Set() };
+  let prev = s.hearts, bumps = s.bumps, bonks = s.bonks, sec = s.section, t = 0;
+  while (!r.done && t < 200) {
+    if (pilot) pilot(r);
+    r.step(STEP); t += STEP;
+    assert.ok(s.hearts <= T.HEARTS && s.maxHearts === T.HEARTS, tag + ': never more than 3 hearts (' + s.hearts + '/' + s.maxHearts + ')');
+    assert.ok(s.hearts <= prev, tag + ': hearts went back up ' + prev + ' → ' + s.hearts + ' at ' + t.toFixed(2) + ' s');
+    assert.equal(s.hearts, Math.max(0, T.HEARTS - s.bumps), tag + ': a heart is lost per bump and never regained');
+    if (s.bumps > bumps) w.bumpSecs.add(s.section);
+    if (s.bonks > bonks) w.bonkSecs.add(s.section);
+    if (s.section !== sec && s.section <= 5) {            /* a Stage Door (6 = the Encore): hearts untouched */
+      w.doors++; if (s.hearts < T.HEARTS) w.doorsHurt++;
+      assert.equal(s.hearts, prev, tag + ': the ' + Course.SECTIONS[s.section].name + ' door changed the hearts');
+      const hs = r.hud().split(' · ')[0];
+      assert.equal([...hs].length, T.HEARTS, tag + ': the HUD line shows 3 heart slots');
+      assert.equal([...hs].filter((c) => c === '❤').length, s.hearts);
+    }
+    for (const e of r.events) { if (e.type === 'heal') w.heal++; if (e.type === 'shieldGet' && e.free) w.freeShield++; }
+    r.events.length = 0;
+    prev = s.hearts; bumps = s.bumps; bonks = s.bonks; sec = s.section;
+  }
+  assert.equal(w.heal, 0, tag + ': no heal event');
+  assert.equal(w.freeShield, 0, tag + ': no free shield');
+  return w;
+}
+
+test('three hearts: full runs with a bump in every section never show more than 3 hearts or one coming back', () => {
+  const cover = new Set();
+  let doorsHurt = 0, runs = 0;
+  VARIANTS.forEach((variant, vi) => {
+    for (let k = 1; k <= 5; k++) {
+      const seed = vi * 1000 + k;
+      for (const secs of [[0, 1, 2], [3, 4], [5], [1, 5], [2, 4]]) {
+        for (const fan of [false, true]) {
+          const tag = `${variant} seed ${seed} miss ${secs.join('+')}${fan ? ' rings' : ''}`;
+          const r = Course.newRound(api, variant, { seed, fan });
+          assert.equal(r.state.hearts, 3, tag + ' starts with 3');
+          const w = watchHearts(r, bumper(secs), tag);
+          const s = r.state;
+          runs++; doorsHurt += w.doorsHurt;
+          w.bumpSecs.forEach((x) => cover.add(x)); if (w.bonkSecs.has(0)) cover.add(0);
+          assert.ok(s.bumps <= 2, tag + ': only the planned bumps (' + s.bumps + ')');
+          assert.equal(s.finished, true, tag + ' finished on ' + s.hearts + ' heart(s)');
+          assert.equal(s.hearts, 3 - s.bumps);
+          assert.equal(w.doors, 5, tag + ': through all 5 Stage Doors');
+        }
+      }
+    }
+  });
+  assert.deepEqual([...cover].sort(), [0, 1, 2, 3, 4, 5], 'a real bump (a free bonk in the Rehearsal) in every section');
+  assert.ok(doorsHurt >= runs, 'hundreds of Stage Doors passed below 3 hearts, none healed (' + doorsHurt + ')');
+});
+
+test('three hearts: every Stage Door leaves the hearts (and the shield) exactly as they were', () => {
+  for (const fan of [false, true]) {
+    for (let sec = 1; sec <= 5; sec++) {
+      for (const hearts of [1, 2, 3]) {
+        const tag = `door ${sec} at ${hearts} heart(s)${fan ? ' rings' : ''}`;
+        const r = Course.newRound(api, 'course_meadow', { course: custom([]), startAt: SECTIONS[sec].t0 - 0.2, fan });
+        const s = r.state;
+        r.wantEvents = true; r.events = [];
+        s.hearts = hearts;
+        while (s.section < sec) r.step(STEP);
+        assert.equal(s.hearts, hearts, tag + ': hearts unchanged');
+        assert.equal(s.shield, false, tag + ': no free bubble shield');
+        assert.equal(r.events.filter((e) => e.type === 'door').length, 1, tag + ': the door itself still fires');
+        assert.ok(!r.events.some((e) => e.type === 'heal' || e.type === 'shieldGet'), tag + ': ' + JSON.stringify(r.events.map((e) => e.type)));
+      }
+    }
+  }
+  /* a pet that collected a bubble shield keeps exactly that one shield through a door */
+  const r = Course.newRound(api, 'course_meadow', { course: custom([]), startAt: SECTIONS[3].t0 - 0.2, fan: false });
+  r.state.shield = true; r.state.hearts = 2;
+  while (r.state.section < 3) r.step(STEP);
+  assert.equal(r.state.shield, true); assert.equal(r.state.hearts, 2);
+});
+
+test('three hearts: Timing rings ON — 3 hearts, no free shield anywhere, only the timing-ring cues', () => {
+  for (const variant of VARIANTS) {
+    for (const seed of [3, 17]) {
+      const tag = `${variant} seed ${seed}`;
+      const r = Course.newRound(api, variant, { seed, fan: true });
+      const s = r.state;
+      assert.equal(s.rings, true, tag + ': the timing-ring flag is set');
+      assert.equal(s.hearts, 3); assert.equal(s.maxHearts, 3); assert.equal(s.shield, false);
+      assert.ok(r.course.obs.every((o) => o.cue), tag + ': a cue ring on every prop');
+      const off = Course.newRound(api, variant, { seed, fan: false });
+      assert.equal(off.state.rings, false);
+      assert.deepEqual(off.course.obs.filter((o) => o.cue).map((o) => o.index), off.course.obs.filter((o) => o.rehearsal).map((o) => o.index), tag + ': rings off: rehearsal cues only');
+      /* the safe autopilot through the whole show: every shield it ever holds is a course pickup */
+      r.wantEvents = true; r.events = [];
+      let gets = 0, t = 0;
+      while (!r.done && t < 200) {
+        r.autopilot(); r.step(STEP); t += STEP;
+        for (const e of r.events) if (e.type === 'shieldGet') { gets++; assert.ok(!e.free, tag + ': a free shield'); }
+        r.events.length = 0;
+        assert.equal(s.hearts, 3);
+      }
+      const pickups = r.course.items.filter((it) => it.kind === 'shield');
+      assert.equal(pickups.length, 2, tag + ': the Verse and Chorus shield pickups are still on the course');
+      assert.equal(gets, pickups.filter((it) => it.got).length, tag + ': shields only from pickups');
+      assert.equal(Course.decodeExtra(r.result().extra).fan, true, tag + ': extra bit 16 still says the assist was on');
+    }
+  }
+  /* an empty stage, rings on, start to finish: no shield ever appears */
+  const e = Course.newRound(api, 'course_meadow', { course: custom([]), fan: true });
+  while (!e.state.finished) { e.step(STEP); assert.equal(e.state.shield, false); assert.equal(e.state.hearts, 3); }
+  assert.equal(e.summaryText().endsWith('❤❤❤ left · 🎯 with Timing rings'), true, e.summaryText());
+});
+
+test('three hearts: the assist is OFF for a first run and for a legacy (V4.53 Fan support) session value', () => {
+  const d = Course.def;
+  /* a child's very first Debut Run (tutorial not seen yet) */
+  const first = { tutSeen: false, profileKey: 'lives-first' };
+  assert.equal(Course.ringsFor(first), false);
+  assert.equal(d.menuOptions(first)[0].value, false);
+  const r1 = Course.newRound(api, 'course_meadow', Object.assign({ seed: 3 }, first));
+  assert.equal(r1.state.rings, false); assert.equal(r1.state.hearts, 3); assert.equal(r1.state.maxHearts, 3);
+  assert.ok(r1.course.obs.every((o) => o.cue === o.rehearsal), 'cue rings on the rehearsal props only');
+  assert.equal(d.tutorial.length, 4, 'no assist card');
+  /* session memory left in V4.53's shape: Fan support switched ON by itself (first run), by hand,
+     or after 2 curtain calls — all read as OFF now, and the legacy fields are gone */
+  for (const legacy of [{ fan: true, manual: false, curtains: 0 }, { fan: true, manual: true, curtains: 0 }, { fan: true, manual: true, curtains: 2 }, { fan: null, manual: false, curtains: 1 }]) {
+    const cfg = { tutSeen: true, profileKey: 'lives-legacy-' + JSON.stringify(legacy) };
+    const m = Course._session(cfg);
+    for (const k of Object.keys(m)) delete m[k];
+    Object.assign(m, legacy);
+    assert.equal(Course.ringsFor(cfg), false, JSON.stringify(legacy));
+    assert.ok(!('fan' in m) && !('manual' in m) && !('curtains' in m), 'migrated: ' + JSON.stringify(m));
+    assert.equal(d.menuOptions(cfg)[0].value, false);
+    const r = Course.newRound(api, 'course_meadow', Object.assign({ seed: 3 }, cfg));
+    assert.equal(r.state.rings, false); assert.equal(r.state.hearts, 3);
+    /* the stored option id still works: 'fan' (the chip) switches the rings on, and nothing else */
+    d.setOption(cfg, 'fan', true);
+    assert.equal(Course.ringsFor(cfg), true);
+    const on = Course.newRound(api, 'course_meadow', Object.assign({ seed: 3 }, cfg));
+    assert.equal(on.state.rings, true); assert.equal(on.state.hearts, 3); assert.equal(on.state.shield, false);
+    d.menuOptions(cfg);
+    assert.equal(d.tutorial.length, 5, 'rings on: the 🎯 card');
+    d.setOption(cfg, 'fan', false);
+  }
+  d.menuOptions(first);                                      /* leave the shell's shown cfg on a rings-off child */
+  d.setOption({ profileKey: 'lives-alias' }, 'rings', true);
+  assert.equal(Course.ringsFor({ profileKey: 'lives-alias' }), true, "'rings' is accepted as an alias");
+  /* the shop demo never has them */
+  assert.equal(Course.ringsFor({ demo: true, fan: true }), false);
+});
+
+test('three hearts: losing the 3rd heart ends the run with the curtain call (and not a moment before)', () => {
+  /* four plain props in the Verse, 1,200 px apart (clear of the 1.4 s grace), no input */
+  const course = custom([{ kind: 'hedge', sec: 1 }, { kind: 'log', sec: 1 }, { kind: 'low', sec: 1 }, { kind: 'hedge', sec: 1 }]);
+  for (const fan of [false, true]) {
+    for (const o of course.obs) Object.assign(o, { hit: false, passed: false, hitT: 0, judge: 0 });
+    const r = Course.newRound(api, 'course_meadow', { course, startAt: SECTIONS[1].t0 + 3, fan });
+    const s = r.state;
+    r.wantEvents = true; r.events = [];
+    placeAhead(r, course.obs[0], 0.5);
+    for (let k = 1; k < 4; k++) course.obs[k].x = course.obs[0].x + 1200 * k;
+    const seen = [];
+    let curtainAt = -1, n = 0;
+    while (!r.done && n++ < 120 * 30) {
+      r.step(STEP);
+      for (const e of r.events) { seen.push(e.type); if (e.type === 'curtain') curtainAt = s.bumps; }
+      r.events.length = 0;
+      if (s.bumps < 3) { assert.equal(s.phase, 'run', 'still running on ' + s.hearts + ' heart(s)'); assert.equal(s.curtain, false); }
+    }
+    assert.equal(r.done, true);
+    assert.equal(s.bumps, 3, 'exactly 3 bumps'); assert.equal(s.hearts, 0);
+    assert.equal(curtainAt, 3, 'the curtain falls on the 3rd bump');
+    assert.equal(seen.filter((t) => t === 'curtain').length, 1);
+    assert.equal(seen.filter((t) => t === 'lastHeart').length, 1, 'one last-heart warning, after the 2nd bump');
+    assert.equal(course.obs[3].hit, false, 'the show was over before the 4th prop');
+    assert.equal(s.curtain, true); assert.equal(s.finished, false);
+    assert.equal(r.summaryTitle(), 'CURTAIN CALL!');
+    assert.equal(Course.decodeExtra(r.result().extra).medal, 0, 'Trainee ribbon');
+  }
+  /* on a real course: a pilot that runs into a prop in every section from the Verse on is
+     curtain-called at its 3rd real bump, wherever that falls */
+  for (const [variant, seed] of [['course_meadow', 3], ['course_snow', 2005], ['course_candy', 3002]]) {
+    const r = Course.newRound(api, variant, { seed, fan: false });
+    const w = watchHearts(r, bumper([1, 2, 3, 4, 5]), variant + ' ' + seed);
+    assert.equal(r.state.curtain, true); assert.equal(r.state.bumps, 3); assert.equal(r.state.finished, false);
+    assert.ok(w.doorsHurt >= 1, 'a door was passed with hearts missing');
+  }
+});
+
 /* ================= controls ================= */
 test('runner: double jump works, buffered jumps fire on landing, and a tumble ignores input for 0.3 s then buffers it', () => {
   const r = Course.newRound(api, 'course_meadow', { seed: 3, fan: false });
@@ -441,14 +657,17 @@ test('runner: double jump works, buffered jumps fire on landing, and a tumble ig
 });
 
 /* ================= scoring + rules ================= */
-test('runner: scoring — Fan finish bonus capped at 3 hearts, score clamp, extra round-trips, Hype tiers, FEVER ends', () => {
+test('runner: scoring — finish bonus capped at 3 hearts, score clamp, extra round-trips, Hype tiers, FEVER ends', () => {
   function finishOn(fan, hearts) {
     const r = Course.newRound(api, 'course_meadow', { course: custom([]), startAt: T.FINISH_T - 0.3, fan });
-    r.state.hearts = hearts;
+    if (hearts != null) r.state.hearts = hearts;
     while (!r.state.finished) r.step(STEP);
     return r.state.score;
   }
-  assert.equal(finishOn(true, 5), 250 + 150, 'Fan support’s extra hearts never count');
+  assert.equal(T.BONUS_HEARTS, 3);
+  assert.equal(finishOn(true, 5), 250 + 150, 'never more than 3 hearts’ worth, even from a tampered state');
+  assert.equal(finishOn(false, null), 400, 'a full house: 250 + 3 x 50');
+  assert.equal(finishOn(true, null), 400, 'Timing rings: the same bonus');
   assert.equal(finishOn(false, 3), 400);
   assert.equal(finishOn(false, 1), 300);
   const r = Course.newRound(api, 'course_meadow', { seed: 1, fan: false });
@@ -491,7 +710,8 @@ test('runner: medals by score and run; results text, badges, curtain call and ti
   assert.equal(Course.medal(2799, true, true), 2, 'the Encore alone is not the crown');
   assert.equal(Course.medal(2800, true, false), 3);
   assert.equal(Course.medal(2800, true, true), 4);
-  /* finished runs below Gold get a next-medal nudge (seeded ±150 ms kids: seed 70 = Silver, 71 = Bronze) */
+  /* finished runs below Gold get a next-medal nudge (seeded ±150 ms kids: seed 70 = Silver, 6 = Bronze;
+     V4.53 used 71 for Bronze, which is a curtain call now that hearts never come back) */
   const silver = play('course_meadow', { seed: 70 }, kid(150, 70)).r;
   assert.equal(Course.decodeExtra(silver.result().extra).medal, 2);
   const sb = silver.summaryBadges();
@@ -500,9 +720,13 @@ test('runner: medals by score and run; results text, badges, curtain call and ti
   assert.ok(sb.filter(b => /^Missed /.test(b.text)).length <= 2, 'at most 2 missed-letter hints');
   assert.equal(silver.summaryTitle(), 'SHOW COMPLETE!');
   assert.match(silver.summaryText(), /^🦴 \d+ treats · ✦ \d+ glow stars? · [ENCORE_ ]{11} · Best Hype \d+ · [❤🤍]+ left$/u);
-  const bronze = play('course_meadow', { seed: 71 }, kid(150, 71)).r;
+  const bronze = play('course_meadow', { seed: 6 }, kid(150, 6)).r;
   assert.equal(bronze.summaryBadges()[0].kind, 'bronze');
   assert.ok(bronze.summaryBadges().some(b => b.text === 'Only ' + (2000 - bronze.result().score) + ' to SILVER!'));
+  /* it limped home on its last heart: the results say so, and no badge offers help or hearts */
+  assert.equal(bronze.state.hearts, 1);
+  assert.ok(bronze.summaryText().endsWith(' · ❤🤍🤍 left'), bronze.summaryText());
+  assert.ok(!bronze.summaryBadges().some(b => /Fan support|heart|🎟️/i.test(b.text)), JSON.stringify(bronze.summaryBadges()));
   assert.ok(!/⭐|🌟/.test(silver.hud() + silver.summaryText()), 'glow stars use ✦, never the reward star');
   assert.match(silver.summaryBig(), /^Score [\d,]+$/);
   /* a curtain call keeps what was earned, with the Trainee ribbon */
@@ -579,7 +803,7 @@ test('runner: events are only pushed while wantEvents; the safe event stream for
 const EVENT_SNAPSHOT = '340:99da0bec';                 /* event count : FNV-1a of the type sequence */
 
 /* ================= shell wiring (data only — the shell itself has no Node tests) ================= */
-test('runner: def wiring — count-in, two verbs, 3D view src, tutorial key cards, Fan support chip, PB medal line', () => {
+test('runner: def wiring — count-in, two verbs, 3D view src, tutorial key cards, Timing rings chip, PB medal line', () => {
   const d = Course.def;
   assert.equal(d.key, 'course'); assert.equal(d.title, 'Debut Run'); assert.equal(d.LW, 960); assert.equal(d.LH, 540);
   assert.deepEqual(d.countIn, { beats: 4, bpm: 128, labels: ['5', '6', '7', '8!'] });
@@ -591,21 +815,28 @@ test('runner: def wiring — count-in, two verbs, 3D view src, tutorial key card
   assert.equal(d.tapAction, 'jump');
   assert.equal(d.tutorial.length, 4);
   assert.ok(!/⭐|🌟/.test(JSON.stringify(d.tutorial)));
-  /* Fan support: ON for a child's very first run, a manual toggle sticks */
+  /* Timing rings (chip id 'fan', kept from V4.53): OFF by default — a very first run included —
+     and a manual toggle sticks; ON, they still leave 3 hearts */
   const first = { tutSeen: false, profileKey: 'kidA' }, later = { tutSeen: true, profileKey: 'kidB' };
-  assert.equal(d.menuOptions(first)[0].value, true);
+  assert.equal(d.menuOptions(first)[0].id, 'fan');
+  assert.equal(d.menuOptions(first)[0].value, false);
   assert.equal(d.menuOptions(later)[0].value, false);
   d.setOption(later, 'fan', true);
   assert.equal(d.menuOptions(later)[0].value, true);
-  assert.equal(Course.newRound(api, 'course_meadow', Object.assign({ seed: 1 }, later)).state.maxHearts, 5);
-  /* two curtain calls in a row pre-switch it on */
+  assert.equal(Course.newRound(api, 'course_meadow', Object.assign({ seed: 1 }, later)).state.maxHearts, 3);
+  d.setOption(later, 'fan', false);
+  assert.equal(d.menuOptions(later)[0].value, false);
+  /* two curtain calls in a row no longer switch anything on */
   const kidC = { tutSeen: true, profileKey: 'kidC' };
   for (let k = 0; k < 2; k++) {
     const r = Course.newRound(api, 'course_meadow', Object.assign({ seed: 5 }, kidC));
     while (!r.done) r.step(STEP);
-    r.onFinish();
+    assert.equal(r.state.curtain, true);
+    if (r.onFinish) r.onFinish();                           /* the shell calls it when present */
+    assert.ok(!r.summaryBadges().some(b => /Fan support|Timing rings/.test(b.text)));
   }
-  assert.equal(d.menuOptions(kidC)[0].value, true);
+  assert.equal(d.menuOptions(kidC)[0].value, false);
+  assert.equal(Course.newRound(api, 'course_meadow', Object.assign({ seed: 5 }, kidC)).state.hearts, 3);
   assert.ok(d.pbText({ score: 2995, extra: Course.encodeExtra({ medal: 3, letters: 0, maxHype: 41, fan: false }) }).includes('score 2,995 · 🥇 Superstar'));
   assert.ok(d.pbText({ score: 120 }).startsWith('🏆 Your best: score 120'));
 });

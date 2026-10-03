@@ -263,33 +263,55 @@ test('#30 kart: the Camera row shows on the FIRST menu when 3D will run (before 
 });
 
 /* ================================================================
-   #27  the tutorial matches Fan support
+   #27  the tutorial matches the run (3 hearts that never come back; Timing rings)
    ================================================================ */
-test('#27 runner: the How-to-play cards count the hearts this run really has and explain Fan support', () => {
+test('#27 runner: the How-to-play cards say 3 hearts that never come back, and explain Timing rings only when on', () => {
   const d = Course.def;
   const first = { tutSeen: false, profileKey: 'fix27a' }, later = { tutSeen: true, profileKey: 'fix27b' };
   const api = { sound() {} };
   /* the shell always shows the menu (def.menuOptions(cfg)) before the cards */
   d.menuOptions(first);
   const cards = d.tutorial, hearts = Course.newRound(api, 'course_meadow', Object.assign({ seed: 3 }, first)).state.maxHearts;
-  assert.equal(hearts, 5, 'a very first run has Fan support: 5 hearts');
-  assert.ok(cards.some((c) => c[1].includes('Lose all ' + hearts + ' and the show ends')), 'the hearts card says 5');
-  assert.ok(!cards.some((c) => /all 3\b/.test(c[1])));
-  const fanCard = cards.find((c) => c[0] === '🎟️');
-  assert.ok(fanCard && /Fan support is ON/.test(fanCard[1]) && /shield/.test(fanCard[1]) && /menu/.test(fanCard[1]), 'Fan support is explained');
+  assert.equal(hearts, 3, 'a very first run has 3 hearts too (no assist switched on for it)');
+  assert.equal(cards.length, 4, 'no assist card on a first run');
+  const heartCard = cards.find((c) => c[0] === '💔');
+  assert.ok(heartCard[1].includes('Lose all 3 and the show ends'), heartCard[1]);
+  assert.match(heartCard[1], /never comes back/, 'the card says a lost heart is gone for the show');
+  assert.ok(!cards.some((c) => /\b5 hearts|all 5\b|refill|Fan support/.test(c[1])));
   d.menuOptions(later);
   const cards2 = d.tutorial;
   assert.equal(cards2.length, 4);
   assert.ok(cards2.some((c) => c[1].includes('Lose all 3 and the show ends')));
   assert.equal(Course.newRound(api, 'course_meadow', Object.assign({ seed: 3 }, later)).state.maxHearts, 3);
-  /* the child turns it on: the cards follow */
+  /* the child turns Timing rings on: a 🎯 card that promises rings, and nothing about hearts or shields */
   d.setOption(later, 'fan', true); d.menuOptions(later);
-  assert.ok(d.tutorial.some((c) => c[1].includes('Lose all 5')));
+  const cards3 = d.tutorial;
+  assert.equal(cards3.length, 5);
+  const ringCard = cards3.find((c) => c[0] === '🎯');
+  assert.ok(ringCard && /Timing rings are ON/.test(ringCard[1]) && /jump/.test(ringCard[1]) && /menu/.test(ringCard[1]), 'Timing rings are explained');
+  assert.ok(!/heart|shield|refill/i.test(ringCard[1]), 'the rings card promises no hearts or shields: ' + ringCard[1]);
+  assert.ok(cards3.some((c) => c[1].includes('Lose all 3')), 'still 3 hearts with the rings on');
   assert.deepEqual(d.tutorialFor(later), d.tutorial, 'tutorialFor(cfg) is the same list');
-  /* the menu chip itself says what Fan support does */
+  d.setOption(later, 'fan', false);
+  /* the menu chip itself says what Timing rings do — and claims no hearts or shields */
   const chip = d.menuOptions(first).find((o) => o.id === 'fan');
-  assert.match(chip.label, /5 hearts/); assert.match(chip.label, /shield/);
-  for (const c of [cards, cards2]) assert.ok(!/⭐|🌟/.test(JSON.stringify(c)));
+  assert.equal(chip.value, false, 'OFF by default, first run included');
+  assert.match(chip.label, /Timing rings/); assert.match(chip.label, /jump/);
+  assert.ok(!/heart|shield|Fan support/i.test(chip.label), chip.label);
+  assert.match(chip.note, /never change your hearts/); assert.match(chip.note, /never comes back/);
+  for (const c of [cards, cards2, cards3]) assert.ok(!/⭐|🌟/.test(JSON.stringify(c)));
+});
+
+test('#27 runner: no game view heals — no heal event, no free door shield, no "Heart back" line anywhere', () => {
+  const src = (f) => read('world/games/' + f).replace(/\/\*[\s\S]*?\*\//g, '');
+  for (const f of ['pet-course.js', 'pet-course-3d.js', 'course-3d-math.js', 'course-3d-scene.js', 'course-hud.js']) {
+    const s = src(f);
+    assert.ok(!/['"]heal['"]/.test(s), f + ' still emits or handles a heal event');
+    assert.ok(!/sinceHeal|Heart back|FAN_HEARTS|Fan support/.test(s), f + ' still has heal / Fan support code or copy');
+    assert.ok(!/'free',\s*true/.test(s), f + ' still hands out a free shield');
+  }
+  assert.ok(!('sinceHeal' in CM.newJuice()), 'the 3D juice has no heal timer');
+  assert.equal(Course.TUNING.HEARTS, 3); assert.ok(!('FAN_HEARTS' in Course.TUNING));
 });
 
 /* ================================================================
@@ -377,7 +399,7 @@ test('#31 runner: the Debut Run menu has a 🎵 Music chip wired to SLMusic.setG
     assert.ok(chip, 'the chip is in the menu');
     assert.equal(chip.value, true);
     assert.deepEqual(chip.options.map((o) => o.value), [true, false]);
-    assert.equal(opts[0].id, 'fan', 'Fan support stays first');
+    assert.equal(opts[0].id, 'fan', 'Timing rings (chip id fan) stay first');
     Course.def.setOption({ profileKey: 'fix31' }, 'music', false);
     assert.deepEqual(calls.filter((c) => c[0] === 'set'), [['set', 'course', false]]);
   });

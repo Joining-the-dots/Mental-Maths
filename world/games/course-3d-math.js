@@ -304,7 +304,7 @@
      (plain object, so the 3D view and tests share one implementation)
      ================================================================ */
   var SINCE_KEYS = ['sinceTakeoff', 'sinceLand', 'sinceDJ', 'sinceBoing', 'sinceBump', 'sinceSplash', 'sincePerfect', 'sinceGreat',
-    'sinceDoor', 'sinceFever', 'sinceFeverEnd', 'sinceTier', 'sinceClear', 'sinceHeal', 'sinceClean', 'sinceShieldGet', 'sinceShieldPop',
+    'sinceDoor', 'sinceFever', 'sinceFeverEnd', 'sinceTier', 'sinceClear', 'sinceClean', 'sinceShieldGet', 'sinceShieldPop',
     'sinceLetter', 'sinceLetters', 'sinceStar', 'sinceFinish', 'sinceEncore', 'sinceEncoreEnd', 'sinceCurtain', 'sinceHat',
     'sinceSlide', 'sinceDive', 'sinceShake', 'sinceKick', 'sinceDJRing', 'sinceLastHeart'];
   function newJuice() {
@@ -353,8 +353,7 @@
       case 'star': j.sinceStar = 0; break;
       case 'letter': j.sinceLetter = 0; break;
       case 'lettersComplete': j.sinceLetters = 0; j.excite = VIEW.EXCITE; break;
-      case 'heal': j.sinceHeal = 0; break;
-      case 'lastHeart': j.sinceLastHeart = 0; break;
+      case 'lastHeart': j.sinceLastHeart = 0; break;           /* (no 'heal': hearts never come back) */
       case 'door': j.sinceDoor = 0; j.doorSec = e.sec | 0; break;
       case 'cleanStage': j.sinceClean = 0; break;
       case 'tier': j.sinceTier = 0; j.tierFrom = j.tierTo; j.tierTo = e.mult | 0; if (e.mult > j.tierFrom) j.excite = VIEW.EXCITE; break;

@@ -4,7 +4,8 @@
    fallback. It only READS round.state / round.course and the round's
    events (drained by the shell after each draw); it never changes the
    logic. pointer-events: none, so taps still reach the game.
-     top-left    hearts as Spark Sticks (✦ heads) in the child's colour
+     top-left    hearts as Spark Sticks (✦ heads) in the child's colour: always 3,
+                 and a lost one stays grey to the end of the show
      top-centre  HYPE bar (notches x2 / x3 / FEVER) + E N C O R E slots
      top-right   treats · ✦ glow stars · score
      bottom      mini runway: 5 Stage Door dots, pet marker, finish flag
@@ -15,7 +16,7 @@
    number (tabular-nums), Unbounded 800 for the big pops, Star Gold and
    the member colour as the accents. Text on a panel is white, Star Gold
    or #E6E1F7 (≥ 4.5:1 even over a white scene).
-   Only heart changes, 'Encore unlocked' and the curtain call are
+   Only heart losses, 'Encore unlocked' and the curtain call are
    announced (aria-live polite); the shell's top text stays the
    accessible summary.
 
@@ -215,9 +216,9 @@
       }
       var crackIdx = -1;
       if (last.hearts >= 0 && s.hearts < last.hearts) {
-        crackIdx = s.hearts;                      /* the wand that was just lost cracks once, then stays grey */
+        crackIdx = s.hearts;                      /* the wand that was just lost cracks once, then stays grey for good */
         if (s.hearts > 0) say('Ouch! ' + s.hearts + (s.hearts === 1 ? ' heart' : ' hearts') + ' left.');
-      } else if (last.hearts >= 0 && s.hearts > last.hearts) say('Heart back! ' + s.hearts + (s.hearts === 1 ? ' heart.' : ' hearts.'));
+      }                                           /* (hearts never come back, so there is no 'heart back' line) */
       var html = '';
       for (var k = 0; k < s.maxHearts; k++) html += wandSvg(col, k >= s.hearts);
       heartsEl.innerHTML = html;

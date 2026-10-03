@@ -306,19 +306,43 @@ test('stage: resolved styles default from the catalogue (the house carries its s
 });
 
 test('stage: the remembered-2D record and the saved measured tier', () => {
-  const rec = JSON.stringify({ off: true, why: 'performance', ver: '3' });
-  assert.equal(S.rememberedFrom(rec, '3', '').rec.why, 'performance');
-  assert.deepEqual(S.rememberedFrom(rec, '4', ''), { rec: null, clear: true }, 'SL_WORLD_VER changed');
-  assert.deepEqual(S.rememberedFrom(rec, '3', '?tab=world&3d=1'), { rec: null, clear: true }, 'a parent opened ?3d=1');
-  assert.deepEqual(S.rememberedFrom('{nope', '3', ''), { rec: null, clear: true });
-  assert.deepEqual(S.rememberedFrom(null, '3', ''), { rec: null, clear: false });
-  assert.deepEqual(S.rememberedFrom(JSON.stringify({ off: false, ver: '3' }), '3', ''), { rec: null, clear: false });
-  assert.equal(S.rememberedFrom(rec, '3', '?x=13d=1').rec.why, 'performance', 'only the real 3d=1 parameter counts');
+  const NOW = 1.8e12;
+  const rec = JSON.stringify({ off: true, why: 'performance', ver: '3', at: NOW - 3600e3 });
+  assert.equal(S.rememberedFrom(rec, '3', '', NOW).rec.why, 'performance');
+  assert.deepEqual(S.rememberedFrom(rec, '4', '', NOW), { rec: null, clear: true }, 'SL_WORLD_VER changed');
+  assert.deepEqual(S.rememberedFrom(rec, '3', '?tab=world&3d=1', NOW), { rec: null, clear: true }, 'a parent opened ?3d=1');
+  assert.deepEqual(S.rememberedFrom('{nope', '3', '', NOW), { rec: null, clear: true });
+  assert.deepEqual(S.rememberedFrom(null, '3', '', NOW), { rec: null, clear: false });
+  assert.deepEqual(S.rememberedFrom(JSON.stringify({ off: false, ver: '3' }), '3', '', NOW), { rec: null, clear: false });
+  assert.equal(S.rememberedFrom(rec, '3', '?x=13d=1', NOW).rec.why, 'performance', 'only the real 3d=1 parameter counts');
+  assert.equal(S.rememberedFrom(JSON.stringify({ off: true, why: 'context', ver: '3', at: Date.now() }), '3', '').rec.why, 'context', 'now defaults to the clock');
   assert.equal(S.tierToSave(null, 'MID'), 'MID');
   assert.equal(S.tierToSave('MID', 'LOW'), 'LOW');
   assert.equal(S.tierToSave('LOW', 'MID'), null, 'never raises a saved tier');
   assert.equal(S.tierToSave('MID', 'MID'), null);
   assert.equal(S.tierToSave('MID', 'bogus'), null);
+});
+
+test('stage: a remembered 2D record expires after REMEMBER_DAYS (a home-screen app has no ?3d=1)', () => {
+  const NOW = 1.8e12, DAY = 24 * 3600 * 1000;
+  assert.equal(S.REMEMBER_DAYS, 7);
+  const at = (ms) => JSON.stringify({ off: true, why: 'performance', ver: '3', at: ms });
+  assert.equal(S.rememberedFrom(at(NOW), '3', '', NOW).rec.why, 'performance', 'just written');
+  assert.equal(S.rememberedFrom(at(NOW - 6.9 * DAY), '3', '', NOW).rec.why, 'performance', 'six days on: still 2D');
+  assert.equal(S.rememberedFrom(at(NOW - 7 * DAY), '3', '', NOW).rec.why, 'performance', 'exactly a week: the last day of it');
+  assert.deepEqual(S.rememberedFrom(at(NOW - 7 * DAY - 1), '3', '', NOW), { rec: null, clear: true }, 'a week old: stale, and cleared');
+  assert.deepEqual(S.rememberedFrom(at(NOW - 40 * DAY), '3', '', NOW), { rec: null, clear: true });
+  /* undated or junk dates: the stage always writes `at`, so these never lock a device */
+  for (const bad of [undefined, null, 'soon', '', true]) {
+    const raw = JSON.stringify({ off: true, why: 'performance', ver: '3', at: bad });
+    assert.deepEqual(S.rememberedFrom(raw, '3', '', NOW), { rec: null, clear: true }, 'at = ' + JSON.stringify(bad));
+  }
+  /* a clock that ran ahead: an hour is fine, more than a day is not trusted */
+  assert.equal(S.rememberedFrom(at(NOW + 3600e3), '3', '', NOW).rec.why, 'performance');
+  assert.deepEqual(S.rememberedFrom(at(NOW + 2 * DAY), '3', '', NOW), { rec: null, clear: true });
+  /* the version and ?3d=1 rules still come first */
+  assert.deepEqual(S.rememberedFrom(at(NOW), '4', '', NOW), { rec: null, clear: true });
+  assert.deepEqual(S.rememberedFrom(at(NOW), '3', '?3d=1', NOW), { rec: null, clear: true });
 });
 
 /* ---------------- kit.js pure helpers ---------------- */

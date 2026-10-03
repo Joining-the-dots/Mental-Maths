@@ -226,13 +226,19 @@
     try { var r = typeof IS.remembered === 'function' ? IS.remembered(w.SL_WORLD_VER) : null; if (r && r.off) return 'remembered:' + (r.why || '2d'); } catch (e) {}
     return null;
   }
-  /* stage.js not loaded: read its remembered record by the same rule (stale once
-     SL_WORLD_VER changes; ?3d=1 lets a parent retry 3D) */
+  /* stage.js not loaded: read its remembered record by the same rule as its
+     rememberedFrom (stale once SL_WORLD_VER changes, when undated, after REMEMBER_DAYS
+     or dated over a day ahead; ?3d=1 lets a parent retry 3D). REMEMBER_DAYS mirrors
+     stage.js's (tests/fix-shell.test.js checks they agree). */
+  var REMEMBER_DAYS = 7, DAY_MS = 24 * 60 * 60 * 1000;
   function storedVerdict(w) {
     try {
       if (/[?&]3d=1(&|$)/.test(String((w.location && w.location.search) || ''))) return null;
       var rec = w.localStorage ? JSON.parse(w.localStorage.getItem('slIsland3D') || 'null') : null;
-      if (rec && typeof rec === 'object' && rec.off && String(rec.ver) === String(w.SL_WORLD_VER || '1')) return 'remembered:' + (rec.why || '2d');
+      if (!rec || typeof rec !== 'object' || !rec.off || String(rec.ver) !== String(w.SL_WORLD_VER || '1')) return null;
+      var at = Number(rec.at), now = Date.now();
+      if (rec.at == null || !isFinite(at) || now - at > REMEMBER_DAYS * DAY_MS || at - now > DAY_MS) return null;
+      return 'remembered:' + (rec.why || '2d');
     } catch (e) {}
     return null;
   }
@@ -831,5 +837,5 @@
     });
   }
 
-  window.SLGameShell = { define: define, rng: rng, svgImage: svgImage, STEP: STEP, makePacer: makePacer, makeFrameWatch: makeFrameWatch, verdict2d: verdict2d, BEAT_PULSE_HZ: BEAT_PULSE_HZ };
+  window.SLGameShell = { define: define, rng: rng, svgImage: svgImage, STEP: STEP, makePacer: makePacer, makeFrameWatch: makeFrameWatch, verdict2d: verdict2d, REMEMBER_DAYS: REMEMBER_DAYS, BEAT_PULSE_HZ: BEAT_PULSE_HZ };
 })();

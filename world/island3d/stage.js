@@ -9,7 +9,8 @@
    window.SLIsland3D
      .boot({ver, deadlineMs = 8000, t0, tier, force}) → Promise<boolean>   island use; mount() is island3d.js
      .ensure({deadlineMs, tier})        → Promise<SL3D|null>  memoised; loads everything WITHOUT mounting a scene
-     .remembered(ver) → {off, why, ver}|null, .remember2D(why), .forget(), .failed() → reason|null
+     .remembered(ver) → {off, why, ver, at}|null (expires after REMEMBER_DAYS), .remember2D(why),
+     .forget() ("Try 3D again"), .failed() → reason|null
      .dispose({keepKit})                stop, drop the renderer (force-lost) and the kit caches
 
    window.SL3D (registry; usable before THREE arrives)
@@ -123,15 +124,26 @@
     if (/^pet_/.test(id)) return { acc: st.acc || {} };
     return st;
   }
-  /* the remembered-2D record: {off, why, ver}; stale when SL_WORLD_VER changed or
-     a parent opened ?3d=1. Returns {rec, clear} so the caller can tidy storage. */
-  function rememberedFrom(raw, ver, search) {
+  /* the remembered-2D record: {off, why, ver, at}; stale when SL_WORLD_VER changed, a
+     parent opened ?3d=1, or it is older than REMEMBER_DAYS (an installed home-screen app
+     has no address bar for ?3d=1, so a fallback must not outlast a week). The ONE
+     definition of the expiry: shell.js storedVerdict mirrors it (a test checks), and
+     photocard.js asks remembered(). Returns {rec, clear} so the caller can tidy storage. */
+  var REMEMBER_DAYS = 7;
+  function rememberedFrom(raw, ver, search, now) {
     if (/[?&]3d=1(&|$)/.test(search || '')) return { rec: null, clear: true };
     var rec = null;
     try { rec = raw ? JSON.parse(raw) : null; } catch (e) { return { rec: null, clear: true }; }
     if (!rec || typeof rec !== 'object' || !rec.off) return { rec: null, clear: false };
     if (String(rec.ver) !== String(ver)) return { rec: null, clear: true };
+    if (rememberStale(rec.at, now)) return { rec: null, clear: true };
     return { rec: rec, clear: false };
+  }
+  /* undated (every record the stage writes is dated), a week old, or from a clock that ran ahead */
+  function rememberStale(at, now) {
+    var t = Number(at), n = now != null && isFinite(now) ? Number(now) : Date.now();
+    if (at == null || !isFinite(t)) return true;
+    return n - t > REMEMBER_DAYS * DAY_MS || t - n > DAY_MS;
   }
   /* the measured tier to save: never raises an earlier saved tier */
   function tierToSave(saved, next, order) {
@@ -302,7 +314,7 @@
   return {
     VERSION: VERSION, FILES: FILES, ADDONS: ADDONS, MODEL_KINDS: MODEL_KINDS,
     baseFrom: baseFrom, scriptList: scriptList, resolveSt: resolveSt,
-    rememberedFrom: rememberedFrom, tierToSave: tierToSave,
+    REMEMBER_DAYS: REMEMBER_DAYS, rememberedFrom: rememberedFrom, tierToSave: tierToSave,
     TIER_POLICY: TIER_POLICY, savedTierFrom: savedTierFrom, savedTierRaw: savedTierRaw, demotionVerdict: demotionVerdict,
     CONTEXT_POLICY: CONTEXT_POLICY, parseStrikes: parseStrikes, ContextLossPolicy: ContextLossPolicy, contextDue: contextDue
   };
@@ -519,7 +531,7 @@
     }
 
     /* ---------------- tier + init ---------------- */
-    var aq = null, pacer = null;
+    var aq = null, pacer = null, aqSkip = [];                   /* aqSkip: steps the tier's budget starts without */
     function readSavedTier() {
       var now = Date.now(), r = savedTierFrom(ls('get', TIER_KEY), now, TIER_POLICY.savedMaxAgeMs, root.SLTier.TIERS);
       if (r.expired) { ls('del', TIER_KEY); log('saved tier expired: measuring again'); }
@@ -550,10 +562,9 @@
         pixelRatio: SL3D.budget.pixelRatio, shadows: !!SL3D.budget.shadows, outlines: !!SL3D.budget.outlines,
         particleScale: 1, lifeScale: 1, reflections: true, cones: true, decor: true, steps: []
       };
-      var skip = [];
-      if (!SL3D.budget.shadows) skip.push('shadows');
-      if (!SL3D.budget.outlines) skip.push('outlines');
-      aq = Tier.AdaptiveQuality({ skip: skip });
+      if (!SL3D.budget.shadows) aqSkip.push('shadows');
+      if (!SL3D.budget.outlines) aqSkip.push('outlines');
+      aq = Tier.AdaptiveQuality({ skip: aqSkip.slice() });
       pacer = Tier.FramePacer({});
       hub = root.SLKit.create(T, {
         addons: addons, models: SL3D.models, qa: QA,
@@ -725,14 +736,20 @@
       if (current && current.h.onQuality) safe(current.h.onQuality, q, step);
       qualityListeners.slice().forEach(function (fn) { safe(fn, q, step); });
     }
-    /* src: 'loop' (the stage's paced loop) | 'held' (a holder's own frames, e.g. a game) */
+    /* src: 'loop' (the stage's paced loop) | 'held' (a holder's own frames, e.g. a game).
+       A fallback above LOW saves LOW and ends 3D for this page session only: the next
+       session retries at LOW (30 city towers, a 16x coarser terrain lattice: savings the
+       ladder can't make). Only the island's own loop, already at LOW, remembers 2D for the
+       device; a game's frames never do. */
     function judge(act, src) {
       if (!act) return;
       if (act.type === 'step') applyStep(act.step, src);
       else if (act.type === 'fallback') {
-        log('frames stay under 20 fps after every step: 2D for this device');
-        remember2D('performance');
+        var keep = SL3D.tier === 'LOW' && src === 'loop';
+        log('frames stay under 20 fps after every step (' + SL3D.tier + ', ' + (src || '?') + '): 2D ' +
+          (keep ? 'for this device' : 'for this session' + (SL3D.tier === 'LOW' ? '' : ', LOW next time')));
         saveTier('LOW');
+        if (keep) remember2D('performance');
         failAll('performance');
       }
     }
@@ -991,12 +1008,36 @@
     function remembered(ver) {
       var search = '';
       try { search = root.location.search; } catch (e) {}
-      var r = rememberedFrom(ls('get', REMEMBER_KEY), ver || root.SL_WORLD_VER || '1', search);
+      var r = rememberedFrom(ls('get', REMEMBER_KEY), ver || root.SL_WORLD_VER || '1', search, Date.now());
       if (r.clear) ls('del', REMEMBER_KEY);
       return r.rec;
     }
     function remember2D(why) {
       ls('set', REMEMBER_KEY, JSON.stringify({ off: true, why: String(why || 'unknown'), ver: String(root.SL_WORLD_VER || '1'), at: Date.now() }));
+    }
+    /* the public one: the island adapter (rewards-world disable3D) asks to remember any
+       'performance' failure it hears about, but judge() has already decided this
+       session's own (remembered only at LOW, from the island's loop), so that stands */
+    function rememberFor(why) {
+      if (sessionFail === 'performance' && /perf/i.test(String(why || ''))) { log('performance: judged by the stage, not remembered again'); return; }
+      remember2D(why);
+    }
+    /* "Try 3D again" (a parent's button): drop the remembered record, the pending
+       demotion (slTier3dPend) and the context strikes, and lift this page session's
+       2D verdict with a fresh judge for the steps already taken, so the next
+       maybeBoot3D() boots 3D. The saved tier stays (measured evidence; LOW after a
+       fallback is the likeliest to hold; it expires by itself). While a holder still sits
+       on a lost context the session verdict stays (until it lets go, or next session). */
+    function forget() {
+      ls('del', REMEMBER_KEY);
+      ls('del', PEND_KEY);
+      ss('del', LOST_KEY);
+      if (lost) return;
+      ctx = ContextLossPolicy({ now: Date.now(), hidden: ctx.hidden });
+      if (!sessionFail) return;
+      sessionFail = null;
+      if (aq) aq = root.SLTier.AdaptiveQuality({ skip: aqSkip.concat(SL3D.quality.steps) });
+      log('3D allowed again');
     }
 
     /* ---------------- dispose ---------------- */
@@ -1054,8 +1095,8 @@
       return ensure({ deadlineMs: left, tier: opts.tier }).then(function (s) { return !!s; }, function () { return false; });
     };
     IS.remembered = remembered;
-    IS.remember2D = remember2D;
-    IS.forget = function () { ls('del', REMEMBER_KEY); };
+    IS.remember2D = rememberFor;
+    IS.forget = forget;
     IS.failed = function () { return sessionFail || permanent || null; };
     IS.dispose = disposeAll;
   }

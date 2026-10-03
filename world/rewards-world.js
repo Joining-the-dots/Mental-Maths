@@ -142,7 +142,7 @@
       '.slw-learn{background:linear-gradient(135deg,#6c5ce7,#a86ff0);color:#fff;border:none;border-radius:999px;padding:10px 18px;font:inherit;font-weight:800;font-size:15px;cursor:pointer;box-shadow:0 4px 14px rgba(108,92,231,.35);}',
       '.slw-pts{background:linear-gradient(135deg,#ffe27a,#ffb347);color:#5a3700;border-radius:999px;padding:8px 16px;font-family:"Baloo 2",sans-serif;font-weight:800;font-size:18px;}',
       '.slw-goal{flex:1;min-width:200px;display:flex;align-items:center;gap:8px;background:#fff;border:2px solid #f2e2a8;border-radius:14px;padding:6px 10px;cursor:pointer;font:inherit;text-align:left;}',
-      '.slw-goal .gi{width:36px;height:36px;flex:0 0 36px;}.slw-goal .gi svg{width:100%;height:100%;}',
+      '.slw-goal .gi{width:36px;height:36px;flex:0 0 36px;position:relative;}.slw-goal .gi svg{width:100%;height:100%;}',
       '.slw-goal .gb{height:10px;background:#f3eedf;border-radius:999px;overflow:hidden;margin-top:3px;}.slw-goal .gb>i{display:block;height:100%;background:linear-gradient(90deg,#ffd166,#ff9f43);border-radius:999px;}',
       '.slw-goal .gt{font-size:12.5px;font-weight:800;color:#6b5a22;}.slw-goal.ready{border-color:#2ecc71;background:#eafaf0;}.slw-goal.ready .gt{color:#1d8a4c;}',
       '.slw-acts{display:flex;gap:6px;flex-wrap:wrap;}',
@@ -1167,7 +1167,7 @@
       });
     };
     if (!chk.trial && it.price >= C.ECONOMY.confirmAt) {
-      var c = overlay('<h2>Buy ' + esc(it.name) + '?</h2><div class="big" style="width:140px;margin:8px auto;">' + iconHtml(it.id, artState(W())) + '</div>' +
+      var c = overlay('<h2>Buy ' + esc(it.name) + '?</h2><div class="big" style="width:140px;margin:8px auto;position:relative;">' + iconHtml(it.id, artState(W())) + '</div>' +
         '<p style="font-weight:700;">It costs <b>⭐ ' + fmt(it.price) + '</b>. You’ll have <b>⭐ ' + fmt((u.points || 0) - it.price) + '</b> left.</p>' +
         '<p style="font-size:13px;font-weight:700;color:#6b6390;margin-top:-4px;">These are the same ⭐ you save for real prizes in the 🎁 Shop.</p>' +
         '<div style="display:flex;gap:8px;justify-content:center;"><button class="slw-btn big" type="button" id="slwNo">Not yet</button><button class="slw-buy" type="button" id="slwYes" style="flex:0 0 auto;padding:10px 22px;">Yes, buy it!</button></div>', { small: true, onClose: function () { confirming = false; } });
@@ -1288,7 +1288,7 @@
     pets.forEach(function (p) {
       var it = C.item(p.id);
       html += '<div class="slw-card" style="margin-bottom:10px;"><div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">' +
-        '<div style="width:120px;">' + iconHtml(p.id, { acc: p.acc || {} }) + '</div>' +
+        '<div style="width:120px;position:relative;">' + iconHtml(p.id, { acc: p.acc || {} }) + '</div>' +
         '<div style="flex:1;min-width:200px;"><div class="nm">' + esc(p.name) + ' <span style="font-weight:700;color:#7c8696;">the ' + esc(it.name.toLowerCase()) + '</span>' + (w.activePet === p.id ? ' 🏅' : '') + '</div>' +
         '<label style="font-size:12px;font-weight:800;color:#4a3f75;">New name <input data-name="' + p.id + '" maxlength="14" value="' + esc(p.name) + '" style="font:inherit;padding:6px 8px;border:2px solid #d9d2ee;border-radius:10px;width:140px;"></label> ' +
         '<button class="slw-btn" type="button" data-rename="' + p.id + '">Save name</button> ' +
@@ -1296,7 +1296,7 @@
         '<div class="slw-err" data-err="' + p.id + '"></div>' +
         (accs.length ? '<div style="font-size:12px;font-weight:800;margin-top:4px;">Wear:</div><div class="slw-tray">' + accs.map(function (a) {
           var on = p.acc[a.slot] === a.id;
-          return '<button type="button" class="slw-trayitem" data-acc="' + a.id + '" data-pet="' + p.id + '" aria-pressed="' + on + '" style="' + (on ? 'border-color:#6c5ce7;background:#f1edfb;' : '') + '">' + iconHtml(a.id) + '<span>' + esc(a.name) + (on ? ' ✓' : '') + '</span></button>';
+          return '<button type="button" class="slw-trayitem" data-acc="' + a.id + '" data-pet="' + p.id + '" aria-pressed="' + on + '" style="' + (on ? 'border-color:#6c5ce7;background:#f1edfb;' : '') + '"><span style="display:block;position:relative;height:56px;">' + iconHtml(a.id) + '</span><span>' + esc(a.name) + (on ? ' ✓' : '') + '</span></button>';
         }).join('') + '</div>' : '<div style="font-size:12px;color:#7c8696;font-weight:700;margin-top:4px;">Caps, beanies, headphones and more are in the shop’s Crew aisle.</div>') +
         '</div></div></div>';
     });

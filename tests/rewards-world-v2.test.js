@@ -61,3 +61,10 @@ test('sheets fill their 3D photocards (item, buy confirm, crew, goal chip) inste
 test('a 2D-fallback device gets the solid LOW panels', () => {
   assert.match(fn('disable3D'), /lowPanels\(\);/);
 });
+
+test('every photocard slot is a positioned box (.slw-pc is display:contents, so the 3D image covers its nearest positioned ancestor)', () => {
+  assert.match(SRC, /'\.slw-goal \.gi\{[^}]*position:relative;/);
+  assert.match(fn('openPets'), /<div style="width:120px;position:relative;">' \+ iconHtml\(p\.id/);
+  assert.match(fn('openPets'), /<span style="display:block;position:relative;height:56px;">' \+ iconHtml\(a\.id\)/);
+  assert.match(fn('buyFlow'), /<div class="big" style="width:140px;margin:8px auto;position:relative;">' \+ iconHtml/);
+});

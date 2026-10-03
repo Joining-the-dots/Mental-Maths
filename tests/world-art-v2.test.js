@@ -53,8 +53,8 @@ function assertSvg(s, where, w, h) {
   for (const hex of s.match(/#[0-9a-fA-F]+\b/g) || []) assert.ok(hex.length === 4 || hex.length === 7, where + ' bad hex ' + hex);
   assert.ok(!/<(animate|set|script|foreignObject|image|use)\b/.test(s), where + ' no SMIL, scripts or external refs');
   assert.ok(!/(href|url)\s*[=(]/.test(s.replace(/url\(#slw\w+\)/g, '')), where + ' no links');
-  /* inline styles only stagger CSS-owned animations or set a transform origin */
-  for (const m of s.matchAll(/style="([^"]*)"/g)) for (const decl of m[1].split(';').filter(Boolean)) assert.match(decl.trim(), /^(animation-delay:[\d.]+s|transform-box:fill-box|transform-origin:[\d.%\s pxa-z]+)$/, where + ' style ' + decl);
+  /* inline styles only stagger CSS-owned animations, set a transform origin, or pin a nested screen's clip */
+  for (const m of s.matchAll(/style="([^"]*)"/g)) for (const decl of m[1].split(';').filter(Boolean)) assert.match(decl.trim(), /^(animation-delay:[\d.]+s|transform-box:fill-box|transform-origin:[\d.%\s pxa-z]+|overflow:hidden|width:\d+px|height:\d+px)$/, where + ' style ' + decl);
 }
 const texts = (s) => [...s.matchAll(/<text\b[^>]*>([^<]*)<\/text>/g)].map((m) => m[1]);
 const house = (st) => ART.sprite('house_cottage', st).svg;
@@ -449,4 +449,13 @@ test('art v2: the 2D crew is de-babied — smaller lidded eye, a side smirk, blu
   }
   /* the locked colours (PETCOL) are the same object the look table pins */
   assert.deepEqual(Object.keys(ART.PETCOL), ['pet_puppy', 'pet_kitten', 'pet_bunny', 'pet_dragon']);
+});
+
+test('2D screens clip with an inline style, so the page\'s descendant svg rules (width:100%, overflow:visible) cannot unclip or stretch them', () => {
+  const tower = ART.sprite('bld_ledtower', { name: 'Ava' }).svg, stage = ART.sprite('bld_stage', { name: 'Ava' }).svg;
+  for (const s of [tower, stage]) {
+    const nested = s.match(/<svg x="[^"]+" y="[^"]+"[^>]*>/g) || [];
+    assert.ok(nested.length >= 1, 'has a nested screen');
+    nested.forEach((tag) => assert.match(tag, /style="overflow:hidden;width:\d+px;height:\d+px"/, tag));
+  }
 });

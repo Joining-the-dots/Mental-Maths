@@ -324,8 +324,8 @@
   function userInfo() { var u = me() || {}; return { name: u.name || '', color: u.color || '#6C5CE7', avatar: u.avatar || '🙂', seed: String(state.activeUser || '').toLowerCase() }; }
   function maybeBoot3D() {
     if (stage3d || booting3d || use3D === false) return;
-    try { if (localStorage.getItem('slNo3D') === '1') { use3D = false; return; } } catch (e) {}
-    if (typeof WebGL2RenderingContext === 'undefined') { use3D = false; return; }
+    try { if (localStorage.getItem('slNo3D') === '1') { use3D = false; lowPanels(); return; } } catch (e) {}
+    if (typeof WebGL2RenderingContext === 'undefined') { use3D = false; lowPanels(); return; }
     booting3d = true;
     var v = '?v=' + (window.SL_WORLD_VER || '1');
     try { if (localStorage.getItem('slQaMode') === '1') v += '&qa=' + Date.now(); } catch (e) {}

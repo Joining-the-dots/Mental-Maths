@@ -68,3 +68,10 @@ test('every photocard slot is a positioned box (.slw-pc is display:contents, so 
   assert.match(fn('openPets'), /<span style="display:block;position:relative;height:56px;">' \+ iconHtml\(a\.id\)/);
   assert.match(fn('buyFlow'), /<div class="big" style="width:140px;margin:8px auto;position:relative;">' \+ iconHtml/);
 });
+
+test('every way into the 2D island sets the LOW panels (parent opt-out, no WebGL2, a failed or remembered boot)', () => {
+  const boot = fn('maybeBoot3D');
+  assert.match(boot, /slNo3D'\) === '1'\) \{ use3D = false; lowPanels\(\); return; \}/);
+  assert.match(boot, /WebGL2RenderingContext === 'undefined'\) \{ use3D = false; lowPanels\(\); return; \}/);
+  assert.match(boot, /if \(gaveUp\) lowPanels\(\);/);
+});

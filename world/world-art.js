@@ -863,7 +863,7 @@
       '<path d="M38 112 L61 92 M62 112 L39 92 M40 90 L60 74 M60 90 L40 74" stroke="#7c8194" stroke-width="2"/>' +
       '<path d="M' + lx + ' 124 V72 M' + (lx + 6) + ' 124 V72 ' + rungs + '" stroke="#2a2d3a" stroke-width="1.8"/>' +
       '<rect x="12" y="10" width="76" height="60" rx="4" fill="#2e2b3a" ' + SW + '/>' +
-      '<svg x="17" y="15" width="66" height="50" viewBox="0 0 66 50" overflow="hidden">' + screen + '</svg>' +
+      '<svg x="17" y="15" width="66" height="50" viewBox="0 0 66 50" overflow="hidden" style="overflow:hidden;width:66px;height:50px">' + screen + '</svg>' +
       '<rect class="slw-neon" color="' + o.acc + '" x="14.5" y="12.5" width="71" height="55" rx="3" fill="none" stroke="' + o.acc + '" stroke-width="1.4"/>' +
       '<circle class="slw-neon" color="#ff2e9a" cx="50" cy="6" r="3.6" fill="#ff2e9a" stroke="' + INK + '" stroke-width="1.2"/>';
   }
@@ -956,7 +956,7 @@
     return shadow(150, 206, 140) +
       '<g class="slw-beam" opacity="0"><path d="M76 48 L84 48 L140 168 L56 168 Z" fill="#8a5cff" fill-opacity="0.18"/><path d="M216 48 L224 48 L244 168 L160 168 Z" fill="#22e4ff" fill-opacity="0.18"/></g>' +
       '<rect x="54" y="50" width="192" height="86" rx="4" fill="#2e2b3a" ' + SW + '/>' +
-      '<svg x="60" y="56" width="180" height="74" viewBox="0 0 180 74" overflow="hidden"><rect width="180" height="74" fill="#0e1626"/>' +
+      '<svg x="60" y="56" width="180" height="74" viewBox="0 0 180 74" overflow="hidden" style="overflow:hidden;width:180px;height:74px"><rect width="180" height="74" fill="#0e1626"/>' +
       eqBars(eqX - 60, 70, 8, 5, [16, 26, 20, 30], ['#22e4ff', '#c6ff3d', '#ff2e9a', '#8a5cff']) + '</svg>' +
       neonStar(150, 82, 20, o.acc) + signText(150, 122, o.name.length > 7 ? 10 : 13, o.name || 'ENCORE', '#f4f2fa') +
       '<path d="' + lattice + '" fill="none" stroke="#7c8194" stroke-width="1.5"/>' +

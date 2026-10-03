@@ -514,7 +514,94 @@ test('env: shader sources are well-formed and use only the uniforms they declare
   assert.ok(/vXZ\.y < -4\.4/.test(E.SHADERS.SEA_FRAG), 'pillars branch-skipped in front of the island');
   assert.ok(/uHaloDir/.test(E.SHADERS.SKY_FRAG) && /uBand/.test(E.SHADERS.SKY_FRAG), 'the sun halo and the city-glow band');
   assert.ok(/uZenith/.test(E.SHADERS.STAR_VERT), 'zenith-only stars at golden hour');
-  assert.ok(/#ifdef USE_INSTANCING/.test(E.SHADERS.CONE_VERT) && /instanceColor/.test(E.SHADERS.CONE_VERT), 'one instanced draw for 3 cones');
+  /* fix3: the 3 cones are one (non-instanced) mesh — aCone picks each vertex's matrix and colour — so
+     they can share the env program; still one draw call */
+  assert.ok(/attribute float aCone;/.test(E.SHADERS.CONE_VERT) && /uConeM\[ci\]/.test(E.SHADERS.CONE_VERT) && /uConeCol\[ci\]/.test(E.SHADERS.CONE_VERT), 'one draw for 3 cones');
+  assert.ok(!/USE_INSTANCING/.test(E.SHADERS.CONE_VERT), 'not an InstancedMesh (that would be another program)');
+});
+
+test('env (fix3): sky, sea, stars and cones compile as ONE program — the passes joined, picked by uPass', () => {
+  const V = E.SHADERS.ENV_VERT, F = E.SHADERS.ENV_FRAG;
+  assert.deepEqual(E.ENV_PASS, { sky: 0, sea: 1, stars: 2, cones: 3 });
+  for (const [fn, src] of [['envSkyV', V], ['envSeaV', V], ['envStarV', V], ['envConeV', V], ['envSkyF', F], ['envSeaF', F], ['envStarF', F], ['envConeF', F]]) {
+    assert.match(src, new RegExp('void ' + fn + '\\(\\) \\{'), fn + ' is a pass');
+  }
+  for (const src of [V, F]) {
+    assert.equal((src.match(/void main\(\) \{/g) || []).length, 1, 'one main()');
+    assert.match(src, /void main\(\) \{\n {2}if \(uPass < 0\.5\) env\w+\(\);\n {2}else if \(uPass < 1\.5\) env\w+\(\);\n {2}else if \(uPass < 2\.5\) env\w+\(\);\n {2}else env\w+\(\);\n\}$/);
+    assert.equal((src.match(/^uniform float uPass;$/gm) || []).length, 1);
+    /* every shared include and every declaration once */
+    for (const inc of ['#include <common>']) assert.equal(src.split('\n').filter((l) => l === inc).length, 1, inc + ' once');
+    const decls = src.split('\n').filter((l) => /^(uniform|attribute|varying) /.test(l));
+    assert.equal(new Set(decls).size, decls.length, 'no declaration twice');
+  }
+  /* the sea writes depth: nothing in the shared fragment program may discard (it would cost the sea its
+     early depth test); the stars zero their faint fringe instead */
+  assert.doesNotMatch(F, /discard/);
+  assert.match(E.SHADERS.STAR_FRAG, /a \*= step\(0\.003, a\);/);
+  /* the per-pass sources are the joined ones, line for line */
+  for (const part of [E.SHADERS.SKY_FRAG, E.SHADERS.SEA_FRAG, E.SHADERS.CONE_FRAG]) {
+    const body = part.split('\n'), m = body.indexOf('void main() {');
+    assert.ok(F.includes(body.slice(m + 1).join('\n')), 'the pass body is unchanged');
+  }
+  /* joinPasses: a name declared twice differently is refused */
+  assert.throws(() => E.joinPasses([['a', 'uniform float uX;\nvoid main() {\n}'], ['b', 'uniform vec3 uX;\nvoid main() {\n}']]), /uX/);
+  assert.throws(() => E.joinPasses([['a', 'void notMain() {\n}']]), /main/);
+});
+
+/* what decides three r170's program for a ShaderMaterial on an object (WebGLPrograms.getProgramCacheKey):
+   the source, the defines, and the flags below. Two materials with equal signatures share one program */
+function shaderSig(m, obj) {
+  const T = { NormalBlending: 1, DoubleSide: 2, BackSide: 1 };
+  return JSON.stringify([m.vertexShader, m.fragmentShader, Object.entries(m.defines || {}), !!(obj && obj.isInstancedMesh), !!(obj && obj.isInstancedMesh && obj.instanceColor),
+    !!(obj && obj.isSkinnedMesh), m.side === T.DoubleSide, m.side === T.BackSide, m.transparent === false && m.blending === T.NormalBlending, m.fog === true, m.toneMapped !== false,
+    !!m.vertexColors, m.alphaTest > 0, !!m.map, !!m.premultipliedAlpha, m.customProgramCacheKey ? m.customProgramCacheKey() : '']);
+}
+/* a THREE that records every ShaderMaterial and the object it is drawn on (anything else is inert) */
+function recordingThree() {
+  const any = anyStub(), mats = [], holders = new Map();
+  class ShaderMaterial {
+    constructor(p) {
+      Object.assign(this, { side: 0, blending: 1, transparent: false, fog: false, toneMapped: true, defines: {}, forceSinglePass: true,
+        vertexColors: false, alphaTest: 0, premultipliedAlpha: false, map: null }, p);
+      this.isShaderMaterial = true; mats.push(this);
+    }
+    customProgramCacheKey() { return 'default'; }
+    dispose() {}
+  }
+  const holder = (type, flags) => class { constructor(g, m) { Object.assign(this, flags); this.type = type; this.geometry = g; this.material = m; this.position = any; this.instanceMatrix = any; this.instanceColor = null; if (m && m.isShaderMaterial) holders.set(m, this); } setColorAt() {} setMatrixAt() {} dispose() {} };
+  const base = {
+    ShaderMaterial, Mesh: holder('Mesh', { isMesh: true }), Points: holder('Points', { isPoints: true }), InstancedMesh: holder('InstancedMesh', { isMesh: true, isInstancedMesh: true }),
+    FrontSide: 0, BackSide: 1, DoubleSide: 2, NoBlending: 0, NormalBlending: 1, AdditiveBlending: 2, CustomBlending: 5,
+    UniformsLib: { fog: { fogDensity: { value: 0 }, fogNear: { value: 1 }, fogFar: { value: 2 }, fogColor: { value: any } } },
+    UniformsUtils: { merge: (l) => Object.assign({}, ...l.map((u) => Object.assign({}, u))), clone: (u) => Object.assign({}, u) }
+  };
+  const T = new Proxy(base, { get(t, k) { return k in t ? t[k] : any; } });
+  return { T, mats, holders, any };
+}
+test('env (fix3): every env ShaderMaterial gets the same program signature (one program, not four)', () => {
+  for (const tier of ['LOW', 'MID', 'HIGH']) {
+    const R = recordingThree();
+    const K = new Proxy({ tier, THREE: R.T, G: R.any }, { get(t, k) { return k in t ? t[k] : R.any; } });
+    const env = E.create(K, null, { scene: R.any, terrainMs: 1e6, unlocked: ['home'], lazyLand: true });
+    const byName = Object.fromEntries(R.mats.map((m) => [m.name, m]));
+    assert.deepEqual(Object.keys(byName).sort(), ['env:cones', 'env:sea', 'env:sky', 'env:stars'], tier + ': env\'s own shader materials');
+    const sigs = new Set(R.mats.map((m) => shaderSig(m, R.holders.get(m))));
+    assert.equal(sigs.size, 1, tier + ': one program signature');
+    for (const m of R.mats) {
+      const h = R.holders.get(m);
+      assert.ok(h && (h.type === 'Mesh' || h.type === 'Points'), m.name + ' is drawn on a plain Mesh / Points (an InstancedMesh is another program)');
+      assert.equal(m.vertexShader, E.SHADERS.ENV_VERT); assert.equal(m.fragmentShader, E.SHADERS.ENV_FRAG);
+      assert.equal(m.uniforms.uPass.value, E.ENV_PASS[m.name.slice(4)], m.name + ' runs its own pass');
+      assert.ok(m.uniforms.uField && m.uniforms.uFieldPrev, m.name + ' binds the sea\'s samplers (never a stale texture unit)');
+    }
+    /* the opaque ones draw exactly as three draws an opaque NormalBlending material */
+    assert.equal(byName['env:sky'].blending, 0); assert.equal(byName['env:sea'].blending, 0);
+    assert.equal(byName['env:sea'].depthWrite, true); assert.equal(byName['env:sky'].depthWrite, false);
+    assert.ok(byName['env:stars'].transparent && byName['env:cones'].transparent);
+    assert.equal(byName['env:cones'].uniforms.uConeM.value.length, 3);
+    env.dispose();
+  }
 });
 
 /* ---------------- review fixes (2026-10-03) ---------------- */

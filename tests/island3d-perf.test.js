@@ -593,3 +593,18 @@ test('perf: the kit documents the merged layer and K.merger', () => {
   assert.match(KIT_SRC, /K\.merger\(\{name, additive = true\}\)/);
   assert.match(KIT_SRC, /K\.batch\(tpl, \{merge: merger\}\) joins it/);
 });
+
+/* ================================================================
+   fix3 (programs): the PET COURSE sign joins the LED / sign program
+   ================================================================ */
+test('fix3: the PET COURSE sign draws with the LED / sign program — no shader patch, no program of its own', () => {
+  const ATT = require('../world/island3d/models-attractions.js');
+  const K = kitOf('MID'), S = { ready: true, tier: 'MID', kit: () => K, models: {} };
+  const M = ATT.models(K, S), m = M.att_course.material('toon', { name: 'text' });
+  const inst = (mat) => { const x = new InstancedMesh(new PlaneGeometry(), mat, 1); x.instanceColor = new InstancedBufferAttribute(new Float32Array(3).fill(1), 3); return x; };
+  assert.equal(programSig(inst(m)), programSig(inst(K.mat('led'))), 'the program LED screens, signs and blob shadows share');
+  assert.equal(m.onBeforeCompile, Material.prototype.onBeforeCompile);
+  assert.equal(m.customProgramCacheKey, Material.prototype.customProgramCacheKey);
+  assert.equal(m, K.variant('sign', 'att-course'), 'a K.variant of the sign material (the kit disposes it)');
+  assert.equal(M.course_beach.material('toon', { name: 'text' }), m, 'one material for every gate');
+});

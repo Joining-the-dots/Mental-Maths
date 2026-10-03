@@ -190,7 +190,7 @@ test('runtime-1: after a kit dispose every atlas material on the next mount samp
     /* every atlas face of the new mount samples the live atlas, and that canvas shows Ben */
     for (const [k, live, set, want] of [
       ['screen', led2, NAMES, 'BEN'], ['screen2', led2, NAMES, 'BEN'], ['photo', sign2, INITIALS, 'B'],
-      ['onair', sign2, INITIALS, 'B'], ['initial', sign2, INITIALS, 'B'], ['course', sign2, INITIALS, 'B']
+      ['onair', sign2, INITIALS, 'B'], ['initial', sign2, INITIALS, 'B']
     ]) {
       const mt = m2[k];
       assert.ok(mt && mt.map, k + ' has a map');
@@ -199,6 +199,13 @@ test('runtime-1: after a kit dispose every atlas material on the next mount samp
       assert.ok(!gone.has(mt), k + ' is not a disposed material');
     }
     assert.equal(lastDrawn(m2.screen.map, NAMES), 'BEN', 'the LED tower name marquee shows Ben');
+    /* the PET COURSE sign (fix3): a sibling of the kit's sign material over the attractions file's own
+       small canvas (no name on it) — a new canvas for the new kit, live, and the previous one freed */
+    assert.ok(m2.course && m2.course.map && m2.course.map !== m1.course.map, 'course: a new sign texture for the new kit');
+    assert.ok(m1.course.map.disposed, 'the previous child\'s sign texture is freed');
+    assert.ok(!m2.course.map.disposed && !gone.has(m2.course), 'course is live');
+    assert.ok(m2.course.map.source.data.texts.includes('PET COURSE'), 'course draws PET COURSE');
+    assert.ok(!m2.course.map.source.data.texts.some((s) => NAMES.has(s) || INITIALS.has(s)), 'and no name');
     for (const k of ['strip', 'beams']) { assert.ok(m2[k], k); assert.ok(!gone.has(m2[k]), k + ' is a live material'); assert.notEqual(m2[k], m1[k], k + ' rebuilt on the new kit'); }
     assert.equal(models.bld_photobooth._strip.key, '', 'the strip is blank again (no previous child\'s pet or emoji)');
     /* the per-frame paths drive the materials the new batches hold */
@@ -209,9 +216,10 @@ test('runtime-1: after a kit dispose every atlas material on the next mount samp
     /* every kit-derived material of mount 2 is on the live kit's dispose list (a second dispose frees it) */
     hub.dispose();
     for (const k of ['screen', 'screen2', 'photo', 'onair', 'initial', 'beams', 'strip']) assert.ok(gone.has(m2[k]), 'the next kit dispose frees mount 2\'s ' + k);
-    /* the PET COURSE sign is the attractions file's own material: it frees the old one when it rebuilds */
+    /* the PET COURSE sign: the kit frees its sign sibling, the attractions file its own canvas texture */
     const m3 = mount(E, { name: 'Ava', color: '#FF5AA5' });
     assert.ok(gone.has(m2.course) && !gone.has(m3.course), 'the old course sign material is freed, the new one is live');
+    assert.ok(m2.course.map.disposed && !m3.course.map.disposed, 'the old course sign texture is freed, the new one is live');
   } finally { E.restore(); }
 });
 

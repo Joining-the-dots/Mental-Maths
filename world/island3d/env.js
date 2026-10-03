@@ -50,7 +50,8 @@
      islet, rock stacks; casts shadows) · layout (world-space dressing + plinth risers) · 2 LED ring buoys + the
      pole behind the house · neon accents (one InstancedMesh of unit boxes on 'state') · 3 spot cones · stars ·
      the ambient halo layer (48, shared with life3d). Every toon mesh is an InstancedMesh with instanceColor,
-     so they share ONE toon program.
+     so they share ONE toon program; the sky, sea, stars and cones (env's own ShaderMaterials) share ONE env
+     program too (SHADERS.ENV_VERT / ENV_FRAG: the four passes joined, picked per material by uPass).
    ================================================================ */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) {
@@ -903,6 +904,23 @@
       g.computeBoundingSphere();
       return g;
     }
+    /* three copies of one cone (position + normal + index) in one geometry, aCone = the copy */
+    function coneTriple(g) {
+      var P = g.getAttribute('position'), N = g.getAttribute('normal'), I = g.index, nv = P.count, ni = I ? I.count : 0;
+      var pos = new Float32Array(nv * 9), nor = new Float32Array(nv * 9), id = new Float32Array(nv * 3);
+      var idx = ni ? (nv * 3 > 65535 ? new Uint32Array(ni * 3) : new Uint16Array(ni * 3)) : null;
+      for (var c = 0; c < 3; c++) {
+        pos.set(P.array, c * nv * 3); nor.set(N.array, c * nv * 3);
+        id.fill(c, c * nv, (c + 1) * nv);
+        for (var k = 0; k < ni; k++) idx[c * ni + k] = I.array[k] + c * nv;
+      }
+      var out = new T.BufferGeometry();
+      out.setAttribute('position', new T.BufferAttribute(pos, 3));
+      out.setAttribute('normal', new T.BufferAttribute(nor, 3));
+      out.setAttribute('aCone', new T.BufferAttribute(id, 1));
+      if (idx) out.setIndex(new T.BufferAttribute(idx, 1));
+      return out;
+    }
     /* a count-1 InstancedMesh on the shared toon program holding one merged geometry */
     function solo(name, o) {
       var m = new T.InstancedMesh(new T.BufferGeometry(), K.mat('toon'), 1);
@@ -1057,7 +1075,22 @@
       uBand: { value: 0.3 }, uHaloDir: { value: new T.Vector3(Math.sin(hy) * Math.cos(he), Math.sin(he), -Math.cos(hy) * Math.cos(he)) },
       uHaloCol: { value: K.col(SUN_HALO.token) }, uHaloK: { value: SUN_HALO.opacity }
     };
-    var skyMat = new T.ShaderMaterial({ name: 'env:sky', uniforms: skyU, vertexShader: SKY_VERT, fragmentShader: SKY_FRAG, side: T.BackSide, depthWrite: false, fog: false });
+    /* every env ShaderMaterial draws through ONE program (ENV_PROGRAM: the sky, sea, star and cone passes
+       joined, picked by uPass) — it only stays one program while all four keep the flags envMat sets */
+    var envDefs = { REFL_N: Math.max(1, Math.min(14, budget.reflections || (low ? 4 : 6))) };
+    if (low) envDefs.ENV_LOW = 1;
+    function envMat(name, pass, u, o) {
+      var fu = T.UniformsUtils.clone(T.UniformsLib.fog);
+      for (var fk in fu) if (!u[fk]) u[fk] = fu[fk];             /* fog: true reads three's fog uniforms */
+      u.uPass = { value: pass };
+      var p = { name: name, uniforms: u, vertexShader: ENV_PROGRAM.vert, fragmentShader: ENV_PROGRAM.frag, defines: envDefs,
+                side: T.DoubleSide, fog: true, depthWrite: false };
+      for (var k in o) p[k] = o[k];
+      return new T.ShaderMaterial(p);
+    }
+    /* NoBlending = what three draws an opaque NormalBlending material with; DoubleSide adds no pixel
+       (the camera is always inside the dome) */
+    var skyMat = envMat('env:sky', ENV_PASS.sky, skyU, { blending: T.NoBlending });
     var sky = new T.Mesh(skyGeo, skyMat);
     sky.name = 'env:sky'; sky.renderOrder = -10; sky.frustumCulled = false;
     owned.geos.push(skyGeo); owned.mats.push(skyMat);
@@ -1072,7 +1105,7 @@
       return t;
     }
     var fieldCur = fieldTex(), fieldPrev = fieldTex();
-    var HT = hologramTokens(), REFL_N = Math.max(1, Math.min(14, budget.reflections || (low ? 4 : 6)));
+    var HT = hologramTokens(), REFL_N = envDefs.REFL_N;
     var reflArr = [], reflCol = [];
     for (var ri = 0; ri < REFL_N; ri++) { reflArr.push(new T.Vector4(0, 0, 0.3, 0)); reflCol.push(new T.Color(0, 0, 0)); }
     var seaU = T.UniformsUtils.merge([T.UniformsLib.fog, {
@@ -1091,15 +1124,18 @@
       uBoat: { value: null }
     }]);
     seaU.uField.value = fieldCur; seaU.uFieldPrev.value = fieldPrev;   /* after merge: shared, not cloned */
+    /* every material of the shared env program binds the field textures, so no draw ever leaves the
+       program's samplers on a stale texture unit (the sky's own pass never samples them) */
+    skyU.uField = seaU.uField; skyU.uFieldPrev = seaU.uFieldPrev;
     seaU.uRefl.value = reflArr; seaU.uReflCol.value = reflCol;
     /* the boats' V wakes (MID / HIGH): life3d's uBoat[4] array, (x, z, dirX·w, dirZ·w) per boat */
     var noBoats = new Float32Array(16);
     seaU.uBoat.value = noBoats;
     seaU.uSandbar.value.copy(K.col(HT.sandbar)); seaU.uEdge.value.copy(K.col(HT.edge));
     seaU.uSpotColA.value.copy(lensOn[0]); seaU.uSpotColB.value.copy(lensOn[1]);
-    var seaDefs = { REFL_N: REFL_N };
-    if (low) seaDefs.ENV_LOW = 1;
-    var seaMat = new T.ShaderMaterial({ name: 'env:sea', uniforms: seaU, vertexShader: SEA_VERT, fragmentShader: SEA_FRAG, fog: true, defines: seaDefs });
+    /* opaque, depth-writing: NoBlending (as three draws an opaque material); DoubleSide on a plane the
+       camera only ever sees from above */
+    var seaMat = envMat('env:sea', ENV_PASS.sea, seaU, { blending: T.NoBlending, depthWrite: true });
     var seaGeo = new T.PlaneGeometry(SEA_SIZE, SEA_SIZE, 1, 1);
     seaGeo.rotateX(-Math.PI / 2);
     var sea = new T.Mesh(seaGeo, seaMat);
@@ -1117,24 +1153,30 @@
     starGeo.setAttribute('aSize', new T.BufferAttribute(SF.size, 1));
     starGeo.setAttribute('aSea', new T.BufferAttribute(SF.sea, 1));
     starGeo.setAttribute('aTint', new T.BufferAttribute(tintArr, 3));
-    var starU = { uTime: { value: 0 }, uPR: { value: 1 }, uSize: { value: 2 }, uAlpha: { value: 0 }, uZenith: { value: 1 }, uFogNear: { value: 28 }, uFogFar: { value: 72 } };
-    var starMat = new T.ShaderMaterial({ name: 'env:stars', uniforms: starU, vertexShader: STAR_VERT, fragmentShader: STAR_FRAG, transparent: true, depthWrite: false, blending: T.AdditiveBlending, fog: false });
+    var starU = { uTime: { value: 0 }, uPR: { value: 1 }, uSize: { value: 2 }, uAlpha: { value: 0 }, uZenith: { value: 1 }, uFogNear: { value: 28 }, uFogFar: { value: 72 },
+                  uField: seaU.uField, uFieldPrev: seaU.uFieldPrev };
+    /* (points are never culled: DoubleSide changes nothing for them) */
+    var starMat = envMat('env:stars', ENV_PASS.stars, starU, { transparent: true, blending: T.AdditiveBlending });
     var stars = new T.Points(starGeo, starMat);
     stars.name = 'env:stars'; stars.frustumCulled = false; stars.renderOrder = 2; stars.visible = false;
     owned.geos.push(starGeo); owned.mats.push(starMat);
 
     /* ---------------- spotlight cones ---------------- */
-    var coneGeo = new T.ConeGeometry(CONE_GEO.r, CONE_GEO.h, low ? CONE_GEO.radialLow : CONE_GEO.radial, 1, true);
-    coneGeo.rotateX(Math.PI);
-    coneGeo.translate(0, CONE_GEO.h / 2, 0);
-    var coneU = { uAlpha: { value: 0 }, uLen: { value: CONE_GEO.h }, uFogNear: { value: 28 }, uFogFar: { value: 72 } };
-    var coneMat = new T.ShaderMaterial({ name: 'env:cones', uniforms: coneU, vertexShader: CONE_VERT, fragmentShader: CONE_FRAG, transparent: true, depthWrite: false, blending: T.AdditiveBlending, side: T.DoubleSide, fog: false });
-    var cones = new T.InstancedMesh(coneGeo, coneMat, 3);
-    cones.instanceColor = new T.InstancedBufferAttribute(new Float32Array(9), 3);
-    for (var ci = 0; ci < 3; ci++) cones.setColorAt(ci, lensOn[ci] || lensOn[0]);
-    cones.instanceMatrix.setUsage(T.DynamicDrawUsage);
+    /* one mesh holding the 3 open cones (aCone = 0, 1, 2), each placed by its uConeM matrix and tinted
+       uConeCol: not an InstancedMesh, so it shares the env program (still one draw call) */
+    var cone1 = new T.ConeGeometry(CONE_GEO.r, CONE_GEO.h, low ? CONE_GEO.radialLow : CONE_GEO.radial, 1, true);
+    cone1.rotateX(Math.PI);
+    cone1.translate(0, CONE_GEO.h / 2, 0);
+    var coneGeo = coneTriple(cone1);
+    cone1.dispose();
+    var coneM = [new T.Matrix4(), new T.Matrix4(), new T.Matrix4()];
+    var coneCol = [0, 1, 2].map(function (ci) { return (lensOn[ci] || lensOn[0]).clone(); });
+    var coneU = { uAlpha: { value: 0 }, uLen: { value: CONE_GEO.h }, uFogNear: { value: 28 }, uFogFar: { value: 72 },
+                  uConeM: { value: coneM }, uConeCol: { value: coneCol }, uField: seaU.uField, uFieldPrev: seaU.uFieldPrev };
+    var coneMat = envMat('env:cones', ENV_PASS.cones, coneU, { transparent: true, blending: T.AdditiveBlending });
+    var cones = new T.Mesh(coneGeo, coneMat);
     cones.name = 'env:cones'; cones.frustumCulled = false; cones.renderOrder = 4; cones.visible = false;
-    owned.geos.push(coneGeo); owned.mats.push(coneMat); owned.meshes.push(cones);
+    owned.geos.push(coneGeo); owned.mats.push(coneMat);
     group.add(sky, stars, sea, cones);
 
     /* ---------------- the city across the bay and the ambient life (optional modules) ---------------- */
@@ -1531,13 +1573,12 @@
           _ax.lerp(_v2, M.ease.inOutSine(ak)).normalize();
         }
         _q.setFromUnitVectors(_up, _ax);
-        cones.setMatrixAt(i, _m.compose(sources[i], _q, _one));
+        coneM[i].compose(sources[i], _q, _one);
         if (i < 2) {
           var hl = Math.sqrt(_ax.x * _ax.x + _ax.z * _ax.z) || 1, sp = i === 0 ? seaU.uSpotA.value : seaU.uSpotB.value;
           sp.set(sources[i].x, sources[i].z, _ax.x / hl, _ax.z / hl);
         }
       }
-      cones.instanceMatrix.needsUpdate = true;
     }
     /* the sibling ticks, bound once (nothing in update() allocates) */
     var tick = { dt: 0, k: 0, show: 0, busy: false, list: null };
@@ -2093,13 +2134,19 @@
     'void main() {',
     '  float r = length(gl_PointCoord - vec2(0.5));',
     '  float a = (1.0 - smoothstep(0.15, 0.5, r)) * vA * uAlpha;',
-    '  if (a < 0.003) discard;',
+    /* below 0.003 a point adds nothing (additive, no depth write): zero instead of discard, which
+       would cost the shared env program (the sea writes depth) its early depth test */
+    '  a *= step(0.003, a);',
     '  gl_FragColor = vec4(vTint, a);',
     '  #include <colorspace_fragment>',
     '}'
   ].join('\n');
 
+  /* the 3 cones are one mesh: aCone picks each vertex's cone matrix and colour */
   var CONE_VERT = [
+    'attribute float aCone;',
+    'uniform mat4 uConeM[3];',
+    'uniform vec3 uConeCol[3];',
     'uniform float uLen;',
     'uniform float uFogNear;',
     'uniform float uFogFar;',
@@ -2109,19 +2156,13 @@
     'varying vec3 vCol;',
     'varying float vFog;',
     'void main() {',
-    '  mat4 m = modelMatrix;',
-    '#ifdef USE_INSTANCING',
-    '  m = modelMatrix * instanceMatrix;',
-    '#endif',
+    '  int ci = int(aCone + 0.5);',
+    '  mat4 m = modelMatrix * uConeM[ci];',
     '  vec4 wp = m * vec4(position, 1.0);',
     '  vW = wp.xyz;',
     '  vN = normalize(mat3(m) * normal);',
     '  vAlong = clamp(position.y / uLen, 0.0, 1.0);',
-    '#ifdef USE_INSTANCING_COLOR',
-    '  vCol = instanceColor;',
-    '#else',
-    '  vCol = vec3(1.0);',
-    '#endif',
+    '  vCol = uConeCol[ci];',
     '  vec4 mv = viewMatrix * wp;',
     '  vFog = smoothstep(uFogNear, uFogFar, -mv.z);',
     '  gl_Position = projectionMatrix * mv;',
@@ -2143,6 +2184,42 @@
     '}'
   ].join('\n');
 
+  /* ---------------- ONE program for the whole env ----------------
+     three keys a program on the shader source, the defines and a material's flags. The sky, sea,
+     star and cone passes are joined into one source whose main() runs the pass uPass names, and
+     create() gives all four materials the same defines and flags (DoubleSide — a ShaderMaterial
+     draws in one pass —, fog on, NoBlending for the opaque sky and sea, never instanced), so they
+     share ONE compiled program instead of four. A uniform branch: each draw runs only its pass.
+     joinPasses([[fnName, src], …]) → one GLSL source: each part's main() becomes fnName(); the
+     shared chunk includes and identical uniform / attribute / varying declarations appear once
+     (a name declared twice differently throws) */
+  var SHARED_INCLUDE = /^#include <(common|fog_pars_vertex|fog_pars_fragment)>$/;
+  var DECL = /^(uniform|attribute|varying)\s+\w+\s+(\w+)/;
+  function joinPasses(parts) {
+    var head = [], seen = {}, body = [], calls = [];
+    parts.forEach(function (p, i) {
+      var lines = p[1].split('\n'), m = lines.indexOf('void main() {');
+      if (m < 0 || lines[lines.length - 1] !== '}') throw new Error('joinPasses: ' + p[0] + ' needs a last-line main()');
+      for (var j = 0; j < lines.length; j++) {
+        var ln = lines[j], d = j < m ? DECL.exec(ln) : null;
+        if (j < m && SHARED_INCLUDE.test(ln)) { if (head.indexOf(ln) < 0) head.push(ln); continue; }
+        if (d) {
+          if (seen[d[2]] != null && seen[d[2]] !== ln) throw new Error('joinPasses: ' + d[2] + ' is declared twice differently');
+          if (seen[d[2]] != null) continue;
+          seen[d[2]] = ln;
+        }
+        body.push(j === m ? 'void ' + p[0] + '() {' : ln);
+      }
+      calls.push((i ? '  else ' : '  ') + (i < parts.length - 1 ? 'if (uPass < ' + (i + 0.5).toFixed(1) + ') ' : '') + p[0] + '();');
+    });
+    return head.concat(['uniform float uPass;'], body, ['void main() {'], calls, ['}']).join('\n');
+  }
+  var ENV_PASS = { sky: 0, sea: 1, stars: 2, cones: 3 };
+  var ENV_PROGRAM = {
+    vert: joinPasses([['envSkyV', SKY_VERT], ['envSeaV', SEA_VERT], ['envStarV', STAR_VERT], ['envConeV', CONE_VERT]]),
+    frag: joinPasses([['envSkyF', SKY_FRAG], ['envSeaF', SEA_FRAG], ['envStarF', STAR_FRAG], ['envConeF', CONE_FRAG]])
+  };
+
   var api = {
     VERSION: VERSION, create: create,
     /* constants (read-only use) */
@@ -2162,8 +2239,11 @@
     rippleNew: rippleNew, rippleToggle: rippleToggle, rippleAdvance: rippleAdvance, rippleLevel: rippleLevel,
     seaWave: seaWave, waveBands: waveBands,
     coneAxis: coneAxis, cloudAt: cloudAt, starField: starField, sunBasis: sunBasis, shadowFit: shadowFit,
-    fieldFromGrid: fieldFromGrid, openSeaField: openSeaField, riseBands: riseBands,
-    SHADERS: { SKY_VERT: SKY_VERT, SKY_FRAG: SKY_FRAG, SEA_VERT: SEA_VERT, SEA_FRAG: SEA_FRAG, STAR_VERT: STAR_VERT, STAR_FRAG: STAR_FRAG, CONE_VERT: CONE_VERT, CONE_FRAG: CONE_FRAG }
+    fieldFromGrid: fieldFromGrid, openSeaField: openSeaField, riseBands: riseBands, joinPasses: joinPasses,
+    /* the per-pass sources, and ENV_VERT / ENV_FRAG: what every env material actually compiles */
+    SHADERS: { SKY_VERT: SKY_VERT, SKY_FRAG: SKY_FRAG, SEA_VERT: SEA_VERT, SEA_FRAG: SEA_FRAG, STAR_VERT: STAR_VERT, STAR_FRAG: STAR_FRAG, CONE_VERT: CONE_VERT, CONE_FRAG: CONE_FRAG,
+               ENV_VERT: ENV_PROGRAM.vert, ENV_FRAG: ENV_PROGRAM.frag },
+    ENV_PASS: ENV_PASS
   };
 
   /* the stage registry: SL3D.makeEnv(opts) → create(K, SL3D, opts) once the stage is ready */

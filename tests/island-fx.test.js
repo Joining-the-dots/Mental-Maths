@@ -763,3 +763,47 @@ test('edit3d: the overlay shader draws rounded, dashed, pulsing cells in one col
   assert.match(V, /#include <fog_vertex>/);
   assert.ok(E.CAP_CELLS >= 16 * 10 + 8, 'room for the whole grid plus off-land footprints, entrances and the ring');
 });
+
+/* ================================================================ fix3: shader programs ================================================================ */
+/* what decides three r170's program for a ShaderMaterial on an object (WebGLPrograms.getProgramCacheKey):
+   the source, the defines, and these flags. Equal signatures → one compiled program */
+function fix3Sig(m, obj) {
+  return JSON.stringify([m.vertexShader, m.fragmentShader, Object.entries(m.defines || {}), !!(obj && obj.isInstancedMesh), m.side || 0,
+    m.transparent === false && (m.blending == null || m.blending === 1), m.fog === true, m.toneMapped !== false, !!m.vertexColors, !!(m.alphaTest > 0), !!m.premultipliedAlpha]);
+}
+test('fx3d + edit3d (fix3): the fx sprites, marks and the edit cell overlay share ONE program — entering edit mode compiles nothing', () => {
+  const inert = new Proxy(function () {}, { get: (t, k) => (k === Symbol.toPrimitive ? () => 0 : k === 'prototype' ? t.prototype : inert), apply: () => inert, construct: () => inert });
+  const T = new Proxy(FxT, { get: (t, k) => (k in t ? t[k] : inert) });
+  const K = Object.assign(fxKit('MID'), { THREE: T });
+  const fx = F.create(K, {}, { seed: 5, tier: 'MID' });
+  const ed = E.create(K, null, {});
+  const all = [];
+  for (const g of [fx.group, ed.group]) for (const o of g.children) if (o.material && o.material.vertexShader) all.push(o);
+  const byName = Object.fromEntries(all.map((o) => [o.material.name, o]));
+  assert.ok(byName['fx3d:particles'] && byName['fx3d:marks'] && byName['edit3d:cells']);
+  const sig = (n) => fix3Sig(byName[n].material, byName[n]);
+  assert.equal(sig('edit3d:cells'), sig('fx3d:particles'), 'the cells draw with the sprite program');
+  assert.equal(sig('fx3d:marks'), sig('fx3d:particles'));
+  /* each material runs its own pass of the joined source */
+  const P = F.OVERLAY_PASS;
+  assert.equal(byName['fx3d:particles'].material.uniforms.uPass.value, P.sprite);
+  assert.equal(byName['edit3d:cells'].material.uniforms.uPass.value, P.cell);
+  assert.ok(byName['edit3d:cells'].material.uniforms.uMap, 'the cells bind the sprite sampler too (never a stale texture unit)');
+  /* the joined source holds both passes unchanged */
+  const O = F.overlayProgram(E.SHADERS.CELL_VERT, E.SHADERS.CELL_FRAG);
+  assert.equal(byName['edit3d:cells'].material.fragmentShader, O.frag);
+  for (const [src, fn] of [[O.vert, 'fxSpriteV'], [O.vert, 'editCellV'], [O.frag, 'fxSpriteF'], [O.frag, 'editCellF']]) assert.match(src, new RegExp('void ' + fn + '\\(\\) \\{'));
+  for (const part of [F.SHADERS.SPRITE_FRAG, E.SHADERS.CELL_FRAG]) {
+    const body = part.split('\n'), m = body.indexOf('void main() {');
+    assert.ok(O.frag.includes(body.slice(m + 1).join('\n')), 'the pass body is unchanged');
+  }
+  for (const src of [O.vert, O.frag]) {
+    const decls = src.split('\n').filter((l) => /^(uniform|attribute|varying) /.test(l));
+    assert.equal(new Set(decls).size, decls.length, 'every declaration once');
+    assert.equal((src.match(/void main\(\) \{/g) || []).length, 1);
+    assert.ok(balanced(src), 'balanced braces');
+  }
+  assert.equal(F.overlayProgram(E.SHADERS.CELL_VERT, E.SHADERS.CELL_FRAG), O, 'memoised: both files get the same strings');
+  assert.equal(F.overlayProgram(null, null), null);
+  ed.dispose(); fx.dispose();
+});

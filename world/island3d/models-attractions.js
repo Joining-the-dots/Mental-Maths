@@ -7,25 +7,32 @@
    used solely inside builders that run when a kit K exists).
 
    IDS (model space = item space: base y = 0, pivot at the footprint
-   centre, facing +z; colour tokens follow SLIslandLook.LOOK[id].colors)
-     att_course   2×2 stage arch: Carrot pillars, an arched THEME[course][1]
-                  banner with 'PET COURSE' (CanvasTexture, Bagel Fat One,
-                  Baloo 2 fallback), 14 marquee bulbs, 2 spinning puffy stars,
-                  2 mini hurdles, THEME[course][0] plate + per-course dressing
-                  parts body | text | bulbA, bulbB (state, pivot 'glow') |
-                        starL (pivot 'spin'), starR (pivot 'spin2')
+   centre, facing +z; colour tokens follow SLIslandLook.LOOK[id].colors).
+   Encore City v2: LOCKED THEME / KARTS / BALLS / STADIA colours are untouched;
+   architecture has no ink hull (a part flagged outline gets only the kit's
+   edit-selection hull).
+     att_course   2×2 LED-strip arch: slim Graphite pillars, a Graphite arch band
+                  with THEME[course][1] rims, 'PET COURSE' white from the shared
+                  sign atlas (Unbounded 800) over a member-colour underline, LED
+                  strips tracing the band, a 14-dot LED marquee, two spinning ✦
+                  sparks, 2 mini hurdles, THEME[course][0] plate + per-course dressing
+                  parts body | text | bulbA, bulbB (state, pivot 'glow': dots +
+                        outer / inner strip) | starL (pivot 'spin'), starR (pivot 'spin2')
                   state keys bulbA, bulbB: 'day' | 'pink' | 'cyan' | 'violet' | 'dim'
                   anchors top, spot, banner
      att_pitch    3×2 pitch in STADIA[stadium][1], line strips, goal + rope net,
-                  a 3-tier stand with 40 fan blobs (30 on LOW) holding wands,
-                  the selected ball on the spot, the stadium's dressing
+                  a 3-tier stand of 40 crowd silhouettes (30 on LOW; makeFanBlob's
+                  when it is light enough) holding ✦ Spark Sticks, the selected
+                  ball on the spot, the stadium's dressing
                   parts body | detail | crowd (pivot 'crowd') | wands (state,
                         pivot 'wands' ⊂ 'crowd') | ball (pivot 'ball') | lamps (night)
                   state key wands: 0 dim … 1 lit (always lit in stadium_night)
                   anchors top, spot (penalty spot)
-     att_kart     2×2 garage: rounded roof, roller door + slats, a 16-quad
-                  checkered banner, a Neon Lime lightning sign (+ Showtime glow
-                  sleeve), 3 ink tyres and the selected kart parked out front at half scale
+     att_kart     2×2 pit garage: a crisp Graphite box under a cantilevered roof,
+                  roller door + slats in a frame, a 16-quad checkered band, a Laser
+                  Lime LED bolt sign on the roof edge (+ Showtime glow sleeve), a
+                  tool chest, 3 ink tyres and the selected kart parked out front at
+                  half scale
                   parts body | sign | signGlow | kart, kartGlow, kartGold (pivot 'kart')
                   anchors top, spot, seat, exhaust
      kart_red|blue|lime|unicorn|gold   the shared 0.9 u kart in its LOCKED colour
@@ -39,9 +46,10 @@
      course_*     the gate dressed as that course (variants preview on their base item)
      track_*      a mini track diorama: oval road, kerbs, the track's grass and props
 
-   HANDLERS: att_course {build, idle, act, show, material}; course_* {build, idle,
-   show, material}; att_pitch {build, idle, act, show} (its idle animates the crowd
-   although LOOK.att_pitch.idle is null); att_kart {build, act}; the rest {build}.
+   HANDLERS: att_course {build, idle, act, show, material, setUser, setMember};
+   course_* {build, idle, show, material, setUser, setMember}; att_pitch {build,
+   idle, act, show} (its idle animates the crowd although LOOK.att_pitch.idle is
+   null); att_kart {build, act}; the rest {build}.
    idle(a) / show(a, k) / act(a, name) → {dur, update(a, t) → alive, cancel()}
    use only the documented animation handle (a.pivot(name).set, a.state, a.emit,
    a.sfx, a.t, a.phase, a.reduced, a.bpm, a.show); timelines come from SLMotion
@@ -49,11 +57,15 @@
    has its reduced-motion variant and fires its own SLMotion cues (sfx + emits).
 
    CUSTOM MATERIAL HOOK (integration): the banner text is a separate part
-   ('text', matKey 'toon', painted in the banner colour so it is invisible
-   without the hook). handler.material(matKey, part) returns the textured
-   banner material for it (null otherwise) — pass it as opts.material to
+   ('text', matKey 'toon', painted in the band colour so it is invisible
+   without the hook). handler.material(matKey, part) returns the sign
+   material for it (null otherwise) — pass it as opts.material to
    K.batch / K.instantiate (the kit's documented override). Templates drop
-   uv, so the material maps the canvas from item-space position on the arch.
+   uv, so the material maps the 'PET COURSE' cell of K.signAtlas() from the
+   item-space position on the arch, and paints the underline below it in the
+   child's member colour: model.setUser({color}) / setMember('#hex') (or a
+   handle carrying a.member / a.user.color) sets it; until then it is the
+   look's member fallback. One material (one program) serves every gate.
    ================================================================ */
 (function (root, factory) {
   var api = factory(root);
@@ -99,11 +111,11 @@
   };
   var COLORS = (function () {
     var c = {
-      att_course: { pillar: 'Carrot', banner: 'THEME.$course.1', plate: 'THEME.$course.0', text: 'Ink', bulb: 'Holo Lemon', star: 'Star Gold',
+      att_course: { pillar: 'Graphite', banner: 'THEME.$course.1', plate: 'THEME.$course.0', text: 'Bone White', bulb: 'Holo Lemon', star: 'Star Gold',
         hurdlePost: 'Cloud White', hurdleA: 'Coral', hurdleB: 'Star Gold' },
       att_pitch: { grass: 'STADIA.$stadium.1', sky: 'STADIA.$stadium.0', line: 'Cloud White', post: 'Cloud White', net: 'Cloud White', stand: 'Pebble',
-        ball: 'BALLS.$ball.0', ballPatch: 'BALLS.$ball.1', fanA: 'Holo Pink', fanB: 'Holo Blue', fanC: 'Holo Mint', fanD: 'Holo Lemon', wand: 'Cloud White' },
-      att_kart: { garage: 'Garage', door: 'Roller Door', slat: 'Door Slat', checkA: 'Ink', checkB: 'Cloud White', sign: 'Neon Lime', tyre: 'Ink', kart: 'KARTS.$kart' },
+        ball: 'BALLS.$ball.0', ballPatch: 'BALLS.$ball.1', fanA: 'Crowd Shadow', fanB: 'Crowd Shadow 2', fanC: 'Crowd Shadow 3', fanD: 'Graphite', wand: 'Cloud White' },
+      att_kart: { garage: 'Graphite', door: 'Roller Door', slat: 'Door Slat', checkA: 'Midnight Ink', checkB: 'Cloud White', sign: 'Laser Lime', tyre: 'Ink', kart: 'KARTS.$kart' },
       course_meadow: { plate: 'THEME.course_meadow.0', banner: 'THEME.course_meadow.1', hedge: 'Bush', flower: 'Tulip Pink' },
       course_beach: { plate: 'THEME.course_beach.0', banner: 'THEME.course_beach.1', crab: 'Coral', shell: 'Blossom Light' },
       course_snow: { plate: 'THEME.course_snow.0', banner: 'THEME.course_snow.1', snow: 'Snow', hat: 'Ink', carrot: 'Carrot' },
@@ -130,14 +142,17 @@
     return c;
   }());
 
-  /* every other token this file paints with (all palette / ART2D / EXTRA names) */
+  /* every other token this file paints with (palette / PALETTE_V2 / ART2D / EXTRA names) */
   var X = {
     ink: 'Ink', white: 'Cloud White', stem: 'Stem', flower2: 'Tulip Yellow', flower3: 'Cloud White',
-    wandOff: 'Pole', pole: 'Pole', riser: 'Riser Top', riserRing: 'Neon Pink',
+    wandOff: 'Pole', pole: 'Pole', stick: 'Midnight Ink', riser: 'Gunmetal', riserRing: 'Neon Magenta',
     pennants: ['Coral', 'Star Gold', 'Splash Blue', 'Leaf Mint'],
-    /* marquee bulb states (instance colours of the 'state' material) */
-    bulbs: { day: 'Holo Lemon', pink: 'Neon Pink', cyan: 'Neon Cyan', violet: 'Neon Violet', dim: 'Sky Night Mid' },
-    neon4: ['Neon Pink', 'Neon Cyan', 'Neon Violet', 'Neon Lime']
+    /* LED dot / strip states (instance colours of the 'state' material): the LOOK bulb colour by
+       day, the v2 neon set at Showtime */
+    bulbs: { day: 'Holo Lemon', pink: 'Neon Magenta', cyan: 'LED Cyan', violet: 'Electric Violet', dim: 'Night Mid' },
+    neon4: ['Neon Magenta', 'LED Cyan', 'Electric Violet', 'Laser Lime'],
+    /* the PET COURSE underline when the child's member colour is not known yet (= MEMBER_FALLBACK) */
+    member: 'Bubblegum'
   };
 
   /* 'THEME.$course.1' + {course: 'course_snow'} → 'THEME.course_snow.1' (unknown or missing → default) */
@@ -163,11 +178,14 @@
      pillar axes at x = ±pillarX. Flat band coords (s along the arc at the mid radius,
      v across from the inner edge) map onto it with arcMap. */
   var ARCH = (function () {
-    var px = 0.72, rIn = 0.95, h = 0.3, rMid = rIn + h / 2;
+    var px = 0.72, rIn = 0.95, h = 0.26, rMid = rIn + h / 2;
     return {
       cy: 0.5, rIn: rIn, h: h, rMid: rMid, rOut: rIn + h, half: Math.asin(px / rMid),
-      z: -0.3, depth: 0.1, pillarX: px, pillarR: 0.12, pillarTop: 1.57, starY: 1.79, starR: 0.13,
-      textHalf: 0.5, bulbHalf: 0.46, bulbR: 0.034, bulbs: 14
+      z: -0.3, depth: 0.09, pillarX: px, pillarR: 0.09, pillarTop: 1.57, starY: 1.79, starR: 0.13,
+      textHalf: 0.5, bulbHalf: 0.46, bulbR: 0.024, bulbs: 14, strip: 0.012, dotInset: 0.034,
+      /* the member underline just under the PET COURSE baseline (the atlas fits the word to ~0.3–0.65
+         of its cell height): band v from v0 to v1 (fractions of h), |text u − ½| ≤ half */
+      under: { v0: 0.2, v1: 0.25, half: 0.36 }
     };
   }());
   function arcMap(s, v, out) {
@@ -177,7 +195,7 @@
     out.c = Math.cos(th); out.s = Math.sin(th);
     return out;
   }
-  /* 14 marquee bulbs along the arch's outer rim, alternating between two chase groups */
+  /* the 14 LED marquee dots along the arch's outer rim, alternating between two chase groups */
   function bulbLayout(n) {
     n = n || ARCH.bulbs;
     var out = [];
@@ -187,10 +205,10 @@
     }
     return out;
   }
-  /* the Showtime marquee chase: groups alternate every beat (≤ 1 Hz each at 118 BPM),
-     colours step Pink → Cyan → Violet every 2 beats; steady under reduced motion */
+  /* the Showtime LED chase (dots + strips): groups alternate every beat (≤ 1 Hz each at 118 BPM),
+     colours step Magenta → Cyan → Violet every 2 beats; steady under reduced motion */
   var CHASE = ['pink', 'cyan', 'violet'];
-  var MAX_BPM = 240;                 /* one toggle per beat: never above MAX_FLASH_HZ = 2 */
+  var MAX_BPM = 180;                 /* one toggle per beat: a group never cycles above LED_CHASE_HZ = 1.5 */
   function chaseState(t, bpm, show, reduced, out) {
     out = out || {};
     if (!(show > 0.5)) { out.a = 'day'; out.b = 'day'; return out; }
@@ -324,25 +342,27 @@
       rod: function (a, b, r, token, o) {
         var dx = b[0] - a[0], dy = b[1] - a[1], dz = b[2] - a[2], len = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1e-4;
         return O.tube(r, r, len, token, { radial: (o && o.radial) || 6, tone: o && o.tone, r: alignY(dx, dy, dz), p: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2] });
+      },
+      /* the ✦ spark (16 tris): a tall and a wide flattened 4-sided double cone, crossed, facing +z.
+         Four points, never the five-point ⭐ reward star */
+      spark: function (rOut, rIn, depth, token, o) {
+        function spike(sx, sy) {
+          var up = G.t(G.tube(0, 1, 1, { radial: 4, open: true }), { p: [0, 0.5, 0] });
+          var dn = G.t(G.tube(1, 0, 1, { radial: 4, open: true }), { p: [0, -0.5, 0] });
+          return G.t(G.merge([up, dn]), { s: [sx, sy, depth] });
+        }
+        var g = G.facet(G.merge([spike(rIn, rOut), spike(rOut, rIn)]));
+        if (token) G.paintBy(g, function (v) { return v.nz > 0.3 && v.nx + v.ny < 0 ? [token, 'shade'] : v.nz > 0.3 ? [token, 'hi'] : token; }, { perFace: true });
+        return o && (o.p || o.r || o.s != null) ? G.t(g, o) : g;
+      },
+      /* a crisp box (BoxGeometry) painted by face: lit top, shaded sides facing away from the sun */
+      crisp: function (w, h, d, token, o) {
+        var g = G.slab(w, h, d, 0);
+        if (token) G.paintBy(g, function (v) { return v.ny > 0.5 ? [token, 'hi'] : v.ny < -0.5 || v.nx > 0.5 ? [token, 'shade'] : token; });
+        return o && (o.p || o.r || o.s != null) ? G.t(g, o) : g;
       }
     };
     return O;
-  }
-  /* keep only the triangles whose centroid passes fn(x, y, z) (a NEW geometry) */
-  function keepTris(K, geo, fn) {
-    var T = K.THREE, P = geo.getAttribute('position').array, N = geo.getAttribute('normal').array, C = geo.getAttribute('color').array;
-    var keep = [], i, j;
-    for (i = 0; i + 8 < P.length; i += 9) {
-      if (fn((P[i] + P[i + 3] + P[i + 6]) / 3, (P[i + 1] + P[i + 4] + P[i + 7]) / 3, (P[i + 2] + P[i + 5] + P[i + 8]) / 3)) keep.push(i);
-    }
-    var n = keep.length * 9, p = new Float32Array(n), nn = new Float32Array(n), c = new Float32Array(n);
-    for (i = 0; i < keep.length; i++) for (j = 0; j < 9; j++) { p[i * 9 + j] = P[keep[i] + j]; nn[i * 9 + j] = N[keep[i] + j]; c[i * 9 + j] = C[keep[i] + j]; }
-    var out = new T.BufferGeometry();
-    out.setAttribute('position', new T.BufferAttribute(p, 3));
-    out.setAttribute('normal', new T.BufferAttribute(nn, 3));
-    out.setAttribute('color', new T.BufferAttribute(c, 3));
-    geo.dispose();
-    return out;
   }
   /* bend a flat band (x = s along the arc, y = v across) onto the arch, normals too */
   var _arc = {};
@@ -382,13 +402,12 @@
   function courseDressing(o, course, list) {
     var c = function (p) { return tok(course, p, {}); }, y0 = 0.07;
     if (course === 'course_beach') {
-      /* a tiny crab, two scallop shells and a starfish */
+      /* a small faceted crab (no face), two scallop shells and a starfish */
       var cx = -0.62, cz = 0.58, crab = c('crab');
-      list.push(o.puff(0.075, crab, { s: [1.3, 0.62, 1], p: [cx, y0 + 0.045, cz] }));
+      list.push(o.G.facet(o.puff(0.075, crab, { s: [1.3, 0.6, 1], p: [cx, y0 + 0.045, cz] })));
       [-1, 1].forEach(function (s) {
         list.push(o.puff(0.032, crab, { tone: 'shade', p: [cx + s * 0.11, y0 + 0.04, cz + 0.06] }));
-        list.push(o.tube(0.009, 0.009, 0.05, crab, { radial: 5, p: [cx + s * 0.03, y0 + 0.1, cz + 0.04] }));
-        list.push(o.box(0.022, 0.022, 0.022, X.ink, { p: [cx + s * 0.03, y0 + 0.13, cz + 0.045] }));
+        list.push(o.tube(0.008, 0.008, 0.045, crab, { radial: 4, tone: 'hi', p: [cx + s * 0.03, y0 + 0.095, cz + 0.04] }));
       });
       [[0.7, 0.2, 20], [0.12, 0.76, -30]].forEach(function (s) {
         var shell = o.cone(0.07, 0.035, null, { radial: 10 });
@@ -434,46 +453,54 @@
       });
     }
   }
+  /* a thin flat strip on the arch's front face, centred at band height v (u), half-width w, over the
+     arc length L: bent from a subdivided flag, so it follows the curve */
+  function arcStrip(G, L, v, w, z, seg, token) {
+    return bendArc(G.t(G.paint(G.flag(L, 2 * w, seg, 1), token), { p: [-L / 2, v, z] }));
+  }
   function buildCourse(ctx, course) {
     var K = ctx.K, o = ops(K), G = K.G, A = ARCH, st = { course: course };
     var c = function (p) { return tok('att_course', p, st); };
-    var body = [];
-    /* plate, pillars with domed tops, star pegs */
-    body.push(o.slab(1.84, 0.07, 1.84, c('plate'), { p: [0, 0.035, 0] }));
+    var body = [], band = c('pillar'), accent = c('banner');
+    /* the start pad: its top in the exact course colour, the sides a shade darker */
+    body.push(G.paintBy(o.box(1.84, 0.07, 1.84, null, { p: [0, 0.035, 0] }), function (v) { return v.ny > 0.5 ? c('plate') : [c('plate'), 'shade']; }));
+    /* slim square Graphite pillars on course-colour plinths, a lit cap and a spark peg */
     [-1, 1].forEach(function (sx) {
-      var x = sx * A.pillarX;
-      body.push(o.tube(0.16, 0.18, 0.08, c('pillar'), { tone: 'shade', p: [x, 0.11, A.z] }));
-      body.push(o.tube(A.pillarR, A.pillarR, A.pillarTop - 0.15, c('pillar'), { p: [x, (A.pillarTop + 0.15) / 2, A.z] }));
-      body.push(o.puff(A.pillarR, c('pillar'), { sphere: true, s: [1, 0.55, 1], p: [x, A.pillarTop, A.z] }));
-      body.push(o.tube(0.016, 0.016, 0.1, c('star'), { radial: 6, tone: 'shade', p: [x, A.pillarTop + 0.08, A.z] }));
+      var x = sx * A.pillarX, h0 = 0.19, top = A.pillarTop - 0.03;
+      body.push(o.crisp(0.25, 0.12, 0.25, accent, { p: [x, 0.07 + 0.06, A.z] }));
+      body.push(o.crisp(2 * A.pillarR, top - h0, 2 * A.pillarR, band, { p: [x, (top + h0) / 2, A.z] }));
+      body.push(o.crisp(2 * A.pillarR + 0.03, 0.04, 2 * A.pillarR + 0.03, band, { p: [x, top + 0.02, A.z] }));
+      body.push(o.tube(0.014, 0.014, 0.12, c('star'), { radial: 6, tone: 'shade', p: [x, A.pillarTop + 0.07, A.z] }));
     });
-    /* the arched banner: front face + outer and inner rims, bent onto the arch */
+    /* the arch band: a Graphite front face, its outer and inner rims in the course colour */
     var seg = o.low ? 11 : 16, L = 2 * A.half * A.rMid, zf = A.z + A.depth / 2;
-    body.push(bendArc(G.t(G.paint(G.flag(L, A.h, seg, 1), c('banner')), { p: [-L / 2, A.h / 2, zf] })));
-    body.push(bendArc(G.t(G.paint(G.flag(L, A.depth, seg, 1), c('banner'), 'shade'), { r: [-90, 0, 0], p: [-L / 2, A.h, A.z] })));
-    body.push(bendArc(G.t(G.paint(G.flag(L, A.depth, seg, 1), c('banner'), 'shade'), { r: [90, 0, 0], p: [-L / 2, 0, A.z] })));
-    /* the text quad over the middle of the band (textured through the material hook) */
+    body.push(bendArc(G.t(G.paint(G.flag(L, A.h, seg, 1), band), { p: [-L / 2, A.h / 2, zf] })));
+    body.push(bendArc(G.t(G.paint(G.flag(L, A.depth, seg, 1), accent), { r: [-90, 0, 0], p: [-L / 2, A.h, A.z] })));
+    body.push(bendArc(G.t(G.paint(G.flag(L, A.depth, seg, 1), accent, 'shade'), { r: [90, 0, 0], p: [-L / 2, 0, A.z] })));
+    /* the text quad over the middle of the band (the sign material through the hook; painted in
+       the band colour, it is invisible without it) */
     var Lt = 2 * A.textHalf * A.rMid;
-    var text = bendArc(G.t(G.paint(G.flag(Lt, A.h, seg, 1), c('banner')), { p: [-Lt / 2, A.h / 2, zf + 0.004] }));
-    /* 14 half-dome marquee bulbs on the outer rim, two chase groups */
-    var bulbs = [[], []];
+    var text = bendArc(G.t(G.paint(G.flag(Lt, A.h, seg, 1), band), { p: [-Lt / 2, A.h / 2, zf + 0.004] }));
+    /* the LED arch: a strip along each edge of the band and 14 LED dots on its outer rim, in the
+       two chase groups (A: dots 0, 2, … + the outer strip; B: dots 1, 3, … + the inner strip) */
+    var leds = [[arcStrip(G, L, A.h - A.strip * 0.75, A.strip / 2, zf + 0.006, seg, X.white)], [arcStrip(G, L, A.strip * 0.75, A.strip / 2, zf + 0.006, seg, X.white)]];
     bulbLayout().forEach(function (b) {
-      var g = keepTris(K, G.puff(A.bulbR), function (x, y) { return y > -0.003; });
+      var g = G.t(G.cone(A.bulbR, A.bulbR * 0.9, 6), { p: [0, A.bulbR * 0.45, 0] });
       G.paint(g, X.white);
-      bulbs[b.group].push(G.t(g, { r: [0, 0, -b.theta / DEG], p: [b.x, b.y, A.z + 0.012] }));
+      leds[b.group].push(G.t(g, { r: [0, 0, -b.theta / DEG], p: [b.x, b.y, A.z] }));
     });
-    /* two mini hurdles in front (white posts, coral and gold bars) */
+    /* two mini hurdles in front (white posts on feet, coral and gold bars) */
     [[-0.3, 0.14, c('hurdleA')], [0.32, 0.5, c('hurdleB')]].forEach(function (h) {
       [-1, 1].forEach(function (s) {
-        body.push(o.tube(0.022, 0.022, 0.24, c('hurdlePost'), { radial: 8, p: [h[0] + s * 0.15, 0.07 + 0.12, h[1]] }));
-        body.push(o.box(0.05, 0.03, 0.13, c('hurdlePost'), { tone: 'shade', p: [h[0] + s * 0.15, 0.085, h[1]] }));
+        body.push(o.crisp(0.036, 0.24, 0.036, c('hurdlePost'), { p: [h[0] + s * 0.15, 0.07 + 0.12, h[1]] }));
+        body.push(o.crisp(0.05, 0.025, 0.14, c('hurdlePost'), { p: [h[0] + s * 0.15, 0.0825, h[1]] }));
       });
-      body.push(o.tube(0.03, 0.03, 0.4, h[2], { radial: 10, r: [0, 0, 90], p: [h[0], 0.29, h[1]] }));
+      body.push(o.crisp(0.36, 0.05, 0.03, h[2], { p: [h[0], 0.285, h[1]] }));
     });
     courseDressing(o, course, body);
-    /* puffy spinning stars, one pivot each */
-    var starL = o.star(A.starR, A.starR * 0.5, c('star'), { p: [-A.pillarX, A.starY, A.z] });
-    var starR = o.star(A.starR, A.starR * 0.5, c('star'), { p: [A.pillarX, A.starY, A.z] });
+    /* the spinning ✦ sparks, one pivot each */
+    var starL = o.spark(A.starR, A.starR * 0.34, 0.04, c('star'), { p: [-A.pillarX, A.starY, A.z] });
+    var starR = o.spark(A.starR, A.starR * 0.34, 0.04, c('star'), { p: [A.pillarX, A.starY, A.z] });
 
     var tc = withBudget(ctx, Math.max(budgetOf('att_course', 4000), ctx.look && ctx.look.tris || 0));
     return K.template(tc)
@@ -482,34 +509,68 @@
       .pivot('spin2', [A.pillarX, A.starY, A.z])
       .part('body', body, 'toon', { castShadow: true, outline: true })
       .part('text', [text], 'toon', {})
-      .part('bulbA', bulbs[0], 'state', { pivot: 'glow', stateColor: BULB_STATE('bulbA') })
-      .part('bulbB', bulbs[1], 'state', { pivot: 'glow', stateColor: BULB_STATE('bulbB') })
-      .part('starL', [starL], 'toon', { pivot: 'spin', outline: true })
-      .part('starR', [starR], 'toon', { pivot: 'spin2', outline: true })
+      .part('bulbA', leds[0], 'state', { pivot: 'glow', stateColor: BULB_STATE('bulbA') })
+      .part('bulbB', leds[1], 'state', { pivot: 'glow', stateColor: BULB_STATE('bulbB') })
+      .part('starL', [starL], 'toon', { pivot: 'spin' })
+      .part('starR', [starR], 'toon', { pivot: 'spin2' })
       .anchor('spot', [0, 0.07, 0.05])
       .anchor('banner', [0, A.cy + A.rOut, A.z + 0.06])
       .done();
   }
 
-  /* the PET COURSE banner: one canvas (512×128) shared by every course and tier;
-     u runs along the arch, v across it, both computed from item-space position */
+  /* the PET COURSE sign: one material shared by every course and tier. It shows the 'PET COURSE'
+     cell of the shared sign atlas (K.signAtlas: Unbounded 800, white; the canvas banner when the kit
+     has no atlas) in the LOOK text colour, and draws the underline in the member colour. u runs
+     along the arch, v across it, both computed from item-space position. */
+  var signRef = null;
   function bannerMaterial(K) {
-    return K.parts.get('att:banner', 'MID', function () {
-      var T = K.THREE;
-      var tex = K.tex.banner('PET COURSE', { w: 512, h: 128, font: 'Bagel Fat One', fallback: 'Baloo 2', fill: tok('att_course', 'text', {}) });
-      var m = new T.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, alphaTest: 0.02, name: 'att-banner' });
-      var uArc = { value: new T.Vector4(ARCH.cy, ARCH.rIn, ARCH.h, ARCH.textHalf) };
+    var e = K.parts.get('att:sign', 'MID', function () {
+      var T3 = K.THREE, atlas = null, r = null, tex;
+      try { atlas = typeof K.signAtlas === 'function' ? K.signAtlas() : null; r = atlas ? atlas.rect('PET COURSE') : null; } catch (err) { atlas = null; r = null; }
+      if (atlas && r) tex = atlas.texture;
+      else {
+        tex = K.tex.banner('PET COURSE', { w: 512, h: 128, font: 'Unbounded', weight: 800, fallback: 'Outfit', fill: 'Cloud White' });
+        r = { u0: 0, v0: 0, u1: 1, v1: 1 };
+      }
+      var m = new T3.MeshBasicMaterial({ map: tex, color: K.col(tok('att_course', 'text', {})), transparent: true, depthWrite: false, alphaTest: 0.02, toneMapped: false, name: 'att-sign' });
+      var U = ARCH.under;
+      var uArc = { value: new T3.Vector4(ARCH.cy, ARCH.rIn, ARCH.h, ARCH.textHalf) };
+      var uRect = { value: new T3.Vector4(r.u0, r.v0, r.u1 - r.u0, r.v1 - r.v0) };
+      var uLine = { value: new T3.Vector4(U.v0, U.v1, U.half, 0) };
+      var uMember = { value: K.col(X.member) };
       m.onBeforeCompile = function (sh) {
-        sh.uniforms.uArc = uArc;
+        sh.uniforms.uArc = uArc; sh.uniforms.uRect = uRect; sh.uniforms.uLine = uLine; sh.uniforms.uMember = uMember;
         sh.vertexShader = sh.vertexShader
-          .replace('#include <common>', '#include <common>\nuniform vec4 uArc;')
-          .replace('#include <uv_vertex>', '#include <uv_vertex>\n#ifdef USE_MAP\n{ vec2 q = vec2(position.x, position.y - uArc.x);\n' +
-            '  vMapUv = vec2(atan(q.x, q.y) / (2.0 * uArc.w) + 0.5, (length(q) - uArc.y) / uArc.z); }\n#endif');
+          .replace('#include <common>', '#include <common>\nuniform vec4 uArc;\nuniform vec4 uRect;\nvarying vec2 vBand;')
+          .replace('#include <uv_vertex>', '#include <uv_vertex>\n{ vec2 q = vec2(position.x, position.y - uArc.x);\n' +
+            '  vBand = vec2(atan(q.x, q.y) / (2.0 * uArc.w) + 0.5, (length(q) - uArc.y) / uArc.z); }\n' +
+            '#ifdef USE_MAP\n  vMapUv = uRect.xy + uRect.zw * clamp(vBand, 0.0, 1.0);\n#endif');
+        sh.fragmentShader = sh.fragmentShader
+          .replace('#include <common>', '#include <common>\nuniform vec4 uLine;\nuniform vec3 uMember;\nvarying vec2 vBand;')
+          .replace('#include <map_fragment>', '#include <map_fragment>\n' +
+            '  if (vBand.y > uLine.x && vBand.y < uLine.y && abs(vBand.x - 0.5) < uLine.z) diffuseColor = vec4(uMember, 1.0);');
       };
-      m.customProgramCacheKey = function () { return 'att-banner'; };
-      return { mat: m };
-    }).mat;
+      m.customProgramCacheKey = function () { return 'att-sign'; };
+      return { mat: m, member: uMember, hex: null };
+    });
+    if (!signRef || signRef.e !== e) { signRef = { e: e, K: K }; applyMember(); }
+    return e.mat;
   }
+  /* the underline's member colour (a '#hex'); safe before the material exists (kept for it) */
+  var memberHex = null;
+  function setMember(hex) {
+    var s0 = typeof hex === 'string' ? hex.trim() : '', h = /^#?[0-9a-f]{6}$/i.test(s0) ? ('#' + s0.replace('#', '')).toUpperCase() : null;
+    if (!h) return false;
+    memberHex = h;
+    var s = signRef;
+    if (s && s.e.hex !== h) {
+      s.e.hex = h;
+      var col = typeof s.K.rgb === 'function' ? s.K.rgb(h) : null;
+      if (col) s.e.member.value.copy(col);
+    }
+    return true;
+  }
+  function applyMember() { if (memberHex) setMember(memberHex); }
 
   /* ================================================================
      THE PITCH (att_pitch) AND THE MINI STADIUMS (stadium_*)
@@ -536,8 +597,9 @@
     }
     return { toon: toon, gold: gold };
   }
-  /* a fan blob: SL3D.makeFanBlob's template (models-characters) when it is light enough
-     for 40 copies inside the crowd budget, else a peg-shaped bean with a rounded top */
+  /* a crowd fan: SL3D.makeFanBlob's template (models-characters) when it is light enough
+     for 40 copies inside the crowd budget, else a silhouette: a tapered body and a faceted head
+     (no face), in the Crowd Shadow tokens */
   var FAN_MAX_TRIS = 36;
   function borrowedFans(K, S) {
     if (!S || typeof S.makeFanBlob !== 'function') return null;
@@ -560,16 +622,20 @@
       var b = borrowed[k % borrowed.length];
       return o.G.t(o.G.clone(b.geo), { s: h / b.h, p: [x, y, z] });
     }
-    var rb = h * 0.42, rt = h * 0.3, hb = h * 0.72;
+    var rb = h * 0.36, rt = h * 0.2, hb = h * 0.64, hr = h * 0.17, hy = y + hb + hr * 0.95;
     return o.G.merge([
       o.tube(rt, rb, hb, token, { radial: 6, open: true, p: [x, y + hb / 2, z] }),
-      o.cone(rt, h - hb, token, { radial: 6, tone: 'hi', p: [x, y + hb + (h - hb) / 2, z] })
+      o.tube(0, hr, hr, token, { radial: 6, open: true, tone: 'hi', p: [x, hy + hr / 2, z] }),
+      o.tube(hr, 0, hr, token, { radial: 6, open: true, p: [x, hy - hr / 2, z] })
     ]);
   }
+  /* a fan's Spark Stick: a Midnight Ink stick and a small ✦ head in one of the v2 neon hues
+     (the 'wands' state colour dims them by day and lights them at Showtime) */
   function wandGeos(o, f, s, list) {
     var a = [f.x + 0.045 * s, f.y + 0.06 * s, f.z + 0.01], b = [f.x + 0.06 * s + f.lean * 0.012, f.y + 0.15 * s, f.z + 0.012];
-    list.push(o.rod(a, b, 0.006 * Math.max(1, s * 0.8), X.white, { radial: 3 }));
-    list.push(o.box(0.026 * s, 0.026 * s, 0.026 * s, X.neon4[f.wand], { r: [45, 0, 35], p: b }));
+    list.push(o.tube(0.005 * Math.max(1, s * 0.8), 0.005 * Math.max(1, s * 0.8), Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]), X.stick,
+      { radial: 3, open: true, r: alignY(b[0] - a[0], b[1] - a[1], b[2] - a[2]), p: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2] }));
+    list.push(o.spark(0.024 * s, 0.009 * s, 0.007 * s, X.neon4[f.wand], { r: [0, 0, f.lean * 8], p: b }));
   }
   /* floodlight tower aimed at the pitch centre (pole + head in body, lamp face in lamps) */
   function floodlight(o, ctxStad, x, z, h, body, lamps, scale, top) {
@@ -817,30 +883,47 @@
     if (g.gold.length) t.part('gold', g.gold, 'gold', { castShadow: true });
     return t.anchor('seat', KART.seat).anchor('nose', KART.nose).anchor('exhaust', KART.exhaust).done();
   }
+  /* the pit garage: a crisp box under a cantilevered roof whose fascia carries the checker band */
+  var GARAGE = { body: [1.7, 1.0, 1.1], bodyZ: -0.36, roof: [1.84, 0.14, 1.34], door: [1.0, 0.76], jamb: 0.06, sign: [0.4, 0.27, 0.04], signZ: 0.27 };
+  GARAGE.front = GARAGE.bodyZ + GARAGE.body[2] / 2;
+  GARAGE.roofZ = GARAGE.bodyZ - GARAGE.body[2] / 2 + GARAGE.roof[2] / 2;
+  GARAGE.roofFront = GARAGE.roofZ + GARAGE.roof[2] / 2;
   function buildGarage(ctx) {
-    var K = ctx.K, o = ops(K), G = K.G, st = ctx.st || {}, kartId = pick('kart', st);
+    var K = ctx.K, o = ops(K), G = K.G, st = ctx.st || {}, kartId = pick('kart', st), Gr = GARAGE;
     var c = function (p) { return tok('att_kart', p, st); };
-    var body = [], sign = [], zf = 0.19;
-    /* body, rounded roof (an elliptical half-barrel), roller door with slats */
-    body.push(o.slab(1.7, 1.0, 1.1, c('garage'), { p: [0, 0.5, -0.36] }));
-    body.push(o.tube(0.55, 0.55, 1.76, c('garage'), { radial: 20, tone: 'shade', s: [0.38, 1, 1], r: [0, 0, 90], p: [0, 1.0, -0.36] }));
-    body.push(o.slab(1.0, 0.74, 0.04, c('door'), { p: [0, 0.39, zf + 0.01] }));
-    for (var i = 0; i < 5; i++) body.push(o.box(0.96, 0.022, 0.012, c('slat'), { p: [0, 0.14 + i * 0.12, zf + 0.034] }));
-    /* the checkered banner: 16 quads above the door */
+    var body = [], sign = [], zf = Gr.front, garage = c('garage'), top = Gr.body[1], R = Gr.roof;
+    /* the body: a crisp graphite box, its front face a touch lighter */
+    body.push(G.paintBy(G.t(G.slab(Gr.body[0], Gr.body[1], Gr.body[2], { arch: true }), { p: [0, top / 2, Gr.bodyZ] }), function (v) {
+      return v.nz > 0.5 ? garage : v.nx > 0.5 ? [garage, 'shade'] : [garage, 'hi'];
+    }));
+    /* the cantilevered roof: lit on top, shaded underneath */
+    body.push(o.crisp(R[0], R[1], R[2], garage, { p: [0, top + R[1] / 2, Gr.roofZ] }));
+    /* the roller door in a frame (two jambs and a lintel), its slats */
+    var dw = Gr.door[0], dh = Gr.door[1], j = Gr.jamb;
+    body.push(o.box(dw, dh, 0.03, c('door'), { p: [0, dh / 2, zf + 0.008] }));
+    for (var i = 0; i < 5; i++) body.push(o.box(dw - 0.04, 0.022, 0.012, c('slat'), { p: [0, 0.12 + i * 0.13, zf + 0.028] }));
+    [-1, 1].forEach(function (s) { body.push(o.crisp(j, dh + j, j, garage, { p: [s * (dw + j) / 2, (dh + j) / 2, zf + j / 2] })); });
+    body.push(o.crisp(dw + 2 * j, j, j, garage, { p: [0, dh + j / 2, zf + j / 2] }));
+    /* the checkered band: 16 quads (8 × 2) across the roof fascia */
+    var qw = (R[0] - 0.24) / 8, qh = (R[1] - 0.03) / 2;
     checkerLayout(8, 2).forEach(function (q) {
-      body.push(o.box(0.115, 0.07, 0.02, q.dark ? c('checkA') : c('checkB'), { p: [-0.4025 + q.c * 0.115, 0.92 - q.r * 0.07, zf + 0.01] }));
+      body.push(o.box(qw, qh, 0.012, q.dark ? c('checkA') : c('checkB'), { p: [-4 * qw + qw / 2 + q.c * qw, top + R[1] - 0.015 - qh / 2 - q.r * qh, Gr.roofFront + 0.006] }));
     });
-    /* the Neon Lime lightning sign on an ink board on the roof: a neon core and the
-       additive glow sleeve the kit fades in at Showtime (opacity 0 by day) */
-    body.push(o.slab(0.34, 0.26, 0.04, X.ink, { p: [0, 1.27, -0.12] }));
+    /* the Laser Lime LED bolt on a Midnight Ink board standing on the roof edge: a neon core and
+       the additive glow sleeve the kit fades in at Showtime (opacity 0 by day) */
+    var S = Gr.sign, sy = top + R[1] + S[1] / 2;
+    body.push(o.crisp(S[0], S[1], S[2], c('checkA'), { p: [0, sy, Gr.signZ] }));
+    body.push(o.crisp(0.05, 0.05, 0.08, garage, { p: [0, top + R[1] + 0.025, Gr.signZ - 0.05] }));
     var sleeve = [];
     for (var b = 0; b < BOLT.length - 1; b++) {
-      var p0 = BOLT[b], p1 = BOLT[b + 1];
-      var seg = [[p0[0] * 0.48, 1.27 + p0[1] * 0.21, -0.09], [p1[0] * 0.48, 1.27 + p1[1] * 0.21, -0.09]];
-      sign.push(G.ribbon(seg, 0.026, { segments: 1 }));
-      sleeve.push(G.ribbon(seg, 0.06, { segments: 1 }));
+      var p0 = BOLT[b], p1 = BOLT[b + 1], zs = Gr.signZ + S[2] / 2 + 0.012;
+      var seg = [[p0[0] * 0.5, sy + p0[1] * 0.2, zs], [p1[0] * 0.5, sy + p1[1] * 0.2, zs]];
+      sign.push(G.ribbon(seg, 0.022, { segments: 1 }));
+      sleeve.push(G.ribbon(seg, 0.055, { segments: 1 }));
     }
-    /* tyre stacks: two at the front-left, one at the front-right */
+    /* pit dressing: a tool chest by the door, tyre stacks at the front corners */
+    body.push(o.crisp(0.24, 0.3, 0.16, c('slat'), { p: [-0.68, 0.15, zf + 0.12] }));
+    [0.1, 0.2].forEach(function (y) { body.push(o.box(0.2, 0.01, 0.005, c('checkA'), { p: [-0.68, y, zf + 0.202] })); });
     [[-0.74, 0.045, 0.6], [-0.74, 0.135, 0.6], [0.76, 0.045, 0.36]].forEach(function (t) {
       body.push(o.ring(0.11, 0.045, c('tyre'), { r: [90, 0, 0], p: t }));
     });
@@ -955,15 +1038,22 @@
     if (CH.b !== m.b || stale) { m.b = CH.b; setState(a, 'bulbB', CH.b); }
     if (stale) m.tw = t;
   }
+  /* a handle that knows the child's member colour (a.member '#hex' or a.user.color) sets the underline */
+  var memberSeen = null;
+  function memberFrom(a) {
+    var h = a && (typeof a.member === 'string' ? a.member : a.user && typeof a.user.color === 'string' ? a.user.color : null);
+    if (h && h !== memberSeen) { memberSeen = h; setMember(h); }
+  }
   function courseIdle(a) {
     if (!a) return false;
     var m = mem(a), red = !!a.reduced, base = M ? M.spin(a.t || 0, 0.25, a.phase || 0, red) : 0;
     pose(a, 'spin', 0, base + m.spin, 0, 0, 0, 0, 1);
-    pose(a, 'spin2', 0, 36 - base - m.spin, 0, 0, 0, 0, 1);
+    pose(a, 'spin2', 0, 45 - base - m.spin, 0, 0, 0, 0, 1);
     courseBulbs(a, m, a.show || 0);
+    memberFrom(a);
     return !red;
   }
-  function courseShow(a, k) { if (a) { var m = mem(a); m.tw = -1; courseBulbs(a, m, k); } }
+  function courseShow(a, k) { if (a) { var m = mem(a); m.tw = -1; courseBulbs(a, m, k); memberFrom(a); } }
   function pitchWands(a, m, k) {
     var v = k > 1 ? 1 : k > 0 ? k : 0, t = a.t || 0;
     if (Math.abs(v - m.w) > 0.02 || !(t - m.tw < 0.5 && t >= m.tw)) { m.w = v; m.tw = t; setState(a, 'wands', v); }
@@ -1031,16 +1121,18 @@
      ================================================================ */
   function models(K, S) {
     M = root.SLMotion || M;
-    /* start fetching the display font now, so the banner is usually drawn in it first time */
-    try { if (K && K.tex && K.tex.fontReady) K.tex.fontReady('400 64px "Bagel Fat One"', 4000); } catch (e) {}
+    /* start fetching the display font now, so the sign atlas is usually drawn in it first time */
+    try { if (K && K.tex && K.tex.fontReady) K.tex.fontReady('800 48px "Unbounded"', 4000); } catch (e) {}
     var material = function (matKey, part) { return part && part.name === 'text' && K ? bannerMaterial(K) : null; };
+    /* the child's member colour for the PET COURSE underline (the controller's mount / setUser) */
+    var setUser = function (u) { return !!(u && setMember(u.color)); };
     var out = {};
     out.att_course = {
       build: function (ctx) { return buildCourse(ctx, pick('course', ctx.st)); },
-      idle: courseIdle, show: courseShow, act: courseAct, material: material
+      idle: courseIdle, show: courseShow, act: courseAct, material: material, setUser: setUser, setMember: setMember
     };
     IDS.courses.forEach(function (id) {
-      out[id] = { build: function (ctx) { return buildCourse(ctx, id); }, idle: courseIdle, show: courseShow, material: material };
+      out[id] = { build: function (ctx) { return buildCourse(ctx, id); }, idle: courseIdle, show: courseShow, material: material, setUser: setUser, setMember: setMember };
     });
     out.att_pitch = { build: function (ctx) { return buildPitch(ctx, S); }, idle: pitchIdle, show: pitchShow, act: pitchAct };
     out.att_kart = { build: buildGarage, act: kartAct };
@@ -1065,7 +1157,7 @@
 
   return {
     IDS: IDS, ALL_IDS: ALL_IDS, COLORS: COLORS, X: X, SLOT_DEFAULTS: SLOT_DEFAULTS,
-    ARCH: ARCH, PITCH: PITCH, KART: KART, PARKED: PARKED, TRACK: TRACK, BOLT: BOLT, ICO_DIRS: ICO_DIRS, MAX_BPM: MAX_BPM,
+    ARCH: ARCH, PITCH: PITCH, KART: KART, PARKED: PARKED, GARAGE: GARAGE, TRACK: TRACK, BOLT: BOLT, ICO_DIRS: ICO_DIRS, MAX_BPM: MAX_BPM,
     pick: pick, slotToken: slotToken, tok: tok, arcMap: arcMap, bulbLayout: bulbLayout, chaseState: chaseState,
     crowdLayout: crowdLayout, crowdPose: crowdPose, checkerLayout: checkerLayout, parkedPoint: parkedPoint,
     nearIco: nearIco, rainbowBand: rainbowBand, alignY: alignY, ovalPoint: ovalPoint,

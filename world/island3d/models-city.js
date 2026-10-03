@@ -92,6 +92,7 @@
   var NEON_DAY = 0.6;            /* neon lines and signs at golden hour (linear ×); full at Showtime */
   var HALO_ON = 0.08;            /* night halos switch on above this Showtime mix and grow with it */
   var CARRY_WINDOW = 0.25;       /* a cancel this recent is an interruption: the restart carries the pose */
+  var COUNTDOWN = 1.5;           /* the snap countdown: bulbs light in thirds before it, fade together after */
   var TRIMS_FALLBACK = { accent: ['@member', 'Neon Magenta', 'LED Cyan'], signSide: ['L', 'R'], stripe: ['A', 'B', 'C'] };
   var GLOW_FALLBACK = [0.6, 1];  /* DUSK / SHOW windowGlow */
   var RATE_FALLBACK = { bloom: 1.5, screen: 0.5 };
@@ -240,7 +241,7 @@
   }
   /* booth bulb i during the countdown: the ring lights in thirds on the ticks, then all fade together */
   function boothBulb(i, bulbs, t) {
-    if (!(t < 1.5)) return clamp01(bulbs);
+    if (!(t < COUNTDOWN)) return clamp01(bulbs);
     var group = Math.floor(i * 3 / PB.bulbs);
     return bulbs >= (group + 1) / 3 - 1e-6 ? 1 : 0;
   }
@@ -1060,22 +1061,36 @@
     function signAtlas() { try { return K && typeof K.signAtlas === 'function' ? K.signAtlas() : null; } catch (e) { return null; } }
     function ledAtlas() { try { return K && typeof K.ledAtlas === 'function' ? K.ledAtlas() : null; } catch (e) { return null; } }
     function variant(key, name, patch) { try { return K && typeof K.variant === 'function' ? K.variant(key, name, patch) : null; } catch (e) { return null; } }
+    /* Every material and view this file keeps from the kit is keyed to the live atlas texture.
+       SLIsland3D.dispose({keepKit: false}) disposes the kit's materials and both atlases (the next
+       mount draws new ones for the child then playing) but never re-runs this factory: a tile, the
+       ON AIR sibling or the strip kept from the old kit would sample the old canvas — the previous
+       child's name — and sit outside the kit's dispose list. The 'sign' / 'led' siblings live
+       exactly as long as their atlas, so its texture is the key. */
+    function texOf(A) { return (A && A.texture) || null; }
     var mats = {};
     function signMat(word) { var A = signAtlas(); return A && typeof A.material === 'function' ? A.material(word) : null; }
     /* the ON AIR text dims with the light (its own sibling of the shared sign material) */
     function onAirMat() {
-      if (mats.onair !== undefined) return mats.onair;
-      var A = signAtlas(), tex = A && typeof A.view === 'function' ? A.view('ON AIR') : null;
+      var A = signAtlas(), key = texOf(A);
+      if (mats.onair !== undefined && mats.onairAt === key) return mats.onair;
+      mats.onairAt = key;
+      var tex = A && typeof A.view === 'function' ? A.view('ON AIR') : null;
       return (mats.onair = tex ? variant('sign', 'city:onair', { map: tex }) : null);
     }
 
-    /* the photo strip: one 128×256 canvas, redrawn only on a tap */
-    var strip = { cv: null, ctx: null, tex: null, mat: undefined, key: '', draws: 0, imgs: new Map() };
+    /* the photo strip: one 128×256 canvas, redrawn only on a tap (and blanked when the kit is
+       disposed, so the next child's booth never shows the last child's strip) */
+    var strip = { cv: null, ctx: null, tex: null, mat: undefined, at: null, key: '', emoji: null, draws: 0, imgs: new Map() };
     function stripMat() {
-      if (strip.mat !== undefined) return strip.mat;
-      strip.cv = canvas(128, 256);
-      strip.ctx = strip.cv ? strip.cv.getContext('2d') : null;
-      strip.tex = canvasTexture(strip.cv, false);
+      var key = texOf(signAtlas());
+      if (strip.mat !== undefined && strip.at === key) return strip.mat;
+      if (strip.mat === undefined) {
+        strip.cv = canvas(128, 256);
+        strip.ctx = strip.cv ? strip.cv.getContext('2d') : null;
+        strip.tex = canvasTexture(strip.cv, false);
+      }
+      strip.at = key; strip.key = ''; strip.emoji = null;
       if (strip.ctx) paintStrip(null, null);
       strip.mat = strip.tex ? variant('sign', 'city:strip', { map: strip.tex }) : null;
       return strip.mat;
@@ -1126,18 +1141,20 @@
     }
     function drawStrip(a) {
       strip.draws++;
+      stripMat();
       var pet = petOf(a), em = emojiOf(a);
       strip.key = (pet || '-') + '|' + (em || '-');
       strip.emoji = em;
-      if (strip.mat === undefined) stripMat();
       paintStrip(pet, em);
     }
 
     /* the LED tower: two live tiles (main + companion) and the pet pixel-art textures */
-    var led = [null, null], petTex = new Map(), _w = { rx: 0, ry: 0, ox: 0, oy: 0 };
+    var led = [null, null], ledAt = null, petTex = new Map(), _w = { rx: 0, ry: 0, ox: 0, oy: 0 };
     function liveTile(i) {
+      var A = ledAtlas(), key = texOf(A);
+      if (key !== ledAt) { led[0] = led[1] = null; ledAt = key; }      /* a new kit: new tiles on its atlas */
       if (led[i] !== null) return led[i] || null;
-      var A = ledAtlas(), tex = A && typeof A.view === 'function' ? A.view(i ? 'eq' : 'name', 0) : null;
+      var tex = A && typeof A.view === 'function' ? A.view(i ? 'eq' : 'name', 0) : null;
       var m = tex ? variant('led', 'city:led:' + i, { map: tex }) : null;
       led[i] = m ? { mat: m, atlas: tex, prog: '', phase: -1, level: -1 } : false;
       return led[i] || null;
@@ -1207,6 +1224,17 @@
       for (var i = 0; i < PB.bulbs; i++) V.bulbs[i] = s.bulbAct ? s.bulbAct[i] : isCard(a) ? 0 : boothChase(t, i, s.k, reduced);
       writeLights(a, V);
     }
+    /* a re-tap never strobes the bulb ring: the bulbs lit when it lands stay lit and the new
+       countdown only adds to them until it is full (a restart used to drop the lit third to 0 for
+       0.1 s, so a child tapping 5 times a second blinked it at 5 Hz). This keeps what the copy
+       shows now (V.bulbs) for the restart. */
+    function holdBulbs(a, s) {
+      if (!s.V) return null;
+      var held = s.held || (s.held = new Float32Array(PB.bulbs));
+      held.set(s.V.bulbs);
+      s.heldAt = timeOf(a);
+      return held;
+    }
     /* the curtain: a CPU flutter from the rod down, plus the act's kick (per-copy geometry) */
     function clothState(geo) {
       if (!geo) return null;
@@ -1264,7 +1292,10 @@
     function snapApply(h, out, tt, rec) {
       var s = pbS.get(h), now = timeOf(h);
       s.bulbAct = s.bulbAct || new Float32Array(PB.bulbs);
-      for (var i = 0; i < PB.bulbs; i++) s.bulbAct[i] = boothBulb(i, out.bulbs, tt);
+      for (var i = 0; i < PB.bulbs; i++) {
+        var b = boothBulb(i, out.bulbs, tt), hb = rec.bulbFrom;
+        s.bulbAct[i] = hb && tt < COUNTDOWN && hb[i] > b ? hb[i] : b;      /* a restart keeps its lit bulbs */
+      }
       /* this act's own bloom moment (an envelope carried over from an interrupted act is not one):
          at most one local bloom per RATE.bloom s per booth */
       if (tt >= 1.45 && out.bloom > 0.01 && !rec.bloomTried) {
@@ -1289,6 +1320,7 @@
     }
     function snapRest(h) {
       var s = pbS.get(h);
+      holdBulbs(h, s);                     /* the controller's re-tap cancels first, then restarts */
       s.bulbAct = null; s.strip = 0; s.stripAt = null; s.kick = 0;
       /* the bloom's clock (s.bloomAt) stays, so a restart still honours the 1.5 s gap */
       s.popCut = true; s.lensSc = 1;
@@ -1321,15 +1353,21 @@
       },
       act: function (a, name) {
         if (!a) return null;
-        var reduced = !!a.reduced, s = pbS.get(a), carry = s.strip;
+        var reduced = !!a.reduced, s = pbS.get(a), carry = s.strip, now = timeOf(a);
+        /* the bulbs to hold through a restart: a live act superseded now, or the one whose cancel
+           (the controller's re-tap) rested them a moment ago */
+        var held = pbBook.live(a.uid) ? holdBulbs(a, s) : s.heldAt != null && Math.abs(now - s.heldAt) <= CARRY_WINDOW ? s.held : null;
+        s.heldAt = null;
         drawStrip(a);
         if (!reduced) askPet(a, 'pose');
         var act = pbBook.start(a, {
           name: 'snap', reduced: reduced, apply: snapApply, rest: snapRest,
           emitAt: function (h) { return lensAt(h); }
         });
+        var rec = act ? pbBook.live(a.uid) : null;
         /* a re-tap after the strip came out: it slides back in before the new strip */
-        if (act && carry > 0) { var rec = pbBook.live(a.uid); if (rec && !rec.o.from) rec.carryStrip = carry; }
+        if (rec && carry > 0 && !rec.o.from) rec.carryStrip = carry;
+        if (rec && held && !reduced) rec.bulbFrom = new Float32Array(held);
         return act;
       },
       show: function (a, k) {
@@ -1518,6 +1556,7 @@
       for (var b = 0; b < RS.bars; b++) V.vu[b] = s.vu ? s.vu[b] : 0;
       writeLights(a, V);
       var m = onAirMat(), lv = lerp(0.42, 1, V.onAir);
+      if (s.textMat !== m) { s.textMat = m; s.textLv = null; }          /* a rebuilt sibling (new kit) is not dimmed yet */
       if (m && m.color && m.color.setScalar && !isCard(a) && Math.abs((s.textLv == null ? -1 : s.textLv) - lv) > 1e-4) { s.textLv = lv; m.color.setScalar(lv); }
       if (!isCard(a) && typeof a.halo === 'function') {
         var on = V.onAir > 0.5;

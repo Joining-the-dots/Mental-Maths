@@ -553,7 +553,14 @@
       m.customProgramCacheKey = function () { return 'att-sign'; };
       return { mat: m, member: uMember, hex: null };
     });
-    if (!signRef || signRef.e !== e) { signRef = { e: e, K: K }; applyMember(); }
+    if (!signRef || signRef.e !== e) {
+      /* the same kit with a new entry: its dispose cleared the parts cache (and the atlas this
+         material showed). The old material is this file's own, never on the kit's dispose list,
+         so it is freed here (another hub's entry is left alone: it may still be drawn) */
+      var old = signRef && signRef.K === K && signRef.e && signRef.e.mat;
+      if (old && old !== e.mat && typeof old.dispose === 'function') { try { old.dispose(); } catch (err) {} }
+      signRef = { e: e, K: K }; applyMember();
+    }
     return e.mat;
   }
   /* the underline's member colour (a '#hex'); safe before the material exists (kept for it) */

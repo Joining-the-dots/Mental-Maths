@@ -1403,10 +1403,17 @@
     function emitAt(id) { var m = EMIT_AT[id]; return function (kind) { return m[kind] || 'top'; }; }
     var EMIT_DANCE = emitAt('bld_dance'), EMIT_ROOF = emitAt('bld_rooftop'), EMIT_STAGE = emitAt('bld_stage');
 
-    /* the additive beam material: a sibling of 'state' (the same program), alpha ≤ 0.18 */
-    var beamMat = null;
+    /* the additive beam material: a sibling of 'state' (the same program), alpha ≤ 0.18. It is
+       keyed to the live 'state' material: SLIsland3D.dispose({keepKit: false}) disposes every kit
+       material (the kit makes K.mat('state') anew afterwards) but never re-runs this factory, and a
+       kept sibling would sit outside the kit's dispose list. */
+    var beamMat = null, beamBase = null;
     function beamMaterial() {
-      if (beamMat || !K || typeof K.variant !== 'function') return beamMat;
+      if (!K || typeof K.variant !== 'function') return beamMat;
+      var base = null;
+      try { base = typeof K.mat === 'function' ? K.mat('state') : null; } catch (e) { base = null; }
+      if (beamMat && base === beamBase) return beamMat;
+      beamBase = base;
       var T = K.THREE || {};
       beamMat = K.variant('state', 'stage-beam', {
         transparent: true, opacity: RULES.beamAlpha, depthWrite: false,

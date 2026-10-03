@@ -683,6 +683,44 @@ test('mount v2: env gets seed, name and tier; setEdit follows the mode; cones ri
   assert.equal(H.envCalls.filter((c) => c[0] === 'seed').length, 1, 'the same child: nothing to rebake');
 });
 
+test('mount v2 (runtime-3): the env is created lazy, so the first sync\'s land is the mount\'s only terrain bake', (t) => {
+  const u = starter();
+  buy(u, C.REGIONS.cove.unlock); buy(u, C.REGIONS.meadow.unlock);
+  assert.deepEqual(C.unlockedRegions(u.world).slice().sort(), ['cove', 'home', 'meadow']);
+  const H = harness(t, { v2: true, setSeed: true });
+  const e = H.envs[0], lands = [];
+  assert.equal(e.opts.lazyLand, true, 'no placeholder home-only coast at create');
+  assert.deepEqual(e.opts.unlocked, ['home'], 'an env that predates lazyLand still gets a land to start from');
+  e.setLand = (unlocked) => { lands.push(unlocked.slice().sort()); };
+  H.stage.sync(viewOf(u));
+  assert.deepEqual(lands, [['cove', 'home', 'meadow']], 'the first sync brings the real land');
+  /* a profile switch hands the env the seed only; the sync after it brings the next child's land */
+  H.stage.setUser({ name: 'Sis', color: '#FF7043', avatar: '🐼', seed: 'kid-b' });
+  assert.equal(lands.length, 1, 'setUser never lands the previous child\'s island again');
+});
+
+test('mount v2 (runtime-7): a new building\'s placement ghost wears the trim it lands with', (t) => {
+  const u = starter();
+  /* bump the next uid until the booth's trim-to-be is not trim 0 (the old ghost always showed trim 0) */
+  while (L.variantOf('p' + u.world.nextUid, 'bld_photobooth') === 0) placeAny(u, 'flower_tulip');
+  buy(u, 'bld_photobooth');
+  const spot = C.findSpot(u.world, 'bld_photobooth'), next = 'p' + u.world.nextUid;
+  const H = harness(t);
+  H.stage.sync(viewOf(u, { mode: 'place', placing: { id: 'bld_photobooth', uid: null, x: spot.x, y: spot.y, ok: true } }));
+  const ghost = H.states[H.states.length - 1].ghost;
+  assert.ok(ghost, 'a ghost is shown');
+  /* confirm: the copy that lands */
+  const r = C.place(u, 'bld_photobooth', spot.x, spot.y);
+  assert.equal(r.uid, next);
+  H.stage.sync(viewOf(u));
+  assert.equal(ghost.stateKey, H.batchOf(r.uid).template.sk, 'the ghost\'s trim = the placed copy\'s trim');
+  assert.notEqual(ghost.stateKey, 'v:0');
+  /* the uid the ghost reads its trim by */
+  assert.equal(S.ghostUid({ id: 'bld_photobooth', uid: null }, { nextUid: 41 }), 'p41', 'SLWorldCore.place: \'p\' + world.nextUid');
+  assert.equal(S.ghostUid({ id: 'bld_photobooth', uid: 'p3' }, u.world), 'p3', 'a moved copy keeps its own uid');
+  assert.equal(S.ghostUid({ id: 'bld_photobooth', uid: null }, {}), null, 'no world: no guess');
+});
+
 test('mount v2: without env.setSeed, a new seed rebuilds the terrain env in place (items stay)', (t) => {
   const u = starter();
   const H = harness(t, { v2: true, globals: { SLTerrain3D: {} } });

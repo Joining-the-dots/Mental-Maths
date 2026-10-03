@@ -14,7 +14,7 @@
        spacing = the lattice step (SL3D.budget.terrainSpacing: 0.5 / 0.25 / 0.125; default by tier)
        bake {version, tier, spacing, seed, sig, ms, land, cells[], sm (the 1/4 u coast fields over the
              sea-field area: d0, s, o, …), lattice,
-             field {w, h, x0, z0, texel, data RGBA8, maxShore, maxLocked, shore, locked, lagoon},
+             field {w, h, x0, z0, texel, data RGBA8, maxShore, maxLocked, maxOther, shore, locked, lagoon, other},
              coastLines [{closed, pts}], structures, anchors, points, bounds}
      meshArrays(bake) → {position, normal, color, index, cell, tris, verts}
                                               the terrain: ONE indexed mesh (pads flat, normals (0, 1, 0)),
@@ -26,7 +26,7 @@
      dressingArrays(bake, placed) → arrays    the dressing as one mesh (same layout as meshArrays)
      mergeArrays(list) · sliceBands(arrays, bandOfCell, n) · heightAt(bake, x, z) · zoneAt(bake, x, z)
      coastAt(bake, x, z) → coast SDF s (≤ 0 on land) · landDist(bake, x, z) → d0 · landSig(land)
-     seedOffset(seed) · regionDist(x, z, lockedOnly, lg) · quayDist(x, z)
+     seedOffset(seed) · regionDist(x, z, lockedOnly, lg) · quayDist(x, z) · otherShoreDist(x, z) (the A channel)
      constants DOMAIN SPACING SM_RES COAST PROFILE FIELD BUDGET EXCLUDE STRUCT QUAY ZONES DRESS VERSION
 
    MATHS (numbers from island-terrain-v2.json)
@@ -73,10 +73,13 @@
     beachMax: 0.34, rockMin: 0.6, lipBeach: 0.12, lipRock: 0.25, bankPow: 2.2,
     lipDrop: 0.025, rim: 0.12, waterEps: 0.02, wetBand: 0.06, fringe: 0.05
   };
-  /* the sea field env samples: R = distance to the real coast (foam hugs the organic shore),
-     G = signed distance to the locked regions' FUTURE coast (the hologram), B = lagoon factor.
+  /* the sea field env samples: R = distance to the island's OWN organic coast (the shore-following
+     wave lines, the shallows and the foam), G = signed distance to the locked regions' FUTURE coast
+     (the hologram), B = lagoon factor, A = distance to the other shores — the city quay, Lantern
+     Islet and the rock stacks — which get a foam edge only (no wave lines of their own: their
+     contours used to fill the whole channel with a second set of bands, 'the white scribble').
      Texel centres sit on the 1/4 u coast-field nodes (x -16 … 15.75, z -10 … 9.75). */
-  var FIELD = { w: 128, h: 80, x0: -16.125, z0: -10.125, texel: 0.25, maxShore: 4, maxLocked: 2 };
+  var FIELD = { w: 128, h: 80, x0: -16.125, z0: -10.125, texel: 0.25, maxShore: 4, maxLocked: 2, maxOther: 1 };
   /* triangle budgets per tier (plan performance table): terrain, scenery, dressing */
   var BUDGET = {
     LOW: { terrain: 1400, scenery: 2500, dressing: 1500 },
@@ -98,7 +101,7 @@
     lookout: { w: 0.7, d: 0.62 },
     boulderEvery: { LOW: 1.25, MID: 0.8, HIGH: 0.7 }
   };
-  /* the city quay (city3d.js draws it; the sea field gives it foam): |x/17|^4 + |(z+0.6)/7.6|^4 = 1, back half */
+  /* the city quay (city3d.js draws it; the sea field's A channel gives it foam): |x/17|^4 + |(z+0.6)/7.6|^4 = 1, back half */
   var QUAY = { a: 17, b: 7.6, zc: -0.6 };
 
   /* ================================================================
@@ -898,16 +901,40 @@
   /* ================================================================
      THE SEA FIELD (128 × 80 RGBA8 at 0.25 u)
      ================================================================ */
+  /* the distance from a water point inside the quay's superellipse to the quay wall (0 on / behind
+     it, Infinity in front of the quay's back half). Newton steps along the gradient land on the wall
+     (g = 0), so the result is the length to a real wall point: never shorter than the true distance
+     and equal to it near the wall, where the foam is drawn (the old one-step −g/|∇g| estimate read
+     3.95 u at (0, −6), 2.21 u from the wall, and squeezed the contours toward the quay) */
   function quayDist(x, z) {
     if (z > QUAY.zc) return Infinity;
     var u = x / QUAY.a, v = (z - QUAY.zc) / QUAY.b, g = u * u * u * u + v * v * v * v - 1;
     if (g >= 0) return 0;
-    var gx = 4 * u * u * u / QUAY.a, gz = 4 * v * v * v / QUAY.b, gl = Math.sqrt(gx * gx + gz * gz) || 1e-6;
-    return Math.min(-g / gl, 8);
+    var px = x, pz = z;
+    for (var it = 0; it < 12; it++) {
+      u = px / QUAY.a; v = (pz - QUAY.zc) / QUAY.b; g = u * u * u * u + v * v * v * v - 1;
+      if (Math.abs(g) < 1e-9) break;
+      var gx = 4 * u * u * u / QUAY.a, gz = 4 * v * v * v / QUAY.b, gl2 = gx * gx + gz * gz;
+      if (!(gl2 > 1e-12)) break;
+      px -= g * gx / gl2; pz -= g * gz / gl2;
+    }
+    return Math.min(Math.sqrt((px - x) * (px - x) + (pz - z) * (pz - z)), 8);
+  }
+  /* A: the nearest other shore (u) — Lantern Islet, the rock stacks, the quay wall */
+  function otherShoreDist(x, z) {
+    var ISL = STRUCT.islet, STK = STRUCT.stacks;
+    var d = Math.sqrt((x - ISL.x) * (x - ISL.x) + (z - ISL.z) * (z - ISL.z)) - ISL.r - 0.05;
+    for (var q = 0; q < STK.length; q++) {
+      var dS = Math.sqrt((x - STK[q].x) * (x - STK[q].x) + (z - STK[q].z) * (z - STK[q].z)) - STK[q].r - 0.04;
+      if (dS < d) d = dS;
+    }
+    var dQ = quayDist(x, z);
+    if (dQ < d) d = dQ;
+    return d > 0 ? d : 0;
   }
   function seaField(bk) {
     var W = FIELD.w, Hh = FIELD.h, sm = bk.sm, data = new Uint8Array(W * Hh * 4);
-    var shore = new Float32Array(W * Hh), lockedF = new Float32Array(W * Hh), lagoon = new Float32Array(W * Hh);
+    var shore = new Float32Array(W * Hh), lockedF = new Float32Array(W * Hh), lagoon = new Float32Array(W * Hh), other = new Float32Array(W * Hh);
     var C = core(), lockedRegions = [];
     Object.keys(C.REGION_CELLS).forEach(function (rk) { if (rk !== 'home' && C.REGION_CELLS[rk].some(function (k) { return !bk.land[k]; })) lockedRegions.push(rk); });
     /* the locked regions' FUTURE coasts (1/2 u fields): bake land ∪ region, keep that region's part */
@@ -916,34 +943,26 @@
       C.REGION_CELLS[rk].forEach(function (k) { var p = k.split(','); lg2[+p[0] + 16 * +p[1]] = REGION_CODE[rk]; });
       return smoothField(lg2, bk.off, 2);
     });
-    var ISL = STRUCT.islet, STK = STRUCT.stacks;
     for (var j = 0; j < Hh; j++) {
       var z = FIELD.z0 + (j + 0.5) * FIELD.texel;
       for (var i = 0; i < W; i++) {
         /* texel centre = coast-field node (i, j) */
         var x = FIELD.x0 + (i + 0.5) * FIELD.texel, k = j * W + i, node = j * sm.nx + i, sCur = sm.s[node];
         var R = sCur > 0 ? sCur : 0, G = FIELD.maxLocked * 4;
-        if (R > 0) {
-          var dI = Math.sqrt((x - ISL.x) * (x - ISL.x) + (z - ISL.z) * (z - ISL.z)) - ISL.r - 0.05;
-          if (dI < R) R = dI > 0 ? dI : 0;
-          for (var q = 0; q < STK.length; q++) {
-            var dS = Math.sqrt((x - STK[q].x) * (x - STK[q].x) + (z - STK[q].z) * (z - STK[q].z)) - STK[q].r - 0.04;
-            if (dS < R) R = dS > 0 ? dS : 0;
-          }
-          var dQ = quayDist(x, z);
-          if (dQ < R) R = dQ;
-        }
+        /* the other shores only matter within the foam's reach (A saturates at maxOther); under the
+           island A reads 'none', so filtering never smears the island's land into a fake other shore */
+        var O = R > 0 ? Math.min(otherShoreDist(x, z), FIELD.maxOther) : FIELD.maxOther;
         for (var f = 0; f < futures.length; f++) G = Math.min(G, Math.max(sampleGrid(futures[f], futures[f].s, x, z), -sCur - 0.3));
         var lag = R > 0 ? clamp01((sm.land[node] - 0.2) / 0.3) * (1 - smooth(0.3, 2.2, R)) : 0;
-        shore[k] = R; lockedF[k] = G; lagoon[k] = lag;
+        shore[k] = R; lockedF[k] = G; lagoon[k] = lag; other[k] = O;
         data[k * 4] = Math.round(clamp01(R / FIELD.maxShore) * 255);
         data[k * 4 + 1] = Math.round(clamp01(0.5 + G / (2 * FIELD.maxLocked)) * 255);
         data[k * 4 + 2] = Math.round(lag * 255);
-        data[k * 4 + 3] = 255;
+        data[k * 4 + 3] = Math.round(clamp01(O / FIELD.maxOther) * 255);
       }
     }
     return { w: W, h: Hh, x0: FIELD.x0, z0: FIELD.z0, texel: FIELD.texel, maxShore: FIELD.maxShore, maxLocked: FIELD.maxLocked,
-             data: data, shore: shore, locked: lockedF, lagoon: lagoon, lockedRegions: lockedRegions };
+             maxOther: FIELD.maxOther, data: data, shore: shore, locked: lockedF, lagoon: lagoon, other: other, lockedRegions: lockedRegions };
   }
   function boundsOf(bk) {
     var L = bk.lattice, b = { minX: Infinity, maxX: -Infinity, minZ: Infinity, maxZ: -Infinity, maxY: 0 };
@@ -1604,7 +1623,7 @@
     BUDGET: BUDGET, EXCLUDE: EXCLUDE, STRUCT: STRUCT, QUAY: QUAY, ZONES: ZONES, DRESS: DRESS, DRESS_TRIS: DRESS_TRIS,
     bake: bake, meshArrays: meshArrays, sceneryArrays: sceneryArrays, scatter: scatter, dressingArrays: dressingArrays,
     mergeArrays: mergeArrays, sliceBands: sliceBands, heightAt: heightAt, zoneAt: zoneAt, coastAt: coastAt, landDist: landDist,
-    nearestCell: nearestCell, landSig: landSig, landSetOf: landSetOf, seedOffset: seedOffset, regionDist: regionDist, quayDist: quayDist,
+    nearestCell: nearestCell, landSig: landSig, landSetOf: landSetOf, seedOffset: seedOffset, regionDist: regionDist, quayDist: quayDist, otherShoreDist: otherShoreDist,
     /* internals exposed for tests */
     _edt2d: edt2d, _gauss: gauss, _vnoise: vnoise, _turfRgb: turfRgb, _cellY: cellY, _s2l: s2l
   };

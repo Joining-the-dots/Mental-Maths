@@ -369,6 +369,14 @@
     if (e && e.kind === 'building' && typeof L.variantOf === 'function') return { variant: uid == null ? 0 : L.variantOf(uid, id) };
     return style || {};
   }
+  /* the uid a placement ghost wears its trim by: a moved copy's own uid, else the uid the confirm will
+     give the new copy (SLWorldCore.place: 'p' + world.nextUid), so the ghost shows the trim that lands */
+  function ghostUid(placing, world) {
+    if (!placing) return null;
+    if (placing.uid != null) return placing.uid;
+    var n = world && world.nextUid;
+    return typeof n === 'number' && isFinite(n) ? 'p' + n : null;
+  }
   /* SLIslandLook.jitter2 for one copy, or null when it must not move: houses, buildings, attractions,
      paths (and anything whose jitter is the identity) stay exactly on their cells */
   function jitterFor(L, uid, id, sameIdNeighbours) {
@@ -834,12 +842,14 @@
       scene.add(itemsRoot, actorsRoot, fxRoot, editRoot);
     }
     /* the environment: a v2 env bakes the child's own coastline from the seed (SLTerrain3D, when
-       loaded), names the city's hero board and hosts the city and the ambient life itself */
+       loaded), names the city's hero board and hosts the city and the ambient life itself.
+       lazyLand: every caller syncs (or setLands) the real land right after this, so that is the one
+       bake — an env that does not know the flag still bakes `unlocked` first, as before */
     function buildEnv() {
       var Env = root.SLIslandEnv;
       if (!Env || typeof Env.create !== 'function') throw new Error('env.js missing');
       env = Env.create(K, SL3D, {
-        scene: scene, renderer: lease ? lease.renderer : null, unlocked: envUnlocked,
+        scene: scene, renderer: lease ? lease.renderer : null, unlocked: envUnlocked, lazyLand: true,
         world: lastView && lastView.world ? lastView.world : { placed: placedList },
         show: showK, member: user.color, reduced: reduced,
         seed: user.seed, name: user.name, tier: tier, terrain: !!root.SLTerrain3D
@@ -1842,8 +1852,9 @@
     function applyEdit() {
       var ghost = null;
       if (placing) {
-        /* the ghost wears the copy's own look (a moved building keeps its trim, the home its shape) */
-        var tf = templateFor(placing.id, copyStyle(L, placing.id, placing.uid, lastView ? lastView.style : {}, user.seed));
+        /* the ghost wears the copy's own look (a moved building keeps its trim, a new one the trim its
+           uid-to-be gives it, the home its shape) */
+        var tf = templateFor(placing.id, copyStyle(L, placing.id, ghostUid(placing, lastView && lastView.world), lastView ? lastView.style : {}, user.seed));
         ghost = { id: placing.id, st: tf.st, stateKey: tf.stateKey, template: tf.tpl, material: tf.material };
       }
       xcall('edit', 'setState', editState(mode, landKeys, envUnlocked, placing, ghost, selectedUid, DEBUG.grid));
@@ -3510,7 +3521,7 @@
     nextDance: nextDance, modelAct: modelAct, toScreen: toScreen, FX_PRESETS: FX_PRESETS,
     /* Encore City: per-copy style, placement variety, auto-tiling, layer ownership, the QA grid */
     ENCORE_CAM: ENCORE_CAM, ENCORE_SEC: ENCORE_SEC, NO_JITTER: NO_JITTER,
-    seedVariant: seedVariant, houseStyle: houseStyle, copyStyle: copyStyle, jitterFor: jitterFor, idNeighbours: idNeighbours,
+    seedVariant: seedVariant, houseStyle: houseStyle, copyStyle: copyStyle, ghostUid: ghostUid, jitterFor: jitterFor, idNeighbours: idNeighbours,
     pathPieces: pathPieces, layerOwner: layerOwner, gridFromQuery: gridFromQuery, debugGrid: debugGrid,
     /* the v2 seams (CONTRACTS §9) */
     firstName: firstName, handleUser: handleUser, PATH_LAYOUTS: PATH_LAYOUTS, pathCopy: pathCopy, HEARTLESS: HEARTLESS,

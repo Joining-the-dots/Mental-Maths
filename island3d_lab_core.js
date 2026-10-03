@@ -485,7 +485,10 @@
     return rows;
   }
   /* a built item against its look entry. report: {id, look, fp, size: {w, h, d}, low: {w, d}
-     (bounds below y = 1), tris, parts, staticMats, pivots[], anchors[], placeholder, st} */
+     (bounds below y = 1), tris, parts, staticMats, pivots[], anchors[], placeholder, st, expectH?}.
+     expectH (optional): the height this exact style should have — the page passes
+     SLIslandLook.heightOf(id, st), so a loft (1.95) or a villa (1.2) is not judged by the cottage's
+     2.3; without it the look entry's h is the reference */
   var HOUSE_DETAIL_PIVOT = { emitter: 'detail_chimney', flag: 'detail_flag', glow: 'detail_lights' };
   function checkItem(r, L) {
     r = r || {};
@@ -495,9 +498,10 @@
     if (typeof look.tris === 'number' && r.tris > look.tris) add('over', r.tris + ' tris > budget ' + look.tris);
     if (r.parts > 6) add('warn', r.parts + ' parts (max 6)');
     if (r.staticMats > 4) add('warn', r.staticMats + ' static materials (max 4)');
-    if (r.size && typeof look.h === 'number' && !r.placeholder) {
-      var tol = Math.max(0.05, look.h * 0.15);
-      if (look.h > 0 && Math.abs(r.size.h - look.h) > tol) add('warn', 'height ' + r.size.h.toFixed(2) + ' u vs look ' + look.h + ' u');
+    var wantH = typeof r.expectH === 'number' && r.expectH > 0 ? r.expectH : look.h;
+    if (r.size && typeof wantH === 'number' && !r.placeholder) {
+      var tol = Math.max(0.05, wantH * 0.15);
+      if (wantH > 0 && Math.abs(r.size.h - wantH) > tol) add('warn', 'height ' + r.size.h.toFixed(2) + ' u vs look ' + wantH + ' u');
     }
     var placed = L && L.PLACED_KINDS ? !!L.PLACED_KINDS[look.kind] : false;
     if (placed && r.low && !r.placeholder) {

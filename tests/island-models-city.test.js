@@ -877,3 +877,23 @@ test('city models: per-copy state and acts end with forget()', () => {
     assert.equal(h.decals.length, 2, id + ' a fresh copy sets its decal again');
   }
 });
+
+test('city seams §9: with the island\'s a.bloom the booth\'s lens moment is one fx bloom (no halo); a refused bloom falls back to the halo', () => {
+  const K = mockK('MID'), models = CITY.factory(K), tpl = models.bld_photobooth.build(ctxOf('bld_photobooth', 'MID', 0, K));
+  const blooms = [];
+  const h = handle('bloomy', tpl);
+  h.bloom = (name, size, token) => { blooms.push({ name, size, token, t: h.t }); return true; };
+  play(models.bld_photobooth.act(h, 'snap'), h);
+  assert.deepEqual(blooms.map((b) => [b.name, b.token]), [['lens', 'Window Warm']], 'one bloom at the lens');
+  assert.equal(h.halos.filter((x) => x.name === 'lens').length, 0, 'no halo on and off: fx swells and fades it');
+  /* a quick re-tap restarts the act before its bloom moment: no second bloom */
+  const again = models.bld_photobooth.act(h, 'snap');
+  play(again, h, 1.0);
+  assert.equal(blooms.length, 1);
+  /* the island refused (fx without bloom, reduced, too soon): the booth's own halo, as before */
+  const g = handle('refused', tpl);
+  g.bloom = () => false;
+  play(models.bld_photobooth.act(g, 'snap'), g);
+  assert.equal(g.halos.filter((x) => x.name === 'lens' && x.on).length, 1);
+  assert.equal(g.halos.filter((x) => x.name === 'lens' && !x.on).length, 1, 'and it goes off again');
+});

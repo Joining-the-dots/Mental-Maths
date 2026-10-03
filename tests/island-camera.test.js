@@ -356,9 +356,10 @@ test('camera: the skyline hero shot — elev 14, yaw -16, target raised to 2.0 a
     let done = false;
     r.skyline().then((ok) => { done = ok; });
     r.update(0);
-    const p = r.pose;
+    const p = r.pose, fit = Cam.skylineFit(aspect);
     assert.equal(r.move.kind, 'skyline');
-    assert.ok(near(p.elev, 14) && near(p.yaw, -16) && near(p.zoom, 0.8) && near(p.ty, 2.0), 'on mount it starts in the pose');
+    assert.ok(near(p.elev, 14) && near(p.yaw, -16) && near(p.zoom, fit.zoom) && near(p.ty, fit.ty), 'on mount it starts in the pose');
+    if (aspect <= 4 / 3) assert.ok(near(fit.zoom, 0.8) && near(fit.ty, 2.0), 'up to 4:3: exactly the plan pose');
     assert.ok(near(p.tx, r.home.tx) && near(p.tz, r.home.tz - 1.5));
     /* at elev 14 the top ray is above the horizontal: the dusk sky, the towers and the wheel show */
     const top = Cam.topRayDeg(p);
@@ -370,6 +371,36 @@ test('camera: the skyline hero shot — elev 14, yaw -16, target raised to 2.0 a
   }
 });
 
+test('camera: the skyline keeps every city tower top and the Signal Mast tip in frame, 2:3 to 2.4:1 (seams §9)', () => {
+  const City = require('../world/island3d/city3d.js');
+  const lays = ['LOW', 'MID', 'HIGH'].map((tier) => City.layout({ tier }));
+  const gy = City.GROUND, mastH = City.MAST.h;
+  for (const aspect of [2 / 3, 1, 4 / 3, 1.6, 16 / 9, 2.4]) {
+    const r = rigWith({ aspect, w: Math.round(aspect * 900), h: 900 });
+    settle(r);
+    r.skyline(); r.update(0);
+    const p = r.pose;
+    let top = -Infinity, n = 0;
+    for (const lay of lays) {
+      const tips = lay.buildings.map((b) => ({ x: b.x, y: gy + b.h, z: b.z }));
+      if (lay.mast) tips.push({ x: lay.mast.x, y: lay.mast.y + mastH, z: lay.mast.z });
+      for (const q of tips) {
+        const s = Cam.projectPose(q, p);
+        if (s.depth <= 0 || Math.abs(s.x) > 1) continue;
+        n++; top = Math.max(top, s.y);
+      }
+    }
+    assert.ok(n > 40, aspect + ': the skyline is in view (' + n + ' tops)');
+    assert.ok(top < 0.99, aspect.toFixed(2) + ': the highest top at NDC y ' + top.toFixed(3) + ' stays inside the frame');
+    const home = Cam.projectPose({ x: r.home.tx, y: 0.3, z: r.home.tz }, p);
+    assert.ok(home.y > -0.9 && home.y < 0, aspect.toFixed(2) + ': the island holds the lower frame');
+  }
+  /* the fit only ever opens and lifts the shot, and only past 4:3 */
+  const a = Cam.skylineFit(4 / 3), b = Cam.skylineFit(16 / 9), c = Cam.skylineFit(9);
+  assert.ok(near(a.zoom, Cam.SKYLINE.zoom) && near(a.ty, Cam.SKYLINE.ty));
+  assert.ok(b.zoom < a.zoom && b.ty > a.ty && c.zoom <= b.zoom && c.zoom > 0.5, 'bounded: ' + JSON.stringify(c));
+});
+
 test('camera: the skyline holds 0.9 s, eases home over 1.8 s (ty interpolated), and resolves', async () => {
   const r = rigWith();
   settle(r);
@@ -379,12 +410,13 @@ test('camera: the skyline holds 0.9 s, eases home over 1.8 s (ty interpolated), 
   for (let t = 0; t < 3; t += 1 / 60) { r.update(1 / 60); log.push([r.t, r.move ? r.move.k : 0, r.pose.ty, r.pose.elev, r.version]); }
   const t0 = log[0][0] - 1 / 60;
   const at = (sec) => log.find((e) => e[0] - t0 >= sec);
+  const ty = Cam.skylineFit(r.aspect).ty;               /* 16:9: the shot's lifted target */
   assert.equal(at(0.85)[1], 1, 'held');
   for (let i = 1; i < 50; i++) assert.ok(log[i][4] > log[i - 1][4], 'the held shot still creeps (never a frozen frame)');
-  assert.ok(near(at(0.85)[2], 2.0) && near(at(0.85)[3], 14));
+  assert.ok(near(at(0.85)[2], ty) && near(at(0.85)[3], 14));
   const mid = at(0.9 + 0.9);
   assert.ok(mid[1] > 0.4 && mid[1] < 0.6, 'half way through the 1.8 s ease');
-  assert.ok(near(mid[2], Cam.TARGET_Y + (2.0 - Cam.TARGET_Y) * mid[1], 1e-9), 'ty = lerp(0.3, 2.0, k)');
+  assert.ok(near(mid[2], Cam.TARGET_Y + (ty - Cam.TARGET_Y) * mid[1], 1e-9), 'ty = lerp(0.3, ty, k)');
   assert.ok(mid[3] > 14 && mid[3] < 48);
   for (let i = 1; i < log.length; i++) assert.ok(log[i][2] <= log[i - 1][2] + 1e-12, 'ty only descends');
   await Promise.resolve();

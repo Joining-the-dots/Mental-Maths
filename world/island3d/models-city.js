@@ -64,7 +64,9 @@
    member hex) or a.user {name, color, avatar} — for the member trim and the
    strip's emoji; without them the member trim shows MEMBER_FALLBACK and the
    strip a ✦. a.pets.active() returning a pet id enables the pet voice, the
-   strip poses and the pet pixel-art program. A handle without a batch is a
+   strip poses and the pet pixel-art program. a.bloom('lens', size, token) → true
+   (island3d → fx3d's rate-limited bloom) replaces the lens halo; without it (or
+   false) the booth shows its own halo. A handle without a batch is a
    photocard / turntable: the LED tower shows the star field, ON AIR is lit,
    the strip stays in and no member colour is applied, so icons are not per
    child.
@@ -1268,8 +1270,11 @@
       if (tt >= 1.45 && out.bloom > 0.01 && !rec.bloomTried) {
         rec.bloomTried = true;
         if (!rec.o.reduced && allow(s.bloomAt, now, rate().bloom)) {
-          s.bloomAt = now; s.bloomOn = true; s.popCut = false;
-          if (typeof h.halo === 'function') safe(h.halo, h, 'lens', true, 0.5, 'Window Warm');
+          /* the island's fx bloom (a smooth swell and fade, rate-limited per item) when the handle
+             offers one (island3d a.bloom); else this booth's own halo for PB.bloomHalo s */
+          var viaFx = typeof h.bloom === 'function' && safe(h.bloom, h, 'lens', 0.5, 'Window Warm') === true;
+          s.bloomAt = now; s.bloomOn = !viaFx; s.popCut = false;
+          if (!viaFx && typeof h.halo === 'function') safe(h.halo, h, 'lens', true, 0.5, 'Window Warm');
         }
       }
       lensTick(h, s);

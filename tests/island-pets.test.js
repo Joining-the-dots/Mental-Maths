@@ -1242,3 +1242,51 @@ test('actors: music nods and headphone rings follow the beat; anchors come from 
   actors.petsApi.perform('sip', placed.bld_boba.uid);
   assert.ok(mine.includes('seat'), 'setAnchorFn replaces the hook');
 });
+
+test('actors seams §9: the headphone rings pulse only while island music plays (steady otherwise)', () => {
+  const u = starter(), w = u.world;
+  const { actors, S } = stage();
+  const reds = [];
+  const made = S.makeRig;
+  S.makeRig = (id, acc) => { const r = made(id, acc); r.setBeat = (b, bpm, red) => { reds.push(red); return r; }; return r; };
+  actors.sync([{ id: 'pet_puppy', acc: { neck: 'acc_headphones' }, active: true }], ME, w);
+  for (let i = 0; i < 10; i++) actors.update(1 / 30, 0, 1, { beat: 10 + i * 0.066, bpm: 118, playing: true });
+  assert.ok(reds.length >= 10 && reds.slice(-5).every((r) => r === false), 'on the beat with music');
+  reds.length = 0;
+  for (let i = 0; i < 10; i++) actors.update(1 / 30, 0, 1, { beat: 12 + i * 0.066, bpm: 118 });
+  assert.ok(reds.length >= 10 && reds.every((r) => r === true), 'held steady without music (the rig\'s reduced = no pulse)');
+  actors.setMusic(true);
+  reds.length = 0;
+  actors.update(1 / 30, 0, 1, { beat: 13, bpm: 118 });
+  assert.deepEqual(reds, [false], 'setMusic(true) from the island counts too');
+});
+
+test('pets seams §9: the crew stands on the Concert Stage model\'s own deck marks (mark0–3 via the anchor function), else the STAGE constants', () => {
+  const { w, placed } = cityWorld([KIND_OF.stage], ALL_PETS.concat(['land_cove', 'land_meadow']));
+  const MX = [-0.72, -0.24, 0.24, 0.72];
+  for (const deckDy of [B.STAGE.y, B.STAGE.y + 1.5]) {
+    const brain = B.create({ seed: 'marks' });
+    brain.sync({ world: w, pets: petsOf(w) });
+    for (let i = 0; i < 20; i++) brain.step(DT);
+    const ob = brain.graph.objects[placed.bld_stage.uid];
+    brain.setAnchorFn((uid, name) => {
+      if (uid !== ob.uid) return null;
+      const m = /^mark(\d)$/.exec(name);
+      if (m) return { x: ob.x + MX[+m[1]], y: ob.y + deckDy, z: ob.z + 0.1 };
+      return name === 'top' ? { x: ob.x, y: ob.y + 2.45, z: ob.z } : null;
+    });
+    assert.ok(brain.perform('stage', ob.uid, undefined, { avatar: true }) >= 0);
+    while (brain.now < brain.danceT0) brain.step(DT);
+    const xs = brain.pets.filter((p) => p.danceMark).map((p) => Math.round((p.danceMark.x - ob.x) * 100) / 100).sort((a, b) => a - b);
+    assert.equal(xs.length, brain.pets.length, 'the whole crew is on the deck');
+    if (deckDy === B.STAGE.y) {
+      assert.equal(xs.length, 4, 'four crew members');
+      assert.deepEqual(xs, MX, 'the model\'s four marks');
+      for (const p of brain.pets) assert.ok(near(p.danceMark.z, ob.z + 0.1) && near(p.y, ob.y + B.STAGE.y), p.id + ' on its mark');
+    } else {
+      /* a mark that is not at deck height is not trusted: the STAGE constants */
+      for (const x of xs) assert.ok(B.STAGE.xs.some((c) => near(c, x, 0.006)), 'constant mark ' + x);
+    }
+    while (brain.danceOn) brain.step(DT);
+  }
+});

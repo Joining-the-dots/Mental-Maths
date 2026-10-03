@@ -47,8 +47,9 @@
                            (lead ≤ 2 s), rests 6 s, hops down
                   'studio' (Dance Studio) every pet to the entrance cells and
                            their neighbours, then the shared 8-count (danceAt)
-                  'stage'  (Concert Stage) every pet up onto a deck mark (hop
-                           from a pit / side cell), then the 8-count
+                  'stage'  (Concert Stage) every pet up onto a deck mark (the
+                           model's 'mark0'–'mark3' anchors, else STAGE; hop from
+                           a pit / side cell), then the 8-count
                   Anchors come live from setAnchorFn(fn(uid, name) → {x, y, z} |
                   null) (the island supplies it), else from the building's
                   footprint. Returns the lead seconds (-1 = no pet / no legal
@@ -137,8 +138,9 @@
      (SLMotion 'snap' at 0.1 / 0.7 / 1.3 s) or 0.6 s apart from the pet's arrival */
   var POSE_TICKS = [0.1, 0.7, 1.3], POSE_GAP = 0.6, POSE_HOLD = 0.9;
   /* the Concert Stage deck (item space): the top at y 0.32, marks across its front half,
-     the avatar centre stage */
-  var STAGE = { y: 0.32, z: 0.3, xs: [-0.55, 0.55, -1.05, 1.05], me: [0, 0.32, 0.38] };
+     the avatar centre stage. With the island's anchor function the model's own 'mark0'–'mark3'
+     (left to right) win, taken in markOrder so the inner pair still fills first */
+  var STAGE = { y: 0.32, z: 0.3, xs: [-0.55, 0.55, -1.05, 1.05], me: [0, 0.32, 0.38], markOrder: [1, 2, 0, 3] };
   /* where a seat sits when the island gives no anchor function (item space) */
   var ANCHOR_FALLBACK = { bld_boba: { seat: [0.5, 0.42, 0.18] }, bld_rooftop: { roof: [-0.3, 1.66, -0.15] } };
   var AVATAR_RES = 999;                      /* the reservation value of the avatar's dance spot */
@@ -1315,6 +1317,14 @@
       cand.forEach(function (i) { if (i >= 0 && gr.walk[i] && out.indexOf(i) < 0) out.push(i); });
       return out;
     }
+    /* a Concert Stage deck mark k (the inner pair first): the model's live 'mark0'–'mark3' anchors
+       through the island's anchor function when it has them on the deck, else the STAGE constants */
+    function stageMark(ob, k) {
+      var m = { x: 0, y: 0, z: 0 };
+      if (anchorFn && anchorAt(ob, 'mark' + STAGE.markOrder[k], STAGE.y + 0.3, m) && Math.abs(m.y - (ob.y + STAGE.y)) <= 0.12) return m;
+      m.x = ob.x + STAGE.xs[k]; m.y = ob.y + STAGE.y; m.z = ob.z + STAGE.z;
+      return m;
+    }
     /* the Concert Stage's approach cells: the crowd pit (entrance), then beside its front corners */
     function stageApproaches(ob) {
       var gr = g(), row = ob.r + ob.h, cand = [], out = [];
@@ -1440,7 +1450,7 @@
       if (kind === 'stage') {
         var approaches = stageApproaches(ob), used = [];
         for (var k = 0; k < STAGE.xs.length && left.length; k++) {
-          var m = { x: ob.x + STAGE.xs[k], y: ob.y + STAGE.y, z: ob.z + STAGE.z }, a = -1, ad = Infinity;
+          var m = stageMark(ob, k), a = -1, ad = Infinity;
           approaches.forEach(function (c) {
             if (used.indexOf(c) >= 0) return;
             var dx = centreX(c) - m.x, dz = centreZ(c) - m.z, d = dx * dx + dz * dz;

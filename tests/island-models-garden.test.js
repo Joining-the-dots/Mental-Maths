@@ -213,6 +213,8 @@ test('covers exactly the garden / lights / flags / paths catalogue ids', () => {
   GARDEN.IDS.forEach((id) => {
     assert.ok(L.LOOK[id], 'LOOK entry for ' + id);
     ['build', 'idle', 'act', 'show'].forEach((k) => assert.equal(typeof MODELS[id][k], 'function', id + '.' + k));
+    /* the paths opt into island3d's auto-tiling (seams §9); nothing else does */
+    assert.equal(MODELS[id].pieces === true, /^path_/.test(id), id + ' pieces');
   });
 });
 

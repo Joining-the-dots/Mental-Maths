@@ -261,6 +261,16 @@ test('checkItem flags placeholders, budgets, height, footprint, pivots and ancho
   assert.deepEqual(LAB.checkItem(house, L).map((c) => c.level), ['ok']);
   house.st = { details: { detail_chimney: true } };
   assert.match(LAB.checkItem(house, L)[0].msg, /missing pivot "emitter"/);
+  /* v2 shapes (seams §9): the page passes expectH = SLIslandLook.heightOf(id, st), so a low villa is
+     judged by its own height, not the cottage's 2.3 */
+  const vst = { details: {}, shape: 'shape_villa' }, vh = L.heightOf('house_cottage', vst);
+  assert.ok(vh > 0 && vh < 2);
+  const villa = Object.assign({}, house, { st: vst, size: { w: 1.7, h: vh, d: 1.7 } });
+  assert.match(LAB.checkItem(villa, L).map((c) => c.level + ':' + c.msg).join('\n'), /warn:height/, 'against the look entry h it warns');
+  villa.expectH = vh;
+  assert.deepEqual(LAB.checkItem(villa, L).map((c) => c.level), ['ok'], 'against its own shape height it passes');
+  villa.size = { w: 1.7, h: 2.3, d: 1.7 };
+  assert.match(LAB.checkItem(villa, L)[0].msg, /height 2\.30 u vs look /, 'a villa built cottage-tall still warns');
 });
 
 test('fpsMeter and memoryVerdict', () => {

@@ -809,6 +809,37 @@ test('engine: duck(0.4, 350) dips and recovers, and ducks never stack', async ()
   close(p.at(r.ctx.currentTime + 0.2), 0.4, 1e-6);
 });
 
+test('engine: SLMusic.drop() drops the island loop for one bar, then the beat comes back in; only when heard; never stacks', async () => {
+  const r = rig();
+  assert.equal(r.eng.drop(), false, 'no audio yet: nothing to drop');
+  r.eng._gesture();
+  r.eng.island('island_day'); await flush();
+  r.run(0.5);
+  const N = r.eng._nodes(), t = r.ctx.currentTime, bar = M.barDur(100);
+  assert.equal(r.eng.drop(), true);
+  close(N.fxLP.frequency.at(t + 0.1), 800, 1e-3, 'closed behind the count filter');
+  close(N.fxLP.frequency.at(t + bar - 0.01), 800, 1e-3, 'for the whole bar');
+  close(N.duck.gain.at(t + 0.1), M.ISLAND_DROP.level, 1e-6, 'and dipped');
+  assert.ok(N.fxLP.frequency.at(t + bar + 0.5) > 17000, 'the beat drops back in over 0.5 s');
+  close(N.duck.gain.at(t + bar + 0.3), 1, 1e-6);
+  r.ctx.currentTime += 0.5;
+  assert.equal(r.eng.drop(), false, 'a second tap inside the bar is ignored');
+  r.ctx.currentTime += bar + 0.6;
+  assert.equal(r.eng.drop(), true, 'after it, a new drop');
+  /* muted, 🎵 off or hidden: the child hears nothing, so nothing drops */
+  r.ctx.currentTime += bar + 1;
+  r.st.muted = true;
+  assert.equal(r.eng.drop(), false, 'muted');
+  r.st.muted = false;
+  r.eng.setEnabled(false);
+  assert.equal(r.eng.drop(), false, '🎵 off');
+  /* a game's music is not the island's: its own channel.drop() stays separate */
+  const r2 = rig(); r2.eng._gesture();
+  const ch = r2.eng.channel({}); ch.play('kart');
+  r2.run(0.5);
+  assert.equal(r2.eng.drop(), false, 'not while a game owns the music');
+});
+
 test('engine: manifest tracks loop decoded files on exact bars; missing files fall back to the band', async () => {
   const r = rig({ manifest: [{ name: 'island_day', bpm: 100, bars: 16 }, 'course'], durations: { 'audio/music/island_day.mp3': 38.45 } });
   r.eng._gesture();

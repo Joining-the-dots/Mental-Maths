@@ -72,6 +72,23 @@
      · SLIsland3D.debug.grid(on) (also ?grid=1 under SL_WORLD_TRIAL) draws the edit grid in play
        mode, so testers can check the pads under the organic ground. html.sl-low marks the LOW tier
        (solid UI panels). The camera buttons use SLWorldArt.uiIcon line icons when present.
+   v2 SEAMS (CONTRACTS §9; every module feature-detected)
+     · The child: every island copy's handle carries a.member ('#hex' | null) and a.user {name (the
+       first name only), color, avatar}, kept current by setUser (photocard handles never have them).
+       On mount and on every setUser: K.ledAtlas().setUser / K.signAtlas().setUser({name, color}),
+       SL3D.models.bld_stage.setUser({name, color}) (the three stage buildings share it) and
+       SL3D.models.att_course.setUser(user) (the course gates share it).
+     · a.pets.active() → the active crew member's id ('pet_…') or null; perform kinds 'pose' | 'sip' |
+       'roof' | 'studio' | 'stage' reach pets-brain; a lead ≤ 0 is 'no pet'.
+     · a.bloom(anchor, sizeU, token) → bool: fx3d's local bloom (≤ 1 per 1.5 s per item, never under
+       reduced motion); false = no bloom (the model may use its own halo). A city building's a.decal
+       is an uplight pool (fx.uplight: r 0.5, 0.25 at golden hour → 0.4 at Showtime). Hearts are the
+       avatar's finger-heart only: any other 'heart' emit becomes Neon Magenta ✦ sparkles.
+     · Music: actors.setMusic(heard) on every change and {playing} in the frame clock, so the crew's
+       beat-nod and headphone pulse run only while the island loop plays and is heard.
+     · env.wakeAt(x, z): a copy's lights join the 'city wakes up' ripple (its show k = k × wake).
+     · Paths: SLModelsGarden.pathPose(mask, uid, {}, PATH_LAYOUTS[tier]) gives each copy its piece,
+       stateKey and yaw (one layout per piece on LOW and MID, 3 on HIGH), so the path cells join up.
 
    SIBLINGS (wave C, feature-detected; built-in fallbacks keep the island whole without them).
    The controller drives every sibling through the ISLAND PROTOCOL below. buildSystem wraps a
@@ -83,12 +100,13 @@
              {sync(v), update(dt, t, ctx) → busy, pick(origin, dir) → {target, t}, emote(target, kind),
               tap(target)?, perform(kind, uid) → lead s (0 = no pet), active(), dance(o) → s,
               anchor(target, out) → out|null, setShow(k), setMode(m), setReduced(on), setUser(u),
-              setQuality(q), setAnchorFn(fn)?, dispose()}      v = actorState(…): {pets, avatar, user,
+              setQuality(q), setAnchorFn(fn)?, setMusic(on)?, dispose()}   v = actorState(…): {pets, avatar, user,
               placed, unlocked, land, world, mode, reduced}; host.voice = false (rewards-world plays the
               pet voice)
      fx3d    SL3D.makeFx(host) | SLFx3D.create(K, SL3D, host) | SLIslandFx.create(…)
              {emit(kind, pos, n, opts), halo(key, on, pos, sizeU, token), decal(key, on, pos, token),
-              update(dt, t) → busy, setMember(hex), setReduced(on), setQuality(q), clear(), dispose()}
+              update(dt, t, ctx {show, camera}) → busy, setMember(hex), setReduced(on), setQuality(q),
+              clear(), dispose(), bloom(key, pos, {size, token}) → bool?, uplight(key, on, pos, token)?}
              positions reach emit as {x, y, z} (arrays from siblings are converted); emit opts use
              fx3d names: {token | tokens[], radius, to, dur, delay, …} ('flight' flies to `to`)
      edit3d  SL3D.makeEdit(host) | SLEdit3D.create(K, SL3D, host) | SLIslandEdit.create(…)
@@ -106,6 +124,7 @@
      without SLMusic) pathD · copyGeometry(part) basePositions(part) pivot(name).set(rot, pos, scale)
      state(key, v) halo(name, on, sizeU, token) decal(on, token) emit(kind, anchor | localPos, n, opts)
      sfx(name, vol, step) (panned by x) pets.{active(), perform(kind, uid)} shake(amp, dur) squish()
+     bloom(anchor, sizeU, token) → bool · member ('#hex' | null) · user {name, color, avatar} (v2)
      pivot('root') / pivot('sway') (no sway pivot) is captured and composed with the controller's
      squish / drop-in / debut / store, so a swaying tree still squishes when tapped.
    ================================================================ */
@@ -127,6 +146,8 @@
      back to the child's view as the confetti flies (the 3 s act ends inside the hold) */
   var ENCORE_CAM = { easeIn: 1.0, hold: 1.4 };
   var ENCORE_SEC = 8;
+  /* the 'city wakes up' ripple can trail the Showtime mix this long (s): show() keeps running */
+  var WAKE_TAIL = 0.5;
   /* placement jitter never moves architecture or the paths (identity even when a LOOK entry
      would allow it) */
   var NO_JITTER = { house: 1, building: 1, attraction: 1, path: 1, land: 1, style: 1 };
@@ -405,6 +426,46 @@
   /* ?grid=1 asks for the QA grid only while the parent's test mode (SL_WORLD_TRIAL) is on */
   function gridFromQuery(search, trial) { return !!trial && /[?&]grid=1(?:[&#]|$)/.test(String(search || '')); }
 
+  /* ---------------- v2 seams: the child on handles and atlases, paths, hearts, music, the wake ---------------- */
+  /* the first name only: atlases, signs and model handles never carry more of the child's name */
+  function firstName(name) { return String(name == null ? '' : name).trim().split(/\s+/)[0] || ''; }
+  /* the user a model sees on an island copy's handle (a.user) and the atlases get ({name, color});
+     the colour as '#RRGGBB' (the models' own form, so an atlas is never redrawn for letter case) */
+  function handleUser(u) {
+    u = u || {};
+    return { name: firstName(u.name), color: hex6(u.color), avatar: typeof u.avatar === 'string' ? u.avatar : '' };
+  }
+  function hex6(c) {
+    var m = typeof c === 'string' ? /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(c.trim()) : null;
+    if (!m) return typeof c === 'string' && c ? c : null;
+    return '#' + (m[1].length === 3 ? m[1].replace(/(.)/g, '$1$1') : m[1]).toUpperCase();
+  }
+  /* auto-tiled path layouts per tier: each (piece, layout) is its own batch (2 draw calls), so the
+     draw-call-bound LOW and MID tiers keep one layout per piece; HIGH shows all three */
+  var PATH_LAYOUTS = { LOW: 1, MID: 1, HIGH: 3 };
+  /* one path copy's look from its neighbour mask: the garden models' own pose (the piece, a free
+     quarter-turn for the symmetric pieces and a stone / plank layout, hashed from the uid) when
+     SLModelsGarden is loaded, else the bare piece → {st, sk, yaw} (pc = pathPieces()[uid]) */
+  function pathCopy(pc, uid, MG, layouts) {
+    if (MG && typeof MG.pathPose === 'function') {
+      var pp = null;
+      try { pp = MG.pathPose(pc.mask, uid, {}, layouts); } catch (e) { pp = null; }
+      if (pp && typeof pp.stateKey === 'string' && /^p:/.test(pp.stateKey) && isFinite(pp.yawDeg)) {
+        return { st: { piece: pp.piece, layout: pp.layout | 0 }, sk: pp.stateKey, yaw: pp.yawDeg };
+      }
+    }
+    return { st: { piece: pc.piece }, sk: 'p:' + pc.piece, yaw: pc.yawDeg };
+  }
+  /* hearts belong to the avatar's finger-heart (art bible v2): any other 'heart' emit — the café's
+     'serve' cue, a house door, a host emote over an item — plays Neon Magenta ✦ sparkles instead */
+  var HEARTLESS = ['Neon Magenta', 'Foil Pink', 'Bone White'];
+  function heartKind(kind, o) { return kind === 'heart' && !(o && o.fingerHeart) ? 'sparkle' : kind; }
+  /* the island loop counts for the crew (beat-nods, headphone pulses) while it plays and is heard */
+  function musicHeard(clk) { return !!(clk && typeof clk === 'object' && clk.playing && clk.audible !== false); }
+  /* a copy's Showtime mix inside the 'city wakes up' ripple: its lights wait for the wave (env.wakeAt
+     → 0..1), so they come on with the city rather than all at once */
+  function wakeShow(k, wake) { return typeof wake === 'number' && isFinite(wake) ? k * clamp(wake, 0, 1) : k; }
+
   /* ================================================================
      SIBLING ADAPTERS (pure; Node-tested against the real actors.js / edit3d.js)
      A sibling that speaks the island protocol is used as it is; actors.js and edit3d.js publish
@@ -427,7 +488,7 @@
   /* actors.js: sync(pets, avatar, world) · update(dt, t, show, beat) · hits(out) · anchorOf(target, out) ·
      tap(target) · emote(target, kind) · perform(kind, uid) → lead | -1 · active() → id | null · dance(on) */
   function adaptActors(A, host) {
-    var clk = { beat: 0, bpm: 100 }, hitList = [];
+    var clk = { beat: 0, bpm: 100, playing: false }, hitList = [];
     return {
       adapted: 'actors.js', inner: A,
       sync: function (v) {
@@ -440,7 +501,8 @@
       },
       update: function (dt, t, ctx) {
         if (ctx && typeof ctx === 'object') {
-          clk.beat = +ctx.beatPos; clk.bpm = +ctx.bpm;
+          /* playing: the island loop is heard (the beat-nod and the headphone pulse need it) */
+          clk.beat = +ctx.beatPos; clk.bpm = +ctx.bpm; clk.playing = !!ctx.musicOn;
           return !!A.update(dt, t, typeof ctx.show === 'number' ? ctx.show : undefined, isFinite(clk.beat) && clk.bpm > 0 ? clk : null);
         }
         return !!A.update(dt, t);
@@ -458,6 +520,8 @@
       setShowtime: function () {},                 /* the Showtime mix (setShow) drives wands and tails */
       setUser: function () {},                     /* the avatar follows view.avatar on the next sync */
       setQuality: function () {},
+      /* island music heard / not (null hands it back to the frame clock's playing flag) */
+      setMusic: function (on) { call0(A, 'setMusic', on == null ? null : !!on); },
       /* live item anchors for the building performs (actors.js or its brain takes them) */
       setAnchorFn: function (fn) {
         if (typeof A.setAnchorFn === 'function') return A.setAnchorFn(fn);
@@ -621,6 +685,7 @@
 
     var reduced = !!opts.reduced;
     var user = normUser(opts.user);
+    var hUser = handleUser(user);             /* what island copies' handles carry as a.user (first name) */
     var optR = { reduced: reduced };          /* SLMotion sample options (reused) */
 
     /* ---------------- state ---------------- */
@@ -632,7 +697,7 @@
     var litMem = {}, envUnlocked = ['home'], landKeys = null, landSig = '', firstSync = true;
     var pendingRise = null, risen = {}, lastDrop = '', placedList = [];
     var clockT = 0, frameNo = 0, cssW = 0, cssH = 0, touch = false;
-    var beat = { pos: 0, bpm: 100, frac: 0, bar: 0, clk: null, polledAt: -1, clkAt: 0, music: null };
+    var beat = { pos: 0, bpm: 100, frac: 0, bar: 0, clk: null, polledAt: -1, clkAt: 0, music: null, heard: false };
     var showK = 0, showDirty = true, userShow = false, encore = null, nextDanceBar = -1, dance = null;
     var readyFired = false, compileState = 0, compileFrames = 0, readyTimer = 0;
     var suspended = false, covered = false, lost = false, revoked = false, launchedUid = null;
@@ -645,6 +710,8 @@
     var layers = { owner: 'env', city: null, life: null, halo: null };
     var encoreLock = null, coneSig = null;
     var _anc = new T.Vector3();
+    /* v2 seams: the music state last told to the crew; the 'city wakes up' ripple window (clockT) */
+    var musicWas = null, wakeUntil = -1;
 
     /* scratch (frame loop: no allocation) */
     var _v = new T.Vector3(), _v2 = new T.Vector3(), _ro = new T.Vector3(), _rd = new T.Vector3();
@@ -917,7 +984,12 @@
       if (!pos || quiet > 0) return;
       var p = toPoint(pos, {});
       if (!p) return;
-      xcall('fx', 'emit', kind, p, n == null ? undefined : n, fxOpts(o));
+      var k = heartKind(kind, o), fo = fxOpts(o);
+      if (k !== kind) {                       /* a heart that is not the finger-heart: ✦ sparkles */
+        fo = fo || {};
+        if (!fo.tokens && !fo.token && !fo.color) fo.tokens = HEARTLESS.slice();
+      }
+      xcall('fx', 'emit', k, p, n == null ? undefined : n, fo);
     }
 
     /* ================================================================
@@ -975,14 +1047,24 @@
       }
       beat.frac = beat.pos - Math.floor(beat.pos);
       beat.bar = Math.floor(beat.pos / 4);
+      beat.heard = musicHeard(beat.music);
+      /* the crew nods and pulses only to music the child can hear: told on every change */
+      if (beat.heard !== musicWas) { musicWas = beat.heard; xcall('actors', 'setMusic', beat.heard); }
     }
     function showOn() { return userShow || !!encore; }
 
     function fill(rec, dt) {
       var a = rec.a;
       a.t = clockT; a.dt = dt; a.beat = beat.frac; a.bar = beat.bar; a.bpm = beat.bpm;
-      a.show = showK; a.lit = litMem[rec.uid] ? 1 : 0; a.reduced = reduced; a.music = beat.music;
+      a.show = recShow(rec); a.lit = litMem[rec.uid] ? 1 : 0; a.reduced = reduced; a.music = beat.music;
       a.pathD = rec.pathD;
+    }
+    /* a copy's Showtime mix: the island's, held back until the env's 'city wakes up' wave reaches it */
+    function recShow(rec) {
+      if (showK <= 0 || !env || typeof env.wakeAt !== 'function') return showK;
+      var w;
+      try { w = env.wakeAt(rec.wx, rec.wz); } catch (e) { return showK; }
+      return wakeShow(showK, w);
     }
 
     function frame(dt, t) {
@@ -993,7 +1075,13 @@
       if (compileState === 2) { compileFrames++; if (compileFrames >= 2) fireReady(); }
       updateBeat(dt);
       /* environment + the Golden hour ↔ Showtime mix (k 0 = DUSK) */
-      if (env) { if (env.update(dt, clockT)) busy = true; if (env.show !== showK) { showK = env.show; showDirty = true; } }
+      if (env) {
+        if (env.update(dt, clockT)) busy = true;
+        if (env.show !== showK) {
+          showK = env.show; showDirty = true;
+          if (typeof env.wakeAt === 'function') wakeUntil = clockT + WAKE_TAIL;    /* lights follow the wave */
+        }
+      }
       /* the hosted city / life (a v2 env drives its own) */
       if (layers.city && layerCall('city', 'update', dt, showK)) busy = true;
       if (layers.life && layerCall('life', 'update', dt, showK, showK)) busy = true;
@@ -1022,8 +1110,8 @@
         try { r = rec.model.idle(rec.a); } catch (e) { modelError(rec, 'idle', e); continue; }
         if (r !== false) busy = true;
       }
-      /* show handlers whenever the mix moves */
-      if (showDirty) {
+      /* show handlers whenever the mix moves (and while the 'city wakes up' wave is still travelling) */
+      if (showDirty || clockT < wakeUntil) {
         showDirty = false;
         for (i = 0; i < recList.length; i++) callShow(recList[i], dt);
         xcall('actors', 'setShow', showK);      /* fx halos follow Showtime through the kit (K.setShow) */
@@ -1053,10 +1141,10 @@
       if (pendingRise && clockT - pendingRise.at > 2.5) applyPendingRise();
       return busy || !reduced;
     }
-    var FCTX = { show: 0, beat: 0, beatPos: 0, bar: 0, bpm: 100, reduced: false, mode: 'play', camera: null, music: null, dt: 0 };
+    var FCTX = { show: 0, beat: 0, beatPos: 0, bar: 0, bpm: 100, reduced: false, mode: 'play', camera: null, music: null, musicOn: false, dt: 0 };
     function frameCtx(dt) {
       FCTX.show = showK; FCTX.beat = beat.frac; FCTX.bar = beat.bar; FCTX.bpm = beat.bpm; FCTX.beatPos = beat.pos;
-      FCTX.reduced = reduced; FCTX.mode = mode; FCTX.camera = camera; FCTX.music = beat.music; FCTX.dt = dt;
+      FCTX.reduced = reduced; FCTX.mode = mode; FCTX.camera = camera; FCTX.music = beat.music; FCTX.musicOn = beat.heard; FCTX.dt = dt;
       return FCTX;
     }
     function modelError(rec, what, e) {
@@ -1068,7 +1156,7 @@
     function callShow(rec, dt) {
       if (!rec.model || typeof rec.model.show !== 'function' || rec.badShow) return;
       fill(rec, dt || 0);
-      try { rec.model.show(rec.a, showK); } catch (e) { modelError(rec, 'show', e); }
+      try { rec.model.show(rec.a, rec.a.show); } catch (e) { modelError(rec, 'show', e); }
     }
     /* ticking culls copies outside the view (acts always run) */
     function cullRecs() {
@@ -1165,12 +1253,20 @@
         sfx: function (name, vol, step) { sfx(name, vol, step, rec.wx); },
         pets: petsApi,
         shake: function (amp, dur) { if (!reduced && rig) rig.shake(amp, dur); },
-        squish: function () { startAnim(rec, 'squish', true); }
+        squish: function () { startAnim(rec, 'squish', true); },
+        /* v2: the child (member trims, the tower's initial, the strip's emoji) and the local bloom */
+        member: hUser.color, user: hUser,
+        bloom: function (name, size, token) { return bloomFor(rec, name, size, token); }
       };
       return a;
     }
+    /* a.pets.active(): the active crew member's id (the café / booth voice, the strip poses, the LED
+       tower's pet program need it), null with none; a sibling that only knows yes / no gives true */
     var petsApi = {
-      active: function () { return !!xcall('actors', 'active'); },
+      active: function () {
+        var r = xcall('actors', 'active');
+        return typeof r === 'string' ? (r || null) : r ? true : null;
+      },
       perform: function (kind, uid) {
         var r = xcall('actors', 'perform', kind, uid);
         if (typeof r === 'number') return r;
@@ -1219,7 +1315,7 @@
         a: null, act: null, anims: { squish: animSlot(), drop: animSlot(), debut: animSlot(), store: animSlot() }, animOn: 0,
         rootModel: { rx: 0, ry: 0, rz: 0, px: 0, py: 0, pz: 0, sx: 1, sy: 1, sz: 1 }, rootDirty: false, rootOn: false, inLive: false,
         idleOn: idleOnFor(model, n.sk), idlePending: true, hidden: false, storing: false, removeAfter: false,
-        halos: {}, decalOn: null, pathD: undefined, bad: 0, badIdle: false, badShow: false, dead: false, debutP: null, storeP: null
+        halos: {}, decalOn: null, decalVia: null, pathD: undefined, bad: 0, badIdle: false, badShow: false, dead: false, debutP: null, storeP: null
       };
       placeRec(rec);
       rec.a = makeHandle(rec);
@@ -1284,7 +1380,8 @@
       cancelAct(rec, false);
       forgetCopy(rec);
       Object.keys(rec.halos).forEach(function (name) { if (rec.halos[name] && rec.halos[name].on) xcall('fx', 'halo', rec.uid + ':' + name, false); });
-      if (rec.decalOn) xcall('fx', 'decal', 'u:' + rec.uid, false);
+      decalOff(rec);
+      if (selectedUid === rec.uid && tier === 'LOW') selDecal(rec, false);
       rec.dead = true;
       try { rec.batch.remove(rec.uid); } catch (e) {}
       releaseBatch(rec.b);
@@ -1309,6 +1406,7 @@
         if (h && h.on) haloFor(rec, name, true, h.size, h.token, true);
       });
       if (rec.decalOn) decalFor(rec, true, rec.decalOn, true);
+      if (tier === 'LOW' && selectedUid === rec.uid) selDecal(rec, true);
     }
     /* world position of an item anchor (or a pivot origin when the template has no such anchor) */
     function anchorOf(rec, name, out) {
@@ -1352,13 +1450,45 @@
       if (onOff) { anchorOf(rec, name, _v2); xcall('fx', 'halo', rec.uid + ':' + name, true, { x: _v2.x, y: _v2.y, z: _v2.z }, size || 0.9, token || 'Lamp Halo'); }
       else xcall('fx', 'halo', rec.uid + ':' + name, false);
     }
+    /* a copy's light pool on the ground. A city building's is an uplight (fx.uplight: r 0.5, 0.25 at
+       golden hour → 0.4 at Showtime, following the frame's show); everything else (lit lamps) keeps
+       the ground decal. rec.decalVia remembers the channel so a pool is always taken off where it is */
     function decalFor(rec, onOff, token, force) {
       if (rec.dead) return;
       var want = onOff ? (token || 'Lamp Warm') : null;
       if (!force && want === rec.decalOn) return;
       rec.decalOn = want;
-      if (want) xcall('fx', 'decal', 'u:' + rec.uid, true, { x: rec.wx, y: rec.wy + 0.02, z: rec.wz }, want);
-      else xcall('fx', 'decal', 'u:' + rec.uid, false);
+      var via = want ? (uplightOf(rec) ? 'up' : 'decal') : null;
+      if (rec.decalVia && rec.decalVia !== via) decalOff(rec);
+      rec.decalVia = via;
+      if (!via) return;
+      var p = { x: rec.wx, y: rec.wy + 0.02, z: rec.wz };
+      if (via === 'up') xcall('fx', 'uplight', 'u:' + rec.uid, true, p, want);
+      else xcall('fx', 'decal', 'u:' + rec.uid, true, p, want);
+    }
+    function decalOff(rec) {
+      if (rec.decalVia === 'up') xcall('fx', 'uplight', 'u:' + rec.uid, false);
+      else if (rec.decalVia === 'decal') xcall('fx', 'decal', 'u:' + rec.uid, false);
+      rec.decalVia = null;
+    }
+    function uplightOf(rec) {
+      var e = L && L.LOOK ? L.LOOK[rec.id] : null;
+      return !!(e && e.kind === 'building' && sys.fx && sys.fx.obj && typeof sys.fx.obj.uplight === 'function');
+    }
+    /* the LOW tier's selection pool (no hulls there): its own key, so it never takes a lamp's or a
+       building's light away */
+    function selDecal(rec, on) {
+      if (on) xcall('fx', 'decal', 'sel:' + rec.uid, true, { x: rec.wx, y: rec.wy + 0.02, z: rec.wz }, 'Star Gold');
+      else xcall('fx', 'decal', 'sel:' + rec.uid, false);
+    }
+    /* a local bloom at an anchor through fx3d (it rate-limits per key and never blooms under reduced
+       motion) → true when it bloomed; false (no fx bloom, reduced motion, too soon) lets the model fall
+       back to its own halo */
+    function bloomFor(rec, name, size, token) {
+      if (rec.dead || reduced || quiet > 0 || !sys.fx || !sys.fx.obj || typeof sys.fx.obj.bloom !== 'function') return false;
+      var nm = String(name || 'top');
+      anchorOf(rec, nm, _v2);
+      return xcall('fx', 'bloom', rec.uid + ':' + nm, { x: _v2.x, y: _v2.y, z: _v2.z }, { size: size, token: token }) === true;
     }
 
     /* ---------------- controller anims: squish, drop-in, debut, store ---------------- */
@@ -1620,11 +1750,13 @@
       var nbs = L ? idNeighbours(list, fpOf, isOrganic) : {};
       var pieced = !!(L && typeof L.pathPiece === 'function') && list.some(function (p) { return piecedPath(p.id); });
       var pieces = pieced ? pathPieces(list, isPath, L.pathPiece) : {};
+      var MG = root.SLModelsGarden, layouts = PATH_LAYOUTS[tier] || 1;
       return list.map(function (p) {
         var st = resolveStyle(p.id, copyStyle(L, p.id, p.uid, style, user.seed));
         var n = { uid: p.uid, id: p.id, x: p.x | 0, y: p.y | 0, st: st, sk: K.stateKey(p.id, st), jit: null, jsig: '', yaw: undefined };
         var pc = pieces[p.uid];
-        if (pc && piecedPath(p.id)) { n.st = { piece: pc.piece }; n.sk = 'p:' + pc.piece; n.yaw = pc.yawDeg; }
+        /* the auto-tiled piece, its layout and its yaw: the path cells join up */
+        if (pc && piecedPath(p.id)) { var pk = pathCopy(pc, p.uid, MG, layouts); n.st = pk.st; n.sk = pk.sk; n.yaw = pk.yaw; }
         var nb = nbs[p.uid];
         n.jit = jitterFor(L, p.uid, p.id, nb);
         if (n.jit && nb && nb.length) n.jsig = nb.join(',');
@@ -1681,12 +1813,12 @@
       if (uid === selectedUid) return;
       var prev = selectedUid && recs.get(selectedUid);
       if (prev) prev.batch.setHighlight(prev.uid, focusKey === 'u:' + prev.uid ? 1 : 0);
-      if (prev && tier === 'LOW') decalFor(prev, false);
+      if (prev && tier === 'LOW') selDecal(prev, false);
       selectedUid = uid;
       var rec = uid && recs.get(uid);
       if (rec) {
         rec.batch.setHighlight(uid, 2);
-        if (tier === 'LOW') decalFor(rec, true, 'Star Gold');      /* LOW has no hulls: a gold light pool instead */
+        if (tier === 'LOW') selDecal(rec, true);                    /* LOW has no hulls: a gold light pool instead */
       } else K.setSelPulse(0);
     }
 
@@ -2403,7 +2535,8 @@
       out.x = _anc.x; out.y = _anc.y; out.z = _anc.z;
       return out;
     }
-    function wireAnchors() { xcall('actors', 'setAnchorFn', anchorFn); }
+    /* a (re)built actors sibling: the live anchors, and the music state is told again next frame */
+    function wireAnchors() { xcall('actors', 'setAnchorFn', anchorFn); musicWas = null; }
     function onDebugGrid() { if (!dead && !failed) { applyEdit(); wake(); } }
     function markTier() {
       try {
@@ -2500,15 +2633,20 @@
     function setUser(u) {
       var prev = user;
       user = normUser(u);
+      hUser = handleUser(user);
       if (env && typeof env.setMember === 'function') env.setMember(user.color);
       xcall('fx', 'setMember', user.color);
       userLayers(prev);
+      userModels();
       recList.forEach(function (r) {
         cancelAct(r, false);
         var an = r.anims;
         for (var k in an) an[k].t = -1;
         r.animOn = 0; r.rootDirty = true; addLive(r);
+        r.a.member = hUser.color; r.a.user = hUser;     /* the next child's trims, initial and emoji */
+        r.idlePending = true;
       });
+      showDirty = true;                                /* every copy re-lights in the new colour */
       endEncoreQuietly();
       dance = null;
       Object.keys(litMem).forEach(function (uid) { setLitInternal(uid, false, false); });
@@ -2534,6 +2672,22 @@
         return;
       }
       if (seedCh && root.SLTerrain3D) rebuildEnv();
+    }
+    /* the child's first name and colour for everything that draws them: the kit's shared LED and sign
+       atlases (the LED name marquee, the tower's initial) and the models with a setUser of their own
+       (bld_stage's covers the three stage buildings, att_course's every course gate) */
+    function userModels() {
+      var au = { name: hUser.name, color: hUser.color };
+      ['ledAtlas', 'signAtlas'].forEach(function (k) {
+        if (typeof K[k] !== 'function') return;
+        try { var at = K[k](); if (at && typeof at.setUser === 'function') at.setUser(au); } catch (e) { issue('K.' + k + '.setUser: ' + errText(e)); }
+      });
+      var M = SL3D.models || {};
+      [['bld_stage', au], ['att_course', handleUser(user)]].forEach(function (m) {
+        var h = M[m[0]];
+        if (!h || typeof h.setUser !== 'function') return;
+        try { h.setUser(m[1]); } catch (e) { issue(m[0] + '.setUser: ' + errText(e)); }
+      });
     }
     /* the environment alone, rebuilt in place (items, actors and effects stay) */
     function rebuildEnv() {
@@ -2630,6 +2784,7 @@
       buildEnv();
       buildSystems();
       wireAnchors();
+      userModels();
       placeCanvas();
       markTier();
       if (queryGrid()) DEBUG.grid = true;
@@ -2773,7 +2928,7 @@
   FP.emit = function (kind, pos, n, o) {
     o = o || {};
     var P = FX_PRESETS[kind] || FX_PRESETS.sparkle, ATL = this.K.ATLAS || {};
-    if (kind === 'emote') P = FX_PRESETS[['heart', 'note', 'star'][Math.floor(this._rand() * 3)]];
+    if (kind === 'emote') P = FX_PRESETS[['star', 'note', 'star'][Math.floor(this._rand() * 3)]];   /* hearts: the finger-heart only */
     var count = Math.max(1, Math.round((n == null ? P.n : n) * (kind === 'confetti' || kind === 'firework' ? this.scale : 1)));
     if (o.max && count > o.max) count = o.max;
     var red = this.reduced, M = this.h.motion;
@@ -3244,7 +3399,7 @@
     if (A) {
       var ac = 'idle', at = this.t;
       if (dancing) { ac = 'dance'; at = this.danceT; }
-      else if (A.waveT >= 0) { A.waveT += dt; ac = A.waveT < 0.9 ? 'wave' : 'cheer'; at = A.waveT; if (A.waveT >= 0.9 && A.heartAt < 0) { A.heartAt = this.t; this._v.set(A.x, A.y + 1.15, A.z + 0.1); this.h.emit('heart', this._v, 1, { token: 'Neon Pink' }); this.h.sfx('pop', 0.8, 0, A.x); } if (A.waveT > 1.5) A.waveT = -1; }
+      else if (A.waveT >= 0) { A.waveT += dt; ac = A.waveT < 0.9 ? 'wave' : 'cheer'; at = A.waveT; if (A.waveT >= 0.9 && A.heartAt < 0) { A.heartAt = this.t; this._v.set(A.x, A.y + 1.15, A.z + 0.1); this.h.emit('heart', this._v, 1, { token: 'Neon Pink', fingerHeart: true }); this.h.sfx('pop', 0.8, 0, A.x); } if (A.waveT > 1.5) A.waveT = -1; }
       A.rig.play(ac, at, opt);
       A.rig.root.position.set(A.x, A.y, A.z);
       if (cam) A.rig.root.rotation.set(0, Math.atan2(this.camPos.x - A.x, this.camPos.z - A.z) * 0.6, 0);
@@ -3301,7 +3456,11 @@
       if (id === 'pet_dragon') { this._v.y += 0.05; this.h.emit('sparkle', this._v, 6); }
     }
   };
-  AP.active = function () { return this.pets.some(function (p) { return p.active; }) || this.pets.length > 0; };
+  /* the active pet's id (else the first pet's), null with no pets: a.pets.active() names it */
+  AP.active = function () {
+    for (var i = 0; i < this.pets.length; i++) if (this.pets[i].active) return this.pets[i].id;
+    return this.pets.length ? this.pets[0].id : null;
+  };
   /* the trampoline: the active pet hops over, bounces with SLMotion 'bounce', hops back */
   AP.perform = function (kind, uid) {
     if (kind !== 'trampoline' || this.reduced) return 0;
@@ -3330,6 +3489,7 @@
   /* live item anchors: the trampoline's 'seat' (the top when a model has none) */
   AP.setAnchorFn = function (fn) { this.anchorFn = typeof fn === 'function' ? fn : null; };
   AP.setShowtime = function (on) { this.showtime = !!on; };
+  AP.setMusic = function () {};                      /* the built-in crew has no beat-nod */
   AP.setMode = function (m) { this.mode = m; };
   AP.setReduced = function (on) { this.reduced = !!on; };
   AP.setUser = function (u) { this.user = u || {}; };
@@ -3352,6 +3512,9 @@
     ENCORE_CAM: ENCORE_CAM, ENCORE_SEC: ENCORE_SEC, NO_JITTER: NO_JITTER,
     seedVariant: seedVariant, houseStyle: houseStyle, copyStyle: copyStyle, jitterFor: jitterFor, idNeighbours: idNeighbours,
     pathPieces: pathPieces, layerOwner: layerOwner, gridFromQuery: gridFromQuery, debugGrid: debugGrid,
+    /* the v2 seams (CONTRACTS §9) */
+    firstName: firstName, handleUser: handleUser, PATH_LAYOUTS: PATH_LAYOUTS, pathCopy: pathCopy, HEARTLESS: HEARTLESS,
+    heartKind: heartKind, musicHeard: musicHeard, wakeShow: wakeShow, WAKE_TAIL: WAKE_TAIL,
     /* the sibling seams (tests/fix-seams.test.js); mount() itself, for the Node harness that injects
        a fake DOM, kit, lease and siblings through the same globals the browser uses */
     mount: mount, normUser: normUser, actorState: actorState, editState: editState, raySphere: raySphere, pickHits: pickHits,

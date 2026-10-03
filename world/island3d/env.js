@@ -42,7 +42,8 @@
    WHAT IT DRAWS (terrain mode; LOW merges the scenery into the terrain and drops the clouds)
      sky dome (golden-hour sun halo, Showtime city-glow band) · 3 dusk cloud streaks · sea (ShaderMaterial: the
      RGBA field from SLTerrain3D — foam on the organic coast, lagoons, the locked regions' future coasts as a
-     hologram sandbar with a dashed neon edge — wave lines, glints, Showtime spot streaks, city light pillars) ·
+     hologram sandbar with a dashed neon edge — wave lines, glints, Showtime spot streaks, city light pillars,
+     the boats' V wakes from life.boats() on MID / HIGH) ·
      terrain (ONE InstancedMesh, count 1, on K's toon program) · scenery (walls, boulders, boardwalks, abutment,
      islet, rock stacks; casts shadows) · layout (world-space dressing + plinth risers) · 2 LED ring buoys + the
      pole behind the house · neon accents (one InstancedMesh of unit boxes on 'state') · 3 spot cones · stars ·
@@ -994,10 +995,14 @@
       uSandbar: { value: new T.Color() }, uEdge: { value: new T.Color() }, uFogCol: { value: new T.Color() },
       uSpotColA: { value: new T.Color() }, uSpotColB: { value: new T.Color() },
       uSpotA: { value: new T.Vector4(0, 0, 1, 0) }, uSpotB: { value: new T.Vector4(0, 0, -1, 0) },
-      uRefl: { value: [] }, uReflCol: { value: [] }, uReflK: { value: 0 }, uQuayK: { value: 0 }
+      uRefl: { value: [] }, uReflCol: { value: [] }, uReflK: { value: 0 }, uQuayK: { value: 0 },
+      uBoat: { value: null }
     }]);
     seaU.uField.value = fieldCur; seaU.uFieldPrev.value = fieldPrev;   /* after merge: shared, not cloned */
     seaU.uRefl.value = reflArr; seaU.uReflCol.value = reflCol;
+    /* the boats' V wakes (MID / HIGH): life3d's uBoat[4] array, (x, z, dirX·w, dirZ·w) per boat */
+    var noBoats = new Float32Array(16);
+    seaU.uBoat.value = noBoats;
     seaU.uSandbar.value.copy(K.col(HT.sandbar)); seaU.uEdge.value.copy(K.col(HT.edge));
     seaU.uSpotColA.value.copy(lensOn[0]); seaU.uSpotColB.value.copy(lensOn[1]);
     var seaDefs = { REFL_N: REFL_N };
@@ -1441,6 +1446,12 @@
     function cityTick(c) { if (typeof c.update === 'function' && c.update(tick.dt, tick.k)) tick.busy = true; }
     function lifeTick(l) { if (typeof l.update === 'function' && l.update(tick.dt, tick.k, tick.show)) tick.busy = true; }
     function cityRefl(c) { tick.list = typeof c.reflections === 'function' ? c.reflections() : null; }
+    /* the water taxis' and catamarans' wakes on the sea (MID / HIGH; life3d keeps them 0 on LOW and
+       after the ladder's 'life' step); the same Float32Array every frame, so it is simply bound */
+    function lifeBoats(l) {
+      var b = typeof l.boats === 'function' ? l.boats() : null;
+      seaU.uBoat.value = b && b.length >= 16 ? b : noBoats;
+    }
     /* city light pillars on the water (P1): the city's list, else the 2 LED ring buoys */
     function updateReflections() {
       var list = null, n = 0;
@@ -1504,6 +1515,8 @@
       tick.dt = dt; tick.k = state.kLight; tick.show = modelShow(); tick.busy = false;
       if (city) safeCall('city', cityTick);
       if (life) safeCall('life', lifeTick);
+      if (life && !low) safeCall('life', lifeBoats);
+      else if (seaU.uBoat.value !== noBoats) seaU.uBoat.value = noBoats;      /* life gone: no ghost wakes */
       if (tick.busy) busy = true;
       if (renderer) beforeRender(renderer);
       return busy || !state.reduced;
@@ -1775,6 +1788,9 @@
     'uniform vec3 uReflCol[REFL_N];',
     'uniform float uReflK;',
     'uniform float uQuayK;',
+    '#ifndef ENV_LOW',
+    'uniform vec4 uBoat[4];',
+    '#endif',
     'varying vec2 vXZ;',
     'float hash12(vec2 p) {',
     '  vec3 p3 = fract(vec3(p.xyx) * 0.1031);',
@@ -1815,6 +1831,25 @@
     '  float along = smoothstep(-0.2, 0.25, a) * (1.0 - smoothstep(1.5, 4.5, a));',
     '  return along * exp(-perp * perp / (w * w)) * r.w;',
     '}',
+    /* a boat's V wake (life3d uBoat: x, z, heading × w): two foam arms opening behind it plus a
+       churned centre line, fading out over ~2.4 u; it moves with the boat (nothing flickers) */
+    '#ifndef ENV_LOW',
+    'float boatWake(vec2 p, vec4 b) {',
+    '  float w = length(b.zw);',
+    '  if (w < 0.001) return 0.0;',
+    '  vec2 dir = b.zw / w;',
+    '  vec2 d = p - b.xy;',
+    '  float back = -dot(d, dir);',
+    '  if (back < -0.15 || back > 2.6) return 0.0;',
+    '  float side = abs(dir.x * d.y - dir.y * d.x);',
+    '  float span = 0.05 + max(back, 0.0) * 0.2;',
+    '  float arm = (side - span) / (0.035 + max(back, 0.0) * 0.03);',
+    '  float arms = exp(-arm * arm);',
+    '  float churn = exp(-side * side / (0.01 + max(back, 0.0) * 0.015)) * 0.7;',
+    '  float fade = smoothstep(-0.12, 0.12, back) * (1.0 - smoothstep(0.8, 2.4, back));',
+    '  return max(arms, churn) * fade * min(w, 1.0);',
+    '}',
+    '#endif',
     'void main() {',
     '  vec2 uv = (vXZ - uFieldRect.xy) * uFieldRect.zw;',
     '  vec3 fld = mix(fieldAt(uFieldPrev, uv), fieldAt(uField, uv), uFieldMix);',
@@ -1843,6 +1878,11 @@
     '  float l2 = 0.3 + 0.04 * sin(uTime * 0.9 + vnoise(vXZ * 0.7 + 4.0) * 4.0);',
     '  float foam2 = (1.0 - smoothstep(0.02 - aa, 0.02 + aa, abs(sd - l2))) * smoothstep(0.35, 0.6, vnoise(vXZ * 1.6 + 9.0));',
     '  col = mix(col, uFoam, max(foam, foam2 * 0.7) * (1.0 - 0.4 * inside));',
+    /* the boats' wakes (MID / HIGH) */
+    '#ifndef ENV_LOW',
+    '  float wake = boatWake(vXZ, uBoat[0]) + boatWake(vXZ, uBoat[1]) + boatWake(vXZ, uBoat[2]) + boatWake(vXZ, uBoat[3]);',
+    '  col = mix(col, uFoam, clamp(wake, 0.0, 1.0) * 0.5 * open);',
+    '#endif',
     /* golden-hour glints: soft ✦ twinkles tinted by the sun halo, one per lucky 1.7 u cell (each ≤ 0.63 Hz) */
     '#ifndef ENV_LOW',
     '  vec2 gp = vXZ / 1.7;',

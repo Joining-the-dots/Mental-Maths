@@ -256,9 +256,12 @@ function fakeRigs(SL) {
 /* an fx sibling that speaks the island protocol and records everything */
 function recFx(h) {
   const fx = {
-    host: h, member: h.member, members: [], emits: [], halos: [], decals: [], disposed: false,
+    host: h, member: h.member, members: [], emits: [], halos: [], decals: [], uplights: [], blooms: [], disposed: false,
     emit(kind, pos, n, o) { fx.emits.push({ kind, pos: { x: pos.x, y: pos.y, z: pos.z }, n, o }); },
-    halo(key, on) { fx.halos.push([key, !!on]); }, decal(key, on) { fx.decals.push([key, !!on]); },
+    halo(key, on) { fx.halos.push([key, !!on]); }, decal(key, on, pos, token) { fx.decals.push([key, !!on, token]); },
+    /* the v2 fx3d surface (seams §9): uplight pools and the rate-limited local bloom */
+    uplight(key, on, pos, token) { fx.uplights.push([key, !!on, token]); return true; },
+    bloom(key, pos, o) { fx.blooms.push({ key, pos: { x: pos.x, y: pos.y, z: pos.z }, o }); return true; },
     setMember(c) { fx.members.push(c); }, update() { return false; }, setReduced() {}, setQuality() {}, clear() {},
     info() { return { rec: true }; }, dispose() { fx.disposed = true; }
   };
@@ -1056,4 +1059,128 @@ test('camera Controls: a lost capture with the finger down is re-taken; only an 
   clock.now += 100; fire('pointerup', 100, 100);
   assert.deepEqual(log, [['long'], ['hold']], 'no tap after a hold');
   ctl.dispose();
+});
+
+/* ================================================================
+   11. Encore City v2 seams (CONTRACTS §9) with the REAL actors.js / pets-brain: the child on every
+       handle, the active crew member's id, the building performs, music-only beat-nods, uplights,
+       blooms and hearts
+   ================================================================ */
+function cityWorldFor(ids, o) {
+  const m = makeWorld(o);
+  const placed = {};
+  for (const id of ids) {
+    m.buy(id);
+    const spot = C.findSpot(m.w, id);
+    assert.ok(spot, 'room for ' + id);
+    const r = C.place(m.u, id, spot.x, spot.y);
+    assert.ok(r && r.ok, 'place ' + id);
+    placed[id] = r.uid;
+  }
+  return Object.assign(m, { placed });
+}
+
+test('seams v2: island copies carry the child (a.member, first-name a.user); a.pets.active() names the crew member; the café\'s sip reaches the brain', (t) => {
+  const { w, placed } = cityWorldFor(['bld_boba'], { pets: ['pet_dragon'] });
+  const shows = [], acts = [];
+  const models = {
+    bld_boba: {
+      show(a) { shows.push({ member: a.member, user: a.user && Object.assign({}, a.user) }); },
+      act(a) { acts.push({ active: a.pets.active(), lead: a.pets.perform('sip', a.uid) }); return { dur: 1, update: (h, tt) => tt < 1 }; }
+    }
+  };
+  const H = harness(t, { models });
+  H.stage.sync(viewOf(w));
+  H.step(30);
+  assert.ok(shows.length > 0);
+  assert.equal(shows[0].member, '#4FC3F7');
+  assert.deepEqual(shows[0].user, { name: 'Kid', color: '#4FC3F7', avatar: '🦊' });
+  /* the crew member's id (not a yes / no), and the café perform comes back with a lead */
+  H.stage.act(placed.bld_boba, 'serve');
+  assert.equal(acts.length, 1);
+  assert.match(String(acts[0].active), /^pet_/, 'a.pets.active() is the pet id: ' + acts[0].active);
+  assert.ok(acts[0].lead > 0, 'a crew member runs to the café: lead ' + acts[0].lead);
+  const raw = H.made.actors[0];
+  assert.equal(raw.brain.pet(acts[0].active).state, 'perform');
+  assert.equal(raw.brain.pet(acts[0].active).action, 'sip');
+  /* a new child: first name only, the new colour, every handle at once */
+  H.stage.setUser({ name: 'Sis  Jones', color: '#FF7043', avatar: '🐼' });
+  H.step(2);
+  assert.deepEqual(shows[shows.length - 1], { member: '#FF7043', user: { name: 'Sis', color: '#FF7043', avatar: '🐼' } });
+  /* edit mode: no crew to name or send (actors.js answers null; its -1 reaches the model as 0) */
+  H.stage.sync(viewOf(w, { mode: 'edit' }));
+  H.stage.act(placed.bld_boba, 'serve');
+  assert.deepEqual(acts[1], { active: null, lead: 0 });
+  assert.equal(S.handleUser({ name: '  Ava Rose ', color: null }).name, 'Ava');
+});
+
+test('seams v2: the crew nods and pulses only while the island loop plays and is heard (setMusic on change + playing in the clock)', (t) => {
+  const { w } = makeWorld({ pets: ['pet_dragon'] });
+  const H = harness(t);
+  H.stage.sync(viewOf(w));
+  H.step(20);
+  const raw = H.made.actors[0], told = [], inner = raw.setMusic;
+  raw.setMusic = (on) => { told.push(on); return inner(on); };
+  assert.equal(raw.brain.music, false, 'no SLMusic clock: no music');
+  globalThis.SLMusic.clock = () => ({ bpm: 100, beat: 12, playing: true, audible: true });
+  H.step(30);
+  assert.equal(raw.brain.music, true, 'the island loop is heard');
+  globalThis.SLMusic.clock = () => ({ bpm: 100, beat: 13, playing: true, audible: false });
+  H.step(30);
+  assert.equal(raw.brain.music, false, 'muted (still keeping time): no nodding');
+  globalThis.SLMusic.clock = () => ({ bpm: 100, beat: 13, playing: false, audible: false });
+  H.step(30);
+  assert.deepEqual(told, [true, false], 'told once per change, never every frame');
+  assert.equal(S.musicHeard({ playing: true }), true, 'an engine without audible counts as heard');
+  assert.equal(S.musicHeard(false), false);
+});
+
+test('seams v2: a city building\'s light pool is an fx uplight, a lamp\'s a decal; a.bloom → fx.bloom; only the finger-heart is a heart', (t) => {
+  const { u, w, placed, lantern } = cityWorldFor(['bld_recording'], { lantern: true });
+  const ret = {};
+  const models = {
+    bld_recording: {
+      show(a) { a.decal(true, 'Window Warm'); },
+      act(a) {
+        a.emit('heart', 'top', 2);                         /* e.g. the café's 'serve' cue */
+        a.emit('heart', 'top', 1, { fingerHeart: true });
+        ret.bloom = a.bloom('lens', 0.5, 'Window Warm');
+        return { dur: 0.5, update: (h, tt) => tt < 0.5 };
+      }
+    },
+    lantern: { show(a) { a.decal(true, 'Lamp Warm'); } }
+  };
+  const H = harness(t, { models });
+  H.stage.sync(viewOf(w));
+  H.step(5);
+  const fx = H.made.fx[H.made.fx.length - 1], rec = placed.bld_recording;
+  assert.deepEqual(fx.uplights.filter((x) => x[0] === 'u:' + rec).pop(), ['u:' + rec, true, 'Window Warm'], 'the studio\'s uplight');
+  assert.ok(!fx.decals.some((x) => x[0] === 'u:' + rec), 'not a ground decal');
+  assert.deepEqual(fx.decals.filter((x) => x[0] === 'u:' + lantern.uid).pop(), ['u:' + lantern.uid, true, 'Lamp Warm'], 'a lamp keeps its decal');
+  fx.emits.length = 0;
+  H.stage.act(rec, 'record');
+  const hearts = fx.emits.filter((e) => e.kind === 'heart'), sparks = fx.emits.filter((e) => e.kind === 'sparkle');
+  assert.equal(hearts.length, 1, 'only the finger-heart stays a heart');
+  assert.ok(hearts[0].o.fingerHeart);
+  assert.equal(sparks.length, 1); assert.deepEqual(sparks[0].o.tokens, S.HEARTLESS, 'the other heart plays ✦ sparkles');
+  assert.equal(ret.bloom, true);
+  assert.equal(fx.blooms.length, 1); assert.equal(fx.blooms[0].key, rec + ':lens');
+  assert.deepEqual(fx.blooms[0].o, { size: 0.5, token: 'Window Warm' });
+  /* reduced motion: never a bloom (the model falls back to its own rules) */
+  H.stage.setReduced(true);
+  H.stage.act(rec, 'record');
+  assert.equal(ret.bloom, false); assert.equal(fx.blooms.length, 1);
+  /* put away: the uplight goes with it */
+  assert.ok(C.store(u, rec).ok);
+  H.stage.sync(viewOf(w));
+  assert.deepEqual(fx.uplights.filter((x) => x[0] === 'u:' + rec).pop(), ['u:' + rec, false, undefined]);
+  /* the same call shapes against the REAL fx3d */
+  const real = F.create(fakeKit(), {}, { seed: 2, member: '#4FC3F7', tier: 'MID' });
+  assert.equal(real.uplight('u:' + rec, true, { x: 1, y: 0.02, z: 2 }, 'Window Warm'), true);
+  assert.equal(real.bloom(rec + ':lens', { x: 1, y: 1.5, z: 2 }, { size: 0.5, token: 'Window Warm' }), true);
+  assert.equal(real.bloom(rec + ':lens', { x: 1, y: 1.5, z: 2 }, { size: 0.5, token: 'Window Warm' }), false, 'fx3d rate-limits per key too');
+  assert.deepEqual([real.info().uplights, real.info().blooms], [1, 1]);
+  assert.ok(real.emit('sparkle', { x: 0, y: 1, z: 0 }, 2, { tokens: S.HEARTLESS.slice() }) > 0, 'the heartless tokens are fx3d colours');
+  real.uplight('u:' + rec, false);
+  assert.equal(real.info().uplights, 0);
 });

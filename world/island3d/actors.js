@@ -28,8 +28,8 @@
      show       the Showtime mix 0..1 (also settable with setShow)
      beat       the music beat clock: SLMusic.clock() {bpm, beat, playing?}, or the beat count
                 (number); used to start the dance break on a bar line (SLMusic.clock() is read when
-                absent), to nod to the beat (only while beat.playing / beat.music or setMusic(true))
-                and to pulse the headphone rings
+                absent), to nod to the beat and to pulse the headphone rings (both only while
+                beat.playing / beat.music or setMusic(true))
    actors.perform(kind, uid) → lead seconds | -1   'trampoline' (run-over ≤ 1.2 s, 3 bounces,
                 front flip, hop off — SLMotion 'bounce' timing) · 'bench' (walk, hop up, sit) ·
                 the city buildings 'pose' (Photo Booth: sit · paw-point · cheer on the ticks) ·
@@ -651,8 +651,9 @@
       if (a.crown && P.crownGlint) pose.glint = Math.max(pose.glint || 0, P.crownGlint(a.idleT, (a.seed % 1000) / 1000, red));
       pose.wave = red || key === 'edit' ? 0 : a.idleT;           /* one continuous cloth clock (frozen when still) */
       rig.setPose(pose);
-      /* the headphone rings pulse on the beat at Showtime (the rig keeps it under 2 Hz) */
-      if (a.phones && typeof rig.setBeat === 'function') rig.setBeat(beatCount(), readClock(false) ? _clk.bpm : DANCE.bpm, red);
+      /* the headphone rings pulse on the beat at Showtime (the rig keeps it under 2 Hz) — only while
+         island music plays (brain.music: setMusic / beat.playing); otherwise they hold steady */
+      if (a.phones && typeof rig.setBeat === 'function') rig.setBeat(beatCount(), readClock(false) ? _clk.bpm : DANCE.bpm, red || !brain.music);
       /* the root: brain position, body yaw (+ the clip's 'face the camera' hint, eased) */
       a.fcS += (clamp01(num(pose.faceCam, 0)) - a.fcS) * (red ? 1 : clamp01(dt * 8));
       var yaw = p.yaw;

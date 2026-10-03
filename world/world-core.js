@@ -54,17 +54,24 @@
              pet | acc (pet accessory) | land | attraction | variant (game course/track)
              cosmetic (ball / stadium / kart)
      slot:   for style/cosmetic/variant — what it replaces when selected
+             (style slots: wall | roof | door | detail | shape — 'shape' is the whole
+             house form; the roof then dresses that shape's crown)
+     cat:    shop tab; 'city' = the collectable city buildings (kind fun)
      fp:     footprint [w,h] in cells for placeable kinds
      act:    what tapping it does on the island ('launch' | 'bounce' | 'splash' |
-             'swing' | 'bubbles' | 'glow' | 'wave' | 'spin' | 'home' | null) */
+             'swing' | 'bubbles' | 'glow' | 'wave' | 'spin' | 'home' |
+             'serve' | 'snap' | 'screen' | 'record' | 'dance' | 'hangout' | 'encore' | null) */
   var CATALOG = [
     /* ---- starter (free, granted once) ---- */
-    { id: 'house_cottage', kind: 'house', name: 'Your Home', price: 0, starter: true, fp: [2, 2], entrance: true, act: 'home', desc: 'Your very own home. Tap it to change its colours.' },
+    { id: 'house_cottage', kind: 'house', name: 'Your Home', price: 0, starter: true, fp: [2, 2], entrance: true, act: 'home', includes: ['shape_cottage', 'shape_loft'], desc: 'Your very own home. Tap it to change its colours.' },
     { id: 'att_course', kind: 'attraction', game: 'course', name: 'Pet Obstacle Course', price: 0, starter: true, fp: [2, 2], entrance: true, act: 'launch', includes: ['course_meadow'], desc: 'Your pet’s own obstacle course. Tap the gate to play — free, forever.' },
     { id: 'pet_puppy', kind: 'pet', name: 'Puppy', price: 0, starter: true, desc: 'Your first pet! Loyal, bouncy and always pleased to see you.' },
     { id: 'wall_cream', kind: 'style', slot: 'wall', name: 'Cream walls', price: 0, starter: true, desc: 'Warm and cosy.' },
     { id: 'roof_red', kind: 'style', slot: 'roof', name: 'Red tile roof', price: 0, starter: true, desc: 'A classic red roof.' },
     { id: 'door_blue', kind: 'style', slot: 'door', name: 'Blue door', price: 0, starter: true, desc: 'A bright blue front door.' },
+    /* the two free home shapes come with the house (never sold); the loft is the default */
+    { id: 'shape_cottage', kind: 'style', slot: 'shape', cat: 'home', name: 'Classic cottage', price: 0, included: true, desc: 'The original gabled cottage. Switch back to it any time.' },
+    { id: 'shape_loft', kind: 'style', slot: 'shape', cat: 'home', name: 'City loft', price: 0, included: true, desc: 'Two stacked boxes, a cantilevered top floor and a wall of glass.' },
     { id: 'course_meadow', kind: 'variant', game: 'course', slot: 'course', name: 'Meadow Dash', price: 0, included: true, desc: 'Grassy hills, hurdles and logs.' },
 
     /* ---- garden: per copy ---- */
@@ -105,6 +112,10 @@
     { id: 'wall_mint', kind: 'style', slot: 'wall', cat: 'home', name: 'Mint walls', price: 120, desc: 'Cool minty green.' },
     { id: 'wall_sky', kind: 'style', slot: 'wall', cat: 'home', name: 'Sky-blue walls', price: 120, desc: 'As blue as a summer sky.' },
     { id: 'wall_lilac', kind: 'style', slot: 'wall', cat: 'home', name: 'Lilac walls', price: 150, desc: 'A soft purple.' },
+    { id: 'wall_concrete', kind: 'style', slot: 'wall', cat: 'home', name: 'Concrete walls', price: 120, desc: 'Smooth grey concrete. Very city.' },
+    { id: 'wall_gallery', kind: 'style', slot: 'wall', cat: 'home', name: 'Gallery white walls', price: 120, desc: 'Crisp off-white, like a gallery.' },
+    { id: 'wall_graphite', kind: 'style', slot: 'wall', cat: 'home', name: 'Graphite walls', price: 150, desc: 'Dark graphite that makes neon pop.' },
+    { id: 'wall_midnight', kind: 'style', slot: 'wall', cat: 'home', name: 'Midnight blue walls', price: 180, desc: 'Deep blue, best after dark.' },
     { id: 'roof_blue', kind: 'style', slot: 'roof', cat: 'home', name: 'Blue slate roof', price: 300, desc: 'Smart blue slates.' },
     { id: 'roof_thatch', kind: 'style', slot: 'roof', cat: 'home', name: 'Thatched roof', price: 350, desc: 'A fluffy straw roof, like a storybook cottage.' },
     { id: 'roof_candy', kind: 'style', slot: 'roof', cat: 'home', name: 'Candy roof', price: 450, desc: 'Pink icing with sprinkles on top.' },
@@ -112,10 +123,16 @@
     { id: 'door_red', kind: 'style', slot: 'door', cat: 'home', name: 'Red door', price: 80, desc: 'A bold red front door.' },
     { id: 'door_green', kind: 'style', slot: 'door', cat: 'home', name: 'Green door', price: 80, desc: 'A leafy green front door.' },
     { id: 'door_gold', kind: 'style', slot: 'door', cat: 'home', name: 'Golden door', price: 150, desc: 'A shiny golden door.' },
+    { id: 'door_glass', kind: 'style', slot: 'door', cat: 'home', name: 'Smoked glass door', price: 160, desc: 'A dark glass door with a steel frame.' },
     { id: 'detail_windowbox', kind: 'style', slot: 'detail', multi: true, cat: 'home', name: 'Window boxes', price: 150, desc: 'Flower boxes under the windows.' },
     { id: 'detail_chimney', kind: 'style', slot: 'detail', multi: true, cat: 'home', name: 'Smoking chimney', price: 120, desc: 'A chimney with little puffs of smoke.' },
     { id: 'detail_lights', kind: 'style', slot: 'detail', multi: true, cat: 'home', name: 'Fairy lights', price: 200, desc: 'Twinkly lights along the roof.' },
     { id: 'detail_flag', kind: 'style', slot: 'detail', multi: true, cat: 'home', name: 'Rooftop flag', price: 100, desc: 'A flag flying from the roof.' },
+    { id: 'detail_neon', kind: 'style', slot: 'detail', multi: true, cat: 'home', name: 'Neon roofline', price: 250, desc: 'A neon tube in your colour along every roof edge.' },
+    /* paid home shapes: buying one selects it (walls, roof, door and extras carry over) */
+    { id: 'shape_villa', kind: 'style', slot: 'shape', cat: 'home', name: 'Beach villa', price: 650, desc: 'Long and low, with a timber deck and its own plunge pool.' },
+    { id: 'shape_tower', kind: 'style', slot: 'shape', cat: 'home', name: 'Neon tower', price: 950, desc: 'Three storeys, an outside stair and a neon sign with your initial.' },
+    { id: 'shape_dome', kind: 'style', slot: 'shape', cat: 'home', name: 'Sky dome', price: 1250, desc: 'A round future home with portholes, a glowing ring and a sliding door.' },
 
     /* ---- pets & accessories ---- */
     { id: 'pet_kitten', kind: 'pet', cat: 'pets', name: 'Kitten', price: 600, desc: 'A playful kitten who loves to pounce.' },
@@ -127,6 +144,20 @@
     { id: 'acc_scarf', kind: 'acc', slot: 'neck', cat: 'pets', name: 'Cosy scarf', price: 120, desc: 'A stripy knitted scarf.' },
     { id: 'acc_shades', kind: 'acc', slot: 'face', cat: 'pets', name: 'Cool shades', price: 140, desc: 'Sunglasses for the coolest pet around.' },
     { id: 'acc_cape', kind: 'acc', slot: 'back', cat: 'pets', name: 'Super cape', price: 300, desc: 'A red hero cape that flaps when your pet runs.' },
+    { id: 'acc_beanie', kind: 'acc', slot: 'hat', cat: 'pets', name: 'Beanie', price: 120, desc: 'A ribbed knit beanie. Bunny ears poke through.' },
+    { id: 'acc_cap', kind: 'acc', slot: 'hat', cat: 'pets', name: 'Snapback', price: 160, desc: 'Worn backwards. The brim glows underneath after dark.' },
+    { id: 'acc_headphones', kind: 'acc', slot: 'neck', cat: 'pets', name: 'Studio headphones', price: 180, desc: 'Worn round the neck, DJ-style. The rings glow on the beat.' },
+    { id: 'acc_visor', kind: 'acc', slot: 'face', cat: 'pets', name: 'LED visor', price: 220, desc: 'A wraparound visor with a light that scans after dark.' },
+    { id: 'acc_hoodie', kind: 'acc', slot: 'back', cat: 'pets', name: 'Hoodie', price: 260, desc: 'A graphite hoodie with neon drawstrings.' },
+
+    /* ---- city buildings: unique, placeable, storable; tapping plays the act (never points) ---- */
+    { id: 'bld_photobooth', kind: 'fun', cat: 'city', name: 'Photo Booth', price: 250, fp: [1, 1], act: 'snap', desc: 'Step in and strike a pose. Your pet gets a strip of four photos.' },
+    { id: 'bld_boba', kind: 'fun', cat: 'city', name: 'Boba Café', price: 350, fp: [2, 1], act: 'serve', desc: 'A café crowned by a giant bubble-tea cup. Tap for a fresh order.' },
+    { id: 'bld_ledtower', kind: 'fun', cat: 'city', name: 'LED Screen Tower', price: 450, fp: [1, 1], act: 'screen', desc: 'A steel mast with a giant screen. Tap it to switch the show.' },
+    { id: 'bld_recording', kind: 'fun', cat: 'city', name: 'Recording Studio', price: 550, fp: [2, 1], act: 'record', desc: 'Giant headphones on the roof and an ON AIR sign. Tap to lay down a beat.' },
+    { id: 'bld_dance', kind: 'fun', cat: 'city', name: 'Dance Studio', price: 950, fp: [2, 2], entrance: true, act: 'dance', desc: 'A glass-front studio with a light-up floor. Tap and your pet hits the floor.' },
+    { id: 'bld_rooftop', kind: 'fun', cat: 'city', name: 'Rooftop Hangout', price: 1100, fp: [2, 2], act: 'hangout', desc: 'A brick warehouse with beanbags, string lights and a telescope on the roof.' },
+    { id: 'bld_stage', kind: 'fun', cat: 'city', name: 'Concert Stage', price: 1450, fp: [3, 2], entrance: true, act: 'encore', desc: 'A real stage with a giant LED wall. Tap to bring the whole crew on.' },
 
     /* ---- land ---- */
     { id: 'land_cove', kind: 'land', region: 'cove', cat: 'land', name: 'Beach Cove', price: 1000, desc: 'A sandy bay on the east side of your island — 18 new squares to build on.' },
@@ -171,13 +202,16 @@
   var STORABLE = { decor: 1, path: 1, fun: 1 };          /* house + attractions move, never store */
   var SELECTABLE = { style: 1, variant: 1, cosmetic: 1 };
 
-  var DEFAULTS = { wall: 'wall_cream', roof: 'roof_red', door: 'door_blue',
+  /* shape: the City loft is the default house form. Parent switch: set it (and
+     SLIslandLook.SLOT_DEFAULTS.shape) to 'shape_cottage' for zero visual change on old saves. */
+  var DEFAULTS = { wall: 'wall_cream', roof: 'roof_red', door: 'door_blue', shape: 'shape_loft',
                    course: 'course_meadow', ball: 'ball_classic', stadium: 'stadium_day',
                    kart: 'kart_red', track: 'track_loop' };
 
   /* starter layout — validated by tests to be legal */
   var STARTER = {
     owned: { house_cottage: 1, att_course: 1, pet_puppy: 1, wall_cream: 1, roof_red: 1, door_blue: 1,
+             shape_cottage: 1, shape_loft: 1,
              course_meadow: 1, tree_oak: 2, tree_pine: 1, flower_tulip: 2, flower_daisy: 1, path_stone: 4, bush_rose: 1 },
     placed: [
       { id: 'house_cottage', x: 6, y: 2 },

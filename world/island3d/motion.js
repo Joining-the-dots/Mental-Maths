@@ -37,7 +37,15 @@
      durOf(name, o) · actFor(catalogAct, id, lit) → act name
      names: squish dropIn store glowOn glowOff flag bunting spin swing splash bounce
             bubbles launch kartRev home homeClose debut hop
+            city buildings (3 s; 'screen' 0.5 s; reduced = the instant end state):
+            snap {bulbs, bloom, strip, curtain} · serve {hatch, cup, cupA, swirl} ·
+            screen {wipe, band, prog} · record {onAir, level} · dance {chase, pump} ·
+            hangout {scope, wave, squish} · encore {wall, heads, chase, beams}
+            (a cue with pet: true is the active pet's voice: SLSound 'voice' at that pet's step)
      ripple(u, front, amp) → bunting pennant extra degrees
+     ON_AIR_SEC (4) · STRIP_SEC (6) · RATE {bloom 1.5, screen 0.5} · allow(lastT, t, gap) → bool
+     vu(i, beat, beatFrac, level, reduced) → bar height · diagChase(cx, cz, beat, beatFrac, groups,
+       reduced) → tile light · wave(t, i, n, hz, level, reduced) → bulb light (≤ ±35%)
    SCENE TIMELINES:
      showMix(t, k0, target, reduced) → k · landRise(t, delay, reduced, out) → {y01, a} ·
      riseDur(n) · crane(t, reduced, out) → {k, elev} · pushIn(t, reduced) · orbit(t, reduced)
@@ -529,6 +537,155 @@
       return blendFrom(out, o.from, this.keys, t);
     } });
 
+  /* ---------------- city building acts (Encore City) ----------------
+     Each lasts ≤ 3 s on the building's ACT_PIVOT pivot, restarts on a re-tap (blending the
+     keys that must not jump), never plays 'pop' in its first 0.05 s (the controller's tap
+     squish owns that), and never involves points or chance. Reduced motion: the instant end
+     state, one sparkle, and the same sounds at t = 0. Longer pet performances run in
+     pets-brain; the models fire them alongside. */
+  /* 0 before a, up to 1 by b (inOutSine), held to c, back to 0 by d */
+  function env(t, a, b, c, d) {
+    if (t <= a || t >= d) return 0;
+    if (t < b) return ease.inOutSine((t - a) / (b - a));
+    if (t <= c) return 1;
+    return 1 - ease.inOutSine((t - c) / (d - c));
+  }
+  function reducedOf(list) {
+    var out = [];
+    list.forEach(function (c) { if (c.sfx) { var o = {}; for (var k in c) o[k] = c[k]; o.t = 0; out.push(o); } });
+    out.push({ t: 0, emit: 'sparkle', n: 1 });
+    return out;
+  }
+  function endInto(out, end) { for (var k in end) out[k] = end[k]; return out; }
+  function defBuildingAct(spec0) {
+    spec0.reducedDur = 0;
+    spec0.reducedCues = reducedOf(spec0.cues);
+    defAct(spec0);
+  }
+  /* the ON AIR sign stays lit this long after a tap (past the 3 s act; the model fades it),
+     and the photo strip waits this long before it fades (or until the next tap) */
+  var ON_AIR_SEC = 4, STRIP_SEC = 6;
+
+  /* Photo Booth: the countdown rings light one by one (1.67 Hz), a local lens bloom at
+     1.5 s, then the strip slides out of the slot (it stays out at the end) */
+  defBuildingAct({ name: 'snap', dur: 3, end: { bulbs: 0, bloom: 0, strip: 1, curtain: 0 },
+    cues: [{ t: 0.1, sfx: 'tick', step: 0 }, { t: 0.7, sfx: 'tick', step: 2 }, { t: 1.3, sfx: 'tick', step: 4 },
+           { t: 1.5, sfx: 'star' }, { t: 1.5, emit: 'sparkle', n: 4 }],
+    sample: function (t, out, o) {
+      if (o.reduced || t >= 3) return endInto(out, this.end);
+      out.bulbs = t < 0.1 ? 0 : t < 0.7 ? 1 / 3 : t < 1.3 ? 2 / 3 : t < 1.5 ? 1 : 1 - clamp01((t - 1.5) / 0.3);
+      out.bloom = t < 1.5 ? 0 : t < 1.75 ? ease.outQuad((t - 1.5) / 0.25) : 1 - ease.inQuad(clamp01((t - 1.75) / 0.5));
+      out.strip = t < 1.7 ? 0 : ease.outQuad(clamp01((t - 1.7) / 0.6));
+      out.curtain = t < 0.5 ? 4 * Math.sin(TAU * 2 * t) * (1 - t / 0.5) : 0;
+      return blendFrom(out, o.from, ['bloom', 'curtain'], t);
+    } });
+
+  /* Boba Café: the hatch flips up, a cup slides along the counter to the table, the giant
+     sign's pearls swirl up a helix and settle, two hearts, the hatch closes */
+  defBuildingAct({ name: 'serve', dur: 3, end: { hatch: 0, cup: 1, cupA: 0, swirl: 0 },
+    cues: [{ t: 0.1, sfx: 'whoosh' }, { t: 0.9, sfx: 'pop', step: 0 }, { t: 1.1, sfx: 'pop', step: 2 },
+           { t: 1.3, sfx: 'pop', step: 4 }, { t: 1.4, emit: 'heart', n: 2 }],
+    sample: function (t, out, o) {
+      if (o.reduced || t >= 3) return endInto(out, this.end);
+      out.hatch = t < 0.1 ? 0 : t < 0.35 ? 110 * ease.outBack((t - 0.1) / 0.25) : t < 2.6 ? 110 : 110 * (1 - ease.inOutSine(clamp01((t - 2.6) / 0.3)));
+      out.cup = t < 0.35 ? 0 : ease.inOutSine(clamp01((t - 0.35) / 0.5));
+      out.cupA = t < 0.35 ? 0 : t < 2.4 ? clamp01((t - 0.35) / 0.1) : 1 - clamp01((t - 2.4) / 0.5);
+      out.swirl = t < 0.9 ? 0 : t < 1.4 ? ease.inOutSine((t - 0.9) / 0.5) : 1 - ease.inOutSine(clamp01((t - 1.4) / 0.6));
+      return blendFrom(out, o.from, ['hatch'], t);
+    } });
+
+  /* LED Screen Tower: a dark scanline band sweeps top to bottom (a moving wipe, never a
+     dimming); prog flips 0 → 1 at 0.2 s = advance the program (the model rate-limits
+     changes to one per RATE.screen s) */
+  defBuildingAct({ name: 'screen', dur: 0.5, end: { wipe: 1, band: 0, prog: 1 },
+    cues: [{ t: 0.2, sfx: 'beep' }, { t: 0.4, sfx: 'chip' }],
+    sample: function (t, out, o) {
+      if (o.reduced || t >= 0.5) return endInto(out, this.end);
+      out.wipe = clamp01((t - 0.05) / 0.3);
+      out.band = t < 0.05 ? 0 : t < 0.1 ? (t - 0.05) / 0.05 : t < 0.3 ? 1 : 1 - clamp01((t - 0.3) / 0.05);
+      out.prog = t < 0.2 ? 0 : 1;
+      return blendFrom(out, o.from, ['band'], t);
+    } });
+
+  /* Recording Studio: ON AIR switches on (and stays on: a re-tap never toggles it off), the
+     VU level envelope runs 0.3–2.7 s (bar heights follow the music beat via vu()), a
+     4-note phrase on the beeps and the active pet's voice (cue pet: true → that pet's step) */
+  var RECORD_CUES = [];
+  [[0.4, 0], [1.0, 2], [1.6, 4], [2.2, 7]].forEach(function (b) {
+    RECORD_CUES.push({ t: b[0], sfx: 'beep', step: b[1] }, { t: b[0], emit: 'note', n: 1 });
+  });
+  RECORD_CUES.push({ t: 2.4, sfx: 'voice', pet: true });
+  defBuildingAct({ name: 'record', dur: 3, end: { onAir: 1, level: 0 }, cues: RECORD_CUES,
+    sample: function (t, out, o) {
+      if (o.reduced || t >= 3) return endInto(out, this.end);
+      var held = o.from && typeof o.from.onAir === 'number' ? clamp01(o.from.onAir) : 0;
+      out.onAir = Math.max(held, ease.inOutSine(clamp01((t - 0.1) / 0.15)));
+      out.level = env(t, 0.3, 0.5, 2.5, 2.7);
+      return blendFrom(out, o.from, ['level'], t);
+    } });
+
+  /* Dance Studio: the floor chase and the speaker pump run under this envelope (the tiles
+     step on the beat via diagChase(), each tile at most once per 4 beats) */
+  defBuildingAct({ name: 'dance', dur: 3, end: { chase: 0, pump: 0 },
+    cues: [{ t: 0.1, sfx: 'go' }, { t: 0.1, emit: 'note', n: 3 }],
+    sample: function (t, out, o) {
+      if (o.reduced || t >= 3) return endInto(out, this.end);
+      out.chase = env(t, 0.1, 0.3, 2.6, 3);
+      out.pump = env(t, 0.1, 0.3, 2.6, 3);
+      return blendFrom(out, o.from, this.keys, t);
+    } });
+
+  /* Rooftop Hangout: the telescope swings 40° to the sky and back, the beanbags squish, the
+     festoon bulbs brighten in a 0.8 Hz wave (wave() under this envelope), stars at 2.2 s */
+  defBuildingAct({ name: 'hangout', dur: 3, end: { scope: 0, wave: 0, squish: 1 },
+    cues: [{ t: 0.1, sfx: 'whoosh' }, { t: 2.2, sfx: 'star' }, { t: 2.2, emit: 'star', n: 3 }],
+    sample: function (t, out, o) {
+      if (o.reduced || t >= 3) return endInto(out, this.end);
+      out.scope = 40 * env(t, 0.1, 0.7, 2.4, 3);
+      out.wave = env(t, 0.3, 0.5, 1.8, 2);
+      out.squish = t < 0.3 || t >= 0.8 ? 1 : t < 0.45 ? lerp(1, 0.92, ease.outQuad((t - 0.3) / 0.15))
+        : t < 0.62 ? lerp(0.92, 1.03, ease.inOutSine((t - 0.45) / 0.17)) : lerp(1.03, 1, ease.inOutSine((t - 0.62) / 0.18));
+      return blendFrom(out, o.from, ['scope', 'squish'], t);
+    } });
+
+  /* Concert Stage (building part): sting, the LED wall wipes to ENCORE (and stays there for
+     the encore moment, which the scene owns), the moving heads swing to centre and back, the
+     footlights chase, beams (alpha ≤ 0.18) under their envelope, confetti at 2.6 s */
+  defBuildingAct({ name: 'encore', dur: 3, end: { wall: 1, heads: 0, chase: 0, beams: 0 },
+    cues: [{ t: 0.1, sfx: 'sting' }, { t: 2.6, sfx: 'tada' }, { t: 2.6, emit: 'confetti', n: 30 }],
+    sample: function (t, out, o) {
+      if (o.reduced || t >= 3) return endInto(out, this.end);
+      out.wall = clamp01((t - 0.1) / 0.4);
+      out.heads = env(t, 0.1, 0.8, 2.4, 3);
+      out.chase = env(t, 0.2, 0.4, 2.6, 3);
+      out.beams = env(t, 0.1, 0.4, 2.5, 3);
+      return blendFrom(out, o.from, ['heads', 'chase', 'beams'], t);
+    } });
+
+  /* ---------------- flash-safe light helpers for the city buildings ---------------- */
+  /* rate gates: one local bloom per item per 1.5 s; one screen program change per 0.5 s */
+  var RATE = { bloom: 1.5, screen: 0.5 };
+  function allow(lastT, t, gap) { return lastT == null || !(t - lastT < gap); }
+  /* VU bar i: smooth heights on a 4-beat pattern (no on/off), scaled by the act envelope */
+  var VU = [0.55, 0.9, 0.7, 1.0];
+  function vu(i, beat, beatFrac, level, reduced) {
+    if (reduced) return 0.75 * level;
+    var b = ((beat + i) % 4 + 4) % 4;
+    return level * lerp(VU[b], VU[(b + 1) % 4], smoothstep(0, 1, beatFrac));
+  }
+  /* light-up floor tile (cx, cz): its diagonal lights for one beat in every `groups` beats,
+     a soft sine within the beat; steady under reduced motion */
+  function diagChase(cx, cz, beat, beatFrac, groups, reduced) {
+    if (reduced) return 0.8;
+    var g = Math.max(2, groups | 0), on = ((cx + cz) % g + g) % g === ((beat % g) + g) % g;
+    return 0.35 + (on ? 0.65 * Math.sin(PI * clamp01(beatFrac)) : 0);
+  }
+  /* a travelling brightness wave over n lights at hz (≤ ±35%), scaled by an envelope */
+  function wave(t, i, n, hz, level, reduced) {
+    if (reduced) return 1;
+    return 1 - 0.35 * clamp01(level) * (0.5 - 0.5 * Math.cos(TAU * (safeHz(hz) * t - i / Math.max(1, n))));
+  }
+
   var NOOPT = {};
   function spec(name) { var s = ACTS[name]; if (!s) throw new Error('SLMotion: unknown act ' + name); return s; }
   function sample(name, t, out, o) { var s = spec(name); return s.sample(t, out || {}, o || NOOPT); }
@@ -562,6 +719,7 @@
       case 'bubbles': return 'bubbles';
       case 'home': return 'home';
       case 'launch': return id === 'att_kart' ? 'kartRev' : 'launch';
+      case 'serve': case 'snap': case 'screen': case 'record': case 'dance': case 'hangout': case 'encore': return act;
     }
     return null;
   }
@@ -610,6 +768,7 @@
     bubbleTrack: bubbleTrack, ripple: ripple,
     ACTS: ACTS, BLEND: BLEND, SPIN: SPIN, SWING: SWING, BOUNCE: BOUNCE,
     sample: sample, carry: carry, cues: cues, durOf: durOf, actFor: actFor,
+    ON_AIR_SEC: ON_AIR_SEC, STRIP_SEC: STRIP_SEC, RATE: RATE, allow: allow, vu: vu, diagChase: diagChase, wave: wave,
     SHOW_MIX_SEC: SHOW_MIX_SEC, SHOW_MIX_REDUCED_SEC: SHOW_MIX_REDUCED_SEC, showMix: showMix,
     RISE: RISE, landRise: landRise, riseDur: riseDur, CRANE: CRANE, crane: crane, pushIn: pushIn, orbit: orbit
   };

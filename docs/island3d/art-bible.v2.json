@@ -1,0 +1,998 @@
+{
+ "name": "Encore City: art bible v2",
+ "version": 2,
+ "supersedes": "docs/island3d/art-bible.json (kept for history; every v1 token stays defined unchanged)",
+ "vibe": "A designer-toy diorama of a tiny harbour city, not a nursery toy: crisp bevelled concrete, smoked glass, teak boardwalks, gunmetal rails, LED strips and screens. Golden hour is the default; Showtime is full night with an indigo sky, a magenta city glow, three sweeping cones, LED edges and the crew on stage. The cuteness dial moves from baby to cool older sibling: smaller confident eyes, longer legs, less squash, witty copy.",
+ "colourRule": {
+  "neutrals": 0.6,
+  "midColour": 0.28,
+  "neon": 0.12,
+  "neonFrameMax": {
+   "goldenHour": 0.08,
+   "showtime": 0.15
+  },
+  "perObject": "Up to 3 tones of one family plus up to 1 neon accent.",
+  "buildings": "1 neutral body + 1 accent + Smoked Glass + neon/LED: at most 4 materials and 4 meshes.",
+  "neonUse": "Neon goes only on lines, rings, signs and screens, never a surface."
+ },
+ "palette": [
+  {
+   "name": "Midnight Ink",
+   "hex": "#14101F",
+   "group": "ink-ui",
+   "use": "Character outline hulls (0.009 u), tyres, LED off-black, boba pearls, the trampoline legs. Replaces Ink for 3D outlines."
+  },
+  {
+   "name": "Night Base",
+   "hex": "#0E0B1A",
+   "group": "ink-ui",
+   "use": "Page and game-shell background behind the island."
+  },
+  {
+   "name": "Panel Glass",
+   "hex": "#161228",
+   "group": "ink-ui",
+   "use": "HUD panels and sheets at 72% alpha; #15112A solid on LOW or without backdrop-filter."
+  },
+  {
+   "name": "CTA Magenta",
+   "hex": "#E0157F",
+   "group": "ink-ui",
+   "use": "Primary button gradient start (white text 4.6:1)."
+  },
+  {
+   "name": "CTA Violet",
+   "hex": "#7B4DFF",
+   "group": "ink-ui",
+   "use": "Primary button gradient end (white text 4.8:1)."
+  },
+  {
+   "name": "Text Muted",
+   "hex": "#B8B2D6",
+   "group": "ink-ui",
+   "use": "Secondary text on dark panels (about 8.6:1)."
+  },
+  {
+   "name": "Error Coral",
+   "hex": "#FF5A6A",
+   "group": "ink-ui",
+   "use": "Invalid placement cell and error text on dark panels."
+  },
+  {
+   "name": "Graphite",
+   "hex": "#2E2B3A",
+   "group": "architecture",
+   "use": "Streetwear, dark cladding, the Recording Studio body, speaker stacks, the course gate pillar."
+  },
+  {
+   "name": "Night Asphalt",
+   "hex": "#3A3646",
+   "group": "architecture",
+   "use": "Avatar joggers, the stage deck, the Photo Booth body, paving joints."
+  },
+  {
+   "name": "Concrete",
+   "hex": "#8C8798",
+   "group": "architecture",
+   "use": "Building bodies and plinths, retaining walls, the Dance Studio and the Boba Café, house steps."
+  },
+  {
+   "name": "Concrete Light",
+   "hex": "#C9C5D3",
+   "group": "architecture",
+   "use": "Upper storeys, parapet caps, stair treads, paver tops, beanie ribs, the fountain basin."
+  },
+  {
+   "name": "Bone White",
+   "hex": "#F4F2FA",
+   "group": "architecture",
+   "use": "Sneakers, drawstrings, trims, windmill slats. Used instead of pure white on lit surfaces."
+  },
+  {
+   "name": "Smoked Glass",
+   "hex": "#1B2438",
+   "group": "architecture",
+   "use": "All glazing (an opaque matcap base): windows, shopfronts, balustrades, the LED visor."
+  },
+  {
+   "name": "Glass Edge",
+   "hex": "#8FB7FF",
+   "group": "architecture",
+   "use": "Spec and rim stop of the SMOKED matcap."
+  },
+  {
+   "name": "Smoked Mid",
+   "hex": "#2A3B5C",
+   "group": "architecture",
+   "use": "SMOKED matcap mid stop (35%)."
+  },
+  {
+   "name": "Smoked Deep",
+   "hex": "#0E1626",
+   "group": "architecture",
+   "use": "SMOKED matcap edge stop."
+  },
+  {
+   "name": "Gunmetal",
+   "hex": "#5A5F72",
+   "group": "architecture",
+   "use": "Truss, railings, posts, door frames, headphone cups, the Spark Stick collar."
+  },
+  {
+   "name": "Gunmetal Spec",
+   "hex": "#E6E9F2",
+   "group": "architecture",
+   "use": "GUNMETAL matcap spec stop."
+  },
+  {
+   "name": "Gunmetal Mid",
+   "hex": "#7C8194",
+   "group": "architecture",
+   "use": "GUNMETAL matcap mid stop; unlit bulbs."
+  },
+  {
+   "name": "Gunmetal Deep",
+   "hex": "#2A2D3A",
+   "group": "architecture",
+   "use": "GUNMETAL matcap edge stop."
+  },
+  {
+   "name": "Teak",
+   "hex": "#9A6A4A",
+   "group": "architecture",
+   "use": "Boardwalk planks (alternating with Teak Light), bench slats, decks, the loft soffit."
+  },
+  {
+   "name": "Teak Light",
+   "hex": "#B07E58",
+   "group": "architecture",
+   "use": "Alternate boardwalk plank."
+  },
+  {
+   "name": "Milk Tea",
+   "hex": "#E2BE94",
+   "group": "architecture",
+   "use": "The Boba Café cup liquid."
+  },
+  {
+   "name": "Dusk Zenith",
+   "hex": "#2B1E5C",
+   "group": "sky-light",
+   "use": "Sky top at golden hour."
+  },
+  {
+   "name": "Dusk Mid",
+   "hex": "#6A3D8F",
+   "group": "sky-light",
+   "use": "Sky middle at golden hour."
+  },
+  {
+   "name": "Dusk Horizon",
+   "hex": "#FF9A7A",
+   "group": "sky-light",
+   "use": "Horizon band at golden hour."
+  },
+  {
+   "name": "Dusk Fog",
+   "hex": "#7E4E8E",
+   "group": "sky-light",
+   "use": "Fog and clear colour at golden hour."
+  },
+  {
+   "name": "Sun Halo",
+   "hex": "#FFD6A0",
+   "group": "sky-light",
+   "use": "Additive sun-disc sprite (r 3 at yaw -30°) and the sea glints at golden hour."
+  },
+  {
+   "name": "Night Zenith",
+   "hex": "#0B0A1F",
+   "group": "sky-light",
+   "use": "Sky top at Showtime; the darkest value anywhere in the scene."
+  },
+  {
+   "name": "Night Mid",
+   "hex": "#1E1450",
+   "group": "sky-light",
+   "use": "Sky middle and fog at Showtime."
+  },
+  {
+   "name": "City Glow",
+   "hex": "#C2338F",
+   "group": "sky-light",
+   "use": "Night horizon band 0–8° above the sea."
+  },
+  {
+   "name": "Hemi Dusk Sky",
+   "hex": "#9C8CFF",
+   "group": "sky-light",
+   "use": "Hemisphere sky colour at golden hour (1.35)."
+  },
+  {
+   "name": "Hemi Dusk Ground",
+   "hex": "#3A2550",
+   "group": "sky-light",
+   "use": "Hemisphere ground colour at golden hour."
+  },
+  {
+   "name": "Sun Dusk",
+   "hex": "#FFB48A",
+   "group": "sky-light",
+   "use": "Key light at golden hour (2.2)."
+  },
+  {
+   "name": "Rim Dusk",
+   "hex": "#FFB0D9",
+   "group": "sky-light",
+   "use": "Rim at golden hour (0.35, member mix 0.25, exponent 3.0)."
+  },
+  {
+   "name": "Hemi Night Sky",
+   "hex": "#5A4BD1",
+   "group": "sky-light",
+   "use": "Hemisphere sky colour at Showtime (0.75)."
+  },
+  {
+   "name": "Hemi Night Ground",
+   "hex": "#1A1030",
+   "group": "sky-light",
+   "use": "Hemisphere ground colour at Showtime."
+  },
+  {
+   "name": "Moon V2",
+   "hex": "#A9B8FF",
+   "group": "sky-light",
+   "use": "Key light at Showtime (0.8), same direction as the sun."
+  },
+  {
+   "name": "Rim Night",
+   "hex": "#FF5FD2",
+   "group": "sky-light",
+   "use": "Rim at Showtime (0.6, member mix 0.5)."
+  },
+  {
+   "name": "Studio Sky",
+   "hex": "#B9B0FF",
+   "group": "sky-light",
+   "use": "Photocard STUDIO hemisphere sky (1.4)."
+  },
+  {
+   "name": "Studio Ground",
+   "hex": "#2A2240",
+   "group": "sky-light",
+   "use": "Photocard STUDIO hemisphere ground."
+  },
+  {
+   "name": "Studio Key",
+   "hex": "#FFE2C8",
+   "group": "sky-light",
+   "use": "Photocard STUDIO key (2.2 from (-5, 8, 9))."
+  },
+  {
+   "name": "Lagoon",
+   "hex": "#3FB8D0",
+   "group": "water",
+   "use": "Shallow water at golden hour."
+  },
+  {
+   "name": "Deep Bay",
+   "hex": "#1E3F86",
+   "group": "water",
+   "use": "Open water at golden hour."
+  },
+  {
+   "name": "Foam Dusk",
+   "hex": "#FFD9E8",
+   "group": "water",
+   "use": "Shore foam at golden hour."
+  },
+  {
+   "name": "Wave Dusk",
+   "hex": "#FFC7B0",
+   "group": "water",
+   "use": "Wave lines at golden hour (0.35, 0.6× width)."
+  },
+  {
+   "name": "Night Lagoon",
+   "hex": "#1F4FA8",
+   "group": "water",
+   "use": "Shallow water at Showtime."
+  },
+  {
+   "name": "Night Deep",
+   "hex": "#0B1440",
+   "group": "water",
+   "use": "Open water at Showtime."
+  },
+  {
+   "name": "Foam Night",
+   "hex": "#B9A8FF",
+   "group": "water",
+   "use": "Shore foam at Showtime."
+  },
+  {
+   "name": "Turf",
+   "hex": "#4FA36A",
+   "group": "land",
+   "use": "Grass tops; lit Turf reads #4FA36A ±6% L at golden hour. ±4% lightness noise, never a checker."
+  },
+  {
+   "name": "Turf Shade",
+   "hex": "#3C8456",
+   "group": "land",
+   "use": "Grass slopes, flower mounds, lower canopy facets."
+  },
+  {
+   "name": "Hill Moss",
+   "hex": "#5DB67E",
+   "group": "land",
+   "use": "Hill crowns and Meadow Hill tops."
+  },
+  {
+   "name": "Cliff Rock",
+   "hex": "#5A5168",
+   "group": "land",
+   "use": "Faceted cliff faces, the mossy rock, Meadow Hill sides."
+  },
+  {
+   "name": "Dune",
+   "hex": "#E9C9A0",
+   "group": "land",
+   "use": "Beaches and the Beach Cove top."
+  },
+  {
+   "name": "Wet Dune",
+   "hex": "#B98F6E",
+   "group": "land",
+   "use": "Waterline ring, tide line and Beach Cove sides."
+  },
+  {
+   "name": "Leaf Deep",
+   "hex": "#2F7D57",
+   "group": "land",
+   "use": "Low-poly canopy base facets."
+  },
+  {
+   "name": "Leaf Lit",
+   "hex": "#57B07A",
+   "group": "land",
+   "use": "Key-lit canopy facets and highlights."
+  },
+  {
+   "name": "Neon Magenta",
+   "hex": "#FF2E9A",
+   "group": "neon",
+   "use": "EMISSIVE ONLY: primary sign tubes, stage LEDs, spotlight 1."
+  },
+  {
+   "name": "LED Cyan",
+   "hex": "#22E4FF",
+   "group": "neon",
+   "use": "EMISSIVE ONLY: LED edges, the loft parapet line, spotlight 2, headphone rings."
+  },
+  {
+   "name": "Electric Violet",
+   "hex": "#8A5CFF",
+   "group": "neon",
+   "use": "EMISSIVE ONLY: spotlight 3, LED screen gradients, buoy rings, ear-cup rings."
+  },
+  {
+   "name": "Laser Lime",
+   "hex": "#C6FF3D",
+   "group": "neon",
+   "use": "EMISSIVE ONLY: the garage sign; at most one accent per building."
+  },
+  {
+   "name": "Sunset Amber",
+   "hex": "#FFB23E",
+   "group": "warm-light",
+   "use": "Warm practical lights: bollards, Edison string lights, lantern glass."
+  },
+  {
+   "name": "Window Warm",
+   "hex": "#FFD08A",
+   "group": "warm-light",
+   "use": "Lit windows (0.6 at golden hour, 1 at Showtime)."
+  },
+  {
+   "name": "Crowd Shadow",
+   "hex": "#2A2348",
+   "group": "crowd",
+   "use": "Fan-silhouette bodies; their Spark Sticks give the colour."
+  },
+  {
+   "name": "Crowd Shadow 2",
+   "hex": "#33295A",
+   "group": "crowd",
+   "use": "Second silhouette body tone."
+  },
+  {
+   "name": "Crowd Shadow 3",
+   "hex": "#3D3166",
+   "group": "crowd",
+   "use": "Third silhouette body tone."
+  },
+  {
+   "name": "Foil Pink",
+   "hex": "#FF7AD9",
+   "group": "foil",
+   "use": "FOIL matcap stop 1; shop shine edges."
+  },
+  {
+   "name": "Foil Blue",
+   "hex": "#7AD7FF",
+   "group": "foil",
+   "use": "FOIL matcap stop 2."
+  },
+  {
+   "name": "Foil Mint",
+   "hex": "#9DFFCF",
+   "group": "foil",
+   "use": "FOIL matcap stop 3."
+  },
+  {
+   "name": "Foil Gold",
+   "hex": "#FFE27A",
+   "group": "foil",
+   "use": "FOIL matcap stop 4."
+  },
+  {
+   "name": "Night Glass Indigo",
+   "hex": "#2A2F5E",
+   "group": "city",
+   "use": "City tower facade tone 1."
+  },
+  {
+   "name": "Night Glass Teal",
+   "hex": "#1F4A55",
+   "group": "city",
+   "use": "City tower facade tone 2."
+  },
+  {
+   "name": "Night Glass Plum",
+   "hex": "#43294F",
+   "group": "city",
+   "use": "City tower facade tone 3."
+  },
+  {
+   "name": "Night Glass Graphite",
+   "hex": "#2B2D38",
+   "group": "city",
+   "use": "City tower facade tone 4."
+  },
+  {
+   "name": "Night Glass Smoke",
+   "hex": "#4A4E63",
+   "group": "city",
+   "use": "City tower facade tone 5."
+  },
+  {
+   "name": "Quay Stone",
+   "hex": "#3B3747",
+   "group": "city",
+   "use": "The quay sea wall across the bay."
+  }
+ ],
+ "kept": {
+  "Star Gold": "#FFD23F",
+  "Success": "#2ECC71",
+  "note": "Star Gold (points, focus ring, selection hull) and Success (BUY, valid cell) keep their v1 values. LOCKED colours are byte-identical; walls and doors only gain new keys."
+ },
+ "lockedAdditions": {
+  "WALL": {
+   "wall_concrete": "#a9a5b3",
+   "wall_gallery": "#eceaf2",
+   "wall_graphite": "#34303f",
+   "wall_midnight": "#232a57"
+  },
+  "DOOR": {
+   "door_glass": "#1b2438"
+  }
+ },
+ "neonSets": {
+  "NEON3": [
+   "Neon Magenta",
+   "LED Cyan",
+   "Electric Violet"
+  ],
+  "NEON4": [
+   "Neon Magenta",
+   "LED Cyan",
+   "Electric Violet",
+   "Laser Lime"
+  ],
+  "rule": "Every LED colour set mixes at least 4 hues (including the member colour) and no hue covers more than 35%."
+ },
+ "presets": {
+  "renderer": "NeutralToneMapping, sRGB output",
+  "sunPos": [
+   -9,
+   7.5,
+   8
+  ],
+  "sunNote": "The sun and the moon share ONE fixed direction, so the static shadow map never re-renders for light changes.",
+  "DUSK": {
+   "label": "Golden hour (default, k = 0)",
+   "exposure": 1.05,
+   "hemi": {
+    "sky": "Hemi Dusk Sky",
+    "ground": "Hemi Dusk Ground",
+    "intensity": 1.35
+   },
+   "key": {
+    "color": "Sun Dusk",
+    "intensity": 2.2
+   },
+   "rim": {
+    "color": "Rim Dusk",
+    "strength": 0.35,
+    "member": 0.25,
+    "exponent": 3
+   },
+   "sky": [
+    "Dusk Zenith",
+    "Dusk Mid",
+    "Dusk Horizon"
+   ],
+   "sunHalo": {
+    "token": "Sun Halo",
+    "r": 3,
+    "yawDeg": -30
+   },
+   "fog": {
+    "color": "Dusk Fog",
+    "near": 28,
+    "far": 72
+   },
+   "sea": {
+    "shallow": "Lagoon",
+    "deep": "Deep Bay",
+    "foam": "Foam Dusk",
+    "waveLine": "Wave Dusk",
+    "waveOpacity": 0.35,
+    "waveWidth": 0.6,
+    "glints": "Sun Halo"
+   },
+   "neonSleeve": 0.25,
+   "halos": {
+    "scale": 1.2,
+    "opacity": 0.6
+   },
+   "windowGlow": 0.6,
+   "stars": 0.25,
+   "cones": 0,
+   "glints": 1,
+   "cityWindowsLit": 0.3
+  },
+  "SHOW": {
+   "label": "Showtime (k = 1)",
+   "exposure": 1.1,
+   "hemi": {
+    "sky": "Hemi Night Sky",
+    "ground": "Hemi Night Ground",
+    "intensity": 0.75
+   },
+   "key": {
+    "color": "Moon V2",
+    "intensity": 0.8
+   },
+   "rim": {
+    "color": "Rim Night",
+    "strength": 0.6,
+    "member": 0.5
+   },
+   "sky": [
+    "Night Zenith",
+    "Night Mid",
+    "City Glow"
+   ],
+   "cityGlowBandDeg": [
+    0,
+    8
+   ],
+   "fog": {
+    "color": "Night Mid",
+    "near": 22,
+    "far": 58
+   },
+   "sea": {
+    "shallow": "Night Lagoon",
+    "deep": "Night Deep",
+    "foam": "Foam Night",
+    "waveLine": "Holo Blue"
+   },
+   "neonSleeve": 0.45,
+   "halos": {
+    "scale": 1.6,
+    "opacity": 0.9
+   },
+   "windowGlow": 1,
+   "stars": 1,
+   "cones": 1,
+   "glints": 0,
+   "cityWindowsLit": 0.7
+  },
+  "DAY": "The v1 pastel DAY preset stays exported but unused by the island.",
+  "calibration": "At golden hour lit Turf reads #4FA36A ±6% L. Tune only the key intensity.",
+  "shadows": {
+   "orthoX": [
+    -13,
+    13
+   ],
+   "orthoY": [
+    -9,
+    9
+   ],
+   "bias": -0.0005,
+   "normalBias": 0.03,
+   "mapSize": {
+    "MID": 1024,
+    "HIGH": 2048
+   },
+   "LOW": "blob shadows"
+  },
+  "transition": {
+   "sec": 1.6,
+   "ease": "inOutSine",
+   "reducedSec": 0.25
+  },
+  "cityWakesUp": {
+   "fadeSec": 0.3,
+   "delayPerCellMs": 40,
+   "rule": "Lights fade in; never a pop."
+  },
+  "ambientDrift": {
+   "formula": "k_a = 0.12 + 0.12·cos(2πt / 420 s)",
+   "editMode": 0,
+   "reduced": 0.12,
+   "note": "Colours and intensities move; the direction never does. P1."
+  },
+  "STUDIO": {
+   "hemi": {
+    "sky": "Studio Sky",
+    "ground": "Studio Ground",
+    "intensity": 1.4
+   },
+   "key": {
+    "color": "Studio Key",
+    "intensity": 2.2,
+    "pos": [
+     -5,
+     8,
+     9
+    ]
+   },
+   "rim": {
+    "member": 0.45
+   },
+   "clear": "transparent over the dark CSS well"
+  }
+ },
+ "flashSafety": {
+  "maxFlashHz": 2,
+  "ledChaseHz": 1.5,
+  "beatPulse": {
+   "maxHz": 1.97,
+   "maxBrightness": 0.35
+  },
+  "skylineWindows": "At most one switch per ramp, with a 1.2 s fade.",
+  "beacons": "0.5 Hz sines.",
+  "fullScreen": "No full-screen luminance change over 20% within 0.5 s, no strobe, no full-screen white.",
+  "bloomGapSec": 1.5
+ },
+ "materials": {
+  "toon": {
+   "programKey": "encore-toon",
+   "ramp": [
+    64,
+    128,
+    200,
+    255
+   ],
+   "rampV1": [
+    110,
+    165,
+    215,
+    255
+   ]
+  },
+  "bevel": {
+   "arch": 0.05,
+   "archMax": 0.06,
+   "segments": 2,
+   "organic": 0.18,
+   "proportions": {
+    "architecture": 1,
+    "props": 1.1
+   }
+  },
+  "outlines": {
+   "kinds": [
+    "pet",
+    "acc",
+    "avatar"
+   ],
+   "character": 0.009,
+   "token": "Midnight Ink",
+   "tiers": "MID/HIGH only",
+   "architecture": 0,
+   "selection": {
+    "token": "Star Gold",
+    "width": [
+     0.02,
+     0.03
+    ],
+    "hz": 1.5
+   }
+  },
+  "matcaps": {
+   "size": 128,
+   "program": "one shared matcap program",
+   "SMOKED": {
+    "stops": [
+     "Glass Edge",
+     "Smoked Mid",
+     "Smoked Glass",
+     "Smoked Deep"
+    ],
+    "at": [
+     0,
+     0.35,
+     0.7,
+     1
+    ],
+    "spec": [
+     0.32,
+     0.28
+    ],
+    "note": "Opaque; all glazing."
+   },
+   "GUNMETAL": {
+    "stops": [
+     "Gunmetal Spec",
+     "Gunmetal Mid",
+     "Gunmetal",
+     "Gunmetal Deep"
+    ]
+   },
+   "FOIL": {
+    "stops": [
+     "Foil Pink",
+     "Foil Blue",
+     "Foil Mint",
+     "Foil Gold"
+    ],
+    "kind": "conic"
+   },
+   "GOLD": "kept as v1",
+   "CHROME": "kept as v1",
+   "PEARL": "kept only for transparent bubbles"
+  },
+  "windows": "Lit windows swap to Window Warm through the shared state material.",
+  "neon": {
+   "core": 0.015,
+   "sleeve": 0.05,
+   "sleeveOpacity": {
+    "goldenHour": 0.25,
+    "showtime": 0.45
+   }
+  },
+  "ledScreens": "MeshBasic plus the shared atlas, animated by UV offset only and never redrawn per frame; they share the emoji-face basic+map program.",
+  "surfaces": "Concrete and paving get ±3% L vertex noise on a 0.25 u grid; teak alternates Teak / Teak Light per plank. At most 3 overlapping transparents.",
+  "uplights": {
+   "r": 0.5,
+   "opacity": {
+    "goldenHour": 0.25,
+    "showtime": 0.4
+   }
+  }
+ },
+ "signWords": {
+  "whitelist": [
+   "ENCORE",
+   "SHOWTIME",
+   "ON AIR",
+   "PHOTO",
+   "DANCE",
+   "PET COURSE",
+   "ISLAND"
+  ],
+  "plus": "the child's own first name and initial",
+  "never": "brands, logos, Hangul, K-pop or idol wording",
+  "screens": "EQ bars, waves, ✦ sparks, member gradients, a star field and the child's emoji"
+ },
+ "characters": {
+  "petcol": "LOCKED; shape, eyes and motion change only.",
+  "pet": {
+   "proportions": {
+    "headR": 0.155,
+    "body": "bean(0.16, 0.20) scaled [0.85, 0.8, 0.85]",
+    "legs": "0.042 × [1, 1.9, 1]",
+    "bodyY": 0.235,
+    "raise": 0.015,
+    "muzzle": [
+     1.15,
+     0.72,
+     0.95
+    ]
+   },
+   "face": {
+    "eye": "0.024 × [1.15, 0.8, 0.5] at x ±0.072, y 0.402, rolled 8° outer-up",
+    "lid": "Midnight Ink ribbon r 0.006",
+    "glint": 0.006,
+    "restOpenness": 0.88,
+    "blush": "cheer only, 0.3 mix",
+    "mouth": "side smirk ribbon"
+   },
+   "species": {
+    "puppy": "ears [0.36, 1.25, 0.8] tucked 10° back",
+    "kitten": "ear cones h 0.125",
+    "bunny": "right ear folded at 35°",
+    "dragon": "horns cone(0.02, 0.095) swept 40°, 5 spines, 3 wing ribs; sparkles only, never fire"
+   },
+   "motion": {
+    "idleSquash": 0.007,
+    "tapSquish": [
+     1,
+     0.96,
+     1.03,
+     1
+    ],
+    "walk": 1,
+    "idles": [
+     "lean",
+     "beatNod",
+     "lookBack"
+    ],
+    "danceBreak": "an 8-count at 118 BPM of generic moves only"
+   }
+  },
+  "accessoriesRestyled": {
+   "acc_partyhat": "matte, 2 stripes",
+   "acc_crown": "band h 0.03, 5 sharp points",
+   "acc_bow": "15% smaller",
+   "acc_scarf": "torus r 0.022",
+   "acc_shades": "one wraparound Midnight Ink shield lens, FOIL at night",
+   "acc_cape": "Gunmetal clasp"
+  },
+  "accessoriesNew": [
+   "acc_beanie",
+   "acc_cap",
+   "acc_headphones",
+   "acc_visor",
+   "acc_hoodie"
+  ],
+  "avatar": {
+   "h": 1,
+   "tris": {
+    "MID": 1500,
+    "LOW": 1050
+   },
+   "face": "the child's emoji on the face cap, never a realistic face",
+   "hood": "member −12% L",
+   "hoodie": "Graphite",
+   "legs": "Night Asphalt",
+   "sneakers": "Bone White",
+   "idle": "weight shift 2.4 s, glance every 6 s",
+   "emotes": [
+    "finger-heart",
+    "V-sign",
+    "mic-point"
+   ],
+   "showtime": "Spark Stick twirl 360° over 1.2 s every 8 s (off under reduced motion)"
+  },
+  "sparkStick": {
+   "tris": 260,
+   "points": 4,
+   "head": "4-point ✦ prism rOut 0.06 rIn 0.016 depth 0.022",
+   "never": "never 5-pointed; never a sphere, heart, hammer, cube, crown, bird, hexagon or ring head"
+  },
+  "crowd": {
+   "day": "tonal streetwear",
+   "night": [
+    "Crowd Shadow",
+    "Crowd Shadow 2",
+    "Crowd Shadow 3"
+   ],
+   "hero": "2 Bone White eye dots; no mouths, no faces"
+  }
+ },
+ "ui": {
+  "scope": "Island and games only; learning screens keep their fonts.",
+  "fonts": {
+   "display": "Unbounded 800 (≥ 20 px, -0.01em)",
+   "h2": "Unbounded 600 (20–24 px)",
+   "ui": "Outfit 700/800",
+   "labels": "Outfit 600",
+   "body": "Outfit 400/500 at 16 px, line-height 1.45",
+   "numbers": "tabular-nums",
+   "tokens": [
+    "--sle-display",
+    "--sle-ui",
+    "--sle-body"
+   ]
+  },
+  "theme": {
+   "page": "#0E0B1A",
+   "panel": "rgba(22,18,40,.72) blur(16px) saturate(1.3); solid #15112A on LOW",
+   "text": "#FFF",
+   "secondary": "#B8B2D6",
+   "disabled": "#6E6890 on #221C3A"
+  },
+  "buttons": {
+   "primary": "linear-gradient(120deg, #E0157F, #7B4DFF)",
+   "secondary": "1.5px #22E4FF outline",
+   "ghost": "rgba(255,255,255,.06)",
+   "buy": "#2ECC71 → #1FA463, text #04301A",
+   "shape": "flat, radius 12, min 44×44, pressed scale .97"
+  },
+  "shopCards": {
+   "ratio": "3:4",
+   "shine": [
+    "plain under 200",
+    "holo-edge 200–599",
+    "holo-foil 600–1,199",
+    "gold-foil 1,200 and up"
+   ],
+   "tilt": "±6°, desktop only"
+  },
+  "icons": "In-house inline-SVG line set (24 grid, 2px round stroke, currentColor); emoji only for the avatar and ⭐.",
+  "motion": {
+   "press": "160 ms ease-out",
+   "sheets": "280 ms cubic-bezier(.2,.8,.2,1), no overshoot",
+   "toasts": "200 ms, 8px drop, 2.4 s",
+   "loopsMaxHz": 0.5,
+   "reduced": "120 ms fades only"
+  },
+  "contrast": "At least 4.5:1; #FF2E9A and #22E4FF as text only at 18px bold or larger on dark."
+ },
+ "copy": {
+  "voice": "A cool older cousin who runs the stage crew: short, confident, a little witty, never babyish or sarcastic.",
+  "rules": [
+   "UK English, sentence case, verbs first",
+   "At most one emoji, only when it carries meaning",
+   "'Pets' becomes 'Crew' in labels only; ids unchanged",
+   "Celebrate effort and saving, never luck",
+   "Keep every reassurance: pets never get sad, game scores never earn or spend ⭐"
+  ],
+  "banned": [
+   "yay",
+   "yippee",
+   "hooray",
+   "boing",
+   "oopsie",
+   "uh-oh",
+   "cosy",
+   "little",
+   "tiny",
+   "cute",
+   "poorly",
+   "magic",
+   "magical",
+   "friendly",
+   "super",
+   "sparkly",
+   "lovely"
+  ],
+  "table": "world/world-copy.js (SLWorldCopy.t / desc); CATALOG names and descriptions are never edited."
+ },
+ "dontDo": [
+  "Don't copy or evoke real idols, groups, agencies, songs, music shows, venues, logos, fandom names or fandom colour schemes. No Hangul and no 'K-pop' or 'idol' wording in the UI.",
+  "Don't use any real light-stick silhouette. The 4-point ✦ Spark Stick is the only light stick and must never read as the 5-point ⭐ reward.",
+  "Don't use recognisable choreography: generic moves only (groove bounce, step-touch, point, spin, hop-turn, freeze).",
+  "Don't flash faster than 2 Hz; full-contrast LED chases ≤ 1.5 Hz; beat pulses ≤ ±35%; no strobe, no full-screen flash.",
+  "Don't go edgy or teen-adult: no skulls, flames, weapons, graffiti words, nightclubs, bars or alcohol (the café serves boba).",
+  "Don't make it dark or scary: the darkest value is Night Zenith #0B0A1F and the island reads on LOW at both presets.",
+  "Don't paint neon onto big surfaces.",
+  "Don't edit existing CATALOG ids, prices, names, descriptions, LOCKED colours, ECONOMY, REGIONS, canPlace or GAME_RULES.",
+  "Don't introduce chance: no random variants at purchase, no loot boxes, timers or 'limited time'.",
+  "Don't jitter houses, buildings, attractions or paths; only organic decor (and small decor's fixed -20/0/+20° yaw).",
+  "Don't make the backdrop pickable or look like buildable land.",
+  "Don't use transparent glass, PointLights, SpotLights, real-time shadow updates or new post-processing; stay within 12 programs and 70/100/150 draw calls.",
+  "Don't put words in textures outside the SIGN_WORDS whitelist plus the child's own name or initial.",
+  "Don't download models, textures, HDRIs, sounds or fonts beyond Unbounded and Outfit.",
+  "Don't lose the cartoon safety net: pets never get sad, no injuries, the dragon never breathes fire.",
+  "Don't over-bounce: no overshoot on UI sheets, no jelly squash on buildings.",
+  "Don't write babyish copy, and don't put more than one emoji in a message."
+ ]
+}

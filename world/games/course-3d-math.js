@@ -626,6 +626,27 @@
   var STICKERS = ['PERFECT!', 'GREAT', 'BOUNCE!', '+3', '+6', '+9', '+12', 'CLEAN STAGE +25'];
   function snackSticker(mult) { return 3 + clamp((mult | 0) - 1, 0, 3); }
 
+  /* what rises from the pet and the fans. Every show has 3 hearts and a lost one never
+     comes back (2026-10-03), and the HUD draws hearts as wands in the child's colour — so
+     nothing heart-shaped (or ✦, the wand's head) is drawn in the child's colour where a heal
+     used to play: a CLEAN STAGE (+25, points) rises as Star Gold stars, the fans cheer the
+     last heart with notes in their own neon, and a confetti piece in the child's colour is
+     never a heart. Cells are sparkle-atlas names. */
+  var CHEER = {
+    clean: { cell: 'star', color: COL.STAR_GOLD },
+    fans: { cell: 'note', colors: FAN_NEON }
+  };
+  var CONFETTI_CELLS = ['rect', 'heart', 'diamond', 'curl'];
+  /* confetti piece i: 40 % in the child's colour (i % 5 < 2), cells cycling CONFETTI_CELLS;
+     a piece in the child's colour that would be a heart is a rect instead */
+  function confettiPiece(i, out) {
+    out = out || {};
+    var c = CONFETTI_CELLS[i % CONFETTI_CELLS.length];
+    out.member = i % 5 < 2;
+    out.cell = out.member && c === 'heart' ? 'rect' : c;
+    return out;
+  }
+
   /* ================================================================
      PARTICLES — one fixed pool, structure-of-arrays, zero allocation.
      Fill sim.spec, then sim.emit(); step(dt) integrates; dead slots have a = 0.
@@ -709,7 +730,7 @@
     /* lights, fans, strips, timelines */
     ledAt: ledAt, marqueeOn: marqueeOn, ringBase: ringBase, ringSlot: ringSlot, fanLook: fanLook, fanPose: fanPose,
     cueRingScale: cueRingScale, pickupSpin: pickupSpin, pickupBob: pickupBob, spillPulse: spillPulse, hatFlight: hatFlight,
-    zipAt: zipAt, curtainK: curtainK, snackSticker: snackSticker,
+    zipAt: zipAt, curtainK: curtainK, snackSticker: snackSticker, CHEER: CHEER, CONFETTI_CELLS: CONFETTI_CELLS, confettiPiece: confettiPiece,
     /* particles */
     ParticleSim: ParticleSim, burst: burst
   };

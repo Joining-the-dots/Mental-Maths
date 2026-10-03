@@ -314,6 +314,64 @@ test('#27 runner: no game view heals — no heal event, no free door shield, no 
   assert.equal(Course.TUNING.HEARTS, 3); assert.ok(!('FAN_HEARTS' in Course.TUNING));
 });
 
+/* the HUD's hearts are ✦-headed wands in the child's colour. V4.53 healed at a Stage Door with a
+   member-coloured halo from the fans, so a heart (or ✦) in that colour at a door or from the fans
+   now reads as a heart that never arrives. The view's choices come from CM.CHEER / confettiPiece
+   (tested in game-runner3d); here: the view really uses them, and nothing else sneaks in. */
+test('#27 runner 3D: no heart or ✦ in the child\'s colour at a Stage Door or from the fans', () => {
+  const view = code(read('world/games/pet-course-3d.js')).replace(/\r\n/g, '\n');
+  const body = (from, to) => {
+    const i = view.indexOf(from); assert.ok(i >= 0, 'found ' + from);
+    const k = view.indexOf(to, i + from.length); assert.ok(k > i, 'end of ' + from);
+    return view.slice(i, k);
+  };
+  const clean = body("case 'cleanStage':", 'break;');
+  assert.match(clean, /\brise\([^;]*CLEAN_INT[^;]*CLEAN_CELL\)/, 'CLEAN STAGE rises as Star Gold stars');
+  assert.ok(!/memberInt|HEART_CELL/.test(clean), clean);
+  assert.match(view, /CLEAN_CELL = cellOf\(M\.CHEER\.clean\.cell\), CLEAN_INT = M\.hexInt\(M\.CHEER\.clean\.color\)/);
+  const fans = body('if (fs.lastHeart && fans.count() > 0', '\n    }');
+  assert.match(fans, /\brise\([^;]*FAN_INTS\[[^;]*FAN_CELL\)/, 'the last-heart fans cheer with neon notes');
+  assert.ok(!/memberInt|HEART_CELL/.test(fans), fans);
+  assert.match(view, /FAN_CELL = cellOf\(M\.CHEER\.fans\.cell\), FAN_INTS = M\.CHEER\.fans\.colors\.map\(M\.hexInt\)/);
+  const conf = body('function confetti(', '\n  }\n');
+  assert.match(conf, /M\.confettiPiece\(i, confPiece\)/);
+  assert.match(conf, /p\.cell = CONF_CELL\[confPiece\.cell\]/, 'the cell comes from confettiPiece');
+  assert.match(conf, /confPiece\.member \? memberInt :/, 'the member colour follows confettiPiece too');
+  const reducedLine = conf.split('\n').find((l) => /if \(reduced\)/.test(l));
+  assert.ok(reducedLine && /sparkles\(/.test(reducedLine) && !/memberInt/.test(reducedLine), 'reduced-motion confetti is not ✦ in the child\'s colour: ' + reducedLine);
+  /* nothing rises in the child's colour anywhere, and hearts rise only on a BOING (Bubblegum) */
+  assert.ok(!/\brise\([^;]*\bmemberInt\b/.test(view), 'no rising burst in the child\'s colour');
+  assert.ok(!/\bhearts\(/.test(view), 'the old member-colour hearts() helper is gone');
+  const heartUses = view.match(/HEART_CELL\b/g) || [];
+  assert.equal(heartUses.length, 2, 'HEART_CELL: declared once, used once (BOING)');
+  assert.match(body("case 'boing':", 'break;'), /rise\([^;]*'#FF8FC8'[^;]*HEART_CELL\)/);
+});
+
+/* the spec is the brief later builders read: its tutorial and tutKey must say what the code does */
+test('#27 runner: spec-runner.json shows the live How-to-play cards, tutKey and the no-heal rules', () => {
+  const spec = JSON.parse(read('docs/island3d/spec-runner.json'));
+  const tutKey = (read('world/rewards-world.js').match(/\bcourse: \{[^}]*tutKey: '([^']+)'/) || [])[1];
+  assert.equal(tutKey, 'course_v3');
+  const hud = spec.hudAndScreens;
+  assert.ok(hud.includes("under the key '" + tutKey + "'"), 'the spec names the live tutKey');
+  assert.ok(spec.shellIntegration.includes("- tutKey: '" + tutKey + "'"), 'shellIntegration names the live tutKey');
+  const lines = hud.slice(hud.indexOf('TUTORIAL (')).split('\n').slice(1).filter((l) => /^\d\. /.test(l));
+  const cards = lines.map((l) => { const m = l.match(/\['([^']+)', '([^']+)'\]$/); assert.ok(m, l); return [m[1], m[2]]; });
+  const d = Course.def;
+  assert.deepEqual(cards, d.tutorialFor({ fan: true }), 'the 5 cards (rings ON) match the code');
+  assert.deepEqual(cards.slice(0, 4), d.tutorialFor({ fan: false }), 'the 4 cards (rings OFF) match the code');
+  assert.ok(lines[4].includes('only when Timing rings are ON'));
+  /* the normative rule blocks no longer heal (history rows are labelled V4.53) */
+  const hearts = spec.mechanics.find((s) => s.startsWith('HEARTS, STAGE DOORS AND CURTAIN CALL:'));
+  for (const s of [spec.coreLoop, hearts]) {
+    assert.ok(!/gives back 1 heart|hearts \+1|up to the cap|refill/.test(s), s);
+    assert.match(s, /never comes back|stays lost/);
+  }
+  assert.match(hearts, /Losing the 3rd heart \(0 hearts\): CURTAIN CALL/);
+  const scoring = spec.tests.find((s) => s.startsWith('Scoring and rules:'));
+  assert.ok(!/5 hearts/.test(scoring) && /min\(3, hearts\)/.test(scoring), scoring);
+});
+
 /* ================================================================
    #31  Debut Run has its beat even when the island music is off
    ================================================================ */

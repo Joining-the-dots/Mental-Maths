@@ -32,7 +32,7 @@ function loadLibs() {
     libsP = Promise.all([
       import('./course-3d-math.js' + QUERY).then(function () {
         const M = globalThis.SLCourse3DMath;
-        if (!M || !M.petVisual) throw new Error('course-3d-math missing');
+        if (!M || !M.petVisual || !M.CHEER) throw new Error('course-3d-math missing (or stale)');
         return M;
       }),
       import('./course-3d-scene.js' + QUERY)
@@ -328,26 +328,40 @@ function makeView(mid, opts, M, S, SL3D, K, hub, tier, budget, fail, built) {
     p.cell = 10; p.life = 0.42; p.s0 = 0.1; p.s1 = 0.26; p.g = 1.5; p.drag = 3; p.floor = 0.02;
     M.burst(fx.simS, n, back ? Math.PI * 0.82 : Math.PI / 2, back ? 0.9 : 2.2, 1.3, 0.4, 0.9);
   }
-  const CONF_CELLS = [6, 1, 13, 12];
+  /* sparkle-atlas cells by name (the kit's atlas; the standard order if it has none) */
+  const ATLAS0 = { sparkle: 0, heart: 1, note: 2, star: 3, rect: 6, curl: 12, diamond: 13 };
+  const cellOf = (name) => (K.ATLAS && K.ATLAS[name] != null ? K.ATLAS[name] : ATLAS0[name]);
+  const HEART_CELL = cellOf('heart');
+  const CONF_CELL = {};
+  M.CONFETTI_CELLS.forEach((c) => { CONF_CELL[c] = cellOf(c); });
+  const confPiece = {};
+  /* hearts never come back, so what rises at a CLEAN STAGE or from the last-heart fans is never
+     a heart in the child's (heart-wand) colour — M.CHEER: Star Gold stars, and neon notes */
+  const CLEAN_CELL = cellOf(M.CHEER.clean.cell), CLEAN_INT = M.hexInt(M.CHEER.clean.color);
+  const FAN_CELL = cellOf(M.CHEER.fans.cell), FAN_INTS = M.CHEER.fans.colors.map(M.hexInt);
   const NEON = [M.hexInt('#FF4FB8'), M.hexInt('#3DF2FF'), M.hexInt('#FFD23F'), M.hexInt('#A66BFF'), M.hexInt('#C9FFE5')];
-  /* confetti: 40 % in the child's colour; a 0.4 s sparkle fade under reduced motion */
+  /* confetti: 40 % in the child's colour (never as a heart: M.confettiPiece). Under reduced motion
+     a 0.4 s sparkle fade in Star Gold + Neon Cyan — not ✦ in the child's colour, the head of the
+     HUD's heart wands, at a Stage Door where hearts no longer come back */
   function confetti(x, y, z, n, angle, spread, speed) {
-    if (reduced) { sparkles(x, y, z, Math.min(10, n >> 2), memberInt, 0, 0.4, 0.2); return; }
+    if (reduced) { const k = Math.min(10, n >> 2); sparkles(x, y, z, k >> 1, NEON[2], 0, 0.4, 0.2); sparkles(x, y, z, k - (k >> 1), NEON[1], 0, 0.4, 0.2); return; }
     const sim = fx.simS;
     n = Math.round(n * (sim.scale || 1));
     for (let i = 0; i < n; i++) {
-      const p = spec(sim, x, y, z, i % 5 < 2 ? memberInt : NEON[i % NEON.length], 1);
+      M.confettiPiece(i, confPiece);
+      const p = spec(sim, x, y, z, confPiece.member ? memberInt : NEON[i % NEON.length], 1);
       const a = angle + (sim.rand() - 0.5) * spread, v = speed * (0.6 + 0.8 * sim.rand());
       p.vx = Math.cos(a) * v; p.vy = Math.sin(a) * v; p.vz = (sim.rand() - 0.5) * 2.4;
       p.g = 5.5; p.drag = 1.4; p.life = 1.5 + sim.rand() * 0.5; p.s0 = p.s1 = 0.08 + sim.rand() * 0.05;
-      p.cell = CONF_CELLS[i % CONF_CELLS.length]; p.rot = sim.rand() * TAU; p.vr = (sim.rand() - 0.5) * 14; p.floor = 0.01;
+      p.cell = CONF_CELL[confPiece.cell]; p.rot = sim.rand() * TAU; p.vr = (sim.rand() - 0.5) * 14; p.floor = 0.01;
       sim.emit();
     }
   }
-  function hearts(x, y, z, n, hex, speed) {
+  /* a soft rising burst of one atlas cell (BOING hearts, CLEAN STAGE stars, the fans' notes) */
+  function rise(x, y, z, n, hex, speed, cell) {
     if (reduced) { sparkles(x, y, z, Math.min(6, n), hex, 0, 0.4, 0.2); return; }
     const p = spec(fx.simS, x, y, z, hex, 1);
-    p.cell = 1; p.life = 0.8; p.s0 = 0.16; p.s1 = 0.1; p.g = 3; p.drag = 1.5; p.vr = 0;
+    p.cell = cell; p.life = 0.8; p.s0 = 0.16; p.s1 = 0.1; p.g = 3; p.drag = 1.5; p.vr = 0;
     M.burst(fx.simS, n, Math.PI / 2, 2.4, speed || 2.4, 0.4, 1.2);
   }
   function feverPiece(dt, camX, halfW, topY) {
@@ -387,7 +401,7 @@ function makeView(mid, opts, M, S, SL3D, K, hub, tier, budget, fail, built) {
       case 'slide': theme.obstacles.pulseGate(px, s ? s.t : 0); break;
       case 'dive': sparkles(px, cy, 0.3, 4, M.hexInt('#3DF2FF'), 1.0, 0.35, 0.12); break;
       case 'boing':
-        hearts(px, fy, 0.3, 8, M.hexInt('#FF8FC8'), 2.6);
+        rise(px, fy, 0.3, 8, M.hexInt('#FF8FC8'), 2.6, HEART_CELL);
         fx.sticker(2, px + 0.2, cy + 0.8, 0.6, 1.1, 0.7);
         break;
       case 'snack': {
@@ -441,8 +455,8 @@ function makeView(mid, opts, M, S, SL3D, K, hub, tier, budget, fail, built) {
         if (hasParty && hat) { hat.group.getWorldPosition(tmp); confetti(tmp.x, tmp.y + 0.15, tmp.z, 14, Math.PI / 2, 1.2, 2.4); }
         break;
       }
-      case 'cleanStage':
-        hearts(px + 0.1, cy + 0.2, 0.35, 4, memberInt, 3.0);
+      case 'cleanStage':                                 /* points, not a heart: Star Gold stars */
+        rise(px + 0.1, cy + 0.2, 0.35, 4, CLEAN_INT, 3.0, CLEAN_CELL);
         fx.sticker(7, px + 0.4, cy + 1.05, 0.6, 1.5, 1.0);
         break;
       case 'fever': feverLeft = 60; feverAcc = 0; ring(px, cy, 0.3, memberInt, 2.4, 0.6); break;
@@ -770,9 +784,9 @@ function makeView(mid, opts, M, S, SL3D, K, hub, tier, budget, fail, built) {
     fs.t = sT; fs.excite = J.excite; fs.ooh = J.ooh; fs.fever = !!fever; fs.reduced = reduced;
     fs.lastHeart = !menu && s && s.hearts === 1 && !s.finished && (s.phase === 'run' || s.phase === 'curtain');
     fans.update(camX, menu ? 0 : (demo ? 1 : L.fans), fx, L.haloS);
-    if (fs.lastHeart && fans.count() > 0 && !reduced) {   /* fans hold up heart paws */
+    if (fs.lastHeart && fans.count() > 0 && !reduced) {   /* fans hold up heart paws and cheer (notes, never a heart back) */
       heartAcc += dt;
-      if (heartAcc > 0.45) { heartAcc = 0; const n = fans.count(), kk = (vt * 131 | 0) % n; hearts(fans.seats[kk * 4], fans.seats[kk * 4 + 3] + 0.1, fans.seats[kk * 4 + 2], 1, memberInt, 0.6); }
+      if (heartAcc > 0.45) { heartAcc = 0; const n = fans.count(), kk = (vt * 131 | 0) % n; rise(fans.seats[kk * 4], fans.seats[kk * 4 + 3] + 0.1, fans.seats[kk * 4 + 2], 1, FAN_INTS[kk % FAN_INTS.length], 0.6, FAN_CELL); }
     }
     /* cones: sweep at Showtime; lock onto the pet at FEVER, at a Stage Door (0.5 s) and at the curtain call */
     const curtainK = !menu && s && s.curtain ? M.curtainK(J.sinceCurtain, reduced) : 0;

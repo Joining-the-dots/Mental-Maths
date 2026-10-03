@@ -15,13 +15,16 @@ const M = require('../world/island3d/motion.js');
 const L = require('../world/world-look.js');
 const C = require('../world/world-core.js');
 
-const IDS = C.CATALOG.filter((i) => i.kind === 'fun').map((i) => i.id).sort();
+/* the garden-fun ids: the city buildings (kind 'fun', cat 'city') live in models-city / models-stage */
+const IDS = C.CATALOG.filter((i) => i.kind === 'fun' && i.cat !== 'city').map((i) => i.id).sort();
 const TIERS = ['LOW', 'MID', 'HIGH'];
 const MARGIN = 0.43;                       /* 0.86 × 0.86 inside the cell */
 const D2R = Math.PI / 180;
 
 /* ---------------- mock K.G ---------------- */
 const ANG = Array.from({ length: 8 }, (_, i) => i * Math.PI / 4);
+/* three's radial vertex angles (x = r·sin θ, z = r·cos θ), so low-sided shapes keep their true corners */
+const RAD = (n) => Array.from({ length: n }, (_, i) => i * 2 * Math.PI / n);
 const DROP_PROFILE = [[0, 0], [0.55, 0.02], [0.9, 0.12], [1, 0.3], [0.93, 0.5], [0.72, 0.7], [0.4, 0.88], [0, 1]];
 function unit(v) { const l = Math.hypot(v[0], v[1], v[2]) || 1; return [v[0] / l, v[1] / l, v[2] / l]; }
 function mockG(tier) {
@@ -43,20 +46,20 @@ function mockG(tier) {
     const cap = low ? 2 : 3, radial = low ? 8 : 10;
     return mk(pts, (4 * cap + 1) * radial * 2);          /* Lathe of 4·cap + 2 path points */
   };
-  G.slab = (w, h, d) => {
+  G.slab = (w, h, d, radius) => {
     const pts = [];
     for (const x of [-1, 1]) for (const y of [-1, 1]) for (const z of [-1, 1]) pts.push({ p: [x * w / 2, y * h / 2, z * d / 2], n: unit([x, y, z]) });
     for (let ax = 0; ax < 3; ax++) for (const s of [-1, 1]) { const p = [0, 0, 0], n = [0, 0, 0]; p[ax] = s * [w, h, d][ax] / 2; n[ax] = s; pts.push({ p, n }); }
-    const seg = (low ? 1 : 2) * 2 + 1;                    /* RoundedBox: a box of (2·segments + 1)³ */
-    return mk(pts, 12 * seg * seg);
+    const seg = (low ? 1 : 2) * 2 + 1;                    /* RoundedBox: a box of (2·segments + 1)³; radius 0 = a plain box */
+    return mk(pts, radius === 0 ? 12 : 12 * seg * seg);
   };
   G.tube = (rTop, rBot, h, o) => {
     if (h === undefined || (h !== null && typeof h === 'object')) { o = h; h = rBot; rBot = rTop; }
     o = o || {};
     const R = o.radial || (low ? 8 : 12), slope = (rBot - rTop) / h, pts = [];
-    for (const a of ANG) {
-      const n = unit([Math.cos(a), slope, Math.sin(a)]);
-      pts.push({ p: [Math.cos(a) * rTop, h / 2, Math.sin(a) * rTop], n }, { p: [Math.cos(a) * rBot, -h / 2, Math.sin(a) * rBot], n });
+    for (const a of RAD(R)) {
+      const n = unit([Math.sin(a), slope, Math.cos(a)]);
+      pts.push({ p: [Math.sin(a) * rTop, h / 2, Math.cos(a) * rTop], n }, { p: [Math.sin(a) * rBot, -h / 2, Math.cos(a) * rBot], n });
     }
     if (!o.open) {
       if (rTop > 0) pts.push({ p: [0, h / 2, 0], n: [0, 1, 0] });
@@ -68,7 +71,7 @@ function mockG(tier) {
   };
   G.cone = (r, h, radial) => {
     const R = radial || (low ? 8 : 12), pts = [{ p: [0, h / 2, 0], n: [0, 1, 0] }];
-    for (const a of ANG) pts.push({ p: [Math.cos(a) * r, -h / 2, Math.sin(a) * r], n: unit([Math.cos(a), r / h, Math.sin(a)]) });
+    for (const a of RAD(R)) pts.push({ p: [Math.sin(a) * r, -h / 2, Math.cos(a) * r], n: unit([Math.sin(a), r / h, Math.cos(a)]) });
     return mk(pts, 2 * R);
   };
   G.drop = (r, h, profile) => {
@@ -130,8 +133,14 @@ function rgbOf(token) {
   const h = L.hex(token) || '#CFC8DC', n = parseInt(h.slice(1), 16);
   return { r: ((n >> 16) & 255) / 255, g: ((n >> 8) & 255) / 255, b: (n & 255) / 255 };
 }
+/* three's detail-0 icosahedron (12 vertices, 20 faces), the kit's ctx.K.THREE source */
+function IcosahedronGeometry(r) {
+  const t = (1 + Math.sqrt(5)) / 2, v = [[-1, t, 0], [1, t, 0], [-1, -t, 0], [1, -t, 0], [0, -1, t], [0, 1, t], [0, -1, -t], [0, 1, -t], [t, 0, -1], [t, 0, 1], [-t, 0, -1], [-t, 0, 1]];
+  this.pts = v.map((q) => { const n = unit(q); return { p: n.map((c) => c * r), n }; });
+  this.tris = 20; this.tokens = [];
+}
 function mockK(tier) {
-  const K = { tier, G: mockG(tier), col: rgbOf, hex: (t) => L.hex(t), has: (t) => L.isToken(t) };
+  const K = { tier, G: mockG(tier), THREE: { IcosahedronGeometry }, col: rgbOf, hex: (t) => L.hex(t), has: (t) => L.isToken(t) };
   K.template = (ctx) => {
     const parts = [], pivots = {}, anchors = {};
     const b = {
@@ -236,7 +245,9 @@ test('fun models: templates carry the LOOK pivots, anchors, materials and colour
     assert.ok(tpl.parts.length <= 6, tag + ' ≤ 6 parts');
     const staticMats = new Set(tpl.parts.filter((p) => !p.pivot && !p.perCopy).map((p) => p.mat));
     assert.ok(staticMats.size <= 4, tag + ' ≤ 4 static materials');
-    const allowedTok = new Set(L.tokensIn(look)), allowedMat = new Set(['toon', 'state', ...Object.values(look.mats)]);
+    /* the model's documented default matcaps (FUN.DEFAULT_MATS) are allowed where the LOOK lists none */
+    const dflt = FUN.DEFAULT_MATS[id] || {}, mats = Object.assign({}, dflt, look.mats);
+    const allowedTok = new Set(L.tokensIn(look)), allowedMat = new Set(['toon', 'state', ...Object.values(mats)]);
     for (const p of tpl.parts) {
       assert.ok(p.pts.length && p.tris > 0, tag + ' part ' + p.name + ' has geometry');
       assert.ok(allowedMat.has(p.mat), tag + ' ' + p.name + ' uses an allowed material (' + p.mat + ')');
@@ -251,10 +262,33 @@ test('fun models: templates carry the LOOK pivots, anchors, materials and colour
         else assert.ok(allowedTok.has(token), tag + ' ' + p.name + ': ' + token + ' comes from the LOOK entry');
       }
       if (p.stateColor) for (const k of ['off', 'on']) assert.ok(allowedTok.has(p.stateColor[k]), tag + ' state colour ' + p.stateColor[k]);
-      for (const [part, m] of Object.entries(look.mats)) {
+      for (const [part, m] of Object.entries(mats)) {
         if (p.mat === m) assert.ok(p.tokens.every((t) => t.token === look.colors[part]), tag + ' ' + m + ' parts are the ' + part);
       }
     }
+  }
+});
+
+test('fun models: the Encore City restyle — LED rim pad, square plaza basin, low-poly tree, FOIL cannon ring', () => {
+  for (const tier of TIERS) {
+    /* trampoline: the static frame carries the LED Cyan pad on a Gunmetal ring; the mat is Graphite */
+    const tr = build('trampoline', tier), frame = tr.parts.find((p) => p.name === 'frame'), mat = tr.parts.find((p) => p.name === 'mat');
+    const ft = new Set(frame.tokens.map((t) => t.token));
+    assert.ok(ft.has(L.LOOK.trampoline.colors.shine) && ft.has(L.LOOK.trampoline.colors.frame) && ft.has(L.LOOK.trampoline.colors.leg), tier + ' trampoline frame tokens');
+    assert.equal(L.hex(L.LOOK.trampoline.colors.shine), L.hex('LED Cyan'));
+    assert.ok(mat.tokens.every((t) => t.token === L.LOOK.trampoline.colors.mat));
+    /* fountain: a square basin — its corners reach the margin on both diagonals */
+    const fo = build('fountain', tier), basin = fo.parts.find((p) => p.name === 'basin').pts.map((q) => q.p);
+    const corner = Math.max(...basin.map((p) => Math.min(Math.abs(p[0]), Math.abs(p[2]))));
+    assert.ok(corner >= FUN.LAYOUT.fountain.half - 1e-9, tier + ' square basin corners ' + corner.toFixed(3));
+    /* swing: faceted 20-face leaf clusters on a trunk, the Teak seat on the 'swing' pivot */
+    const sw = build('swing', tier);
+    const leafTris = sw.parts.find((p) => p.name === 'frame').geos.filter((g) => g.tris === 20).length;
+    assert.equal(leafTris, FUN.LAYOUT.swing.leaves.length, tier + ' low-poly leaf clusters');
+    assert.ok(sw.parts.find((p) => p.name === 'swing').tokens.some((t) => t.token === L.LOOK.swing.colors.seat));
+    /* bubbles: the ring is the FOIL matcap at the cannon's mouth, on the emitter */
+    const bu = build('bubbles', tier), ring = bu.parts.find((p) => p.name === 'ring');
+    assert.ok(ring && ring.mat === 'foil' && ring.pivot === 'emitter');
   }
 });
 
@@ -303,12 +337,14 @@ test('fun helpers: pendulum, ripple, bubbler, mat dip, wand point and lead parsi
   assert.equal(FUN.pendulum(1.3, 4, 2.4, 0.2, true), 0);
   assert.equal(FUN.rippleScale(1.3, 2.4, 0.2, true), 1);
   assert.equal(FUN.bubblerScale(1.3, 2, 0.2, true), 1);
-  /* ring B at the end of a period lands exactly where ring A starts: a seamless loop */
+  /* square B at the end of a period lands exactly where square A starts: a seamless loop */
   const F = FUN.LAYOUT.fountain;
-  assert.ok(Math.abs(F.ripR * F.ripK * (1 / F.ripK) - F.ripR) < 1e-12);
-  assert.ok(F.ripR / F.ripK - F.ripW / F.ripK / 2 >= F.lipR - F.lipr, 'ring A ends under the lip');
-  assert.ok(F.poolR > F.lipR - F.lipr && F.poolR < F.lipR + F.lipr, 'the water edge tucks under the lip');
-  assert.ok(F.lipR + F.lipr <= MARGIN, 'the lip stays inside the cell');
+  assert.ok(Math.abs(F.ripHalf * F.ripK * (1 / F.ripK) - F.ripHalf) < 1e-12);
+  assert.ok(F.ripHalf / F.ripK - F.ripW / F.ripK / 2 >= F.poolHalf, 'square A ends hidden under the walls');
+  assert.ok(F.ripHalf / F.ripK + F.ripW / F.ripK / 2 <= F.half, '… and never pokes out of the basin');
+  assert.ok(Math.abs(F.poolHalf - (F.half - F.wall)) < 1e-9, 'the water meets the walls');
+  assert.ok(F.half <= MARGIN, 'the basin stays inside the cell');
+  assert.ok(F.plinthY1 + F.capH < F.jets[0].p[1] + 1e-9 && F.jets[0].p[1] + F.jets[0].h <= F.spoutY + 1e-9, 'the centre jet stands on the nozzle plate');
   /* the mat: rest depth at no dip, the full 0.12 dip deepens the bowl to 0.136 */
   assert.equal(FUN.matScaleY(0), 1);
   assert.ok(Math.abs(FUN.matScaleY(-0.12) * FUN.LAYOUT.trampoline.depth - (FUN.LAYOUT.trampoline.depth + 0.12)) < 1e-9);
@@ -344,10 +380,11 @@ test('fun helpers: drop arcs leave the spout, stay in the cell and land in the l
   for (let t = 0; t < 2; t += 0.01) for (let i = 0; i < F.drops; i++) {
     FUN.dropPose(t, i, 0.81, false, out);
     const rr = Math.hypot(out.x, out.z), p = rr / F.reach;
-    assert.ok(rr <= F.reach + 1e-9 && rr < F.poolR, 'inside the pool radius');
+    assert.ok(rr <= F.reach + 1e-9 && rr < F.poolHalf, 'inside the square pool');
     assert.ok(out.s >= 0 && out.s <= 1);
     assert.ok(out.y >= F.landY - 1e-9 && out.y <= F.spoutY + F.arc, 'between the pool and the arc top');
-    if (p > 0.6) assert.ok(rr > F.upR + 0.02 || out.y > F.upY + F.upH, 'clears the upper basin lip');
+    assert.ok(out.y > F.poolY, 'above the water');
+    if (p > 0.5) assert.ok(rr > F.capHalf * Math.SQRT2 + 0.01 || out.y > F.plinthY1 + F.capH, 'clears the nozzle plate');
     peak = Math.max(peak, out.y);
   }
   assert.ok(peak > F.spoutY + 0.1 && peak + F.dropUp <= L.LOOK.fountain.h * 1.05, 'the arc rises above the spout and stays near the look height');

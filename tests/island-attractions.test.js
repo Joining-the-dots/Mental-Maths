@@ -118,8 +118,8 @@ test('chase: day bulbs are lemon, reduced motion is a steady glow, Showtime chas
       if (last !== null && on !== last) flips++;
       last = on;
     }
-    /* a full on/off cycle is 2 flips: never faster than MAX_FLASH_HZ */
-    assert.ok(flips / 2 / T <= Motion.MAX_FLASH_HZ + 0.01, bpm + ' bpm: ' + (flips / 2 / T).toFixed(2) + ' Hz');
+    /* a full on/off cycle is 2 flips: a full-contrast LED chase, never faster than LED_CHASE_HZ (< MAX_FLASH_HZ) */
+    assert.ok(flips / 2 / T <= L.LED_CHASE_HZ + 0.01 && L.LED_CHASE_HZ < Motion.MAX_FLASH_HZ, bpm + ' bpm: ' + (flips / 2 / T).toFixed(2) + ' Hz');
     assert.deepEqual([...colours].sort(), ['cyan', 'pink', 'violet']);
   }
 });
@@ -205,7 +205,9 @@ test('tracks: the oval tangent yaw turns +x along the road', () => {
 });
 
 /* ---------------- builders against a mock kit ---------------- */
-function mockKit(tier, tokensSeen) {
+const ATLAS_RECT = { u0: 0.5, v0: 0.25, u1: 1, v1: 0.5 };
+function mockKit(tier, tokensSeen, o) {
+  o = o || {};
   const D = Math.PI / 180;
   function geo(P, N, Cc) {
     const attrs = {
@@ -291,9 +293,13 @@ function mockKit(tier, tokensSeen) {
     Vector4: function (x, y, z, w) { Object.assign(this, { x, y, z, w }); }
   };
   const parts = new Map();
+  const color = (hex) => ({ hex, copy(c) { this.hex = c.hex; return this; } });
+  const atlas = { texture: { atlas: true }, words: [], rect(w) { atlas.words.push(w); return w === 'PET COURSE' ? ATLAS_RECT : null; } };
   const K = {
     THREE, tier, G,
-    tex: { banner: (text, o) => ({ text, o }), fontReady: () => Promise.resolve(true) },
+    col: (t) => color(L.hex(t)), rgb: (h) => color(String(h).toUpperCase()),
+    signAtlas: o.noAtlas ? undefined : () => atlas,
+    tex: { banner: (text, opts) => ({ text, o: opts }), fontReady: () => Promise.resolve(true) },
     parts: { get: (key, t, fn) => { const k = key + '#' + t; if (!parts.has(k)) parts.set(k, fn(K)); return parts.get(k); } },
     isTemplate: (x) => !!(x && x.__template),
     template(ctx) {
@@ -376,11 +382,84 @@ test('builders: the documented part names of the island attractions and the kart
   assert.equal(kart.pivots.wheelF.parent, 'steer');
   assert.ok(kart.anchors.seat && kart.pivots.seat);
   assert.equal(kart.parts.find((p) => p.name === 'glow').mat, 'neon:Neon Cyan');
-  /* the banner text hook: textured material for the text part only, one for every course */
+  /* the sign hook: the shared sign atlas's PET COURSE cell for the text part only, one material for every course */
   const m = M.att_course.material('toon', { name: 'text' });
-  assert.ok(m && m.isMeshBasicMaterial && m.map && m.map.text === 'PET COURSE' && m.map.o.font === 'Bagel Fat One' && m.map.o.fallback === 'Baloo 2');
+  assert.ok(m && m.isMeshBasicMaterial && m.map && m.map.atlas === true, 'the shared sign atlas texture');
+  assert.equal(m.color.hex, L.hex(L.LOOK.att_course.colors.text), 'white text (the LOOK text colour)');
+  assert.equal(m.toneMapped, false);
   assert.equal(M.course_candy.material('toon', { name: 'text' }), m);
   assert.equal(M.att_course.material('toon', { name: 'body' }), null);
+  assert.equal(m.customProgramCacheKey(), 'att-sign');
+});
+
+test('course sign: atlas UVs from the arch position, a member-colour underline, the canvas fallback', () => {
+  const K = mockKit('MID', new Set()), M = A.models(K, null), m = M.att_course.material('toon', { name: 'text' });
+  /* the shader patch maps the PET COURSE cell and draws the underline */
+  const sh = {
+    uniforms: {},
+    vertexShader: '#include <common>\nvoid main() {\n#include <uv_vertex>\n}',
+    fragmentShader: '#include <common>\nvoid main() {\nvec4 diffuseColor = vec4(diffuse, opacity);\n#include <map_fragment>\n}'
+  };
+  m.onBeforeCompile(sh);
+  assert.ok(/vMapUv = uRect\.xy \+ uRect\.zw \* clamp\(vBand, 0\.0, 1\.0\)/.test(sh.vertexShader));
+  assert.ok(/varying vec2 vBand/.test(sh.vertexShader) && /varying vec2 vBand/.test(sh.fragmentShader));
+  assert.ok(/diffuseColor = vec4\(uMember, 1\.0\)/.test(sh.fragmentShader));
+  const R = sh.uniforms.uRect.value;
+  assert.deepEqual([R.x, R.y, R.z, R.w], [ATLAS_RECT.u0, ATLAS_RECT.v0, ATLAS_RECT.u1 - ATLAS_RECT.u0, ATLAS_RECT.v1 - ATLAS_RECT.v0]);
+  const U = sh.uniforms.uLine.value, Arch = sh.uniforms.uArc.value;
+  assert.deepEqual([Arch.x, Arch.y, Arch.z, Arch.w], [A.ARCH.cy, A.ARCH.rIn, A.ARCH.h, A.ARCH.textHalf]);
+  assert.ok(U.x > 0.1 && U.y > U.x && U.y <= 0.28 && U.z > 0 && U.z < 0.5, 'the underline sits low on the band, under the text baseline');
+  const strip = A.ARCH.strip * 1.25 / A.ARCH.h;
+  assert.ok(U.x > strip && 1 - strip > 0.65, 'clear of the LED strips at the band edges');
+  /* the member colour: the look fallback until the controller (or a handle) tells it */
+  assert.equal(sh.uniforms.uMember.value.hex, L.hex(A.X.member));
+  assert.equal(L.hex(A.X.member), L.hex(L.MEMBER_FALLBACK));
+  assert.equal(M.att_course.setUser({ color: '#4fc3f7' }), true);
+  assert.equal(sh.uniforms.uMember.value.hex, '#4FC3F7');
+  assert.equal(M.course_snow.setMember('nope'), false, 'not a colour: ignored');
+  assert.equal(sh.uniforms.uMember.value.hex, '#4FC3F7');
+  M.att_course.show({ uid: 'g', t: 0, show: 0, member: '#ff7043', pivot: () => null, state: () => {} }, 0);
+  assert.equal(sh.uniforms.uMember.value.hex, '#FF7043', 'a handle carrying the member colour sets it');
+  /* only SIGN_WORDS are asked of the atlas */
+  K.signAtlas().words.forEach((w) => assert.ok(L.SIGN_WORDS.includes(w), w));
+  /* without the atlas: the canvas banner in Unbounded 800 over the whole texture */
+  const K2 = mockKit('MID', new Set(), { noAtlas: true }), m2 = A.models(K2, null).att_course.material('toon', { name: 'text' });
+  assert.ok(m2.map.text === 'PET COURSE' && m2.map.o.font === 'Unbounded' && m2.map.o.weight === 800);
+  const sh2 = { uniforms: {}, vertexShader: '#include <common>\n#include <uv_vertex>', fragmentShader: '#include <common>\n#include <map_fragment>' };
+  m2.onBeforeCompile(sh2);
+  const R2 = sh2.uniforms.uRect.value;
+  assert.deepEqual([R2.x, R2.y, R2.z, R2.w], [0, 0, 1, 1]);
+});
+
+test('course gate: four-point ✦ sparks, an LED-strip arch and an LED-dot marquee', () => {
+  const K = mockKit('MID', new Set()), M = A.models(K, null);
+  const tpl = M.att_course.build({ id: 'att_course', look: L.LOOK.att_course, st: L.resolveStyle('att_course', {}), stateKey: 'course_meadow', tier: 'MID', K, G: K.G });
+  const R = A.ARCH;
+  ['starL', 'starR'].forEach((name, i) => {
+    const P = tpl.parts.find((p) => p.name === name).geo.attrs.position.array, cx = (i ? 1 : -1) * R.pillarX;
+    let mx = 0, my = 0;
+    for (let k = 0; k < P.length; k += 3) {
+      const x = Math.abs(P[k] - cx), y = Math.abs(P[k + 1] - R.starY);
+      mx = Math.max(mx, x); my = Math.max(my, y);
+      /* every far point lies on an axis: four points, never the five-point ⭐ */
+      if (Math.hypot(x, y) > R.starR * 0.5) assert.ok(Math.min(x, y) < R.starR * 0.36, name + ' point off-axis at ' + x.toFixed(3) + ', ' + y.toFixed(3));
+    }
+    assert.ok(Math.abs(mx - R.starR) < 1e-6 && Math.abs(my - R.starR) < 1e-6, name + ' reaches rOut on both axes');
+  });
+  /* the LED groups: each carries an arch-long strip plus its marquee dots */
+  for (const name of ['bulbA', 'bulbB']) {
+    const p = tpl.parts.find((q) => q.name === name), P = p.geo.attrs.position.array;
+    let lo = Infinity, hi = -Infinity;
+    for (let k = 0; k < P.length; k += 3) { lo = Math.min(lo, P[k]); hi = Math.max(hi, P[k]); }
+    assert.ok(hi - lo > 2 * R.pillarX * 0.85, name + ' spans the arch');
+    assert.equal(p.mat, 'state');
+    assert.deepEqual(Object.keys(p.o.stateColor.map).sort(), ['cyan', 'day', 'dim', 'pink', 'violet']);
+  }
+  assert.equal(L.hex(A.X.bulbs.pink), L.hex('Neon Magenta'));
+  assert.equal(L.hex(A.X.bulbs.cyan), L.hex('LED Cyan'));
+  assert.equal(L.hex(A.X.bulbs.violet), L.hex('Electric Violet'));
+  /* the spark sticks of the crowd are v2 neon */
+  A.X.neon4.forEach((t, i) => assert.equal(L.hex(t), L.hex(L.NEON4[i])));
 });
 
 /* ---------------- animation handlers (fake handle, real SLMotion) ---------------- */

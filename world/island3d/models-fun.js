@@ -1,27 +1,34 @@
 /* ================================================================
-   My Island 3D — fun item models (island chunk 6; classic script).
-   Registers SL3D.defineModels('fun', factory(K)) for every CATALOG id of
-   kind 'fun'. THREE is never touched here: geometry comes from the K.G
-   primitive kit (ctx.G), materials by K key, colours from the LOOK table.
-   In Node, module.exports gives the factory and the pure helpers (tests).
+   My Island 3D — fun item models (island chunk 6, Encore City v2 restyle; classic script).
+   Registers SL3D.defineModels('fun', factory(K)) for the four garden-fun ids
+   (CATALOG kind 'fun' outside cat 'city': the city buildings live in
+   models-city.js / models-stage.js). THREE is never touched as a global:
+   geometry comes from the K.G primitive kit (ctx.G; the faceted canopy
+   clusters take a detail-0 icosahedron from ctx.K.THREE), materials by K key,
+   colours from the LOOK table. In Node, module.exports gives the factory and
+   the pure helpers (tests).
 
    Item space (kit.js): pivot at the footprint centre, base y = 0, facing +z,
    everything inside the 0.86 × 0.86 cell margin. Fun items are never jittered.
-     trampoline  frame torus + 3 ink bean legs (static). The mat is a shallow
-                 bowl on pivot 'mat' that deepens (y scale) at each contact.
+   Shapes are modern; acts and descriptions stay true:
+     trampoline  a Gunmetal frame ring under an LED Cyan rim pad on 3 slim
+                 Midnight Ink legs (static). The Graphite mat is a shallow bowl
+                 on pivot 'mat' that deepens (y scale) at each contact.
                  Act 'bounce': asks a.pets.perform('trampoline', uid) for the
                  pet's run-over + 3 bounces; with no pet the mat does one boing.
-     fountain    2-tier lathe basin (torus lip on the lower tier) + water
-                 (static); an expanding ripple pair
-                 on 'ripple'; 3 bubbler jets ('water' = centre / act pivot,
-                 'jetL', 'jetR') that breathe idly and play the 3 s concert;
-                 12 drops on a per-copy geometry placed on the CPU each frame.
-                 Showtime: the jets and drops take neon tints.
-     swing       A-frame + leafy top bar (static); ropes + seat on 'swing':
-                 ±4° pendulum idle, the act swings to ±38° and decays over 4 s.
-     bubbles     machine body + porthole (static); wand arm + ring and its soap
-                 film on 'emitter' (it waves during the act); 2 idle glass
-                 bubbles on 'bubA'/'bubB'. The act emits PEARL bubbles (a.emit).
+     fountain    a square Concrete plaza basin (four walls, a coping, a square
+                 pool, a plinth with a nozzle plate; static); square ripples on
+                 'ripple'; 3 bubbler jets ('water' = centre / act pivot, 'jetL',
+                 'jetR') that breathe idly and play the 3 s concert; 12 drops on
+                 a per-copy geometry placed on the CPU each frame.
+                 Showtime: the jets and drops take LED neon tints.
+     swing       a low-poly tree (faceted trunk, limb and leaf clusters; static);
+                 ropes + Teak seat on 'swing' under the limb: ±4° pendulum
+                 idle, the act swings to ±38° and decays over 4 s.
+     bubbles     a Graphite speaker-cabinet bubble cannon (woofer + tweeter;
+                 static); its post, barrel, FOIL mouth ring and soap film on
+                 'emitter' (it sweeps during the act); 2 idle glass bubbles on
+                 'bubA'/'bubB'. The act emits PEARL bubbles (a.emit).
    Acts (SLMotion timelines): ≤ 3 s (the swing decay excepted), interruptible
    (cancel), never stacking (a re-tap supersedes the live act on that uid and
    blends from its pose), sounds and emits from SLMotion.cues via a.sfx/a.emit.
@@ -51,7 +58,7 @@
 }(typeof self !== 'undefined' ? self : typeof globalThis !== 'undefined' ? globalThis : this, function (root, M0, L0) {
   'use strict';
 
-  var VERSION = 1;
+  var VERSION = 2;                          /* 2 = the Encore City restyle */
   var IDS = ['trampoline', 'fountain', 'swing', 'bubbles'];
   var PI = Math.PI, TAU = PI * 2, DEG = PI / 180;
 
@@ -64,74 +71,78 @@
 
   /* ---------------- default colour tokens (= the LOOK entries; the LOOK wins) ---------------- */
   var DEF = {
-    trampoline: { frame: 'Tramp Frame', mat: 'Tramp Mat', shine: 'Tramp Shine', leg: 'Ink' },
-    fountain: { basin: 'Basin', water: 'Water', drop: 'Water' },
-    swing: { post: 'Palm Bark', leaves: 'Leaf', rope: 'Pole', seat: 'Carrot' },
-    bubbles: { body: 'Grape', face: 'Cloud White', wand: 'Pole', bubble: 'Holo Pink', rim: 'Bubble Rim' }
+    trampoline: { frame: 'Gunmetal', mat: 'Graphite', shine: 'LED Cyan', leg: 'Midnight Ink' },
+    fountain: { basin: 'Concrete Light', water: 'Water', drop: 'Water' },
+    swing: { post: 'Palm Bark', leaves: 'Leaf Deep', rope: 'Pole', seat: 'Teak' },
+    bubbles: { body: 'Graphite', face: 'Gunmetal', wand: 'Pole', bubble: 'Holo Pink', rim: 'Bubble Rim' }
   };
-  var NEON3 = ['Neon Pink', 'Neon Cyan', 'Neon Violet'];
+  /* default materials for parts the LOOK entry does not list (its mats win): the cannon's FOIL ring */
+  var MATS = { trampoline: {}, fountain: {}, swing: {}, bubbles: { rim: 'foil' } };
+  var NEON3 = ['Neon Magenta', 'LED Cyan', 'Electric Violet'];   /* = SLIslandLook.NEON3 (v2) */
   var PAINT_WHITE = 'Cloud White';          /* state-coloured parts: the instance colour shows exactly */
+  var ICO_TILT = Math.atan2(1, (1 + Math.sqrt(5)) / 2) / DEG;   /* 31.72°: an icosahedron vertex on +y */
 
   /* ================================================================
      LAYOUT (item-space units; all inside the 0.43 half-cell margin)
      ================================================================ */
-  /* trampoline: the bible's torus R 0.42 would poke 0.04 past the margin, so R 0.375 + r 0.05 */
+  /* trampoline: a slim gunmetal frame ring, the LED Cyan pad (a flattened torus) riding on it */
   var T = {
-    y: 0.39, R: 0.375, r: 0.05,                       /* frame tube centre height, torus radii */
-    matR: 0.345, depth: 0.016,                            /* mat bowl: rim radius (under the frame), rest depth */
-    matProfile: [[1, 1], [0.7, 0.55], [0.38, 0.18], [0, 0]], /* rim → centre, so the faces look up */
-    shineR: 0.1, shineS: [1, 0.09, 0.55], shineP: [-0.11, 0.38, -0.05],
-    legs: [90, 210, 330], legR: 0.028, legLen: 0.315, legMid: 0.36, legY: 0.185, legTilt: 4.6
+    y: 0.39, R: 0.385, r: 0.03,                               /* frame tube centre height, torus radii */
+    padR: 0.36, padr: 0.042, padS: 0.42, padY: 0.405,         /* the rim pad: torus radii, y squash, centre height */
+    matR: 0.33, depth: 0.016,                                 /* mat bowl: rim radius (under the pad), rest depth */
+    matProfile: [[1, 1], [0.7, 0.55], [0.38, 0.18], [0, 0]],  /* rim → centre, so the faces look up */
+    legs: [90, 210, 330], legR: 0.018, legTop: 0.38, legIn: 0.36, legOut: 0.385, footR: 0.036, footH: 0.02
   };
-  /* fountain: lower pool r 0.42 (bible 0.45, clamped to the margin), upper tier r 0.2.
-     The lower tier is a lathe bowl under a torus lip: the lip gives the main silhouette a
-     16-gon (12 on LOW) outline where the lathe alone would be a 10-gon (7 on LOW) */
+  /* fountain: a square plaza basin. Four walls (half-size 0.41, 0.05 thick) hold a square pool;
+     a square plinth carries the nozzle plate and the centre jet */
   var F = {
-    lowR: 0.4, lowH: 0.18, lowProfile: [[0.86, 0], [0.94, 0.1], [0.99, 0.45], [1, 0.95]],
-    lipR: 0.385, lipr: 0.035, lipY: 0.172,
-    poolR: 0.372, poolY: 0.155,
-    pedTop: 0.062, pedBot: 0.085, pedY0: 0.12, pedY1: 0.55,
-    upR: 0.2, upH: 0.185, upY: 0.47,
-    upProfile: [[0.3, 0], [0.5, 0.18], [0.78, 0.42], [0.96, 0.72], [1, 0.9], [0.94, 1], [0.86, 0.86]],
-    upPoolR: 0.176, upPoolY: 0.632,
+    half: 0.41, wall: 0.05, rimH: 0.17, coping: [0.062, 0.022],
+    poolHalf: 0.36, poolY: 0.135,
+    plinth: 0.055, plinthY0: 0.13, plinthY1: 0.575, capHalf: 0.12, capH: 0.035,
     /* the three bubbler jets: centre (pivot 'water'), left (-x), right (+x); h = rest height */
     jets: [
-      { pivot: 'water', part: 'jetC', p: [0, 0.632, 0], r: 0.045, h: 0.128, neon: 1 },
-      { pivot: 'jetL', part: 'jetL', p: [-0.25, 0.155, 0], r: 0.034, h: 0.085, neon: 0 },
-      { pivot: 'jetR', part: 'jetR', p: [0.25, 0.155, 0], r: 0.034, h: 0.085, neon: 2 }
+      { pivot: 'water', part: 'jetC', p: [0, 0.61, 0], r: 0.045, h: 0.13, neon: 1 },
+      { pivot: 'jetL', part: 'jetL', p: [-0.24, 0.135, 0], r: 0.034, h: 0.085, neon: 0 },
+      { pivot: 'jetR', part: 'jetR', p: [0.24, 0.135, 0], r: 0.034, h: 0.085, neon: 2 }
     ],
     jetProfile: [[1, 0], [0.96, 0.5], [0.82, 0.8], [0.5, 0.95], [0, 1]],
     bob: 0.18, bobPeriod: 1.2,                            /* bubbler breathing: ±18 %, two day beats */
-    /* ripple pair: rings at R and R·k; the pivot scales xz 1 → 1/k each period, so ring B
-       ends exactly where ring A began (seamless), and ring A ends hidden under the lip */
-    ripY: 0.16, ripR: 0.19, ripW: 0.024, ripK: 0.5, ripPeriod: 2.4,
+    /* ripple pair: square rings of half-size H and H·k; the pivot scales xz 1 → 1/k each period,
+       so square B ends exactly where square A began (seamless), and A ends hidden under the walls */
+    ripY: 0.14, ripHalf: 0.192, ripW: 0.022, ripK: 0.5, ripPeriod: 2.4,
     /* drops: SLMotion.drop's 3 streams × 4, re-based from the spout down into the pool */
-    drops: 12, streams: 3, period: 0.9, reach: 0.32, arcScale: 0.9, spoutY: 0.76, landY: 0.165,
+    drops: 12, streams: 3, period: 0.9, reach: 0.32, arcScale: 0.9, spoutY: 0.74, landY: 0.145,
     dropR: 0.03, dropUp: 0.065, dropDown: 0.035, dropRadial: 4, restT: 0.125
   };
   F.arc = 0.42 * F.arcScale;                               /* SLMotion.drop's 0.42 u arc, scaled */
-  /* swing: A-frame posts splayed front/back, the bar along x, the seat swings in z */
+  /* swing: a low-poly tree — a trunk on the left, a limb across, faceted leaf clusters above; the
+     ropes and seat hang from the limb and swing in z */
   var S = {
-    halfW: 0.36, footZ: 0.3, apexY: 1.2, postR: [0.03, 0.04],
-    barY: 1.2, barR: 0.034, barLen: 0.8,
-    leafX: [-0.3, -0.15, 0, 0.15, 0.3], leafZ: [0.02, -0.03, 0.01, -0.02, 0.03], leafR: [0.115, 0.13, 0.135, 0.13, 0.115],
-    leafY: 1.285, leafS: [1.1, 0.85, 1],
-    ropeX: 0.15, ropeR: 0.012, ropeTop: 1.17, seatY: 0.36, seat: [0.36, 0.05, 0.16],
-    pivotY: 1.2
+    trunk: { x: -0.29, z: -0.04, rBot: 0.085, rTop: 0.05, h: 1.24 },
+    limb: { from: [-0.29, 1.12, -0.04], to: [0.32, 1.21, -0.02], r0: 0.045, r1: 0.028 },
+    leaves: [
+      { c: [-0.22, 1.25, -0.02], r: 0.21, tone: 'base' }, { c: [0.02, 1.3, -0.08], r: 0.2, tone: 'hi' },
+      { c: [0.24, 1.22, 0], r: 0.18, tone: 'base' }, { c: [-0.05, 1.17, 0.16], r: 0.16, tone: 'shade' },
+      { c: [0.14, 1.33, 0.13], r: 0.15, tone: 'base' }, { c: [-0.12, 1.36, 0.06], r: 0.14, tone: 'hi' }
+    ],
+    seatX: 0.06, ropeX: 0.13, ropeR: 0.01, ropeTop: 1.16, seatY: 0.36, seat: [0.32, 0.045, 0.15],
+    pivotY: 1.17
   };
-  /* bubble machine: body slab(0.5, 0.32, 0.36) with a white porthole, the wand up-right */
+  /* bubble cannon: a speaker cabinet (woofer + tweeter on the front), a post up to a barrel
+     aimed up and out at the camera, the FOIL ring at its mouth (the ring centre is the emitter) */
   var B = {
     body: [0.5, 0.32, 0.36],
-    faceR: 0.088, faceD: 0.02, faceY: 0.16, faceZ: 0.182, bezelR: 0.094, bezelr: 0.016, bezelZ: 0.19,
-    armBase: [0.1, 0.3, 0.02], armR: 0.02,
-    ring: [0.23, 0.68, 0.02], ringR: 0.075, ringr: 0.014, filmR: 0.064, filmS: [1, 1, 0.14],
-    rest: [{ p: [0.16, 0.77, 0.05], r: 0.045 }, { p: [-0.13, 0.365, 0.03], r: 0.045 }],
+    faceZ: 0.18, woofer: { x: -0.085, y: 0.16, R: 0.096, r: 0.016, cone: 0.088 }, tweeter: { x: 0.15, y: 0.215, R: 0.036, r: 0.01 },
+    armBase: [0.1, 0.32, 0.02], armR: 0.022,
+    ring: [0.23, 0.68, 0.02], ringR: 0.075, ringr: 0.016, filmR: 0.064, filmS: [1, 1, 0.14],
+    barrel: { r: 0.07, len: 0.17 }, aim: 28,               /* the barrel tips up by aim degrees */
+    rest: [{ p: [0.2, 0.8, 0.07], r: 0.045 }, { p: [-0.13, 0.365, 0.03], r: 0.045 }],
     wandGain: 4,                                           /* SLMotion's ±3° shake, ×4 on the wand */
     /* SLMotion.idleBubble starts its track at (0.12, 0.3, 0) with peak alpha 0.45: re-based to the ring */
     trackX0: 0.12, trackY0: 0.3, trackA: 0.45
   };
   (function () {
-    var dx = B.ring[0] - B.armBase[0], dy = (B.ring[1] - B.ringR) - B.armBase[1];
+    var dx = B.ring[0] - B.armBase[0], dy = (B.ring[1] - B.barrel.r) - B.armBase[1];
     B.armLen = Math.sqrt(dx * dx + dy * dy);
     B.armTilt = Math.atan2(dx, dy) / DEG;
     B.armMid = [B.armBase[0] + dx / 2, B.armBase[1] + dy / 2, B.armBase[2]];
@@ -404,26 +415,54 @@
     hi = hi == null ? 0.6 : hi; lo = lo == null ? -0.35 : lo;
     return G.paintBy(geo, function (v) { return v.ny > hi ? [tok, 'hi'] : v.ny < lo ? [tok, 'shade'] : tok; });
   }
+  /* one flat tone per facet (faceted canopies and stone): lit tops, mid sides, shaded undersides */
+  function facetShade(G, geo, tok, mid, hi, lo) {
+    hi = hi == null ? 0.5 : hi; lo = lo == null ? -0.3 : lo;
+    return G.paintBy(geo, function (v) { return v.ny > hi ? [tok, 'hi'] : v.ny < lo ? [tok, 'shade'] : [tok, mid || 'base']; }, { perFace: true });
+  }
+  function rad(ctx, n) { return ctx.tier === 'LOW' ? Math.max(3, Math.round(n * 0.7)) : n; }
+  /* a crisp box: BoxGeometry (12 tris), the architecture look at this scale */
+  function box(G, w, h, d, p, r) { return G.t(G.slab(w, h, d, 0), { p: p, r: r }); }
+  /* Euler XYZ degrees (three.js order) that turn +y onto (dx, dy, dz) */
+  function alignY(dx, dy, dz) {
+    var l = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1;
+    dx /= l; dy /= l; dz /= l;
+    var gz = -Math.asin(dx < -1 ? -1 : dx > 1 ? 1 : dx);
+    var ax = Math.abs(dx) > 0.99999 ? 0 : Math.atan2(dz, dy);
+    return [ax / DEG, 0, gz / DEG];
+  }
+  /* a tapered tube from a (radius r0) to b (radius r1) */
+  function rod(G, a, b, r0, r1, radial) {
+    var dx = b[0] - a[0], dy = b[1] - a[1], dz = b[2] - a[2], len = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1e-4;
+    return G.t(G.tube(r1, r0, len, { radial: radial }), { r: alignY(dx, dy, dz), p: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2] });
+  }
+  /* a faceted detail-0 icosahedron (circumradius r, a vertex up): the low-poly leaf cluster. The kit
+     has no detail-0 primitive, so it comes from ctx.K.THREE (an 80-face faceted puff without it) */
+  function ico(ctx, r) {
+    var G = ctx.G, T3 = ctx.K && ctx.K.THREE, g = null;
+    if (T3 && typeof T3.IcosahedronGeometry === 'function' && typeof G.normalise === 'function') g = G.normalise(new T3.IcosahedronGeometry(r, 0));
+    if (!g) g = G.puff(r);
+    return G.facet(G.t(g, { r: [0, 0, ICO_TILT] }));
+  }
 
   function buildTrampoline(ctx) {
     var G = ctx.G, c = colorsOf(ctx, DEF.trampoline), ol = outlineOf(ctx);
-    /* the frame: a torus laid flat, lit on top */
+    /* the frame: a slim gunmetal ring laid flat; the LED Cyan pad rides on top of it */
     var frame = toyShade(G, G.t(G.ring(T.R, T.r), { r: [90, 0, 0], p: [0, T.y, 0] }), c.frame, 0.5);
-    var geos = [frame];
-    /* 3 ink bean legs (front, back-left, back-right), tops leaning in */
+    var pad = toyShade(G, G.t(G.ring(T.padR, T.padr), { r: [90, 0, 0], s: [1, 1, T.padS], p: [0, T.padY, 0] }), c.shine, 0.7, -0.2);
+    var geos = [frame, pad];
+    /* 3 slim ink legs (front, back-left, back-right) splaying a touch outward, on round feet */
     for (var k = 0; k < T.legs.length; k++) {
-      var A = T.legs[k];
-      geos.push(G.paint(G.t(G.bean(T.legR, T.legLen), {
-        r: [0, -A, T.legTilt], p: [Math.cos(A * DEG) * T.legMid, T.legY, Math.sin(A * DEG) * T.legMid]
-      }), c.leg));
+      var cs = Math.cos(T.legs[k] * DEG), sn = Math.sin(T.legs[k] * DEG);
+      geos.push(G.paint(rod(G, [cs * T.legIn, T.legTop, sn * T.legIn], [cs * T.legOut, T.footH, sn * T.legOut], T.legR, T.legR, rad(ctx, 6)), c.leg));
+      geos.push(G.paint(G.t(G.tube(T.footR * 0.8, T.footR, T.footH, { radial: rad(ctx, 8) }), { p: [cs * T.legOut, T.footH / 2, sn * T.legOut] }), c.leg, 'hi'));
     }
-    /* the mat: a shallow bowl whose rim sits under the frame tube; the shine dab sits on it */
+    /* the Graphite mat: a shallow bowl whose rim tucks under the pad */
     var mat = G.paint(G.t(G.drop(T.matR, T.depth, T.matProfile), { p: [0, T.y - T.depth, 0] }), c.mat);
-    var shine = G.paint(G.t(G.puff(T.shineR), { s: T.shineS, p: T.shineP }), c.shine);
     return ctx.K.template(ctx)
       .part('frame', geos, 'toon', { castShadow: true, outline: ol })
       .pivot('mat', [0, T.y, 0])
-      .part('mat', [mat, shine], 'toon', { pivot: 'mat' })
+      .part('mat', [mat], 'toon', { pivot: 'mat' })
       .anchor('top', [0, topOf(ctx, 0.45), 0])
       .anchor('seat', [0, T.y - T.depth, 0])
       .done();
@@ -435,20 +474,33 @@
     var bot = G.t(G.tube(F.dropR, 0, F.dropDown, { radial: F.dropRadial, open: true }), { p: [0, -F.dropDown / 2, 0] });
     return G.merge([top, bot]);
   }
+  /* a flat open square frame (a 4-sided sloped tube turned 45°): half-size h, band width w */
+  function squareRing(G, h, w, y, tok, tone) {
+    var k = Math.SQRT2;
+    return G.paint(G.t(G.tube((h - w / 2) * k, (h + w / 2) * k, 0.006, { radial: 4, open: true }), { r: [0, 45, 0], p: [0, y, 0] }), tok, tone);
+  }
   function buildFountain(ctx) {
     var G = ctx.G, c = colorsOf(ctx, DEF.fountain), ol = outlineOf(ctx);
     var neon = ctx.look && ctx.look.show && Array.isArray(ctx.look.show.neon) && ctx.look.show.neon.length >= 3 ? ctx.look.show.neon : NEON3;
-    /* basin: lower lathe bowl + torus lip, pedestal, upper lathe bowl (rolled lip), two water discs */
-    var lower = toyShade(G, G.drop(F.lowR, F.lowH, F.lowProfile), c.basin);
-    var lip = toyShade(G, G.t(G.ring(F.lipR, F.lipr), { r: [90, 0, 0], p: [0, F.lipY, 0] }), c.basin, 0.5);
-    var ped = toyShade(G, G.t(G.tube(F.pedTop, F.pedBot, F.pedY1 - F.pedY0, { open: true }), { p: [0, (F.pedY0 + F.pedY1) / 2, 0] }), c.basin);
-    var upper = toyShade(G, G.t(G.drop(F.upR, F.upH, F.upProfile), { p: [0, F.upY, 0] }), c.basin);
-    /* the water: near-flat open cones (only the upward side; no hidden base cap) */
-    function water(r, y) { return G.paint(G.t(G.tube(0, r, 0.004, { open: true }), { p: [0, y, 0] }), c.water); }
-    var pool = water(F.poolR, F.poolY), upPool = water(F.upPoolR, F.upPoolY);
-    /* the ripple pair: thin sloped rings just above the lower pool */
-    function ring(R, w) { return G.paint(G.t(G.tube(R - w / 2, R + w / 2, 0.006, { open: true }), { p: [0, F.ripY, 0] }), c.water, 'hi'); }
-    var ripA = ring(F.ripR, F.ripW), ripB = ring(F.ripR * F.ripK, F.ripW * F.ripK);
+    var basin = [], H = F.half, W = F.wall, mid = H - W / 2, cp = F.coping;
+    /* the square basin: four concrete walls (inner faces in shade) under a lighter coping */
+    function wallShade(v) { return v.ny > 0.5 ? [c.basin, 'hi'] : (v.nx * v.x + v.nz * v.z) < 0 ? [c.basin, 'shade'] : c.basin; }
+    basin.push(G.paintBy(box(G, 2 * H, F.rimH, W, [0, F.rimH / 2, -mid]), wallShade));
+    basin.push(G.paintBy(box(G, 2 * H, F.rimH, W, [0, F.rimH / 2, mid]), wallShade));
+    basin.push(G.paintBy(box(G, W, F.rimH, 2 * H - 2 * W, [-mid, F.rimH / 2, 0]), wallShade));
+    basin.push(G.paintBy(box(G, W, F.rimH, 2 * H - 2 * W, [mid, F.rimH / 2, 0]), wallShade));
+    [[0, -mid, 2 * H, cp[0]], [0, mid, 2 * H, cp[0]], [-mid, 0, cp[0], 2 * H - 2 * W], [mid, 0, cp[0], 2 * H - 2 * W]].forEach(function (q) {
+      basin.push(G.paint(box(G, q[2], cp[1], q[3], [q[0], F.rimH + cp[1] / 2, q[1]]), c.basin, 'hi'));
+    });
+    /* the pool: one flat square of water inside the walls (only the upward side) */
+    basin.push(G.paint(G.t(G.tube(0, F.poolHalf * Math.SQRT2, 0.004, { radial: 4, open: true }), { r: [0, 45, 0], p: [0, F.poolY, 0] }), c.water));
+    /* the plinth and its nozzle plate */
+    basin.push(G.paintBy(box(G, 2 * F.plinth, F.plinthY1 - F.plinthY0, 2 * F.plinth, [0, (F.plinthY0 + F.plinthY1) / 2, 0]), function (v) {
+      return v.nx + v.nz > 0.5 ? c.basin : [c.basin, 'shade'];
+    }));
+    basin.push(G.paintBy(box(G, 2 * F.capHalf, F.capH, 2 * F.capHalf, [0, F.plinthY1 + F.capH / 2, 0]), function (v) { return v.ny > 0.5 ? [c.basin, 'hi'] : c.basin; }));
+    /* the ripple pair: thin square rings just above the pool */
+    var ripA = squareRing(G, F.ripHalf, F.ripW, F.ripY, c.water, 'hi'), ripB = squareRing(G, F.ripHalf * F.ripK, F.ripW * F.ripK, F.ripY, c.water, 'hi');
     /* a jet: a rounded water column; paler at the tip (the instance colour carries Water / neon) */
     function jet(J) {
       var g = G.t(G.drop(J.r, J.h, F.jetProfile), { p: J.p }), y0 = J.p[1] + J.h * 0.35;
@@ -460,7 +512,7 @@
       drops.push(G.paint(G.t(dropGeo(G), { p: [r.x, r.y, r.z] }), c.drop));
     }
     var b = ctx.K.template(ctx)
-      .part('basin', [lower, lip, pool, ped, upper, upPool], 'toon', { castShadow: true, outline: ol })
+      .part('basin', basin, 'toon', { castShadow: true, outline: ol })
       .pivot('ripple', [0, F.ripY, 0])
       .part('ripple', [ripA, ripB], 'toon', { pivot: 'ripple' });
     F.jets.forEach(function (J) {
@@ -473,53 +525,56 @@
   }
 
   function buildSwing(ctx) {
-    var G = ctx.G, c = colorsOf(ctx, DEF.swing), ol = outlineOf(ctx);
-    var frame = [];
-    /* 2 A-frames at x = ±halfW: posts from feet at z = ±footZ up to the apex at z = 0 */
-    var len = Math.sqrt(S.footZ * S.footZ + S.apexY * S.apexY), tilt = Math.atan2(S.footZ, S.apexY) / DEG;
-    [-1, 1].forEach(function (sx) {
-      [-1, 1].forEach(function (fz) {
-        frame.push(G.paint(G.t(G.tube(S.postR[0], S.postR[1], len), { r: [-fz * tilt, 0, 0], p: [sx * S.halfW, S.apexY / 2, fz * S.footZ / 2] }), c.post));
-      });
+    var G = ctx.G, c = colorsOf(ctx, DEF.swing), ol = outlineOf(ctx), tree = [], tk = S.trunk, lb = S.limb;
+    /* the low-poly tree: a faceted hexagonal trunk, a limb across, faceted leaf clusters */
+    var trunk = G.facet(G.t(G.tube(tk.rTop, tk.rBot, tk.h, { radial: rad(ctx, 6) }), { p: [tk.x, tk.h / 2, tk.z], r: [0, 15, 0] }));
+    tree.push(G.paintBy(trunk, function (v) { return v.y < 0.12 || v.nx + v.nz < -0.6 ? [c.post, 'shade'] : c.post; }, { perFace: true }));
+    tree.push(G.paint(G.facet(rod(G, lb.from, lb.to, lb.r0, lb.r1, rad(ctx, 6))), c.post));
+    S.leaves.forEach(function (l, i) {
+      tree.push(facetShade(G, G.t(ico(ctx, l.r), { r: [0, i * 23, 0], p: l.c }), c.leaves, l.tone));
     });
-    frame.push(toyShade(G, G.t(G.tube(S.barR, S.barLen), { r: [0, 0, 90], p: [0, S.barY, 0] }), c.post, 0.7, -0.5));
-    /* the leafy top bar: 5 puffs, lit tops, shaded undersides */
-    for (var i = 0; i < S.leafX.length; i++) {
-      frame.push(toyShade(G, G.t(G.puff(S.leafR[i]), { s: S.leafS, p: [S.leafX[i], S.leafY, S.leafZ[i]] }), c.leaves, 0.55, -0.3));
-    }
-    /* ropes + seat hang from the bar on the 'swing' pivot */
+    /* ropes + the Teak seat hang from the limb on the 'swing' pivot */
     var ropeLen = S.ropeTop - (S.seatY + S.seat[1] / 2), ropeY = S.ropeTop - ropeLen / 2;
     var seatParts = [
-      G.paint(G.t(G.tube(S.ropeR, ropeLen, { radial: 4 }), { p: [-S.ropeX, ropeY, 0] }), c.rope),
-      G.paint(G.t(G.tube(S.ropeR, ropeLen, { radial: 4 }), { p: [S.ropeX, ropeY, 0] }), c.rope),
-      toyShade(G, G.t(G.slab(S.seat[0], S.seat[1], S.seat[2]), { p: [0, S.seatY, 0] }), c.seat)
+      G.paint(G.t(G.tube(S.ropeR, ropeLen, { radial: 4 }), { p: [S.seatX - S.ropeX, ropeY, 0] }), c.rope),
+      G.paint(G.t(G.tube(S.ropeR, ropeLen, { radial: 4 }), { p: [S.seatX + S.ropeX, ropeY, 0] }), c.rope),
+      G.paintBy(box(G, S.seat[0], S.seat[1], S.seat[2], [S.seatX, S.seatY, 0]), function (v) { return v.ny > 0.5 ? [c.seat, 'hi'] : v.ny < -0.5 ? [c.seat, 'shade'] : c.seat; })
     ];
     return ctx.K.template(ctx)
-      .part('frame', frame, 'toon', { castShadow: true, outline: ol })
-      .pivot('swing', [0, S.pivotY, 0])
+      .part('frame', tree, 'toon', { castShadow: true, outline: ol })
+      .pivot('swing', [S.seatX, S.pivotY, 0])
       .part('swing', seatParts, 'toon', { pivot: 'swing' })
       .anchor('top', [0, topOf(ctx, 1.4), 0])
-      .anchor('seat', [0, S.seatY + S.seat[1] / 2, 0])
+      .anchor('seat', [S.seatX, S.seatY + S.seat[1] / 2, 0])
       .done();
   }
 
   function buildBubbles(ctx) {
     var G = ctx.G, c = colorsOf(ctx, DEF.bubbles), ol = outlineOf(ctx), glass = matOf(ctx, 'bubble', 'glass');
-    /* the machine: a chunky rounded box with a white porthole in a Bubble Rim bezel */
-    var body = toyShade(G, G.t(G.slab(B.body[0], B.body[1], B.body[2]), { p: [0, B.body[1] / 2, 0] }), c.body);
-    var face = G.paint(G.t(G.tube(B.faceR, B.faceR, B.faceD), { r: [90, 0, 0], p: [0, B.faceY, B.faceZ] }), c.face);
-    var bezel = G.paint(G.t(G.ring(B.bezelR, B.bezelr), { p: [0, B.faceY, B.bezelZ] }), c.rim);
-    /* the wand: an arm up to a ring facing the camera, a soap film inside it */
-    var arm = G.paint(G.t(G.tube(B.armR, B.armLen), { r: [0, 0, -B.armTilt], p: B.armMid }), c.wand);
-    var ring = toyShade(G, G.t(G.ring(B.ringR, B.ringr), { p: B.ring }), c.wand, 0.7, -0.6);
-    var film = G.paint(G.t(G.puff(B.filmR), { s: B.filmS, p: B.ring }), c.bubble);
-    /* two idle bubbles: rest = one just blown above the ring, one resting on the machine */
+    var foil = matOf(ctx, 'rim', MATS.bubbles.rim), Z = B.faceZ, Wf = B.woofer, Tw = B.tweeter;
+    /* the speaker cabinet: a crisp graphite box, a woofer (gunmetal surround, dark cone) and a tweeter */
+    var body = [toyShade(G, G.t(G.slab(B.body[0], B.body[1], B.body[2], { arch: true }), { p: [0, B.body[1] / 2, 0] }), c.body, 0.6, -0.5)];
+    body.push(toyShade(G, G.t(G.ring(Wf.R, Wf.r), { p: [Wf.x, Wf.y, Z] }), c.face, 0.6, -0.6));
+    body.push(G.paint(G.t(G.cone(Wf.cone, 0.04, rad(ctx, 12)), { r: [-90, 0, 0], p: [Wf.x, Wf.y, Z - 0.015] }), c.body, 'shade'));
+    body.push(G.paint(G.t(G.tube(0.022, 0.022, 0.012, { radial: rad(ctx, 8) }), { r: [90, 0, 0], p: [Wf.x, Wf.y, Z - 0.004] }), c.face));
+    body.push(G.paint(G.t(G.tube(Tw.R, Tw.R, 0.012, { radial: rad(ctx, 10) }), { r: [90, 0, 0], p: [Tw.x, Tw.y, Z - 0.002] }), c.face));
+    body.push(G.paint(G.t(G.tube(Tw.R * 0.6, Tw.R * 0.6, 0.012, { radial: rad(ctx, 8) }), { r: [90, 0, 0], p: [Tw.x, Tw.y, Z + 0.003] }), c.body, 'hi'));
+    /* the cannon: a post up to a barrel aimed up and out at the camera; the FOIL ring at its mouth.
+       Barrel, ring and film are built round the ring centre and tipped up by B.aim */
+    var aim = { r: [-B.aim, 0, 0], p: B.ring };
+    var post = G.paint(G.t(G.tube(B.armR, B.armLen, { radial: rad(ctx, 8) }), { r: [0, 0, -B.armTilt], p: B.armMid }), c.wand);
+    var barrel = G.t(G.t(G.tube(B.barrel.r, B.barrel.r * 1.12, B.barrel.len, { radial: rad(ctx, 12) }), { r: [90, 0, 0], p: [0, 0, -B.barrel.len / 2 - 0.004] }), aim);
+    barrel = toyShade(G, barrel, c.body, 0.75, -0.5);
+    var ring = G.paint(G.t(G.ring(B.ringR, B.ringr), aim), c.rim);
+    var film = G.paint(G.t(G.t(G.puff(B.filmR), { s: B.filmS }), aim), c.bubble);
+    /* two idle bubbles: rest = one just blown above the ring, one resting on the cabinet */
     var bubA = G.paint(G.t(G.puff(B.rest[0].r), { p: B.rest[0].p }), c.bubble);
     var bubB = G.paint(G.t(G.puff(B.rest[1].r), { p: B.rest[1].p }), c.bubble);
     return ctx.K.template(ctx)
-      .part('body', [body, face, bezel], 'toon', { castShadow: true, outline: ol })
+      .part('body', body, 'toon', { castShadow: true, outline: ol })
       .pivot('emitter', B.armBase)
-      .part('wand', [arm, ring], 'toon', { pivot: 'emitter' })
+      .part('wand', [post, barrel], 'toon', { pivot: 'emitter' })
+      .part('ring', [ring], foil, { pivot: 'emitter' })
       .part('film', [film], glass, { pivot: 'emitter', receiveShadow: false })
       .pivot('bubA', B.rest[0].p)
       .part('bubbleA', [bubA], glass, { pivot: 'bubA', receiveShadow: false })
@@ -708,6 +763,7 @@
   return {
     VERSION: VERSION, IDS: IDS, factory: factory,
     LAYOUT: freezeAll({ trampoline: T, fountain: F, swing: S, bubbles: B }), DROP_REST: DROP_REST, DEFAULT_COLORS: freezeAll(DEF),
+    DEFAULT_MATS: freezeAll(MATS),
     /* pure helpers */
     pendulum: pendulum, rippleScale: rippleScale, bubblerScale: bubblerScale, arcPoint: arcPoint, dropPose: dropPose,
     matScaleY: matScaleY, wandPoint: wandPoint, bubblePose: bubblePose, leadOf: leadOf, makeBook: makeBook

@@ -48,7 +48,8 @@
    - Flag cloth and bunting pennants are perCopy parts: CPU waves written
      into each copy's own geometry (no allocation per frame).
 
-   PATHS (P1 auto-tiling). The controller hands the piece in the stateKey:
+   PATHS (P1 auto-tiling; the path models set `pieces: true`, island3d's opt-in).
+   The controller hands the piece in the stateKey:
      'p:<piece>' or 'p:<piece>:<layout>'   piece = single | end | straight | corner |
                                             tee | cross (SLIslandLook.pathPiece), layout 0..2
      anything else ('base': photocards, shop icons, a controller without auto-tiling)
@@ -1428,7 +1429,10 @@
           b.part('glow', plates, 'glow:' + runTok, { castShadow: false, receiveShadow: false, stateColor: { key: 'runway', off: LIT_TOKENS.night, on: LIT_TOKENS.runway, initial: 1 } });
           return b.done();
         },
-        idle: runwayIdle, act: none, show: runwayIdle
+        idle: runwayIdle, act: none, show: runwayIdle,
+        /* auto-tiling opt-in: the controller hands each copy its piece key ('p:<piece>[:<layout>]',
+           from pathPose) and yaw, so neighbouring path cells join up */
+        pieces: true
       };
     }
     /* a flat faceted stone: an open n-sided cone (no hidden base), apex up */

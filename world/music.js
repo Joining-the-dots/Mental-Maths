@@ -27,6 +27,10 @@
          ('island_day' is the golden-hour loop; 'golden' / 'golden_hour' / 'dusk' are aliases for it)
      SLMusic.duck(level, ms), SLMusic.enabled(), SLMusic.setEnabled(on),
      SLMusic.clock() -> {bpm, t0, beat, playing, track}, SLMusic.preload(track)
+     SLMusic.drop() -> bool   the island loop drops out for one bar (the Recording Studio's 'record'
+         act): behind the 800 Hz filter at 55%, then the beat comes back in with the 0.5 s drop sweep.
+         Only while the island owns a loop the child can hear (🎵 on, not muted, page shown); never
+         stacks (a second call inside the bar is ignored). A game channel keeps its own drop().
 
    BEAT-LOCK: play('course', {clock: () => round.state.t}) (or set('clock', fn)
    before the shell's play) schedules the band from the logic clock: beat k at
@@ -51,6 +55,7 @@
   var LOOKAHEAD = 0.12, TICK_MS = 25, MAX_VOICES = 12, LATE = 0.05;
   var RESYNC = 0.08, SLEW = 0.01, STALL = 0.25, BUS_GAIN = 0.3, OPEN = 18000;
   var MENU_GAIN = 0.6, MENU_LP = 1200, COUNT_GAIN = 0.4, COUNT_LP = 800, DROP_SEC = 0.5;
+  var ISLAND_DROP = { level: 0.55, close: 0.08 };    /* SLMusic.drop(): the bar's duck level, the filter's close (s) */
   var HIDE_FADE = 0.2, SHOW_FADE = 0.3, CUT_FADE = 0.25, MUTE_FADE = 0.15;
   var STORE_KEY = 'slMusic', MANIFEST_URL = 'audio/music/manifest.json';
   var MAX_BUFS = 3, READY_WAIT_MS = 1200;
@@ -756,7 +761,7 @@
       ctx: null, N: null, noAudio: false, decks: [], cur: null, owner: null, island: null, menuBy: null,
       gestured: false, hidden: !!(env.hidden && env.hidden()), enabled: null, timer: null, pool: [],
       manifest: null, manP: null, bufs: {}, loads: {}, bad: {}, lru: [], wantLoad: {}, memory: {},
-      duckEnd: 0, duckLevel: 1, seq: 0, deckSeq: 0, tok: 0, waitingFor: null,
+      duckEnd: 0, duckLevel: 1, dropUntil: 0, seq: 0, deckSeq: 0, tok: 0, waitingFor: null,
       fadeOn: false, fadeOffAt: 0, silent: false, stageApplied: null, t0: perf(), game: {}
     };
     var INST = makeInst(noiseBuf);
@@ -1276,6 +1281,21 @@
       rampAt(E.N.fxLP.frequency, openHz(), now, 0.2, true);
       applyStage(0.2);
     }
+    /* the island loop drops out for one bar: the mix closes behind the count filter (800 Hz) and
+       ducks, then the beat comes back in with the 0.5 s drop sweep on the next bar. Only while the
+       island owns a playing loop the child can hear; a call inside a running drop is ignored. */
+    function islandDrop() {
+      var d = E.cur;
+      if (!E.N || !E.ctx || !d || E.owner !== ISLAND || d.owner !== ISLAND || !audibleTarget() || isFrozen(d) || d.waiting) return false;
+      var now = E.ctx.currentTime, bar = barDur(d.bpm);
+      if (now < E.dropUntil) return false;
+      E.dropUntil = now + bar + DROP_SEC;
+      var f = E.N.fxLP.frequency;
+      rampAt(f, COUNT_LP, now, ISLAND_DROP.close, true);
+      rampFrom(f, COUNT_LP, openHz(), now + bar, DROP_SEC, true);      /* the beat drops back in */
+      duck(ISLAND_DROP.level, bar * 1000);
+      return true;
+    }
     function duck(level, ms) {
       if (!E.N) return;
       var lv = +level; if (!isFinite(lv)) lv = 0.4;
@@ -1479,7 +1499,7 @@
     if (env.listen) { try { env.listen(onGesture, onVisibility); } catch (e) {} }
 
     return {
-      channel: channel, island: island, stopAll: stopAll, duck: duck,
+      channel: channel, island: island, stopAll: stopAll, duck: duck, drop: islandDrop,
       enabled: function () { return isEnabled(); }, setEnabled: setEnabled,
       toggle: function () { return setEnabled(!isEnabled()); },
       gameEnabled: gameEnabled, setGameEnabled: setGameEnabled,
@@ -1524,7 +1544,7 @@
   return {
     /* data */
     TRACKS: TRACKS, TRACK_IDS: TRACK_IDS, PATTERNS: PATTERNS, MELODY: MELODY, PRI: PRI, STORE_KEY: STORE_KEY, MANIFEST_URL: MANIFEST_URL,
-    LOOKAHEAD: LOOKAHEAD, TICK_MS: TICK_MS, MAX_VOICES: MAX_VOICES, RESYNC: RESYNC, BUS_GAIN: BUS_GAIN,
+    LOOKAHEAD: LOOKAHEAD, TICK_MS: TICK_MS, MAX_VOICES: MAX_VOICES, RESYNC: RESYNC, BUS_GAIN: BUS_GAIN, ISLAND_DROP: ISLAND_DROP,
     /* harmony */
     parseChord: parseChord, chordTone: chordTone, padNotes: padNotes, placeRoot: placeRoot, midiHz: midiHz, chordAt: chordAt,
     /* time */

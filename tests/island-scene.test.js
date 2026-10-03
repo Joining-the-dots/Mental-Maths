@@ -435,11 +435,14 @@ class FakeBatch {
 }
 function fakeKit(tier) {
   const K = {
-    THREE: T, tier: tier || 'MID', batches: [],
-    templates: { get: (id, sk) => ({ id, sk, anchors: id === 'bld_stage' ? STAGE_ANCHORS : { top: [0, 1, 0] }, pivots: {}, parts: [] }) },
+    THREE: T, tier: tier || 'MID', batches: [], atlasUsers: [],
+    templates: { get: (id, sk, t, st) => ({ id, sk, st, anchors: id === 'bld_stage' ? STAGE_ANCHORS : { top: [0, 1, 0] }, pivots: {}, parts: [] }) },
     stateKey: (id, st) => L.stateKey(id, st || {}),
     batch(tpl) { const b = new FakeBatch(tpl); K.batches.push(b); return b; },
-    setSelPulse() {}, billboards: () => ({ mesh: new Obj3(), dispose() {} })
+    setSelPulse() {}, billboards: () => ({ mesh: new Obj3(), dispose() {} }),
+    /* the shared atlases (kit.js): only their user cells matter here */
+    ledAtlas: () => ({ setUser(u) { K.atlasUsers.push(['led', u]); } }),
+    signAtlas: () => ({ setUser(u) { K.atlasUsers.push(['sign', u]); } })
   };
   return K;
 }
@@ -453,6 +456,7 @@ function fakeEnv(o, rec, cfg) {
   };
   if (cfg.v2) { env.setEdit = (on) => rec.push(['edit', !!on]); env.setConeMounts = (pts) => rec.push(['cones', pts]); }
   if (cfg.setSeed) env.setSeed = (s) => rec.push(['seed', s]);
+  if (cfg.wakeAt) env.wakeAt = cfg.wakeAt;
   return env;
 }
 /* the browser globals mount() reads; every test puts the originals back (idempotent, any order) */
@@ -486,7 +490,7 @@ function harness(t, cfg = {}) {
       leases.push(l);
       return l;
     },
-    makeFx: () => ({ emit() {}, halo() {}, decal() {}, update: () => false, setMember() {}, setReduced() {}, setQuality() {}, clear() {}, dispose() {} }),
+    makeFx: cfg.fx || (() => ({ emit() {}, halo() {}, decal() {}, update: () => false, setMember() {}, setReduced() {}, setQuality() {}, clear() {}, dispose() {} })),
     makeActors: () => {
       const a = { sync() {}, update: () => false, pick: () => null, anchor: () => null, emote() {}, tap: () => false, perform: () => 0, active: () => null,
         dance: () => { actorsLog.push('dance'); return 4; }, setShow() {}, setMode() {}, setReduced() {}, setUser() {}, setQuality() {}, setShowtime() {},
@@ -771,4 +775,96 @@ test('mount v2: the crew anchor function, the QA grid, html.sl-low and the camer
   assert.equal(Q.states[Q.states.length - 1].grid, true);
   assert.ok(!globalThis.document.documentElement.classList.contains('sl-low'), 'MID: no LOW mark');
   assert.equal(Q.stage.element.querySelector('[data-cam="left"]').textContent, '⟲', 'no 2D art: the glyphs');
+});
+
+/* ================================================================
+   v2 seams (CONTRACTS §9): the child on atlases / models, paths, the wake ripple, LOW pools
+   ================================================================ */
+test('seams v2: the child\'s first name and colour reach the LED / sign atlases and the stage / course models, on mount and on every setUser', (t) => {
+  const log = [];
+  const models = { bld_stage: { setUser(x) { log.push(['stage', x]); } }, att_course: { setUser(x) { log.push(['course', x]); } } };
+  const H = harness(t, { models, user: { name: 'Ava Rose', color: '#4FC3F7', avatar: '🦊', seed: 'kid-a' } });
+  const ava = { name: 'Ava', color: '#4FC3F7' };
+  assert.deepEqual(H.K.atlasUsers, [['led', ava], ['sign', ava]], 'the first name only');
+  assert.deepEqual(log, [['stage', ava], ['course', { name: 'Ava', color: '#4FC3F7', avatar: '🦊' }]]);
+  H.stage.setUser({ name: 'Sis', color: '#FF7043', avatar: '🐼', seed: 'kid-b' });
+  const sis = { name: 'Sis', color: '#FF7043' };
+  assert.deepEqual(H.K.atlasUsers.slice(2), [['led', sis], ['sign', sis]]);
+  assert.deepEqual(log.slice(2), [['stage', sis], ['course', { name: 'Sis', color: '#FF7043', avatar: '🐼' }]]);
+  /* a model whose setUser throws is only logged */
+  const B = harness(t, { models: { bld_stage: { setUser() { throw new Error('boom'); } } } });
+  assert.equal(B.stage.info().failed, null);
+  assert.ok(B.stage.info().issues.some((s) => /bld_stage\.setUser/.test(s)));
+  assert.deepEqual(S.handleUser({ name: 'Kid', color: '#4FC3F7', avatar: '🦊' }), { name: 'Kid', color: '#4FC3F7', avatar: '🦊' });
+  assert.equal(S.firstName('  Mia  Grace '), 'Mia'); assert.equal(S.firstName(null), '');
+});
+
+test('seams v2: path models that opt in get their piece, layout and yaw from SLModelsGarden.pathPose (one layout per piece below HIGH)', (t) => {
+  const GARDEN = require('../world/island3d/models-garden.js');
+  const u = starter();
+  const isPath = (id) => C.item(id).kind === 'path';
+  const paths = u.world.placed.filter((p) => isPath(p.id));
+  assert.ok(paths.length >= 3, 'the starter island has a path');
+  const pc = S.pathPieces(u.world.placed, isPath, L.pathPiece);
+  for (const tier of ['MID', 'LOW', 'HIGH']) {
+    const H = harness(t, { tier, models: { path_stone: { pieces: true }, path_wood: { pieces: true }, path_flower: { pieces: true } }, globals: { SLModelsGarden: GARDEN } });
+    H.stage.sync(viewOf(u));
+    for (const p of paths) {
+      const want = GARDEN.pathPose(pc[p.uid].mask, p.uid, {}, S.PATH_LAYOUTS[tier]);
+      const b = H.batchOf(p.uid), add = b.adds.filter((a) => a.uid === p.uid).pop();
+      assert.equal(b.template.sk, want.stateKey, tier + ' ' + p.uid);
+      assert.deepEqual(b.template.st, { piece: want.piece, layout: want.layout });
+      assert.equal(add.place.yaw, want.yawDeg, 'the piece turns on its cell');
+      assert.equal(add.jitter, undefined, 'paths never jitter');
+      if (tier !== 'HIGH') assert.equal(want.layout, 0, 'one layout per piece on LOW and MID');
+    }
+  }
+  /* without SLModelsGarden: the bare piece and its yaw */
+  assert.deepEqual(S.pathCopy({ mask: 5, piece: 'straight', yawDeg: 0 }, 'p1', null, 3), { st: { piece: 'straight' }, sk: 'p:straight', yaw: 0 });
+  assert.deepEqual(S.PATH_LAYOUTS, { LOW: 1, MID: 1, HIGH: 3 });
+});
+
+test('seams v2: copies light up with the env\'s "city wakes up" ripple (k × env.wakeAt) and re-light for a new child', (t) => {
+  const u = starter();
+  placeAny(u, 'bld_photobooth');
+  const shows = [];
+  let wake = 0.25;
+  const models = { bld_photobooth: { show(a, k) { shows.push([k, a.show, a.member]); } } };
+  const H = harness(t, { models, wakeAt: () => wake });
+  H.stage.sync(viewOf(u));
+  readyUp(H);
+  shows.length = 0;
+  H.stage.showtime(true);
+  H.step(1);
+  assert.deepEqual(shows.pop(), [0.25, 0.25, '#4FC3F7'], 'the wave has not reached the booth yet');
+  wake = 1;
+  H.step(1);
+  assert.deepEqual(shows.pop(), [1, 1, '#4FC3F7'], 'it catches up while the wave travels');
+  H.step(60);
+  const n = shows.length;
+  H.step(10);
+  assert.equal(shows.length, n, 'show() rests once the ripple window is over');
+  H.stage.setUser({ name: 'Sis', color: '#FF7043', seed: 'kid-a' });
+  H.step(1);
+  assert.deepEqual(shows.pop(), [1, 1, '#FF7043'], 'every copy re-lights in the new colour');
+  assert.equal(S.wakeShow(0.8, 0.5), 0.4); assert.equal(S.wakeShow(0.8, undefined), 0.8); assert.equal(S.wakeShow(1, 3), 1);
+});
+
+test('seams v2 (LOW): the selection pool has its own key, so it never takes a building\'s uplight away', (t) => {
+  const u = starter();
+  const studio = placeAny(u, 'bld_recording');
+  const fxLog = [];
+  const fx = () => ({
+    emit() {}, halo() {}, update: () => false, setMember() {}, setReduced() {}, setQuality() {}, clear() {}, dispose() {},
+    decal(k, on, p, tok) { fxLog.push(['decal', k, !!on, tok]); }, uplight(k, on, p, tok) { fxLog.push(['up', k, !!on, tok]); }
+  });
+  const H = harness(t, { tier: 'LOW', fx, models: { bld_recording: { show(a) { a.decal(true, 'Window Warm'); } } } });
+  H.stage.sync(viewOf(u));
+  const of = (k) => fxLog.filter((e) => e[1] === k);
+  assert.deepEqual(of('u:' + studio).pop(), ['up', 'u:' + studio, true, 'Window Warm'], 'the studio\'s uplight');
+  H.stage.sync(viewOf(u, { mode: 'edit', selectedUid: studio }));
+  assert.deepEqual(of('sel:' + studio).pop(), ['decal', 'sel:' + studio, true, 'Star Gold'], 'LOW: a gold pool marks the selection');
+  H.stage.sync(viewOf(u, { mode: 'edit', selectedUid: null }));
+  assert.deepEqual(of('sel:' + studio).pop(), ['decal', 'sel:' + studio, false, undefined]);
+  assert.ok(of('u:' + studio).every((e) => e[2]), 'the uplight stayed on throughout');
 });

@@ -875,7 +875,7 @@ window.SL_WORLD_VER = '1';
   function stepEntry(en, dt) {
     var a = en.a;
     if (a) {
-      a.t += dt; a.dt = dt; a.reduced = !!S.reduced; a.show = S.show; a.tier = S.tier;
+      a.t += dt; a.dt = dt; a.reduced = !!S.reduced; a.show = entryShow(en, S.show); a.tier = S.tier;
       a.beat = _beat.frac || 0; a.bar = _beat.bar || 0; a.bpm = _beat.bpm || 100;
     }
     if (en.rig) {
@@ -1057,6 +1057,10 @@ window.SL_WORLD_VER = '1';
     var lay = LAB.layoutGrid(secs, {});
     lay.items.forEach(function (it, i) {
       var en = view.add(createEntry(it.entry, 'sc' + i));
+      /* the city buildings show their lit Showtime look here (the stage's beams, lit windows, signs
+         at full) — SL3D.make copies otherwise rest in the hidden golden-hour pose */
+      var lk = G.L.LOOK[en.modelId || en.id];
+      if (lk && lk.kind === 'building') en.showLit = 1;
       en.holder.position.set(it.x, 0, it.z);
       tileBatch(view, it.w, it.d, 'Grass Top', 'Grass Side').add('t' + i, { pos: [it.x, 0, it.z] });
     });
@@ -1428,12 +1432,15 @@ window.SL_WORLD_VER = '1';
     if (!changed || !v) return;
     if (v.env) call(v, 'envShow', function () { v.env.setShow(k); });
     v.entries.forEach(function (en) {
-      if (en.a) en.a.show = k;
-      if (en.rig && typeof en.rig.setShow === 'function') call(en, 'setShow', function () { en.rig.setShow(k); });
-      if (en.driver && typeof en.driver.setShow === 'function') call(en, 'setShow', function () { en.driver.setShow(k); });
-      if (en.model && typeof en.model.show === 'function') call(en, 'show', function () { en.model.show(en.a, k); });
+      var ek = entryShow(en, k);
+      if (en.a) en.a.show = ek;
+      if (en.rig && typeof en.rig.setShow === 'function') call(en, 'setShow', function () { en.rig.setShow(ek); });
+      if (en.driver && typeof en.driver.setShow === 'function') call(en, 'setShow', function () { en.driver.setShow(ek); });
+      if (en.model && typeof en.model.show === 'function') call(en, 'show', function () { en.model.show(en.a, ek); });
     });
   }
+  /* an entry's Showtime mix: the showcase's city buildings are always lit (model.show(a, 1)) */
+  function entryShow(en, k) { return en && en.showLit ? Math.max(k, en.showLit) : k; }
   function animateShow(target) {
     if (R.view && R.view.kind === 'mount') { applyShow(target); updateURL(); return; }   /* the stage animates its own Showtime */
     R.showAnim = { from: S.show, to: target, t: 0 };
@@ -1625,6 +1632,8 @@ window.SL_WORLD_VER = '1';
   function itemReport(en) {
     var id = en.modelId || en.id, look = G.L.LOOK[id] || {}, tpl = en.template;
     var r = { id: id, look: look, fp: G.Grid ? G.Grid.footprint(id) : [1, 1], placeholder: !!en.placeholder, st: en.st };
+    /* the height this style should have (a loft / villa / tower / dome house is not the cottage) */
+    if (typeof G.L.heightOf === 'function') { var eh = safe(function () { return G.L.heightOf(id, en.st || {}); }, 'heightOf'); if (eh > 0) r.expectH = eh; }
     if (tpl) {
       var b = templateBounds(tpl), mats = {};
       tpl.parts.forEach(function (p) { if (!p.pivot && !p.perCopy) mats[p.mat] = 1; });

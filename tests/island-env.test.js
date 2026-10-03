@@ -515,3 +515,16 @@ test('env: shader sources are well-formed and use only the uniforms they declare
   assert.ok(/uZenith/.test(E.SHADERS.STAR_VERT), 'zenith-only stars at golden hour');
   assert.ok(/#ifdef USE_INSTANCING/.test(E.SHADERS.CONE_VERT) && /instanceColor/.test(E.SHADERS.CONE_VERT), 'one instanced draw for 3 cones');
 });
+
+test('env seams §9: the sea draws life3d\'s boat wakes (uBoat[4]) on MID / HIGH only, fed from life.boats() every frame', () => {
+  const src = E.SHADERS.SEA_FRAG;
+  const lowOnly = (s) => s.replace(/#ifndef ENV_LOW[\s\S]*?#endif/g, '');
+  assert.match(src, /uniform vec4 uBoat\[4\];/, 'four boats: life3d\'s Float32Array(16)');
+  for (let i = 0; i < 4; i++) assert.ok(src.includes('uBoat[' + i + ']'), 'boat ' + i + ' leaves a wake');
+  assert.ok(!/uBoat|boatWake/.test(lowOnly(src)), 'LOW has no wakes (and no uBoat uniform)');
+  assert.ok(/float boatWake\(vec2 p, vec4 b\)/.test(src) && src.indexOf('float boatWake') < src.indexOf('void main()'), 'declared before main');
+  assert.ok(!/uTime[^;]*boat|boat[^;]*uTime/i.test(src), 'a wake moves with its boat only: nothing flickers');
+  const env = require('node:fs').readFileSync(require('node:path').join(__dirname, '../world/island3d/env.js'), 'utf8');
+  assert.match(env, /function lifeBoats\(l\)[\s\S]*?l\.boats\(\)/, 'env reads life.boats()');
+  assert.match(env, /if \(life && !low\) safeCall\('life', lifeBoats\)/, 'on MID / HIGH, every frame');
+});

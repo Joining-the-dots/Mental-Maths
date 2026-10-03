@@ -30,6 +30,7 @@
      zoomMaxFor(touch, aspect) · homeZoomFor(touch, aspect) · isPhone(touch, aspect)
      orbitDip(orbitYaw, elev) → degrees the Showtime orbit lowers the view (≤ 6, never below 40)
      topRayDeg(pose) → the top frustum edge's angle above the horizontal (≥ 0: the sky shows)
+     skylineFit(aspect, out) → {zoom, ty}   the hero shot's zoom / target height for a view aspect
      projectPose(p, pose, out) → {x, y, depth} (NDC) · groundAt(pose, nx, ny, y, out) → point | null
    Rig(o) → rig            o {grid, motion, reduced, touch, aspect, land}
      rig.setLand(land, {smooth}) · rig.resize(w, h) · rig.setTouch(on) · rig.setReduced(on)
@@ -40,8 +41,9 @@
      rig.fling(vx, vy, mode) · rig.command('left'|'right'|'up'|'down'|'in'|'out'|'reset')
      rig.reset(instant) · rig.focusOn(point, {zoom, instant}) · rig.keepInView(point, frac)
      rig.skyline({easeIn, hold, at}?) → Promise   the establishing hero shot (SKYLINE): elev 14, yaw -16,
-                                             target raised to y 2.0 and 1.5 u toward the city, zoom 0.8; hold
-                                             0.9 s, then 1.8 s inOutSine back to the user view. On mount it
+                                             target raised to y 2.0 and 1.5 u toward the city, zoom 0.8 (wider
+                                             than 4:3: skylineFit opens and lifts it so the tower tops stay in
+                                             frame); hold 0.9 s, then 1.8 s inOutSine back to the user view. On mount it
                                              starts in the pose (easeIn 0); the stage encore eases in. Any user
                                              camera input releases it (0.45 s); reduced motion skips it
      rig.reveal() (= skyline()) · rig.crane(point) → Promise · rig.pushIn(point, {zoom}) → Promise
@@ -101,8 +103,13 @@
   };
   /* the establishing hero shot: low over the bay, the target raised and pulled toward the city so
      the towers, the Halo Wheel and the Lantern Bridge fill the top of the frame (top ray ≈ +1°).
-     The shot is never quite still: its yaw creeps 2° over the whole move (a slow dolly) */
-  var SKYLINE = { elev: 14, yaw: -16, ty: 2.0, dz: -1.5, zoom: 0.8, hold: 0.9, ease: 1.8, drift: 2, release: 0.45, freezeMax: 1.5 };
+     The shot is never quite still: its yaw creeps 2° over the whole move (a slow dolly).
+     wide: up to 4:3 the land fits by width and the pose is exactly the one above; a wider view is
+     height-limited, so per 16:9-minus-4:3 step of extra width (at most `max` steps) the shot opens
+     by `zoom` and lifts the target by `ty`, keeping the tallest towers and the Signal Mast's tip
+     inside the top edge (city3d LAYERS.L3 ≤ 9 u + the 1 u mast; tested at 16:10, 16:9 and 2.4:1) */
+  var SKYLINE = { elev: 14, yaw: -16, ty: 2.0, dz: -1.5, zoom: 0.8, hold: 0.9, ease: 1.8, drift: 2, release: 0.45, freezeMax: 1.5,
+    wide: { from: 4 / 3, step: 16 / 9 - 4 / 3, zoom: -0.12, ty: 0.5, max: 2 } };
   var DEG_PER_PX = { yaw: 0.25, elev: 0.2 };
   var STEP_EPS = 1e-4;
 
@@ -202,6 +209,14 @@
   function orbitDip(orbitYaw, elev) {
     var d = LIMITS.orbitDip * Math.min(1, Math.abs(orbitYaw || 0) / LIMITS.orbitDeg);
     return Math.max(0, Math.min(d, elev - LIMITS.orbitDipFloor));
+  }
+  /* the skyline shot's zoom and target height for a view aspect (SKYLINE.wide) → out {zoom, ty} */
+  function skylineFit(aspect, out) {
+    out = out || {};
+    var S = SKYLINE, w = S.wide, u = w ? clamp(((aspect > 0 ? aspect : 16 / 9) - w.from) / w.step, 0, w.max) : 0;
+    out.zoom = S.zoom + (w ? w.zoom * u : 0);
+    out.ty = S.ty + (w ? w.ty * u : 0);
+    return out;
   }
   /* the top frustum edge's angle above the horizontal for a pose (the camera never rolls) */
   var _tr = {};
@@ -491,13 +506,13 @@
   R.skyline = function (o) {
     o = o || {};
     if (this.reduced) return P() ? P().resolve(true) : null;
-    var S = SKYLINE, h = this.home;
+    var S = SKYLINE, h = this.home, fit = skylineFit(this.aspect, {});
     var easeIn = o.easeIn > 0 ? o.easeIn : 0, hold = o.hold > 0 ? o.hold : S.hold, ease = S.ease;
     var at = o.at && isFinite(o.at.x) && isFinite(o.at.z) ? o.at : null;
     return this._startMove({
       kind: 'skyline', skippable: true, dur: easeIn + hold + ease,
-      tx: at ? lerp(h.tx, at.x, 0.5) : h.tx, tz: h.tz + S.dz, ty: S.ty,
-      elev: S.elev, yaw: S.yaw, yawDrift: S.drift, zoom: S.zoom,
+      tx: at ? lerp(h.tx, at.x, 0.5) : h.tx, tz: h.tz + S.dz, ty: fit.ty,
+      elev: S.elev, yaw: S.yaw, yawDrift: S.drift, zoom: fit.zoom,
       kAt: function (t, reduced) {
         if (reduced) return 0;
         if (t < easeIn) return inOutSine(t / easeIn);
@@ -1042,7 +1057,7 @@
     clamp: clamp, lerp: lerp, damp: damp, wrapDeg: wrapDeg,
     boundsOf: boundsOf, fitDist: fitDist, basisInto: basisInto, panDelta: panDelta, panLimit: panLimit, backPanFor: backPanFor,
     isPhone: isPhone, zoomMaxFor: zoomMaxFor, homeZoomFor: homeZoomFor, orbitDip: orbitDip, topRayDeg: topRayDeg,
-    projectPose: projectPose, groundAt: groundAt,
+    skylineFit: skylineFit, projectPose: projectPose, groundAt: groundAt,
     Rig: Rig, Gesture: Gesture, Controls: Controls,
     create: function (o) { return new Rig(o); }
   };

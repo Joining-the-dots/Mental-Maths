@@ -8,18 +8,25 @@ const vm = require('node:vm');
 const M = require('../world/island3d/motion.js');
 const FX = require('../world/games/fx.js');
 const C = require('../world/world-core.js');
+const L = require('../world/world-look.js');
+const SOUND = require('../world/sound.js');
 
 const NAMES = Object.keys(M.ACTS);
 const near = (a, b, eps = 1e-6) => Math.abs(a - b) <= eps;
 const LEAD = { lead: 1.2 };
 /* keys that must carry straight across an interruption (the rest restart by design:
-   a re-drop falls from 1.2, a flip/launch/debut starts over, a lamp steps up again) */
+   a re-drop falls from 1.2, a flip/launch/debut starts over, a lamp steps up again,
+   a booth's countdown and strip start over, a new screen wipe starts at the top) */
 const CONT = {
   squish: ['sy', 'sxz'], dropIn: ['sy', 'sxz', 'a'], store: ['s'], glowOn: [], glowOff: ['level'], flag: ['amp', 'hz'],
   bunting: ['amp'], spin: ['rps', 'extraDeg'], swing: ['deg', 'idleMix'], splash: ['c', 'l', 'r'], bounce: ['matDip', 'petY'],
-  bubbles: ['wobble'], launch: [], kartRev: [], home: ['deg'], homeClose: ['deg'], debut: [], hop: ['dy', 'sy']
+  bubbles: ['wobble'], launch: [], kartRev: [], home: ['deg'], homeClose: ['deg'], debut: [], hop: ['dy', 'sy'],
+  snap: ['bloom', 'curtain'], serve: ['hatch'], screen: ['band'], record: ['onAir', 'level'], dance: ['chase', 'pump'],
+  hangout: ['scope', 'squish'], encore: ['heads', 'chase', 'beams']
 };
-const SFX = ['pop', 'chip', 'whoosh', 'star', 'boost', 'combo', 'boing', 'unlock'];
+/* every sound a cue names must be one SLSound can play */
+const SFX = SOUND.NAMES;
+const CITY_ACTS = ['snap', 'serve', 'screen', 'record', 'dance', 'hangout', 'encore'];
 function sameMod(a, b, m) { if (!m) return near(a, b, 1e-6); const d = ((a - b) % m + m) % m; return d < 1e-6 || m - d < 1e-6; }
 function atEnd(name, s, reduced) {
   const spec = M.ACTS[name], end = (reduced && spec.endReduced) || spec.end, mod = spec.mod || {};
@@ -240,6 +247,106 @@ test('motion: cues are sorted, inside their act, and use the shell sound names',
       if (c.emit) assert.ok(c.n >= 1);
     }
   }
+});
+
+/* ---------------- city building acts (Encore City) ---------------- */
+test('motion: every city act maps from its CATALOG act, runs ≤ 3 s and keeps the cue table', () => {
+  for (const it of C.CATALOG.filter((x) => x.cat === 'city')) {
+    assert.equal(M.actFor(it.act, it.id, false), it.act, it.id);
+    assert.ok(M.ACTS[it.act], it.id + ' act exists');
+    assert.ok(L.ACT_PIVOT[it.act], it.id + ' act has a pivot');
+  }
+  assert.deepEqual(CITY_ACTS.map((a) => M.durOf(a)), [3, 3, 0.5, 3, 3, 3, 3]);
+  const plain = (name) => M.cues(name).map((c) => c.sfx ? [c.t, c.sfx, c.step == null ? null : c.step] : [c.t, '@' + c.emit, c.n]);
+  assert.deepEqual(plain('snap'), [[0.1, 'tick', 0], [0.7, 'tick', 2], [1.3, 'tick', 4], [1.5, 'star', null], [1.5, '@sparkle', 4]]);
+  assert.deepEqual(plain('serve'), [[0.1, 'whoosh', null], [0.9, 'pop', 0], [1.1, 'pop', 2], [1.3, 'pop', 4], [1.4, '@heart', 2]]);
+  assert.deepEqual(plain('screen'), [[0.2, 'beep', null], [0.4, 'chip', null]]);
+  assert.deepEqual(M.cues('record').filter((c) => c.sfx === 'beep').map((c) => [c.t, c.step]), [[0.4, 0], [1.0, 2], [1.6, 4], [2.2, 7]]);
+  const voice = M.cues('record').filter((c) => c.sfx === 'voice');
+  assert.equal(voice.length, 1); assert.equal(voice[0].t, 2.4); assert.equal(voice[0].pet, true, 'the active pet’s own voice');
+  assert.ok(M.cues('record').filter((c) => c.emit === 'note').length <= 4, 'up to 4 notes rise');
+  assert.deepEqual(plain('dance').map((c) => c.slice(0, 2)), [[0.1, 'go'], [0.1, '@note']]);
+  assert.equal(M.cues('dance').find((c) => c.emit === 'note').n, 3);
+  assert.deepEqual(plain('hangout').filter((c) => !String(c[1]).startsWith('@')), [[0.1, 'whoosh', null], [2.2, 'star', null]]);
+  assert.deepEqual(plain('encore').filter((c) => !String(c[1]).startsWith('@')), [[0.1, 'sting', null], [2.6, 'tada', null]]);
+  assert.ok(M.cues('encore').some((c) => c.emit === 'confetti' && c.t === 2.6));
+  /* the controller's tap squish owns the opening 'pop' */
+  for (const a of CITY_ACTS) for (const reduced of [false, true]) {
+    if (!reduced) assert.ok(M.cues(a).every((c) => !(c.sfx === 'pop' && c.t < 0.05)), a + ' plays no pop in its first 0.05 s');
+  }
+});
+
+test('motion: city acts — reduced motion is the instant end state, one sparkle and the same sounds at t = 0', () => {
+  for (const a of CITY_ACTS) {
+    const spec = M.ACTS[a];
+    assert.equal(M.durOf(a, { reduced: true }), 0, a);
+    for (const t of [0, 0.4, 2]) assert.deepEqual({ ...M.sample(a, t, {}, { reduced: true }) }, { ...spec.end }, a + ' at ' + t);
+    const rc = M.cues(a, { reduced: true });
+    assert.ok(rc.every((c) => c.t === 0), a + ' reduced cues at t = 0');
+    assert.deepEqual(rc.filter((c) => c.emit), [{ t: 0, emit: 'sparkle', n: 1 }], a + ' one sparkle');
+    assert.deepEqual(rc.filter((c) => c.sfx).map((c) => c.sfx), M.cues(a).filter((c) => c.sfx).map((c) => c.sfx), a + ' same sounds');
+  }
+});
+
+test('motion: city act timelines (countdown, bloom, strip, hatch, wipe, ON AIR, envelopes)', () => {
+  const s = (a, t, o) => M.sample(a, t, {}, o || {});
+  /* the booth counts down in 3 steps, blooms once at 1.5 s and leaves the strip out */
+  assert.deepEqual([0.05, 0.4, 1.0, 1.4].map((t) => +s('snap', t).bulbs.toFixed(4)), [0, 0.3333, 0.6667, 1]);
+  let peak = 0, peakAt = 0;
+  for (let t = 0; t <= 3; t += 0.005) { const b = s('snap', t).bloom; if (b > peak) { peak = b; peakAt = t; } }
+  assert.ok(near(peak, 1, 1e-3) && peakAt > 1.5 && peakAt < 1.9, 'one bloom just after 1.5 s');
+  assert.equal(s('snap', 1.6).strip, 0); assert.equal(s('snap', 2.5).strip, 1);
+  let steps = 0, prev = s('snap', 0).bulbs;
+  for (let t = 0; t <= 1.5; t += 0.001) { const b = s('snap', t).bulbs; if (b !== prev) steps++; prev = b; }
+  assert.equal(steps, 3, 'one ring per tick, 0.6 s apart (1.67 Hz)');
+  /* the boba hatch flips open, holds, closes; the cup ends on the table, faded out */
+  assert.ok(s('serve', 1.5).hatch > 100); assert.equal(s('serve', 2.95).hatch < 5, true);
+  assert.ok(s('serve', 1.2).swirl > 0.5 && s('serve', 2.2).swirl === 0);
+  /* the screen wipe flips the program exactly once, at 0.2 s */
+  let flips = 0, pv = 0;
+  for (let t = 0; t <= 0.5; t += 0.001) { const p = s('screen', t).prog; if (p !== pv) flips++; pv = p; }
+  assert.equal(flips, 1); assert.equal(s('screen', 0.19).prog, 0); assert.equal(s('screen', 0.21).prog, 1);
+  /* ON AIR is lit before the first beep and stays lit; a re-tap never toggles it off */
+  assert.equal(s('record', 0.3).onAir, 1);
+  const lit = M.carry('record', s('record', 2.9));
+  for (let t = 0; t <= 3; t += 0.01) assert.equal(s('record', t, { from: lit }).onAir, 1, 're-tap keeps ON AIR on at ' + t);
+  assert.equal(M.ON_AIR_SEC, 4); assert.equal(M.STRIP_SEC, 6);
+  /* envelopes rise and fall inside the act */
+  assert.ok(s('dance', 1.5).chase === 1 && s('dance', 1.5).pump === 1);
+  assert.ok(near(s('hangout', 1.2).scope, 40) && s('hangout', 2.95).scope < 1);
+  assert.ok(s('hangout', 0.45).squish < 0.95, 'the beanbags squish');
+  assert.ok(s('encore', 1.5).heads === 1 && s('encore', 1.5).beams === 1 && s('encore', 0.5).wall === 1);
+});
+
+test('motion: flash-safe helpers for the city buildings', () => {
+  assert.deepEqual({ ...M.RATE }, { bloom: 1.5, screen: 0.5 });
+  assert.equal(M.allow(null, 3, 1.5), true);
+  assert.equal(M.allow(2, 3, 1.5), false);
+  assert.equal(M.allow(1.5, 3, 1.5), true);
+  /* VU bars glide between beat heights (never on/off) */
+  let worst = 0;
+  for (let i = 0; i < 4; i++) {
+    let prev = M.vu(i, 0, 0, 1);
+    for (let b = 0; b < 8; b++) for (let f = 0; f <= 1.0001; f += 0.01) {
+      const v = M.vu(i, b, Math.min(f, 0.999999), 1);
+      assert.ok(v >= 0.5 && v <= 1, 'bounded ' + v);
+      worst = Math.max(worst, Math.abs(v - prev)); prev = v;
+    }
+  }
+  assert.ok(worst < 0.05, 'smooth heights (largest step ' + worst + ')');
+  assert.equal(M.vu(2, 5, 0.3, 0.5, true), 0.375, 'reduced: a steady level');
+  /* the dance floor at the 118 BPM show tempo: every tile lights ≤ LED_CHASE_HZ */
+  const bpm = 118, per = 60 / bpm;
+  for (const [cx, cz] of [[0, 0], [1, 0], [2, 1], [1, 1]]) {
+    const fn = (t) => { const b = M.beatInfo(t, bpm, 0); return M.diagChase(cx, cz, b.beat, b.frac, 4, false); };
+    assert.ok(peaksPerSec(fn) <= L.LED_CHASE_HZ + 0.05, 'tile ' + cx + ',' + cz + ' ' + peaksPerSec(fn) + ' Hz');
+    assert.equal(M.diagChase(cx, cz, 3, 0.4, 4, true), 0.8);
+  }
+  assert.ok(per * 4 >= 1 / L.LED_CHASE_HZ);
+  /* the festoon wave: at most ±35% and never above 2 Hz however it is asked */
+  for (let t = 0; t < 5; t += 0.01) { const w = M.wave(t, 3, 9, 0.8, 1); assert.ok(w >= 0.65 - 1e-9 && w <= 1 + 1e-9); }
+  assert.ok(peaksPerSec((t) => M.wave(t, 0, 9, 10, 1)) <= 2 + 0.06);
+  assert.equal(M.wave(1.3, 2, 9, 0.8, 1, true), 1);
 });
 
 /* ---------------- scene timelines ---------------- */

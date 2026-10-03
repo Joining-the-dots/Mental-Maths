@@ -545,3 +545,214 @@ test('merge: a one-off bought for real on one fork and got free on the other kee
   assert.equal(rows[0].tx, 'tx_paid_later', 'the real payment stays on record');
   assert.equal(m.points, 400);
 });
+
+/* ---- Encore City v2: home shapes and city buildings (additive catalogue) ---- */
+const NEW_IDS = ['shape_cottage', 'shape_loft', 'wall_concrete', 'wall_gallery', 'wall_graphite', 'wall_midnight', 'door_glass',
+  'detail_neon', 'shape_villa', 'shape_tower', 'shape_dome', 'acc_beanie', 'acc_cap', 'acc_headphones', 'acc_visor', 'acc_hoodie',
+  'bld_photobooth', 'bld_boba', 'bld_ledtower', 'bld_recording', 'bld_dance', 'bld_rooftop', 'bld_stage'];
+const BLD = C.CATALOG.filter(i => i.cat === 'city');
+const SHAPES = C.CATALOG.filter(i => i.slot === 'shape');
+/* a save made before v2: the same starter grant, without the two included shapes */
+function v1Kid(points) {
+  const u = kid(points);
+  delete u.world.owned.shape_cottage; delete u.world.owned.shape_loft;
+  return u;
+}
+
+test('v2 catalogue: 23 additive ids with the planned prices; 104 in all; the 21 paid ones total 9,870', () => {
+  assert.equal(C.CATALOG.length, 104);
+  for (const id of NEW_IDS) assert.ok(C.item(id), id);
+  const price = { shape_villa: 650, shape_tower: 950, shape_dome: 1250, bld_photobooth: 250, bld_boba: 350, bld_ledtower: 450,
+    bld_recording: 550, bld_dance: 950, bld_rooftop: 1100, bld_stage: 1450, wall_concrete: 120, wall_gallery: 120, wall_graphite: 150,
+    wall_midnight: 180, door_glass: 160, detail_neon: 250, acc_beanie: 120, acc_cap: 160, acc_headphones: 180, acc_visor: 220, acc_hoodie: 260 };
+  for (const [id, p] of Object.entries(price)) assert.equal(C.item(id).price, p, id);
+  const paid = NEW_IDS.map(C.item).filter(i => !i.included);
+  assert.equal(paid.length, 21);
+  assert.equal(paid.reduce((s, i) => s + i.price, 0), 9870);
+  for (const s of SHAPES) { assert.equal(s.kind, 'style'); assert.equal(s.cat, 'home'); }
+  assert.deepEqual(SHAPES.map(s => s.id), ['shape_cottage', 'shape_loft', 'shape_villa', 'shape_tower', 'shape_dome']);
+  assert.deepEqual(C.item('house_cottage').includes, ['shape_cottage', 'shape_loft'], 'the only edit to an existing entry');
+  assert.equal(C.DEFAULTS.shape, 'shape_loft');
+  assert.equal(C.STARTER.owned.shape_cottage, 1); assert.equal(C.STARTER.owned.shape_loft, 1);
+  const acts = { bld_photobooth: 'snap', bld_boba: 'serve', bld_ledtower: 'screen', bld_recording: 'record', bld_dance: 'dance', bld_rooftop: 'hangout', bld_stage: 'encore' };
+  for (const b of BLD) { assert.equal(b.kind, 'fun', b.id); assert.equal(b.act, acts[b.id], b.id); }
+  assert.deepEqual(BLD.map(b => b.fp.join('x')), ['1x1', '2x1', '1x1', '2x1', '2x2', '2x2', '3x2']);
+});
+
+test('v2 (a): an old save gains both shapes once on normalize — layout, points and ledger untouched', () => {
+  const u = v1Kid(900);
+  const placed = JSON.stringify(u.world.placed), ledger = JSON.stringify(u.world.ledger), sel = JSON.stringify(u.world.sel);
+  assert.equal(C.owns(u.world, 'shape_cottage'), false);
+  assert.equal(C.selected(u.world, 'shape'), 'shape_loft', 'the first frame already draws the default shape');
+  assert.equal(C.normalize(u), true, 'the one-time grant is a change');
+  assert.ok(C.owns(u.world, 'shape_cottage') && C.owns(u.world, 'shape_loft'));
+  assert.equal(C.normalize(u), false, 'stable afterwards');
+  assert.equal(JSON.stringify(u.world.placed), placed, 'layout untouched');
+  assert.equal(JSON.stringify(u.world.ledger), ledger, 'no ledger row for the free shapes');
+  assert.equal(JSON.stringify(u.world.sel), sel);
+  assert.equal(u.points, 900); assert.equal(u.world.spent, 0);
+  /* a fresh profile owns both from the starter grant */
+  const fresh = kid(0);
+  assert.ok(C.owns(fresh.world, 'shape_cottage') && C.owns(fresh.world, 'shape_loft'));
+  assert.equal(C.normalize(fresh), false);
+});
+
+test('v2 (b): included shapes are never sold; a paid shape debits, auto-selects and switches back', () => {
+  const u = kid(5000);
+  for (const id of ['shape_cottage', 'shape_loft']) {
+    assert.equal(C.purchase(u, id, { tx: tx() }).code, 'not_for_sale', id);
+    assert.ok(!C.shopItems().some(i => i.id === id), id + ' hidden from the shop');
+    assert.equal(C.setGoal(u, id).ok, false, id + ' cannot be a goal');
+  }
+  const r = C.purchase(u, 'shape_dome', { tx: tx() });
+  assert.equal(r.ok, true); assert.equal(u.points, 3750);
+  assert.equal(C.selected(u.world, 'shape'), 'shape_dome', 'buying selects it');
+  assert.equal(C.select(u, 'shape_cottage').ok, true);
+  assert.equal(C.selected(u.world, 'shape'), 'shape_cottage', 'one tap back to the cottage');
+  assert.equal(C.select(u, 'shape_villa').ok, false, 'an unowned shape cannot be selected');
+  C.purchase(u, 'roof_castle', { tx: tx() });
+  C.select(u, 'shape_dome');
+  assert.equal(C.selected(u.world, 'roof'), 'roof_castle'); assert.equal(C.selected(u.world, 'shape'), 'shape_dome', 'roof and shape are independent');
+  const house = u.world.placed.find(p => p.id === 'house_cottage');
+  assert.ok(C.canPlace(u.world, 'house_cottage', house.x, house.y, house.uid).ok, 'the 2×2 footprint is unchanged');
+});
+
+test('v2 (c): an unowned shape selection (old fork or merge) is dropped and falls back to the default', () => {
+  const u = kid(0);
+  u.world.sel.shape = 'shape_villa';
+  assert.equal(C.normalize(u), true);
+  assert.equal(u.world.sel.shape, undefined);
+  assert.equal(C.selected(u.world, 'shape'), 'shape_loft');
+});
+
+test('v2 (d): mergeWorlds keeps a shape bought on one fork and a building on the other, each paid once', () => {
+  const base = kid(3000);
+  const a = JSON.parse(JSON.stringify(base)), b = JSON.parse(JSON.stringify(base));
+  C.purchase(a, 'shape_villa', { tx: 'tx_fork_villa' });
+  C.purchase(b, 'bld_stage', { tx: 'tx_fork_stage' });
+  const m = C.mergeWorlds(a, b);
+  assert.ok(C.owns(m.world, 'shape_villa') && C.owns(m.world, 'bld_stage'));
+  assert.ok(C.owns(m.world, 'shape_cottage') && C.owns(m.world, 'shape_loft'));
+  assert.equal(m.points, 3000 - 650 - 1450);
+  assert.equal(C.mergeWorlds({ points: m.points, world: m.world }, b).points, m.points, 'stable on re-merge');
+});
+
+test('v2 (e): buildings are unique, storable and placeable; each lands in storage', () => {
+  const u = kid(9000);
+  for (const b of BLD) {
+    assert.equal(C.isRepeatable(b), false, b.id); assert.ok(C.isStorable(b) && C.isPlaceable(b), b.id);
+    assert.equal(C.purchase(u, b.id, { tx: tx() }).ok, true, b.id);
+    assert.equal(C.storedCount(u.world, b.id), 1, b.id + ' waits in storage');
+    assert.ok(!u.world.placed.some(p => p.id === b.id), b.id + ' is not auto-placed');
+  }
+  assert.equal(C.purchase(u, 'bld_stage', { tx: tx() }).code, 'already_owned');
+  assert.equal(u.points, 9000 - 5100);
+  /* store and re-place without repurchase */
+  const spot = C.findSpot(u.world, 'bld_boba');
+  const r = C.place(u, 'bld_boba', spot.x, spot.y);
+  assert.equal(r.ok, true);
+  assert.equal(C.store(u, r.uid).ok, true);
+  assert.equal(C.storedCount(u.world, 'bld_boba'), 1);
+});
+
+test('v2 (f): each building has a legal spot on a fresh starter island without moving anything', () => {
+  for (const b of BLD) {
+    const u = kid(9000);
+    const before = JSON.stringify(u.world.placed);
+    C.purchase(u, b.id, { tx: tx() });
+    const spot = C.findSpot(u.world, b.id);
+    assert.ok(spot, b.id + ' fits on the starter island');
+    assert.equal(C.place(u, b.id, spot.x, spot.y).ok, true, b.id);
+    assert.equal(JSON.stringify(u.world.placed.filter(p => p.id !== b.id)), before, b.id + ' moved nothing');
+  }
+});
+
+test('v2 (g): the stage crowd pit and the dance floor refuse a tree but accept a path', () => {
+  for (const id of ['bld_stage', 'bld_dance']) {
+    const u = kid(9000);
+    C.purchase(u, id, { tx: tx() });
+    const s = C.findSpot(u.world, id);
+    assert.equal(C.place(u, id, s.x, s.y).ok, true, id);
+    const ent = C.entranceCells(C.item(id), s.x, s.y).map(k => k.split(',').map(Number));
+    assert.equal(ent.length, C.item(id).fp[0], id + ' entrance row');
+    C.purchase(u, 'tree_oak', { tx: tx() }); C.purchase(u, 'path_wood', { tx: tx() });
+    for (const [ex, ey] of ent) {
+      if (!C.landSet(u.world)[ex + ',' + ey]) continue;
+      const tree = C.canPlace(u.world, 'tree_oak', ex, ey);
+      assert.equal(tree.ok, false, id + ' keeps ' + ex + ',' + ey + ' clear');
+      if (!C.occupancy(u.world).occ[ex + ',' + ey]) {
+        assert.match(tree.reason, /doorway/);
+        assert.equal(C.canPlace(u.world, 'path_wood', ex, ey).ok, true, id + ' path at ' + ex + ',' + ey);
+      }
+    }
+  }
+});
+
+test('v2 (h): a building saved in an illegal spot goes back to storage, never lost', () => {
+  const u = kid(9000);
+  C.purchase(u, 'bld_rooftop', { tx: tx() });
+  u.world.placed.push({ uid: 'zz1', id: 'bld_rooftop', x: 0, y: 0 });
+  assert.equal(C.normalize(u), true);
+  assert.ok(!u.world.placed.some(p => p.id === 'bld_rooftop'));
+  assert.equal(C.storedCount(u.world, 'bld_rooftop'), 1);
+  /* an old client (blind to buildings) could put decor on a building's cells: the next
+     normalize sends one of the two back to storage and both stay owned */
+  C.purchase(u, 'tree_oak', { tx: tx() });
+  const s = C.findSpot(u.world, 'bld_rooftop');
+  assert.equal(C.place(u, 'bld_rooftop', s.x, s.y).ok, true);
+  u.world.placed.push({ uid: 'zz2', id: 'tree_oak', x: s.x + 1, y: s.y + 1 });
+  const ownedBefore = JSON.stringify(u.world.owned);
+  assert.equal(C.normalize(u), true);
+  assert.equal(JSON.stringify(u.world.owned), ownedBefore, 'nothing is lost');
+  const seen = {};
+  for (const p of u.world.placed) {
+    if (!C.item(p.id)) continue;
+    assert.ok(C.canPlace(u.world, p.id, p.x, p.y, p.uid).ok, p.id + ' legal');
+    for (const c of C.fpCells(C.item(p.id), p.x, p.y)) { assert.ok(!seen[c], 'one thing per cell ' + c); seen[c] = 1; }
+  }
+  assert.equal(C.placedCount(u.world, 'bld_rooftop') + C.storedCount(u.world, 'bld_rooftop'), 1);
+});
+
+test('v2 (i): test mode makes all 21 paid new items free, rows tagged, ⭐ untouched; included shapes never make rows', () => {
+  const u = kid(10);
+  const rows = u.world.ledger.length;
+  for (const id of NEW_IDS) {
+    const it = C.item(id);
+    const r = C.purchase(u, id, { tx: tx(), trial: true });
+    if (it.included) { assert.equal(r.code, 'not_for_sale', id); continue; }
+    assert.equal(r.ok, true, id); assert.equal(r.price, 0, id);
+    const row = u.world.ledger[u.world.ledger.length - 1];
+    assert.equal(row.trial, true); assert.equal(row.list, it.price);
+  }
+  assert.equal(u.world.ledger.length, rows + 21);
+  assert.equal(u.points, 10); assert.equal(u.world.spent, 0);
+});
+
+test('v2 (j): the max island — every placeable id (one each, biggest first) plus 20 paths fits on all land', () => {
+  const u = kid(0);
+  const w = u.world;
+  for (const it of C.CATALOG) {
+    if (it.starter || it.included || (C.isRepeatable(it) && C.ownedCount(w, it.id) > 0)) continue;
+    C.purchase(u, it.id, { tx: tx(), trial: true });
+  }
+  assert.equal(Object.keys(C.landSet(w)).length, 111, 'all three regions unlocked');
+  const size = (i) => i.fp[0] * i.fp[1] + (i.entrance ? i.fp[0] : 0);
+  const todo = C.CATALOG.filter(i => C.isPlaceable(i) && i.kind !== 'path' && C.storedCount(w, i.id) > 0).sort((a, b) => size(b) - size(a));
+  const fails = [];
+  for (const it of todo) {
+    let ok = false;
+    for (let y = 0; y < C.ROWS && !ok; y++) for (let x = 0; x < C.COLS && !ok; x++) if (C.canPlace(w, it.id, x, y).ok) ok = C.place(u, it.id, x, y).ok;
+    if (!ok) fails.push(it.id);
+  }
+  assert.deepEqual(fails, []);
+  for (const b of BLD) assert.ok(w.placed.some(p => p.id === b.id), b.id + ' placed');
+  let paths = w.placed.filter(p => C.item(p.id).kind === 'path').length;
+  for (let k = 0; k < 40 && paths < 20; k++) {
+    if (!C.storedCount(w, 'path_stone')) C.purchase(u, 'path_stone', { tx: tx(), trial: true });
+    const sp = C.findSpot(w, 'path_stone');
+    if (sp && C.place(u, 'path_stone', sp.x, sp.y).ok) paths++;
+  }
+  assert.ok(paths >= 20, 'paths ' + paths);
+  for (const p of w.placed) assert.ok(C.canPlace(w, p.id, p.x, p.y, p.uid).ok, p.id + ' legal');
+  assert.equal(C.normalize(u), false, 'the full island is already a normal state');
+});

@@ -17,8 +17,11 @@
      .defineApi(name, factory(K, SL3D) → value)        e.g. 'makeRig', 'makeAvatar', 'makeWand', 'makeFanBlob'
    …and once ready:
      .THREE, .addons {RoundedBoxGeometry, BufferGeometryUtils}, .tier, .budget, .quality, .models, .missing
+       quality {pixelRatio, shadows, outlines, particleScale, lifeScale, reflections, cones, steps[]}:
+       the adaptive LADDER's live state (onQuality listeners hear every step)
      .kit(tier) → K                     (kit.js; one K per tier sharing materials and caches)
-     .make(id, st, tier) → Object3D     one catalogue item / kart / ball (placeholder if its model is missing)
+     .make(id, st, tier) → Object3D     one catalogue item / kart / ball (placeholder if its model is missing);
+                                        st.variant (a building's or a home shape's trim) is passed through
      .lease(owner, handlers) → Lease    the shared renderer + paced loop (see Lease below)
      .createRenderer(opts)              a SEPARATE renderer with the tier's settings (photocards)
      .onQuality(fn) → unsubscribe, .info(), .dispose()
@@ -37,18 +40,26 @@
   /* Every script boot injects (relative to this file), in execution order. A
      `global` entry is skipped when that global already exists (the app loaded
      it); `required` files must arrive or 3D is unavailable; the rest are
-     tolerated when missing (they land in later build waves). */
+     tolerated when missing (they land in later build waves). Encore City (v2)
+     adds the organic terrain before env.js, the city across the bay and the
+     ambient life after it, and the city-building models after the attractions;
+     all of them are optional (env falls back to its tiles, buildings to placeholders). */
   var FILES = [
     { path: '../world-look.js', global: 'SLIslandLook' },
     { path: 'tier.js', global: 'SLTier', required: true },
     { path: 'grid3d.js', global: 'SLGrid3D' },
     { path: 'motion.js', global: 'SLMotion' },
     { path: 'kit.js', global: 'SLKit', required: true },
+    { path: 'terrain3d.js', global: 'SLTerrain3D' },
     { path: 'env.js' },
+    { path: 'city3d.js', global: 'SLCity3D' },
+    { path: 'life3d.js', global: 'SLLife3D' },
     { path: 'models-garden.js' },
     { path: 'models-home.js' },
     { path: 'models-fun.js' },
     { path: 'models-attractions.js' },
+    { path: 'models-city.js' },
+    { path: 'models-stage.js' },
     { path: 'models-characters.js' },
     { path: 'pets-brain.js', global: 'SLPetBrain' },
     { path: 'actors.js' },
@@ -94,12 +105,16 @@
       };
     });
   }
-  /* the resolved style for an item: house {wall, roof, door, details}; att_course {course};
-     att_pitch {ball, stadium}; att_kart {kart}; pets {acc}; otherwise st or {} */
+  /* the resolved style for an item: house {wall, roof, door, details, shape, variant};
+     att_course {course}; att_pitch {ball, stadium}; att_kart {kart}; pets {acc};
+     otherwise st or {} (so a city building's {variant} trim passes straight through) */
   function resolveSt(id, st, defaults) {
     st = st || {}; defaults = defaults || {};
     function pick(k, dflt) { return st[k] || defaults[k] || dflt; }
-    if (id === 'house_cottage') return { wall: pick('wall', 'wall_cream'), roof: pick('roof', 'roof_red'), door: pick('door', 'door_blue'), details: st.details || {} };
+    if (id === 'house_cottage') {
+      return { wall: pick('wall', 'wall_cream'), roof: pick('roof', 'roof_red'), door: pick('door', 'door_blue'), details: st.details || {},
+               shape: pick('shape', 'shape_loft'), variant: st.variant | 0 };
+    }
     if (id === 'att_course') return { course: pick('course', 'course_meadow') };
     if (id === 'att_pitch') return { ball: pick('ball', 'ball_classic'), stadium: pick('stadium', 'stadium_day') };
     if (id === 'att_kart') return { kart: pick('kart', 'kart_red') };
@@ -531,7 +546,7 @@
       SL3D.budget = Tier.budget(tier, root.devicePixelRatio || 1);
       SL3D.quality = {
         pixelRatio: SL3D.budget.pixelRatio, shadows: !!SL3D.budget.shadows, outlines: !!SL3D.budget.outlines,
-        particleScale: 1, cones: true, steps: []
+        particleScale: 1, lifeScale: 1, reflections: true, cones: true, steps: []
       };
       var skip = [];
       if (!SL3D.budget.shadows) skip.push('shadows');
@@ -699,6 +714,8 @@
         q.outlines = false;
         if (hub) hub.setOutlines(false);
       } else if (step === 'particles') q.particleScale = 0.5;
+      else if (step === 'life') q.lifeScale = 0.5;                 /* life3d halves its boats, birds and lanterns */
+      else if (step === 'reflections') q.reflections = false;      /* env drops the sea light pillars */
       else if (step === 'cones') q.cones = false;
       log('quality step ' + q.steps.length + ': ' + step + ' (' + (src || '?') + ')');
       if (src === 'loop' && ++loopSteps === 2) demote(root.SLTier.lower(SL3D.tier));   /* a later session may start cheaper */

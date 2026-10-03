@@ -7,7 +7,7 @@
    API
      SLTier.TIERS                       ['LOW', 'MID', 'HIGH']
      SLTier.BUDGETS[tier]               per-tier numbers (art bible performanceBudget)
-     SLTier.LADDER                      adaptive step-down order
+     SLTier.LADDER                      adaptive step-down order (pixelRatio shadows outlines particles life reflections cones)
      SLTier.facts(nav, extra)           navigator-like → {ios, android, touch, desktop, cores, maxTex, caveat, saved}
      SLTier.decide(facts)               → 'LOW' | 'MID' | 'HIGH'   (decided BEFORE the renderer exists)
      SLTier.explain(facts)              → {tier, why}
@@ -26,21 +26,27 @@
 
   /* ---------------- budgets (art bible performanceBudget + island architecture) ----------------
      drawCalls/tris are the island budgets; gameDrawCalls/gameTris the 3D games'.
-     segScale: LOW cuts primitive segment counts by ~30%. */
+     segScale: LOW cuts primitive segment counts by ~30%.
+     Encore City (v2): cityBuildings = towers in the city across the bay, birds = harbour
+     swifts, boats = water taxis + catamarans, lanterns = floating lanterns, reflections =
+     light pillars in the sea, terrainSpacing = the terrain lattice step (divides 1, so cell
+     edges are lattice lines). */
   var BUDGETS = {
     LOW: {
       tier: 'LOW', pixelRatioCap: 1.0, antialias: false,
       drawCalls: 70, tris: 60000, gameDrawCalls: 60, gameTris: 50000,
       programs: 12, particles: 128, confetti: 120, bubbles: 24, petals: 40, snow: 60,
       stars: 120, crowd: 30, shadows: false, shadowMapSize: 0, outlines: false,
-      bloom: false, segScale: 0.7, textureMB: 8
+      bloom: false, segScale: 0.7, textureMB: 8,
+      cityBuildings: 30, birds: 4, boats: 2, lanterns: 8, reflections: 4, terrainSpacing: 0.5
     },
     MID: {
       tier: 'MID', pixelRatioCap: 1.5, antialias: true,
       drawCalls: 100, tris: 120000, gameDrawCalls: 90, gameTris: 100000,
       programs: 16, particles: 256, confetti: 120, bubbles: 24, petals: 40, snow: 100,
       stars: 250, crowd: 60, shadows: true, shadowMapSize: 1024, outlines: true,
-      bloom: false, segScale: 1, textureMB: 8
+      bloom: false, segScale: 1, textureMB: 8,
+      cityBuildings: 60, birds: 7, boats: 4, lanterns: 16, reflections: 6, terrainSpacing: 0.25
     },
     HIGH: {
       tier: 'HIGH', pixelRatioCap: 2, antialias: true,
@@ -48,12 +54,14 @@
       programs: 16, particles: 512, confetti: 120, bubbles: 24, petals: 40, snow: 150,
       stars: 250, crowd: 60, shadows: true, shadowMapSize: 2048, outlines: true,
       /* bloom is optional on HIGH: UnrealBloomPass at half resolution, only after ≥ 55 fps was measured */
-      bloom: 'optional', bloomMinFps: 55, segScale: 1, textureMB: 8
+      bloom: 'optional', bloomMinFps: 55, segScale: 1, textureMB: 8,
+      cityBuildings: 90, birds: 10, boats: 5, lanterns: 24, reflections: 10, terrainSpacing: 0.125
     }
   };
 
-  /* adaptive quality step-down order; never stepped back up within a session */
-  var LADDER = ['pixelRatio', 'shadows', 'outlines', 'particles', 'cones'];
+  /* adaptive quality step-down order; never stepped back up within a session. Ambient
+     life (halved) and the sea reflections go before the Showtime cones. */
+  var LADDER = ['pixelRatio', 'shadows', 'outlines', 'particles', 'life', 'reflections', 'cones'];
 
   function parseTier(v) {
     if (typeof v !== 'string') return null;

@@ -12,8 +12,10 @@
      K.hex(token) → '#RRGGBB'; K.tone(token, 'base'|'shade'|'hi'|±n) → Color; K.has(token)
      K.rgb('#hex') → Color           RUNTIME colours only (the child's member colour) — never catalogue art
      K.G                             geometry kit bound to the tier (see makeG below)
-     K.mat(key)                      'toon' | 'gold' | 'chrome' | 'pearl' | 'glass' | 'neon:<Token>' |
-                                     'glow:<Token>' | 'state' | 'ink' | 'outline[:w]' | 'line[:Token]' | 'blob'
+     K.mat(key)                      'toon' | 'gold' | 'chrome' | 'pearl' | 'smoked' | 'gunmetal' | 'foil'
+                                     (matcaps, one program) | 'glass' | 'neon:<Token>' | 'glow:<Token>' |
+                                     'state' | 'led' | 'sign' (the atlases on the emoji-face basic+map
+                                     program) | 'ink' | 'outline[:w]' | 'line[:Token]' | 'blob'
      K.variant(key, name, patch)     a cached sibling material (e.g. a transparent ghost) sharing the program
      K.ctx(id, st, stateKey?)        the ctx given to build(): {id, look, st, stateKey, tier, G, col, fp, K}
      K.template(ctx)                 → TemplateBuilder: .part() .pivot() .anchor() .hit() .done() → Template
@@ -22,10 +24,25 @@
      K.templates.get(id, stateKey, tier, st) / K.parts.get(key, tier, fn)   memo caches
      K.placeholder(ctx)              a rounded slab of the look height in the item's base colour
      K.stateKey(id, st)              SLIslandLook.stateKey, or the documented fallback
+     K.facet(geo)                    bake flat per-face normals (faceted rocks and canopies, no extra program)
+     K.ledAtlas()                    the ONE shared 512×256 LED screen texture: 8 programs (LED_PROGRAMS), each a
+                                     256×64 strip holding two periods of a 128-px pattern; a screen shows a 128×64
+                                     window and scrolls it by UV offset only (view(p, phase) → a texture clone that
+                                     shares the Source; setWindow(tex, p, phase) moves it). setUser({name, color})
+                                     redraws only the name cell. Never redrawn per frame.
+     K.signAtlas()                   the ONE shared 512×256 sign texture: SIGN_WORDS in cells 0–6 and the child's
+                                     first name + initial in cell 7 (rect(word) → UV rect; view(word) → a clone);
+                                     Unbounded 800 once document.fonts has it (Outfit / system-ui until then).
+                                     A word outside SIGN_WORDS throws in QA mode and draws nothing otherwise.
      K.tex.{ramp, halo, blob, sparkles, matcap, emojiFace, banner, fontReady, release}, K.ATLAS
      K.billboards(opts), K.blobs(capacity)   base pools for halos/particles and blob shadows
      K.setRim(color, strength), K.setShow(k), K.setOutlines(on), K.setSelPulse(p), K.setGrid({baseY})
      K.issues (QA log), K.dispose()
+
+   OUTLINES (v2): only OUTLINE_KINDS (pets, accessories, the avatar) keep an ink hull, at
+   K.OUTLINE_CHAR (0.009 u) in Midnight Ink. Architecture has none: a part flagged outline on a
+   house, building or attraction gets the edit SELECTION hull only (Star Gold, 0.02 ↔ 0.03 u with
+   K.setSelPulse), drawn just for copies with setHighlight(uid, 1|2). LOW has no hulls at all.
 
    GEOMETRY CONVENTION: every G builder returns a NON-indexed BufferGeometry
    with exactly position, normal and a 'color' attribute (uv dropped), so any
@@ -41,9 +58,11 @@
 }(typeof self !== 'undefined' ? self : typeof globalThis !== 'undefined' ? globalThis : this, function (root) {
   'use strict';
 
-  var VERSION = 1;
+  var VERSION = 2;
   var DEG = Math.PI / 180;
-  var OUTLINE_W = 0.018;           /* buildings and attractions; characters use 0.012 */
+  var OUTLINE_W = 0.02;            /* the selection hull's base width (pulses to SEL_W[1]) */
+  var OUTLINE_CHAR = 0.009;        /* character hulls (pets, accessories, avatar) */
+  var SEL_W = [0.02, 0.03];        /* selection hull width range (world-look MATERIAL.outline.pulse) */
   var TEMPLATE_CAP = 120;          /* LRU trim beyond this many cached templates */
   var UNKNOWN_HEX = '#CFC8DC';     /* Pebble: what an unknown token renders as (logged in QA) */
   var TIERS = ['LOW', 'MID', 'HIGH'];
@@ -70,8 +89,9 @@
       'Error': '#E74C3C', 'Blob Shadow': '#3B2F4A'
     },
     LOCKED: {
-      WALL: { wall_cream: '#f7e6c4', wall_pink: '#f9b7cc', wall_mint: '#b8ecd6', wall_sky: '#a9d6f7', wall_lilac: '#d6bdf2' },
-      DOOR: { door_blue: '#3b7dd8', door_red: '#d94b4b', door_green: '#38a85c', door_gold: '#f0c02f' },
+      WALL: { wall_cream: '#f7e6c4', wall_pink: '#f9b7cc', wall_mint: '#b8ecd6', wall_sky: '#a9d6f7', wall_lilac: '#d6bdf2',
+              wall_concrete: '#a9a5b3', wall_gallery: '#eceaf2', wall_graphite: '#34303f', wall_midnight: '#232a57' },
+      DOOR: { door_blue: '#3b7dd8', door_red: '#d94b4b', door_green: '#38a85c', door_gold: '#f0c02f', door_glass: '#1b2438' },
       ROOF: { roof_red: ['#e0574f', '#c4433c'], roof_blue: ['#4a6fa5', '#3a5888'], roof_thatch: ['#e3b24f', '#c99634'], roof_candy: ['#ff8fb8', '#f06d9e'] },
       PETCOL: {
         pet_puppy: { body: '#e3b077', dark: '#b8834f', light: '#f6d9b3', nose: '#3b2f4a' },
@@ -161,21 +181,27 @@
   }
 
   /* stateKey fallback, matching the documented format (world-look.js owns the real one):
-     house 'wall|roof|door|d:<sorted details>' (detail_flag dropped under roof_castle);
-     att_course course; att_pitch ball|stadium; att_kart kart; pets hat|neck|face|back. */
+     house 'wall|roof|door|d:<sorted details>' (detail_flag dropped under roof_castle), plus
+     '|s:<shape>|v:<0|1>' for every shape but the cottage (the default shape is the City loft);
+     att_course course; att_pitch ball|stadium; att_kart kart; pets hat|neck|face|back;
+     city buildings 'v:<0..2>'. */
   function detailList(d) {
     var out = [];
     if (Array.isArray(d)) out = d.filter(function (x) { return typeof x === 'string'; });
     else if (d && typeof d === 'object') out = Object.keys(d).filter(function (k) { return !!d[k]; });
     return out.sort();
   }
+  function clampTrim(v, n) { var x = v | 0; return x < 0 ? 0 : x > n - 1 ? n - 1 : x; }
   function fallbackStateKey(id, st) {
     st = st || {};
     if (id === 'house_cottage') {
       var roof = st.roof || 'roof_red';
       var det = detailList(st.details).filter(function (k) { return !(roof === 'roof_castle' && k === 'detail_flag'); });
-      return [st.wall || 'wall_cream', roof, st.door || 'door_blue', 'd:' + det.join(',')].join('|');
+      var key = [st.wall || 'wall_cream', roof, st.door || 'door_blue', 'd:' + det.join(',')].join('|');
+      var shape = typeof st.shape === 'string' && st.shape ? st.shape : 'shape_loft';
+      return shape === 'shape_cottage' ? key : key + '|s:' + shape + '|v:' + clampTrim(st.variant, 2);
     }
+    if (/^bld_/.test(id)) return 'v:' + clampTrim(st.variant, 3);
     if (id === 'att_course') return st.course || 'course_meadow';
     if (id === 'att_pitch') return (st.ball || 'ball_classic') + '|' + (st.stadium || 'stadium_day');
     if (id === 'att_kart') return st.kart || 'kart_red';
@@ -196,6 +222,136 @@
   /* sparkle atlas: 4×4 cells of 64², drawn white and tinted per instance */
   var ATLAS = { sparkle: 0, heart: 1, note: 2, star: 3, dot: 4, ring: 5, rect: 6, petal: 7, snow: 8, bubble: 9, puff: 10, circle: 11, curl: 12, diamond: 13, plus: 14, tri: 15 };
   var ATLAS_CELLS = 4;
+
+  /* ---------------- v2 look constants (world-look wins when it is loaded) ---------------- */
+  var RAMP = [64, 128, 200, 255];                           /* MATERIAL.toonRamp */
+  var BEVEL = { arch: 0.05, archMax: 0.06, organic: 0.18 }; /* MATERIAL.bevel */
+  var OUTLINE_KINDS_FALLBACK = { pet: 1, acc: 1, avatar: 1 };
+  var SIGN_WORDS_FALLBACK = ['ENCORE', 'SHOWTIME', 'ON AIR', 'PHOTO', 'DANCE', 'PET COURSE', 'ISLAND'];
+  /* matcap stops (spec/centre → edge) and the atlas colours, as hexes for a kit without world-look */
+  var MATCAP_FALLBACK = {
+    smoked: ['#8FB7FF', '#2A3B5C', '#1B2438', '#0E1626'],
+    gunmetal: ['#E6E9F2', '#7C8194', '#5A5F72', '#2A2D3A'],
+    foil: ['#FF7AD9', '#7AD7FF', '#9DFFCF', '#FFE27A']
+  };
+  var NEON_FALLBACK = { 'Neon Magenta': '#FF2E9A', 'LED Cyan': '#22E4FF', 'Electric Violet': '#8A5CFF', 'Laser Lime': '#C6FF3D',
+                        'Midnight Ink': '#14101F', 'Night Zenith': '#0B0A1F', 'Bone White': '#F4F2FA' };
+
+  function rampFrom(L) {
+    var r = L && L.MATERIAL && L.MATERIAL.toonRamp, ok = r && r.length === 4;
+    for (var i = 0; ok && i < 4; i++) ok = typeof r[i] === 'number' && r[i] >= 0 && r[i] <= 255 && (i === 0 || r[i] >= r[i - 1]);
+    return ok ? [r[0] | 0, r[1] | 0, r[2] | 0, r[3] | 0] : RAMP.slice();
+  }
+  function bevelFrom(L) {
+    var b = L && L.MATERIAL && L.MATERIAL.bevel;
+    return b && b.arch > 0 && b.archMax > 0 ? b : BEVEL;
+  }
+  /* the crisp architecture bevel: arch × the smallest side, capped at archMax */
+  function archRadius(w, h, d, bevel) {
+    var b = bevel || BEVEL;
+    return Math.min(b.arch * Math.min(w, h, d), b.archMax);
+  }
+
+  /* ---------------- LED screen atlas layout (pure) ----------------
+     512×256, 2 columns × 4 rows of 256×64 strips. Each strip holds two periods of a 128-px
+     pattern, so a 128×64 window slides across it by UV offset alone and wraps seamlessly. */
+  var LED_PROGRAMS = ['eq', 'wave', 'spark', 'gradient', 'stars', 'encore', 'showtime', 'name'];
+  var LED = { w: 512, h: 256, stripW: 256, cellW: 128, cellH: 64, cols: 2 };
+  function ledIndex(p) {
+    var i = typeof p === 'number' ? Math.floor(p) : LED_PROGRAMS.indexOf(p);
+    return i >= 0 && i < LED_PROGRAMS.length ? i : -1;
+  }
+  /* the strip of program p in canvas pixels (top-left origin), or null */
+  function ledCell(p) {
+    var i = ledIndex(p);
+    return i < 0 ? null : { x: (i % LED.cols) * LED.stripW, y: Math.floor(i / LED.cols) * LED.cellH, w: LED.stripW, h: LED.cellH };
+  }
+  /* the window of program p at phase (0..1 of its 128-px period) as texture repeat/offset
+     (flipY: v = 0 at the canvas bottom) */
+  function ledWindow(p, phase, out) {
+    out = out || {};
+    var c = ledCell(p) || ledCell(0), ph = +phase || 0, f = ph - Math.floor(ph);
+    out.rx = LED.cellW / LED.w; out.ry = LED.cellH / LED.h;
+    out.ox = (c.x + f * LED.cellW) / LED.w; out.oy = 1 - (c.y + LED.cellH) / LED.h;
+    return out;
+  }
+
+  /* ---------------- sign atlas layout (pure) ----------------
+     512×256, 8 cells of 256×64: cells 0–6 = SIGN_WORDS in order; cell 7 = the child's first
+     name (x 0–191) and initial (x 192–255). Nothing else is ever drawn into a texture. */
+  var SIGN = { w: 512, h: 256, cellW: 256, cellH: 64, cols: 2, userCell: 7, nameW: 192 };
+  /* the pixel rect for a whitelisted word, ':name' or ':initial'; null for anything else */
+  function signCell(word, words) {
+    words = words || SIGN_WORDS_FALLBACK;
+    var i, x0 = 0, w = SIGN.cellW;
+    if (word === ':name') { i = SIGN.userCell; w = SIGN.nameW; }
+    else if (word === ':initial') { i = SIGN.userCell; x0 = SIGN.nameW; w = SIGN.cellW - SIGN.nameW; }
+    else { i = typeof word === 'string' ? words.indexOf(word.trim().toUpperCase()) : -1; if (i >= SIGN.userCell) i = -1; }
+    if (i < 0) return null;
+    return { cell: i, x: (i % SIGN.cols) * SIGN.cellW + x0, y: Math.floor(i / SIGN.cols) * SIGN.cellH, w: w, h: SIGN.cellH };
+  }
+  function signRect(word, words) {
+    var c = signCell(word, words);
+    return c ? { u0: c.x / SIGN.w, u1: (c.x + c.w) / SIGN.w, v0: 1 - (c.y + c.h) / SIGN.h, v1: 1 - c.y / SIGN.h } : null;
+  }
+  /* true for an allowed word; otherwise throws when strict (QA mode), else false */
+  function checkSignWord(word, words, strict) {
+    if (signCell(word, words)) return true;
+    if (strict) throw new Error('SLKit: "' + word + '" is not a sign word (SIGN_WORDS, :name, :initial only)');
+    return false;
+  }
+  /* the child's first name as drawn on signs and screens: letters only, upper case, ≤ 12 */
+  function signName(name) {
+    var first = String(name == null ? '' : name).trim().split(/\s+/)[0] || '';
+    return first.replace(/[^A-Za-zÀ-ÖØ-öø-ÿ'\-]/g, '').toUpperCase().slice(0, 12).replace(/['\-]+$/, '');
+  }
+  function signInitial(name) { var m = /[A-ZÀ-ÖØ-Þ]/.exec(signName(name)); return m ? m[0] : ''; }
+
+  /* ---------------- placement variety maths (pure) ---------------- */
+  /* SLIslandLook.jitter2 {yaw, sx, sy, sz, lean, leanAxis, tint: {l, h}} or the v1 {yaw, scale}
+     → {yaw, sx, sy, sz, lean, leanAxis (degrees), tl (lightness ×), th (hue tilt °)};
+     scales are always positive (never a mirror) */
+  function normJitter(j, out) {
+    out = out || {};
+    function num(v) { return typeof v === 'number' && isFinite(v) ? v : 0; }
+    function pos(v, d) { return typeof v === 'number' && isFinite(v) && v > 0 ? v : d; }
+    var s = pos(j && j.scale, 1), t = j && j.tint;
+    out.yaw = num(j && j.yaw); out.sx = pos(j && j.sx, s); out.sy = pos(j && j.sy, s); out.sz = pos(j && j.sz, s);
+    out.lean = num(j && j.lean); out.leanAxis = num(j && j.leanAxis);
+    out.tl = pos(t && t.l, 1); out.th = num(t && t.h);
+    return out;
+  }
+  /* the copy's rotation: yaw about +y, then a lean about the horizontal axis at leanAxis° round
+     +y (three.js convention) → quaternion [x, y, z, w] */
+  function jitterQuat(yawDeg, leanDeg, axisDeg, out) {
+    out = out || [0, 0, 0, 1];
+    var hy = (yawDeg || 0) * DEG / 2, hl = (leanDeg || 0) * DEG / 2, a = (axisDeg || 0) * DEG;
+    var sy = Math.sin(hy), cy = Math.cos(hy), sl = Math.sin(hl), cl = Math.cos(hl);
+    var x1 = Math.cos(a) * sl, z1 = -Math.sin(a) * sl;
+    out[0] = x1 * cy - z1 * sy; out[1] = cl * sy; out[2] = x1 * sy + z1 * cy; out[3] = cl * cy;
+    return out;
+  }
+  /* the per-copy colour multiplier: lightness × l with a warm/cool tilt of h degrees (+ leans a
+     green toward yellow, − toward blue: about a ±5° hue shift on foliage) */
+  function tintMul(l, h, out) {
+    out = out || [1, 1, 1];
+    var m = l > 0 ? l : 1, k = 0.012 * (h || 0);
+    out[0] = m * (1 + k); out[1] = m; out[2] = m * (1 - k);
+    return out;
+  }
+
+  /* ---------------- shader program families (≤ 12 programs on LOW) ----------------
+     Every K.mat key maps to a family; keys in one family share one compiled program. The v2
+     matcaps join the v1 matcap family and the LED / sign atlases join the emoji face's. */
+  var PROGRAM_FAMILY = {
+    toon: 'toon', gold: 'matcap', chrome: 'matcap', pearl: 'matcap', smoked: 'matcap', gunmetal: 'matcap', foil: 'matcap',
+    glass: 'matcap-transparent', neon: 'basic', ink: 'basic', glow: 'basic-additive', state: 'basic-vertex',
+    led: 'basic-map', sign: 'basic-map', emoji: 'basic-map', blob: 'basic-blob', line: 'line', outline: 'outline'
+  };
+  function programFamily(key) {
+    var b = String(key || 'toon').split(':')[0];
+    return Object.prototype.hasOwnProperty.call(PROGRAM_FAMILY, b) ? PROGRAM_FAMILY[b] : null;
+  }
 
   /* ================================================================
      create(THREE, opts) → hub {kit(tier), dispose(), setOutlines(), setShow(), …}
@@ -222,6 +378,7 @@
     /* scratch objects: nothing below allocates in a per-frame path */
     var _m = new THREE.Matrix4(), _m2 = new THREE.Matrix4(), _base = new THREE.Matrix4(), _w = new THREE.Matrix4();
     var _q = new THREE.Quaternion(), _e = new THREE.Euler(), _p = new THREE.Vector3(), _s = new THREE.Vector3();
+    var _jit = {}, _jq = [0, 0, 0, 1];         /* jitter scratch (normJitter / jitterQuat) */
     var _c = new THREE.Color(), _hsl = { h: 0, s: 0, l: 0 };
     var Y_AXIS = new THREE.Vector3(0, 1, 0);
     var ZERO = new THREE.Matrix4().set(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1);
@@ -347,10 +504,15 @@
       };
       /* bean(r, len): capsule, len = straight middle length */
       G.bean = function (r, len) { return fin(new THREE.CapsuleGeometry(r, len, low ? 2 : 3, low ? 8 : 10)); };
-      /* slab(w, h, d[, radius]): rounded box, radius 0.18 × the smallest side by default */
+      /* slab(w, h, d[, radius | {arch: true} | {radius}]): rounded box. Default radius 0.18 × the
+         smallest side (organic / toy pieces); {arch: true} is the crisp architecture bevel
+         min(0.05 × the smallest side, 0.06) from MATERIAL.bevel */
       G.slab = function (w, h, d, radius) {
-        var m = Math.min(w, h, d);
-        var rad = radius != null ? Math.min(radius, m * 0.49) : 0.18 * m;
+        var m = Math.min(w, h, d), rad;
+        if (radius && typeof radius === 'object') {
+          rad = radius.arch ? archRadius(w, h, d, bevelFrom(lookNow()))
+            : radius.radius != null ? Math.min(radius.radius, m * 0.49) : 0.18 * m;
+        } else rad = radius != null ? Math.min(radius, m * 0.49) : 0.18 * m;
         var g = RoundedBox && rad > 0 ? new RoundedBox(w, h, d, low ? 1 : 2, rad) : new THREE.BoxGeometry(w, h, d);
         return fin(g);
       };
@@ -521,10 +683,10 @@
       return canvasTex(c);
     }
     var tex = {
-      /* toon ramp: 4×1 RedFormat [110, 165, 215, 255], Nearest, no mips */
+      /* toon ramp: 4×1 RedFormat from MATERIAL.toonRamp (v2 [64, 128, 200, 255]), Nearest, no mips */
       ramp: function () {
         if (texCache.ramp) return texCache.ramp;
-        var t = new THREE.DataTexture(new Uint8Array([110, 165, 215, 255]), 4, 1, THREE.RedFormat);
+        var t = new THREE.DataTexture(new Uint8Array(rampFrom(lookNow())), 4, 1, THREE.RedFormat);
         t.minFilter = THREE.NearestFilter; t.magFilter = THREE.NearestFilter;
         t.generateMipmaps = false; t.needsUpdate = true;
         return (texCache.ramp = t);
@@ -538,7 +700,7 @@
         return texCache.blob || (texCache.blob = radialAlpha(64, function (r) { var a = clamp((1 - r) * 1.6, 0, 1); return a * a * (3 - 2 * a); }));
       },
       sparkles: function () { return texCache.sparkles || (texCache.sparkles = drawAtlas()); },
-      /* matcaps at 128²: 'gold' | 'chrome' | 'pearl' */
+      /* matcaps at 128²: 'gold' | 'chrome' | 'pearl' | 'smoked' | 'gunmetal' | 'foil' */
       matcap: function (name) {
         var k = 'mc_' + name;
         return texCache[k] || (texCache[k] = drawMatcap(name));
@@ -555,12 +717,61 @@
       }
     };
 
+    /* v2 matcap stops: the look's MATCAPS tokens, else the bible hexes */
+    function matcapStops(name) {
+      var L = lookNow(), toks = L && L.MATCAPS && L.MATCAPS[name];
+      if (toks && toks.length) {
+        var out = toks.map(function (t) { return tryHex(t); });
+        if (out.every(Boolean)) return out;
+      }
+      return MATCAP_FALLBACK[name];
+    }
     function drawMatcap(name) {
       var S = 128, c = mkCanvas(S, S);
       if (!c) return whiteTex();
       var ctx = c.getContext('2d');
       if (!ctx) return whiteTex();
-      var g;
+      var g, st;
+      if (name === 'smoked') {
+        /* opaque smoked glass: a cool spec near the top-left (0.32, 0.28) → mid 35% → glass 70% → deep edge */
+        st = matcapStops('smoked');
+        ctx.fillStyle = st[3]; ctx.fillRect(0, 0, S, S);
+        g = ctx.createRadialGradient(S * 0.32, S * 0.28, 0, S / 2, S / 2, S * 0.52);
+        g.addColorStop(0, st[0]); g.addColorStop(0.35, st[1]); g.addColorStop(0.7, st[2]); g.addColorStop(1, st[3]);
+        ctx.fillStyle = g; ctx.fillRect(0, 0, S, S);
+        spec(ctx, S * 0.32, S * 0.28, S * 0.06, 0.55);
+        return canvasTex(c);
+      }
+      if (name === 'gunmetal') {
+        /* dark chrome: spec → mid → gunmetal → deep, with a soft horizon band */
+        st = matcapStops('gunmetal');
+        ctx.fillStyle = st[3]; ctx.fillRect(0, 0, S, S);
+        g = ctx.createRadialGradient(S * 0.42, S * 0.38, 2, S / 2, S / 2, S * 0.52);
+        g.addColorStop(0, st[0]); g.addColorStop(0.4, st[1]); g.addColorStop(0.78, st[2]); g.addColorStop(1, st[3]);
+        ctx.fillStyle = g; ctx.fillRect(0, 0, S, S);
+        var band = ctx.createLinearGradient(0, S * 0.5, 0, S * 0.66);
+        band.addColorStop(0, 'rgba(42,45,58,0)'); band.addColorStop(0.5, 'rgba(42,45,58,0.35)'); band.addColorStop(1, 'rgba(42,45,58,0)');
+        ctx.fillStyle = band; ctx.fillRect(0, S * 0.5, S, S * 0.16);
+        spec(ctx, S * 0.36, S * 0.32, S * 0.07, 0.8);
+        return canvasTex(c);
+      }
+      if (name === 'foil') {
+        /* conic foil: pink → blue → mint → gold → pink, with a soft sheen */
+        st = matcapStops('foil');
+        st = st.concat([st[0]]);
+        if (typeof ctx.createConicGradient === 'function') {
+          g = ctx.createConicGradient(-Math.PI / 4, S / 2, S / 2);
+          st.forEach(function (s, i) { g.addColorStop(i / (st.length - 1), s); });
+        } else {
+          g = ctx.createLinearGradient(0, 0, S, S);
+          st.slice(0, 4).forEach(function (s, i) { g.addColorStop(i / 3, s); });
+        }
+        ctx.fillStyle = g; ctx.fillRect(0, 0, S, S);
+        var sh = ctx.createRadialGradient(S * 0.4, S * 0.36, 0, S * 0.4, S * 0.36, S * 0.42);
+        sh.addColorStop(0, 'rgba(255,255,255,0.6)'); sh.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.fillStyle = sh; ctx.fillRect(0, 0, S, S);
+        return canvasTex(c);
+      }
       if (name === 'gold') {
         ctx.fillStyle = '#8A5F10'; ctx.fillRect(0, 0, S, S);
         g = ctx.createRadialGradient(S * 0.42, S * 0.38, 2, S / 2, S / 2, S * 0.52);
@@ -777,12 +988,191 @@
       return t;
     }
 
+    /* ---------------- shared atlases: LED screens and signs (one GPU upload each) ----------------
+       Drawn once (and the user cell again on setUser); screens animate by UV offset only. Text
+       uses Unbounded 800 once document.fonts has it, Outfit / system-ui until then, and redraws
+       once when the display font arrives. */
+    var DISPLAY_FONT = '800 48px "Unbounded"';
+    function fontStack(px) { return '800 ' + px + 'px "Unbounded", "Outfit", system-ui, -apple-system, "Segoe UI", sans-serif'; }
+    function atlasHex(token) { return tryHex(token) || NEON_FALLBACK[token] || '#FFFFFF'; }
+    function fitText(ctx, text, maxW, px, minPx) {
+      var size = px;
+      do { ctx.font = fontStack(size); size -= 1; } while (size > minPx && ctx.measureText(text).width > maxW);
+    }
+    function signWordsNow() { var L = lookNow(); return L && Array.isArray(L.SIGN_WORDS) ? L.SIGN_WORDS : SIGN_WORDS_FALLBACK; }
+    function atlasTexture(c) {
+      var t = c ? canvasTex(c) : whiteTex();
+      t.generateMipmaps = false; t.minFilter = THREE.LinearFilter; t.magFilter = THREE.LinearFilter;
+      return t;
+    }
+    /* a texture clone that shares the atlas Source (no second upload), framed on one window */
+    function windowView(base, rx, ry, ox, oy) {
+      var v = base.clone();
+      v.repeat.set(rx, ry); v.offset.set(ox, oy);
+      return v;
+    }
+    function star4(ctx, x, y, r) {          /* ✦: the four-point spark (never the five-point ⭐) */
+      ctx.beginPath(); ctx.moveTo(x, y - r);
+      ctx.quadraticCurveTo(x + r * 0.12, y - r * 0.12, x + r, y); ctx.quadraticCurveTo(x + r * 0.12, y + r * 0.12, x, y + r);
+      ctx.quadraticCurveTo(x - r * 0.12, y + r * 0.12, x - r, y); ctx.quadraticCurveTo(x - r * 0.12, y - r * 0.12, x, y - r);
+      ctx.fill();
+    }
+    var shared = { led: null, sign: null, user: { name: '', color: null } };
+
+    /* one 128-px period of program i at (x, y); every LED colour set mixes ≥ 4 hues, none over 35% */
+    function drawLedPeriod(ctx, i, x, y, user) {
+      var W = LED.cellW, H = LED.cellH, hues = ['Neon Magenta', 'LED Cyan', 'Electric Violet', 'Laser Lime'].map(atlasHex);
+      var ink = atlasHex('Midnight Ink'), k;
+      ctx.save();
+      ctx.beginPath(); ctx.rect(x, y, W, H); ctx.clip();
+      ctx.fillStyle = i === 4 ? atlasHex('Night Zenith') : ink; ctx.fillRect(x, y, W, H);
+      if (i === 0) {                                     /* EQ: 8 bars, 2 per hue */
+        var hs = [0.45, 0.8, 0.6, 0.95, 0.5, 0.75, 0.35, 0.65];
+        for (k = 0; k < 8; k++) { ctx.fillStyle = hues[k % 4]; var bh = hs[k] * (H - 10); ctx.fillRect(x + k * 16 + 2, y + H - 5 - bh, 12, bh); }
+      } else if (i === 1) {                              /* waves: 3 lines + lime dots, one cycle per period */
+        ctx.lineWidth = 3; ctx.lineCap = 'round';
+        [[18, 0], [12, 0.33], [8, 0.66]].forEach(function (w, n) {
+          ctx.strokeStyle = hues[n]; ctx.beginPath();
+          for (var px = 0; px <= W; px += 2) {
+            var yy = y + H / 2 + w[0] * Math.sin(2 * Math.PI * (px / W + w[1]));
+            if (px) ctx.lineTo(x + px, yy); else ctx.moveTo(x + px, yy);
+          }
+          ctx.stroke();
+        });
+        ctx.fillStyle = hues[3];
+        for (k = 0; k < 4; k++) { ctx.beginPath(); ctx.arc(x + 16 + k * 32, y + 10, 2.5, 0, Math.PI * 2); ctx.fill(); }
+      } else if (i === 2) {                              /* ✦ drift: fixed sparks, 4 hues */
+        [[18, 20, 9], [52, 44, 6], [80, 16, 7], [108, 40, 10], [36, 52, 4], [96, 56, 4], [66, 30, 5], [122, 18, 4]].forEach(function (s, n) {
+          ctx.fillStyle = hues[n % 4]; star4(ctx, x + s[0], y + s[1], s[2]);
+        });
+      } else if (i === 3) {                              /* gradient sweep: magenta → cyan → violet → lime → magenta */
+        var g = ctx.createLinearGradient(x, 0, x + W, 0);
+        hues.concat([hues[0]]).forEach(function (h, n) { g.addColorStop(n / 4, h); });
+        ctx.fillStyle = g; ctx.fillRect(x, y, W, H);
+      } else if (i === 4) {                              /* star field (photocards and shop icons use this one) */
+        ctx.fillStyle = '#FFFFFF';
+        for (k = 0; k < 22; k++) {
+          var sx = (k * 37 + 11) % W, sy = (k * 23 + 7) % H, r = 0.8 + (k % 3) * 0.6;
+          ctx.globalAlpha = 0.55 + (k % 4) * 0.15; ctx.beginPath(); ctx.arc(x + sx, y + sy, r, 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.globalAlpha = 1; ctx.fillStyle = hues[2]; star4(ctx, x + 96, y + 22, 6);
+      } else {                                           /* ENCORE / SHOWTIME / the child's name + ✦ */
+        var text = i === 5 ? 'ENCORE' : i === 6 ? 'SHOWTIME' : signName(user.name);
+        if (i >= 5 && i <= 6 && !checkSignWord(text, signWordsNow(), false)) text = '';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillStyle = i === 7 ? (normHex(user.color) || hues[0]) : i === 5 ? hues[0] : hues[1];
+        if (text) { fitText(ctx, text, i === 7 ? W - 34 : W - 12, 26, 9); ctx.fillText(text, x + (i === 7 ? W / 2 - 10 : W / 2), y + H / 2 + 1); }
+        if (i === 7) { ctx.fillStyle = hues[2]; star4(ctx, x + (text ? W - 14 : W / 2), y + H / 2, text ? 7 : 14); }
+        ctx.fillStyle = hues[i === 7 ? 3 : 2]; ctx.fillRect(x + 8, y + H - 6, W - 16, 2);
+      }
+      ctx.restore();
+    }
+    function drawLedProgram(ctx, i, user) {
+      var c = ledCell(i);
+      ctx.clearRect(c.x, c.y, c.w, c.h);
+      drawLedPeriod(ctx, i, c.x, c.y, user);
+      drawLedPeriod(ctx, i, c.x + LED.cellW, c.y, user);
+    }
+    function ledAtlas() {
+      if (shared.led) return shared.led;
+      var c = mkCanvas(LED.w, LED.h), ctx = c && c.getContext('2d');
+      var t = atlasTexture(ctx ? c : null), mats = {};
+      extraTex.add(t);
+      function paint(onlyText) {
+        if (!ctx) return;
+        for (var i = 0; i < LED_PROGRAMS.length; i++) if (!onlyText || i >= 5) drawLedProgram(ctx, i, shared.user);
+        t.needsUpdate = true;
+      }
+      paint(false);
+      fontReady(DISPLAY_FONT, 60000).then(function (ok) { if (ok && shared.led) paint(true); });
+      var api = shared.led = {
+        texture: t, PROGRAMS: LED_PROGRAMS.slice(), CELL: { w: LED.cellW, h: LED.cellH },
+        cell: ledCell,
+        window: function (p, phase, out) { return ledWindow(p, phase, out); },
+        /* a texture clone framed on program p (scroll it with setWindow) */
+        view: function (p, phase) { var w = ledWindow(p, phase); return windowView(t, w.rx, w.ry, w.ox, w.oy); },
+        setWindow: function (tx, p, phase) { var w = ledWindow(p, phase); tx.repeat.set(w.rx, w.ry); tx.offset.set(w.ox, w.oy); return tx; },
+        /* one shared material per program (copies showing it scroll together) */
+        material: function (p) {
+          var i = ledIndex(p);
+          if (i < 0) i = 0;
+          return mats[i] || (mats[i] = variant('led', 'p:' + LED_PROGRAMS[i], { map: api.view(i, 0) }));
+        },
+        /* redraws only the name cell (and the sign atlas's name + initial) */
+        setUser: function (u) { setAtlasUser(u); return api; },
+        _redrawUser: function () { if (ctx) { drawLedProgram(ctx, 7, shared.user); t.needsUpdate = true; } }
+      };
+      return api;
+    }
+    /* the child's name and member colour for both atlases; only the user cells are redrawn */
+    function setAtlasUser(u) {
+      u = u || {};
+      var name = typeof u.name === 'string' ? u.name : shared.user.name, color = u.color != null ? u.color : shared.user.color;
+      if (name === shared.user.name && color === shared.user.color) return;
+      var renamed = name !== shared.user.name;
+      shared.user.name = name; shared.user.color = color;
+      if (shared.led) shared.led._redrawUser();
+      if (shared.sign && renamed) shared.sign._redrawUser();
+    }
+    function drawSignCell(ctx, word, user) {
+      var c = signCell(word, signWordsNow());
+      if (!c) return;
+      ctx.clearRect(c.x, c.y, c.w, c.h);
+      var text = word === ':name' ? signName(user.name) : word === ':initial' ? signInitial(user.name) : word.trim().toUpperCase();
+      if (!text) return;
+      ctx.save();
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#FFFFFF';
+      fitText(ctx, text, c.w - 16, 46, 10);
+      ctx.fillText(text, c.x + c.w / 2, c.y + c.h / 2 + 2);
+      ctx.restore();
+    }
+    function signAtlas() {
+      if (shared.sign) return shared.sign;
+      var c = mkCanvas(SIGN.w, SIGN.h), ctx = c && c.getContext('2d');
+      var t = atlasTexture(ctx ? c : null), mats = {};
+      extraTex.add(t);
+      function paint() {
+        if (!ctx) return;
+        signWordsNow().slice(0, SIGN.userCell).forEach(function (w) { drawSignCell(ctx, w, shared.user); });
+        drawSignCell(ctx, ':name', shared.user); drawSignCell(ctx, ':initial', shared.user);
+        t.needsUpdate = true;
+      }
+      paint();
+      fontReady(DISPLAY_FONT, 60000).then(function (ok) { if (ok && shared.sign) paint(); });
+      function allowed(word) { return checkSignWord(word, signWordsNow(), qa); }
+      var api = shared.sign = {
+        texture: t, WORDS: signWordsNow().slice(),
+        /* UV rect of a word, ':name' or ':initial' (null — or a throw in QA mode — for anything else) */
+        rect: function (word) { return allowed(word) ? signRect(word, signWordsNow()) : null; },
+        view: function (word) {
+          var r = api.rect(word);
+          return r ? windowView(t, r.u1 - r.u0, r.v1 - r.v0, r.u0, r.v0) : null;
+        },
+        material: function (word) {
+          if (!allowed(word)) return null;
+          var key = word.trim().toUpperCase();
+          return mats[key] || (mats[key] = variant('sign', 'w:' + key, { map: api.view(word) }));
+        },
+        setUser: function (u) { setAtlasUser(u); return api; },
+        _redrawUser: function () {
+          if (ctx) { drawSignCell(ctx, ':name', shared.user); drawSignCell(ctx, ':initial', shared.user); t.needsUpdate = true; }
+        }
+      };
+      return api;
+    }
+
     /* ---------------- materials (each created once, shared) ---------------- */
     var uniforms = {
       uRimColor: { value: new THREE.Color(1, 1, 1) },
       uRimStrength: { value: 0.28 },
-      uSelPulse: { value: 0 }
+      uSelPulse: { value: 0 },
+      uSelMin: { value: SEL_W[0] },
+      uSelMax: { value: SEL_W[1] }
     };
+    (function () {
+      var L = lookNow(), o = L && L.MATERIAL && L.MATERIAL.outline, p = o && o.pulse;
+      if (p && p.length === 2 && p[0] > 0 && p[1] >= p[0]) { uniforms.uSelMin.value = p[0]; uniforms.uSelMax.value = p[1]; }
+    }());
     var mats = new Map(), allMats = new Set(), glowMats = [], variants = new Map();
     function rimPatch(shader) {
       shader.uniforms.uRimColor = uniforms.uRimColor;
@@ -801,12 +1191,15 @@
       m.onBeforeCompile = function (shader) {
         shader.uniforms.uOutline = uW;
         shader.uniforms.uSelPulse = uniforms.uSelPulse;
+        shader.uniforms.uSelMin = uniforms.uSelMin;
+        shader.uniforms.uSelMax = uniforms.uSelMax;
+        /* a gold (selected) copy pulses between the selection widths; every other copy keeps uOutline */
         shader.vertexShader = shader.vertexShader
-          .replace('#include <common>', '#include <common>\nuniform float uOutline;\nuniform float uSelPulse;')
+          .replace('#include <common>', '#include <common>\nuniform float uOutline;\nuniform float uSelPulse;\nuniform float uSelMin;\nuniform float uSelMax;')
           .replace('#include <begin_vertex>',
             '#include <begin_vertex>\n' +
             '#ifdef USE_INSTANCING_COLOR\nfloat slSel = step(0.35, instanceColor.r - instanceColor.b);\n#else\nfloat slSel = 0.0;\n#endif\n' +
-            'transformed += normalize(normal) * uOutline * (1.0 + slSel * uSelPulse * 0.6667);');
+            'transformed += normalize(normal) * mix(uOutline, mix(uSelMin, uSelMax, uSelPulse), slSel);');
       };
       m.customProgramCacheKey = outlineKey;
       return m;
@@ -820,8 +1213,14 @@
           m.onBeforeCompile = rimPatch;
           m.customProgramCacheKey = toonKey;
           return m;
-        case 'gold': case 'chrome': case 'pearl':
+        case 'gold': case 'chrome': case 'pearl': case 'smoked': case 'gunmetal': case 'foil':
           return new THREE.MeshMatcapMaterial({ matcap: tex.matcap(base), name: base });
+        case 'led': case 'sign':
+          /* the emoji face's basic + map program: the 'state' material with the shared atlas */
+          m = mat('state').clone();
+          m.vertexColors = false; m.transparent = true; m.alphaTest = 0.05; m.name = base;
+          m.map = base === 'led' ? ledAtlas().texture : signAtlas().texture;
+          return m;
         case 'glass':
           return new THREE.MeshMatcapMaterial({ matcap: tex.matcap('pearl'), transparent: true, opacity: 0.45, depthWrite: false, name: 'glass' });
         case 'neon':
@@ -834,7 +1233,7 @@
         case 'state':
           return new THREE.MeshBasicMaterial({ color: 0xffffff, vertexColors: true, toneMapped: false, name: 'state' });
         case 'ink':
-          return new THREE.MeshBasicMaterial({ color: col('Ink'), name: 'ink' });
+          return new THREE.MeshBasicMaterial({ color: inkC().clone(), name: 'ink' });
         case 'line':
           return new THREE.LineBasicMaterial({ color: col(arg || 'Ink'), name: key });
         case 'outline':
@@ -1113,8 +1512,29 @@
 
     /* ---------------- instanced mesh helper ---------------- */
     var WHITE = new THREE.Color(1, 1, 1), INK = null, GOLD = null;
-    function inkC() { return INK || (INK = col('Ink')); }
-    function goldC() { return GOLD || (GOLD = col('Star Gold')); }
+    /* hull ink: MATERIAL.outline.token (Midnight Ink), or v1 Ink without world-look */
+    function inkC() {
+      if (INK) return INK;
+      var L = lookNow(), o = L && L.MATERIAL && L.MATERIAL.outline, tok = o && typeof o.token === 'string' && tryHex(o.token) ? o.token : 'Ink';
+      return (INK = col(tok));
+    }
+    function goldC() {
+      if (GOLD) return GOLD;
+      var L = lookNow(), o = L && L.MATERIAL && L.MATERIAL.outline, tok = o && typeof o.selected === 'string' && tryHex(o.selected) ? o.selected : 'Star Gold';
+      return (GOLD = col(tok));
+    }
+    /* does this template's look kind keep a character hull? (OUTLINE_KINDS: pets, accessories, avatar) */
+    function charHull(id) {
+      var L = lookNow(), e = L && L.LOOK && L.LOOK[id], kinds = (L && L.OUTLINE_KINDS) || OUTLINE_KINDS_FALLBACK;
+      if (e) return !!kinds[e.kind];
+      return /^(pet|acc)_/.test(String(id || ''));
+    }
+    /* a flagged part's hull width: characters keep their own (true → OUTLINE_CHAR); architecture
+       only ever shows the selection hull */
+    function hullWidth(part, character) {
+      if (!character) return OUTLINE_W;
+      return part.outline === OUTLINE_W ? OUTLINE_CHAR : part.outline;
+    }
     function newIM(geo, m, cap) {
       var im = new THREE.InstancedMesh(geo, m, cap);
       im.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(cap * 3).fill(1), 3);
@@ -1129,7 +1549,10 @@
        pivot 'root' (alias 'sway' when the template has none) moves the whole
        copy (squish, sway, drop-in). perCopy parts are one InstancedMesh(1)
        per copy with their own geometry for CPU waves.
-         add(uid, {x, y, fp, baseY, pos:[x,y,z], yaw}, {jitter: {yaw, scale}}), move(uid, x, y, place?), remove(uid)
+         add(uid, {x, y, fp, baseY, pos:[x,y,z], yaw}, {jitter}), move(uid, x, y, place?), remove(uid)
+           jitter: SLIslandLook.jitter2's {yaw, sx, sy, sz, lean, leanAxis, tint: {l, h}} (or the
+           v1 {yaw, scale}); move(…, {jitter}) re-jitters. The tint multiplies the instance colour
+           of every non-state part.
          hide(uid) / show(uid), setState(uid, key, value), setHighlight(uid, 0|1|2)
          pivot(uid, name) → Matrix4 to write;  setPivot(uid, name, rotDeg[], pos[], scale)
          resetPivots(uid), commit(), anchorWorld(uid, name, outV3), worldPos(uid, outV3)
@@ -1147,6 +1570,9 @@
       this.fp = o.fp || itemFp(tpl.id) || [1, 1];
       this._matFor = typeof o.material === 'function' ? o.material : null;
       this._wantOutlines = K.tier !== 'LOW' && o.outlines !== false && hub.outlinesOn;
+      /* architecture: the hull is the edit selection hull only, shown for highlighted copies */
+      this._charHull = charHull(tpl.id);
+      this._selOnly = !this._charHull;
       this._castShadow = o.castShadow !== false;
       this._dirty = []; this._structural = false; this._disposed = false;
       this._slots = []; this._copyParts = [];
@@ -1172,14 +1598,23 @@
       this.group.add(mesh);
       var out = null;
       if (p.outline && this._wantOutlines) {
-        out = newIM(p.geo, mat('outline:' + p.outline), cap);
+        out = newIM(p.geo, mat('outline:' + hullWidth(p, this._charHull)), cap);
         out.name = p.name + ':outline';
-        out.frustumCulled = mesh.frustumCulled;
-        if (p.pivot) out.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+        /* a selection hull's bounds change with the selection: never cull it on stale bounds */
+        out.frustumCulled = this._selOnly ? false : mesh.frustumCulled;
+        if (p.pivot || this._selOnly) out.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
         out.count = 0; out.visible = false;
         this.group.add(out);
       }
       return { part: p, mesh: mesh, outline: out, m: false, c: false };
+    };
+    /* is any copy highlighted? (selection-only hulls draw nothing otherwise) */
+    ItemBatch.prototype._anyHl = function () {
+      for (var i = 0; i < this.n; i++) if (this.recs[i].hl) return true;
+      return false;
+    };
+    ItemBatch.prototype._hullVisible = function () {
+      return this.n > 0 && hub.outlinesOn && (!this._selOnly || this._anyHl());
     };
     function regrow(group, old, cap) {
       var im = newIM(old.geometry, old.material, cap);
@@ -1217,10 +1652,15 @@
         var by = place.baseY != null ? place.baseY : baseY(x, y, fp, this.template.id);
         rec.pos.set(x + fp[0] / 2 - 8, by, y + fp[1] / 2 - 5);
       }
-      if (jitter) { rec.jYaw = (jitter.yaw || 0) * DEG; rec.scale = jitter.scale || 1; }
+      if (jitter) {
+        var j = normJitter(jitter, _jit);
+        rec.jYaw = j.yaw; rec.sx = j.sx; rec.sy = j.sy; rec.sz = j.sz; rec.lean = j.lean; rec.leanAxis = j.leanAxis;
+        rec.tint = j.tl !== 1 || j.th !== 0 ? tintMul(j.tl, j.th, rec.tint || [1, 1, 1]) : null;
+      }
       if (place.yaw != null) rec.yaw = place.yaw * DEG;
-      _q.setFromAxisAngle(Y_AXIS, rec.yaw + rec.jYaw);
-      _s.set(rec.scale, rec.scale, rec.scale);
+      jitterQuat(rec.yaw / DEG + rec.jYaw, rec.lean, rec.leanAxis, _jq);
+      _q.set(_jq[0], _jq[1], _jq[2], _jq[3]);
+      _s.set(rec.sx, rec.sy, rec.sz);
       rec.item.compose(rec.pos, _q, _s);
     };
     ItemBatch.prototype.add = function (uid, place, o) {
@@ -1229,7 +1669,8 @@
       if (this.n >= this.cap) this._grow(this.cap * 2);
       var i = this.n++, self = this;
       var rec = {
-        uid: uid, i: i, x: 0, y: 0, fp: null, pos: new THREE.Vector3(), yaw: 0, jYaw: 0, scale: 1,
+        uid: uid, i: i, x: 0, y: 0, fp: null, pos: new THREE.Vector3(), yaw: 0,
+        jYaw: 0, sx: 1, sy: 1, sz: 1, lean: 0, leanAxis: 0, tint: null,
         item: new THREE.Matrix4(), root: new THREE.Matrix4(), rootAnim: false, piv: {},
         hidden: false, hl: 0, state: {}, copies: null, dirty: 0
       };
@@ -1256,6 +1697,7 @@
       var p = { x: x, y: y };
       if (place) { p.fp = place.fp; p.baseY = place.baseY; p.pos = place.pos; p.yaw = place.yaw; }
       this._place(rec, p, place && place.jitter);
+      if (place && place.jitter) this._writeColors(rec);
       this._mark(rec, 2);
       this._structural = true;
       return true;
@@ -1332,7 +1774,7 @@
         else _w.copy(_base);
         _w.toArray(s.mesh.instanceMatrix.array, i * 16);
         s.m = true;
-        if (s.outline) _w.toArray(s.outline.instanceMatrix.array, i * 16);
+        if (s.outline) (this._selOnly && !rec.hl ? ZERO : _w).toArray(s.outline.instanceMatrix.array, i * 16);
       }
       if (rec.copies) {
         for (k = 0; k < rec.copies.length; k++) {
@@ -1344,11 +1786,13 @@
         }
       }
     };
+    /* a non-state part's instance colour: white, or the copy's jitter tint */
+    function baseColorInto(rec, out) { return rec.tint ? out.setRGB(rec.tint[0], rec.tint[1], rec.tint[2]) : out.copy(WHITE); }
     ItemBatch.prototype._writeColors = function (rec) {
       var i = rec.i, k, s, p;
       for (k = 0; k < this._slots.length; k++) {
         s = this._slots[k]; p = s.part;
-        if (p.stateColor) stateColorInto(p.stateColor, rec.state[p.stateColor.key], _c); else _c.copy(WHITE);
+        if (p.stateColor) stateColorInto(p.stateColor, rec.state[p.stateColor.key], _c); else baseColorInto(rec, _c);
         _c.toArray(s.mesh.instanceColor.array, i * 3);
         if (s.outline) { (rec.hl ? goldC() : inkC()).toArray(s.outline.instanceColor.array, i * 3); }
         s.c = true;
@@ -1356,7 +1800,7 @@
       if (rec.copies) {
         for (k = 0; k < rec.copies.length; k++) {
           var cp = rec.copies[k];
-          if (cp.part.stateColor) stateColorInto(cp.part.stateColor, rec.state[cp.part.stateColor.key], _c); else _c.copy(WHITE);
+          if (cp.part.stateColor) stateColorInto(cp.part.stateColor, rec.state[cp.part.stateColor.key], _c); else baseColorInto(rec, _c);
           _c.toArray(cp.mesh.instanceColor.array, 0);
           cp.mesh.instanceColor.needsUpdate = true;
         }
@@ -1388,6 +1832,7 @@
     ItemBatch.prototype.setHighlight = function (uid, level) {
       var rec = this._rec(uid);
       if (!rec) return this;
+      var was = rec.hl;
       rec.hl = level | 0;
       for (var k = 0; k < this._slots.length; k++) {
         var s = this._slots[k];
@@ -1395,6 +1840,8 @@
         (rec.hl ? goldC() : inkC()).toArray(s.outline.instanceColor.array, rec.i * 3);
         s.outline.instanceColor.needsUpdate = true;
       }
+      /* selection-only hulls: write (or zero) this copy's hull and show the hull mesh only while selected */
+      if (this._selOnly && !was !== !rec.hl) { this._mark(rec, 2); this.commit(); this._applyOutlines(); }
       return this;
     };
     ItemBatch.prototype.commit = function () {
@@ -1422,7 +1869,7 @@
             s.mesh.boundingSphere.radius += 0.25;    /* room for squish / sway */
           }
           if (s.outline) {
-            s.outline.count = this.n; s.outline.visible = this.n > 0 && hub.outlinesOn;
+            s.outline.count = this.n; s.outline.visible = this._hullVisible();
             if (this.n && s.outline.frustumCulled) { s.outline.computeBoundingSphere(); s.outline.boundingSphere.radius += 0.25; }
           }
         }
@@ -1432,7 +1879,7 @@
     ItemBatch.prototype._applyOutlines = function () {
       for (var k = 0; k < this._slots.length; k++) {
         var s = this._slots[k];
-        if (s.outline) s.outline.visible = this.n > 0 && hub.outlinesOn;
+        if (s.outline) s.outline.visible = this._hullVisible();
       }
     };
     ItemBatch.prototype.anchorWorld = function (uid, name, out) {
@@ -1503,7 +1950,8 @@
         nodes[name] = n;
       });
       var meshes = {}, hulls = [], clones = [], state = {}, hl = 0;
-      var withOutlines = K.tier !== 'LOW' && hub.outlinesOn && o.outlines !== false;
+      /* standalone copies (photocards, games): only characters keep a hull; architecture has no selection here */
+      var withOutlines = K.tier !== 'LOW' && hub.outlinesOn && o.outlines !== false && charHull(tpl.id);
       tpl.parts.forEach(function (p) {
         var node = p.pivot ? nodes[p.pivot] : g;
         var geo = p.perCopy ? p.geo.clone() : p.geo;
@@ -1517,7 +1965,7 @@
         node.add(mm);
         meshes[p.name] = mm;
         if (p.outline && withOutlines) {
-          var h = newIM(geo, mat('outline:' + p.outline), 1);
+          var h = newIM(geo, mat('outline:' + hullWidth(p, true)), 1);
           h.count = 1; h.name = p.name + ':outline';
           h.position.copy(mm.position); h.frustumCulled = mm.frustumCulled;
           inkC().toArray(h.instanceColor.array, 0);
@@ -1728,11 +2176,13 @@
       if (kits[tier]) return kits[tier];
       var K = {
         THREE: THREE, tier: tier, version: VERSION, outlines: tier !== 'LOW',
-        ATLAS: ATLAS, ATLAS_CELLS: ATLAS_CELLS, OUTLINE_W: OUTLINE_W, OUTLINE_CHAR: 0.012,
+        ATLAS: ATLAS, ATLAS_CELLS: ATLAS_CELLS, OUTLINE_W: OUTLINE_W, OUTLINE_CHAR: OUTLINE_CHAR,
+        LED_PROGRAMS: LED_PROGRAMS, SIGN_WORDS: signWordsNow(),
         uniforms: uniforms, issues: hub.issues,
         col: col, hex: hex, tone: tone, rgb: rgb,
         has: function (token) { return !!tryHex(token); },
         mat: mat, variant: variant, tex: tex,
+        ledAtlas: ledAtlas, signAtlas: signAtlas,
         stateKey: stateKeyOf,
         billboards: billboards, blobs: blobs,
         setRim: setRim, setShow: setShow, setOutlines: setOutlines, setSelPulse: setSelPulse,
@@ -1741,6 +2191,7 @@
         isTemplate: isTemplate
       };
       K.G = makeG(tier);
+      K.facet = K.G.facet;
       K.ctx = function (id, st, stateKey) { return ctxFor(K, id, st, stateKey); };
       K.template = function (ctx) { return new TemplateBuilder(K, ctx || K.ctx('item', {})); };
       K.batch = function (tpl, o) { return new ItemBatch(K, tpl, o); };
@@ -1784,6 +2235,7 @@
       extraTex.forEach(function (t) { t.dispose(); }); extraTex.clear();
       instOutlines.clear(); colTmp.clear();
       INK = null; GOLD = null;
+      shared.led = null; shared.sign = null;
     }
 
     hub.kit = kit;
@@ -1804,6 +2256,13 @@
     VERSION: VERSION, FALLBACK: FALLBACK, ATLAS: ATLAS, ATLAS_CELLS: ATLAS_CELLS, OUTLINE_W: OUTLINE_W,
     create: create,
     /* pure helpers (Node-testable) */
-    resolveHex: resolveHex, fallbackStateKey: fallbackStateKey, normHex: normHex
+    resolveHex: resolveHex, fallbackStateKey: fallbackStateKey, normHex: normHex,
+    OUTLINE_CHAR: OUTLINE_CHAR, SEL_W: SEL_W, RAMP: RAMP, BEVEL: BEVEL, MATCAP_FALLBACK: MATCAP_FALLBACK,
+    rampFrom: rampFrom, bevelFrom: bevelFrom, archRadius: archRadius,
+    LED_PROGRAMS: LED_PROGRAMS, LED: LED, ledIndex: ledIndex, ledCell: ledCell, ledWindow: ledWindow,
+    SIGN: SIGN, SIGN_WORDS: SIGN_WORDS_FALLBACK, signCell: signCell, signRect: signRect, checkSignWord: checkSignWord,
+    signName: signName, signInitial: signInitial,
+    normJitter: normJitter, jitterQuat: jitterQuat, tintMul: tintMul,
+    PROGRAM_FAMILY: PROGRAM_FAMILY, programFamily: programFamily
   };
 }));

@@ -71,6 +71,20 @@ test('budgets match the art bible and the island architecture', () => {
   for (const t of T.TIERS) { assert.equal(B[t].confetti, 120); assert.equal(B[t].bubbles, 24); assert.equal(B[t].petals, 40); }
 });
 
+test('budgets: Encore City city, life, reflections and terrain per tier (v2 plan)', () => {
+  const B = T.BUDGETS, row = (k) => T.TIERS.map((t) => B[t][k]);
+  assert.deepEqual(row('cityBuildings'), [30, 60, 90]);
+  assert.deepEqual(row('birds'), [4, 7, 10]);
+  assert.deepEqual(row('boats'), [2, 4, 5]);
+  assert.deepEqual(row('lanterns'), [8, 16, 24]);
+  assert.deepEqual(row('reflections'), [4, 6, 10]);
+  assert.deepEqual(row('terrainSpacing'), [0.5, 0.25, 0.125]);
+  /* each spacing divides 1, so cell edges are lattice lines */
+  for (const s of row('terrainSpacing')) assert.equal(Math.round(1 / s), 1 / s);
+  /* fresh copies carry the new keys too */
+  assert.equal(T.budget('LOW', 2).cityBuildings, 30); assert.equal(T.budget('HIGH', 1).terrainSpacing, 0.125);
+});
+
 test('budget(tier, dpr): pixel ratio caps LOW 1.0, MID min(dpr, 1.5), HIGH min(dpr, 2); fresh objects', () => {
   assert.equal(T.budget('LOW', 3).pixelRatio, 1);
   assert.equal(T.budget('MID', 3).pixelRatio, 1.5);
@@ -105,14 +119,15 @@ test('adaptive quality: steps down in ladder order, at most once per 2 s, and ne
   const r = drive(aq, { ms: 30000, interval: 33.4, work: 28 });
   const steps = r.actions.filter(a => a.type === 'step');
   assert.deepEqual(steps.map(a => a.step), T.LADDER);
-  assert.deepEqual(T.LADDER, ['pixelRatio', 'shadows', 'outlines', 'particles', 'cones']);
+  /* ambient life and the sea reflections shed before the Showtime cones */
+  assert.deepEqual(T.LADDER, ['pixelRatio', 'shadows', 'outlines', 'particles', 'life', 'reflections', 'cones']);
   assert.ok(steps[0].at >= 2000, 'first step only after 2 s of slow frames');
   for (let i = 1; i < steps.length; i++) assert.ok(steps[i].at - steps[i - 1].at >= 2000, 'one step per 2 s');
   assert.equal(r.actions.filter(a => a.type === 'fallback').length, 0, '30 fps is slow but not < 20 fps: no fallback');
   /* fast frames afterwards never undo a step */
   const after = drive(aq, { start: r.now, ms: 10000, interval: 16.7, work: 3 });
   assert.equal(after.actions.length, 0);
-  assert.deepEqual(aq.steps, T.LADDER); assert.equal(aq.level, 5); assert.equal(aq.done, true);
+  assert.deepEqual(aq.steps, T.LADDER); assert.equal(aq.level, T.LADDER.length); assert.equal(aq.done, true);
 });
 
 test('adaptive quality: falls back only after every step, and only once', () => {
@@ -121,7 +136,7 @@ test('adaptive quality: falls back only after every step, and only once', () => 
   const types = r.actions.map(a => a.type);
   const fb = types.indexOf('fallback');
   assert.ok(fb > 0, 'fallback happens');
-  assert.equal(types.slice(0, fb).filter(t => t === 'step').length, 5, 'all 5 steps first');
+  assert.equal(types.slice(0, fb).filter(t => t === 'step').length, T.LADDER.length, 'every step first');
   assert.equal(types.filter(t => t === 'fallback').length, 1);
   assert.ok(r.actions[fb].at - r.actions[fb - 1].at >= 3000, 'sustained under 20 fps after the last step');
   assert.equal(aq.failed, true);
@@ -156,7 +171,7 @@ test('adaptive quality: healthy frames, idle pacing at 30 fps, pauses and skippe
   /* LOW has no shadows or outlines: those steps start taken */
   const aq3 = T.AdaptiveQuality({ skip: ['shadows', 'outlines'] });
   const steps = drive(aq3, { ms: 20000, interval: 33.4, work: 28 }).actions.filter(a => a.type === 'step').map(a => a.step);
-  assert.deepEqual(steps, ['pixelRatio', 'particles', 'cones']);
+  assert.deepEqual(steps, ['pixelRatio', 'particles', 'life', 'reflections', 'cones']);
   assert.ok(aq3.has('shadows') && aq3.done);
 });
 
@@ -217,9 +232,9 @@ test('stage: boot loads the island3d scripts in order, reusing the ?v= query, sk
   assert.deepEqual(base, { dir: 'https://x.test/app/world/island3d/', query: '?v=5&qa=1' });
   const list = S.scriptList(base, { SLTier: {}, SLSound: {} });
   const names = list.map(f => f.path);
-  const ordered = ['grid3d.js', 'motion.js', 'kit.js', 'env.js', 'models-garden.js', 'models-home.js', 'models-fun.js',
-    'models-attractions.js', 'models-characters.js', 'pets-brain.js', 'actors.js', 'fx3d.js', 'edit3d.js', 'camera.js',
-    'island3d.js', 'photocard.js'];
+  const ordered = ['grid3d.js', 'motion.js', 'kit.js', 'terrain3d.js', 'env.js', 'city3d.js', 'life3d.js', 'models-garden.js', 'models-home.js',
+    'models-fun.js', 'models-attractions.js', 'models-city.js', 'models-stage.js', 'models-characters.js', 'pets-brain.js', 'actors.js',
+    'fx3d.js', 'edit3d.js', 'camera.js', 'island3d.js', 'photocard.js'];
   let last = -1;
   for (const f of ordered) { const i = names.indexOf(f); assert.ok(i > last, f + ' in order'); last = i; }
   assert.ok(names.indexOf('tier.js') < names.indexOf('kit.js'));
@@ -231,15 +246,27 @@ test('stage: boot loads the island3d scripts in order, reusing the ?v= query, sk
   assert.deepEqual(list.filter(f => f.required).map(f => f.path), ['tier.js', 'kit.js']);
   assert.deepEqual(S.baseFrom('', 'https://x.test/app/index.html', '9'), { dir: 'https://x.test/app/world/island3d/', query: '?v=9' });
   assert.deepEqual(S.ADDONS, ['three/addons/geometries/RoundedBoxGeometry.js', 'three/addons/utils/BufferGeometryUtils.js']);
-  /* every listed island3d file is one the architecture names */
+  /* the Encore City modules are optional (a missing one only means a fallback) and skip when already loaded */
+  const V2 = { 'terrain3d.js': 'SLTerrain3D', 'city3d.js': 'SLCity3D', 'life3d.js': 'SLLife3D', 'models-city.js': null, 'models-stage.js': null };
+  for (const [f, g] of Object.entries(V2)) {
+    const e = list.find(x => x.path === f);
+    assert.ok(e, f + ' listed'); assert.equal(e.required, false, f + ' optional'); assert.equal(e.global, g, f + ' global');
+  }
+  assert.equal(S.scriptList(base, { SLCity3D: {} }).find(f => f.path === 'city3d.js').skip, true);
+  /* every listed island3d file is one the architecture (v1) or the Encore City plan (v2) names */
   const arch = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'docs', 'island3d', 'island-architecture.json'), 'utf8'));
-  const named = arch.files.join(' ');
+  const named = arch.files.join(' ') + ' ' + Object.keys(V2).map(f => 'world/island3d/' + f).join(' ');
   for (const f of names.filter(n => !n.startsWith('..'))) assert.ok(named.includes('world/island3d/' + f), f + ' is in the architecture');
 });
 
-test('stage: resolved styles default from the catalogue', () => {
+test('stage: resolved styles default from the catalogue (the house carries its shape and trim)', () => {
   const D = { wall: 'wall_cream', roof: 'roof_red', door: 'door_blue', course: 'course_meadow', ball: 'ball_classic', stadium: 'stadium_day', kart: 'kart_red' };
-  assert.deepEqual(S.resolveSt('house_cottage', { roof: 'roof_castle' }, D), { wall: 'wall_cream', roof: 'roof_castle', door: 'door_blue', details: {} });
+  assert.deepEqual(S.resolveSt('house_cottage', { roof: 'roof_castle' }, D), { wall: 'wall_cream', roof: 'roof_castle', door: 'door_blue', details: {}, shape: 'shape_loft', variant: 0 });
+  assert.deepEqual(S.resolveSt('house_cottage', { shape: 'shape_dome', variant: 1 }, Object.assign({ shape: 'shape_cottage' }, D)),
+    { wall: 'wall_cream', roof: 'roof_red', door: 'door_blue', details: {}, shape: 'shape_dome', variant: 1 });
+  assert.equal(S.resolveSt('house_cottage', {}, Object.assign({ shape: 'shape_cottage' }, D)).shape, 'shape_cottage', 'the catalogue default wins');
+  /* make() forwards a city building's trim untouched */
+  assert.deepEqual(S.resolveSt('bld_stage', { variant: 2 }, D), { variant: 2 });
   assert.deepEqual(S.resolveSt('att_course', {}, D), { course: 'course_meadow' });
   assert.deepEqual(S.resolveSt('att_pitch', { stadium: 'stadium_night' }, D), { ball: 'ball_classic', stadium: 'stadium_night' });
   assert.deepEqual(S.resolveSt('att_kart', null, D), { kart: 'kart_red' });
@@ -306,12 +333,19 @@ test('kit: colour tokens resolve only through the look tables', () => {
   assert.equal(KIT.normHex('#abc'), '#AABBCC');
 });
 
-test('kit: the stateKey fallback matches the documented format', () => {
-  const k = KIT.fallbackStateKey;
-  assert.equal(k('house_cottage', { wall: 'wall_pink', roof: 'roof_blue', door: 'door_red', details: { detail_lights: true, detail_chimney: true, detail_flag: false } }),
+test('kit: the stateKey fallback matches the documented format (and world-look)', () => {
+  const k = KIT.fallbackStateKey, COT = { shape: 'shape_cottage' };
+  assert.equal(k('house_cottage', { ...COT, wall: 'wall_pink', roof: 'roof_blue', door: 'door_red', details: { detail_lights: true, detail_chimney: true, detail_flag: false } }),
     'wall_pink|roof_blue|door_red|d:detail_chimney,detail_lights');
-  assert.equal(k('house_cottage', { roof: 'roof_castle', details: ['detail_flag', 'detail_windowbox'] }), 'wall_cream|roof_castle|door_blue|d:detail_windowbox', 'detail_flag dropped under the castle roof');
-  assert.equal(k('house_cottage', {}), 'wall_cream|roof_red|door_blue|d:');
+  assert.equal(k('house_cottage', { ...COT, roof: 'roof_castle', details: ['detail_flag', 'detail_windowbox'] }), 'wall_cream|roof_castle|door_blue|d:detail_windowbox', 'detail_flag dropped under the castle roof');
+  assert.equal(k('house_cottage', COT), 'wall_cream|roof_red|door_blue|d:');
+  assert.equal(k('house_cottage', {}), 'wall_cream|roof_red|door_blue|d:|s:shape_loft|v:0', 'the loft is the default shape');
+  assert.equal(k('house_cottage', { shape: 'shape_tower', variant: 5 }), 'wall_cream|roof_red|door_blue|d:|s:shape_tower|v:1');
+  assert.equal(k('bld_boba', { variant: 2 }), 'v:2'); assert.equal(k('bld_boba', { variant: 9 }), 'v:2'); assert.equal(k('bld_boba', {}), 'v:0');
+  const L = require('../world/world-look.js');
+  for (const st of [{}, COT, { shape: 'shape_dome', variant: 1, roof: 'roof_candy', details: ['detail_neon'] }, { shape: 'shape_villa', details: { detail_flag: 1 }, roof: 'roof_castle' }])
+    assert.equal(k('house_cottage', st), L.stateKey('house_cottage', st), JSON.stringify(st));
+  for (const v of [0, 1, 2, 7]) assert.equal(k('bld_dance', { variant: v }), L.stateKey('bld_dance', { variant: v }));
   assert.equal(k('att_course', { course: 'course_snow' }), 'course_snow');
   assert.equal(k('att_pitch', { ball: 'ball_gold' }), 'ball_gold|stadium_day');
   assert.equal(k('att_kart', {}), 'kart_red');

@@ -45,6 +45,7 @@ test('env: loads in Node without THREE, exposes create() and refuses to run with
   assert.equal(E.TERRAIN_MS, 60, 'the tile fallback budget');
   assert.deepEqual(E.FIELD, { w: T3.FIELD.w, h: T3.FIELD.h, x0: T3.FIELD.x0, z0: T3.FIELD.z0, texel: T3.FIELD.texel }, 'one sea-field layout for both grounds');
   assert.equal(E.FIELD_PACK.maxShore, T3.FIELD.maxShore); assert.equal(E.FIELD_PACK.maxLocked, T3.FIELD.maxLocked);
+  assert.equal(E.FIELD_PACK.maxOther, T3.FIELD.maxOther, 'the A channel (other shores) packs the same way');
 });
 
 test('env: landOf accepts region lists, worlds and land sets, and always keeps Home Island', () => {
@@ -514,6 +515,172 @@ test('env: shader sources are well-formed and use only the uniforms they declare
   assert.ok(/uHaloDir/.test(E.SHADERS.SKY_FRAG) && /uBand/.test(E.SHADERS.SKY_FRAG), 'the sun halo and the city-glow band');
   assert.ok(/uZenith/.test(E.SHADERS.STAR_VERT), 'zenith-only stars at golden hour');
   assert.ok(/#ifdef USE_INSTANCING/.test(E.SHADERS.CONE_VERT) && /instanceColor/.test(E.SHADERS.CONE_VERT), 'one instanced draw for 3 cones');
+});
+
+/* ---------------- review fixes (2026-10-03) ---------------- */
+/* a headless env.create: every THREE / kit call lands on one do-anything stub (numbers read as 0), so the
+   env's own logic — land, bakes, seeds, the wake ripple — runs for real in Node */
+function anyStub() {
+  const fn = function () {};
+  const p = new Proxy(fn, {
+    get(t, k) { if (k === Symbol.toPrimitive) return () => 0; if (k === 'then' || k === Symbol.iterator) return undefined; return p; },
+    set() { return true; }, apply() { return p; }, construct() { return p; }, has() { return true; }
+  });
+  return p;
+}
+function headlessEnv(opts) {
+  const any = anyStub();
+  const K = new Proxy({ tier: 'MID', THREE: any, G: any }, { get(t, k) { return k in t ? t[k] : any; } });
+  return E.create(K, null, Object.assign({ scene: any, terrainMs: 1e6 }, opts));
+}
+function countBakes(t) {
+  const log = [], orig = T3.bake;
+  T3.bake = function (land, o) { log.push({ cells: Object.keys(land).length, seed: o.seed }); return orig.apply(this, arguments); };
+  t.after(() => { T3.bake = orig; });
+  return log;
+}
+
+test('env (runtime-3): a lazy env bakes only the land its first setLand brings; a new child bakes once, on their own land', (t) => {
+  const bakes = countBakes(t);
+  const all = ['home', 'cove', 'meadow'], allCells = Object.keys(E.landOf(all)).length, homeCells = Object.keys(E.landOf(['home'])).length;
+  const env = headlessEnv({ unlocked: ['home'], lazyLand: true, seed: 'rt3-ava', name: 'Ava' });
+  assert.equal(bakes.length, 0, 'no placeholder bake at create');
+  assert.equal(env.info().land, 0, 'open water until the first setLand');
+  env.setLand(all);
+  assert.deepEqual(bakes, [{ cells: allCells, seed: 'rt3-ava' }], 'the mount: one bake, the real land');
+  env.update(1 / 60, 0);
+  /* a profile switch: the new seed waits for the next child's land */
+  env.setUser({ name: 'Ben', color: '#33AAFF', seed: 'rt3-ben' });
+  assert.equal(bakes.length, 1, 'setUser does not re-bake the previous child\'s land');
+  env.update(1 / 60, 0);
+  env.setLand(['home']);
+  assert.deepEqual(bakes[1], { cells: homeCells, seed: 'rt3-ben' }, 'the switch: one bake, the next child\'s land');
+  assert.equal(bakes.length, 2);
+  assert.equal(env.bake.seed, 'rt3-ben');
+  /* the same land, a new seed: the next setLand re-bakes it even though the land signature is unchanged */
+  env.setSeed('rt3-cat');
+  env.setLand(['home']);
+  assert.deepEqual(bakes[2], { cells: homeCells, seed: 'rt3-cat' });
+  /* no setLand at all: the coastline follows after SEED_WAIT of frames, once */
+  env.setSeed('rt3-dan');
+  for (let i = 0; i < 20; i++) env.update(1 / 60, 0);
+  assert.equal(bakes.length, 3, 'waits for a sync');
+  for (let i = 0; i < 20; i++) env.update(1 / 60, 0);
+  assert.deepEqual(bakes[3], { cells: homeCells, seed: 'rt3-dan' });
+  for (let i = 0; i < 40; i++) env.update(1 / 60, 0);
+  assert.equal(bakes.length, 4);
+  env.dispose();
+  /* an env made without lazyLand still bakes its opts.unlocked at once (older controllers) */
+  const eager = headlessEnv({ unlocked: ['home'], seed: 'rt3-eve' });
+  assert.deepEqual(bakes[4], { cells: homeCells, seed: 'rt3-eve' });
+  eager.dispose();
+});
+
+test('env (safety-4): wakeAt is reversal-safe — Showtime toggled back mid-ripple never drops an item\'s lights', (t) => {
+  /* the pure ripple: any delay, any toggle pattern → no jump at a toggle, the same path as wakeStep */
+  const dt = 1 / 60, delays = [0, 0.05, 0.12, 0.2, 0.33, 0.4, 0.55, 0.75];
+  for (const pattern of [[0.2], [0.05, 0.1], [0.3, 0.25, 0.4], [0.7, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05], [1.3, 0.1]]) {
+    const r = E.rippleNew(false), steps = delays.map(() => 0);
+    E.rippleToggle(r, true);
+    let on = true, t0 = 0, next = 0, maxDiff = 0;
+    for (let f = 0; f < 200; f++) {
+      if (next < pattern.length && t0 >= pattern[next]) {
+        const before = delays.map((d) => E.rippleLevel(r, d, false));
+        on = !on; E.rippleToggle(r, on); t0 = 0; next++;
+        delays.forEach((d, i) => assert.ok(Math.abs(E.rippleLevel(r, d, false) - before[i]) < 1e-12, `toggle ${next}: delay ${d} holds its level`));
+      }
+      E.rippleAdvance(r, dt); t0 += dt;
+      delays.forEach((d, i) => {
+        steps[i] = E.wakeStep(steps[i], on, r.t, d, dt, false);
+        maxDiff = Math.max(maxDiff, Math.abs(E.rippleLevel(r, d, false) - E.wakeEase(steps[i])));
+      });
+    }
+    assert.ok(maxDiff <= 1.5 * dt / E.WAKE.fade + 1e-9, `pattern ${pattern}: within one frame of the per-light step (${maxDiff.toFixed(4)})`);
+    delays.forEach((d) => assert.equal(E.rippleLevel(r, d, false), on ? 1 : 0, 'settles'));
+  }
+  /* the reviewer's case on a real env: Showtime ends, and 0.2 s later it is back on (the encore re-tap):
+     an item 10 u from the home was still lit (its OFF delay not reached) and must stay lit */
+  const env = headlessEnv({ unlocked: ['home'], show: 1, seed: 'rt3-wake' });
+  const far = { x: 9, z: -2 + Math.sqrt(100 - 100) }, home = { x: -1, z: -2 };
+  assert.ok(Math.hypot(far.x - home.x, far.z - home.z) >= 9.99);
+  assert.equal(env.wakeAt(far.x, far.z), 1, 'Showtime: lit');
+  env.showtime(false);
+  for (let i = 0; i < 12; i++) env.update(1 / 60, i / 60);
+  const before = env.wakeAt(far.x, far.z);
+  env.showtime(true);
+  const after = env.wakeAt(far.x, far.z);
+  assert.equal(before, 1, 'its OFF delay (0.4 s) had not come yet');
+  assert.ok(Math.abs(after - before) < 1e-9, `no pop: ${before} → ${after}`);
+  let prev = after;
+  for (let i = 0; i < 90; i++) {
+    env.update(1 / 60, 0.2 + i / 60);
+    const w = env.wakeAt(far.x, far.z);
+    assert.ok(Math.abs(w - prev) <= 1.5 / 60 / E.WAKE.fade + 1e-9, 'every frame within one step of its 0.3 s fade');
+    prev = w;
+  }
+  assert.equal(prev, 1);
+  env.dispose();
+});
+
+test('env (perf-8): the per-frame neon pass parses the member colour once, not on every call', (t) => {
+  const real = L.normHex;
+  let calls = 0;
+  L.normHex = function () { calls++; return real.apply(this, arguments); };
+  t.after(() => { L.normHex = real; });
+  const out = [0, 0, 0], member = '#2E86DE';
+  E.neonColour('edge', 1, 1, member, 0, 0, 0, false, out);
+  const first = calls;
+  for (let i = 0; i < 500; i++) E.neonColour(['edge', 'plaza', 'ring'][i % 3], 1, 1, member, i / 60, i % 4, 1, false, out);
+  assert.equal(calls, first, 'no RegExp / string work per frame for an unchanged member');
+  E.neonColour('edge', 1, 1, member, 0, 0, 0, false, out);
+  assert.deepEqual(out.map((v) => Math.round(v * 255)), [0x2E, 0x86, 0xDE], 'still the member colour');
+  E.neonColour('edge', 1, 1, '#E94B4B', 0, 0, 0, false, out);
+  assert.equal(calls, first + 1, 'a new member is parsed once');
+  assert.deepEqual(out.map((v) => Math.round(v * 255)), [0xE9, 0x4B, 0x4B]);
+  E.neonColour('edge', 1, 1, null, 0, 0, 0, false, out);
+  E.neonColour('edge', 1, 1, null, 0, 0, 0, false, out);
+  assert.equal(calls, first + 2, 'no member: the fallback, parsed once');
+});
+
+test('env (runtime-2 / perf-3): the sea\'s wave lines follow the island\'s own coast, stay near it, and calm right down at Showtime', () => {
+  const S = E.SEA, src = E.SHADERS.SEA_FRAG;
+  /* the art bible: wave lines 0.6× v1's 0.03 wide at every light; the foam band 0.10 + 0.05·sin */
+  assert.equal(S.waveW, 0.6 * 0.03);
+  assert.deepEqual(S.foamEdge, [0.1, 0.05]);
+  for (const k of [0, 0.24, 0.5, 1]) assert.equal(E.seaWave(k).w, S.waveW, 'one width at every k');
+  assert.ok(E.seaWave(0).a < 0.35 && E.seaWave(1).a <= 0.12, 'golden hour softer than the bible\'s 0.35, Showtime almost glass');
+  for (let k = 0; k < 1; k += 0.05) assert.ok(E.seaWave(k + 0.05).a <= E.seaWave(k).a + 1e-12, 'calmer as the night deepens');
+  /* the shader is built from those numbers: the bands clamp to the island's near shore and clear the other shores */
+  assert.match(src, /float island = smoothstep\(0\.2, 0\.6, od\);/);
+  assert.match(src, /float bands = smoothstep\(0\.3, 0\.6, sd\) \* \(1\.0 - smoothstep\(1\.1, 1\.6, sd\)\) \* island;/);
+  assert.match(src, /float edge = 0\.1 \+ 0\.05 \* sin\(/);
+  assert.match(src, /float foam = 1\.0 - smoothstep\(edge - aaF, edge \+ aaF, fd\);/, 'the foam hugs every waterline');
+  assert.match(src, /foam2 \* uFoam2/);
+  assert.ok(!/smoothstep\(2\.4, 3\.3, sd\)/.test(src), 'the old 3.3 u reach is gone');
+  /* over the real bake, the bay between the island and the quay is mostly clear water */
+  const L2 = (c) => { const n = parseInt((L.hex(c) || c).slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) => { v /= 255; return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }); };
+  for (const combo of [['home'], ['home', 'cove', 'meadow']]) {
+    const f = T3.bake(combo, { tier: 'MID', seed: 'mia' }).field;
+    let n = 0, inBands = 0;
+    for (let j = 0; j < f.h; j++) for (let i = 0; i < f.w; i++) {
+      const x = f.x0 + (i + 0.5) * f.texel, z = f.z0 + (j + 0.5) * f.texel, k = j * f.w + i;
+      if (Math.abs(x) > 12 || z > -4 || z < -8.6 || f.shore[k] <= 0 || f.other[k] <= 0) continue;
+      n++;
+      const b = E.waveBands(f.shore[k], f.other[k]);
+      if (b > 0.5) inBands++;
+      if (f.shore[k] > S.bandOut[1]) assert.equal(b, 0, 'no wave line beyond 1.6 u of the island');
+    }
+    assert.ok(n > 500 && inBands / n < 0.2, `${combo}: ${(100 * inBands / n).toFixed(1)}% of the bay inside the wave bands (was ~65–70%)`);
+  }
+  /* Showtime: a stroke over the night water is a soft tint (≤ 1.6:1), not near-white on navy (≈ 7:1) */
+  const P1 = L.presetAt(1, null), deep = L2(P1.seaDeep), sh = L2(P1.seaShallow), wv = L2(P1.waveLine), sw = E.seaWave(1);
+  const mixc = (a, b, k) => a.map((v, i) => v + (b[i] - v) * k), lum = (c) => 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+  const stroke = mixc(deep, mixc(wv, sh, sw.mix), sw.a);
+  assert.ok((lum(stroke) + 0.05) / (lum(deep) + 0.05) <= 1.6, 'Showtime stroke contrast ' + ((lum(stroke) + 0.05) / (lum(deep) + 0.05)).toFixed(2));
+  /* the open-water field of a lazy env: no shore, no hologram, no lagoon */
+  const open = E.openSeaField();
+  assert.equal(open.length, E.FIELD.w * E.FIELD.h * 4);
+  assert.ok(open.every((v, i) => v === (i % 4 === 2 ? 0 : 255)));
 });
 
 test('env seams §9: the sea draws life3d\'s boat wakes (uBoat[4]) on MID / HIGH only, fed from life.boats() every frame', () => {

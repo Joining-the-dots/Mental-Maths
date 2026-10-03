@@ -15,11 +15,6 @@ function rigWith(o = {}) {
   r.update(0);
   return r;
 }
-function corners(land) {
-  const b = Cam.boundsOf(land), out = [];
-  for (const x of [b.minX, b.maxX]) for (const y of [b.bottom, b.top]) for (const z of [b.minZ, b.maxZ]) out.push({ x, y, z });
-  return out;
-}
 
 /* ---------------- framing ---------------- */
 test('camera: fitDist is the allocation-free twin of SLGrid3D.fitCamera', () => {
@@ -38,14 +33,107 @@ test('camera: the default view frames every unlocked-land corner inside NDC ±0.
     assert.equal(p.yaw, 0); assert.equal(p.elev, 48); assert.equal(p.zoom, 1);
     assert.equal(p.ty, Cam.TARGET_Y);
     const fit = G.fitCamera({ land, aspect, yaw: 0, elev: 48 });
-    assert.ok(near(p.tx, fit.target.x) && near(p.tz, fit.target.z), 'target = land centre');
-    assert.ok(near(p.dist, fit.dist, 1e-9));
-    for (const c of corners(land)) {
-      const n = Cam.projectPose(c, p);
-      assert.ok(n.depth > 0, 'in front');
-      assert.ok(Math.abs(n.x) <= 0.94 + 1e-9 && Math.abs(n.y) <= 0.94 + 1e-9, `${land} ${aspect}: ${n.x}, ${n.y}`);
+    assert.ok(near(r.home.tx, fit.target.x) && near(r.home.tz, fit.target.z), 'home = the land centre');
+    /* the play framing (FRAME): the target slides from the land centre toward the city (-z) only */
+    const F = Cam.fitFrame(r.fr, 0, 48, aspect, Cam.FRAME.band);
+    assert.ok(F.shift > 0, 'the skyline band slides the target toward the city');
+    assert.ok(near(p.tx, fit.target.x) && near(p.tz, fit.target.z - F.shift, 1e-9), 'target = land centre + the slide');
+    assert.ok(near(p.dist, F.dist, 1e-9));
+    /* every unlocked cell's corners, from the beach to the tallest item (the real outline, not its box) */
+    const b = Cam.boundsOf(land);
+    for (const k of Object.keys(G.landFrom(land))) {
+      const q = G.parseKey(k), c = G.cellCenter(q.c, q.r);
+      for (const dx of [-0.5, 0.5]) for (const dz of [-0.5, 0.5]) for (const y of [b.bottom, b.top]) {
+        const n = Cam.projectPose({ x: c.x + dx, y, z: c.z + dz }, p);
+        assert.ok(n.depth > 0, 'in front');
+        assert.ok(Math.abs(n.x) <= 0.94 + 1e-9 && n.y >= -0.94 - 1e-9 && n.y <= 0.94 - 2 * Cam.FRAME.band + 1e-9, `${land} ${aspect}: ${n.x}, ${n.y}`);
+      }
     }
   }
+});
+
+/* the lead's QA (2026-10-03): with all land at 16:9 the old default (a fit of the cell squares + 0.25 u)
+   cropped the island's edges and showed only tower bases along the top. The default play view must hold
+   the island as it really stands — the baked organic coast and its scenery, the rocks the land reaches —
+   AND keep a band of the city across the bay above it, on 16:9 and 4:3 (and 16:10 / 2.4:1 windows) */
+test('camera: the default play view fits the real organic island with a margin and keeps a skyline band on top', () => {
+  const T3 = require('../world/island3d/terrain3d.js'), City = require('../world/island3d/city3d.js');
+  const S = T3.STRUCT, rocks = [S.islet].concat(S.stacks);
+  const lay = City.layout({ tier: 'MID' }), gy = City.GROUND;
+  for (const land of [['home'], ['home', 'cove', 'meadow'], ['home', 'cove'], ['home', 'meadow']]) {
+    /* the island as baked for two children: terrain above the water + scenery, the rocks apart */
+    const isl = [], rockPts = [];
+    const lb = G.landBounds(land, 0), RN = 1.8, nearRock = (q) => q.x >= lb.minX - RN && q.x <= lb.maxX + RN &&
+      q.z >= lb.minZ - RN && q.z <= lb.maxZ + RN;          /* = FRAME.rockNear */
+    for (const seed of ['kid-a', 'mia']) {
+      const bk = T3.bake(land, { tier: 'MID', seed });
+      for (const arr of [T3.meshArrays(bk).position, T3.sceneryArrays(bk).position]) {
+        for (let i = 0; i < arr.length; i += 3) {
+          const q = { x: arr[i], y: arr[i + 1], z: arr[i + 2] };
+          if (q.y <= G.SEA_Y + 0.02) continue;
+          const rk = rocks.find((r) => Math.hypot(q.x - r.x, q.z - r.z) < r.r + 0.4);
+          if (!rk) isl.push(q); else if (nearRock(rk)) rockPts.push(q);
+        }
+      }
+    }
+    for (const k of Object.keys(G.landFrom(land))) {                   /* the tallest item on every cell */
+      const q = G.parseKey(k), c = G.cellCenter(q.c, q.r);
+      isl.push({ x: c.x, y: G.surfaceY(q.c, q.r) + G.ITEM_MAX_H, z: c.z });
+    }
+    for (const aspect of [16 / 9, 4 / 3, 1.6, 2.4]) {
+      const r = new Cam.Rig({ aspect, land: G.landFrom(land) });
+      r.update(0);
+      const p = r.pose, tag = land.join('+') + ' @' + aspect.toFixed(2);
+      for (const q of isl) {
+        const n = Cam.projectPose(q, p);
+        assert.ok(Math.abs(n.x) <= 0.95 && n.y >= -0.95 && n.y <= 0.95, `${tag}: island point (${q.x.toFixed(2)}, ${q.y.toFixed(2)}, ${q.z.toFixed(2)}) at NDC ${n.x.toFixed(3)}, ${n.y.toFixed(3)}`);
+      }
+      for (const q of rockPts) { const n = Cam.projectPose(q, p); assert.ok(Math.abs(n.x) <= 1 && Math.abs(n.y) <= 1, `${tag}: a rock the land reaches is in frame`); }
+      /* the skyline band: the quay's back wall sits in the top part of the frame with ≥ 15% of the frame above it */
+      for (let x = -8; x <= 8; x += 1) {
+        const n = Cam.projectPose({ x, y: gy, z: City.quayZ(x) }, p);
+        assert.ok(n.y <= 0.7 && n.y > 0, `${tag}: the quay at x ${x} sits at NDC y ${n.y.toFixed(3)}`);
+      }
+      /* the 3 media barges are whole (plan acceptance: 'City visible') */
+      for (const bg of lay.barges) for (const lx of [-0.75, 0.75]) for (const y of [0.15, 0.8]) {
+        const n = Cam.projectPose({ x: bg.x + lx * Math.cos(bg.yaw), y, z: bg.z - lx * Math.sin(bg.yaw) }, p);
+        assert.ok(Math.abs(n.x) <= 1 && Math.abs(n.y) <= 1, tag + ': barge screen corner in frame');
+      }
+      /* and most of the mid-rise skyline row shows, not just tower bases */
+      let vis = 0, cnt = 0;
+      for (const b of lay.buildings) {
+        if (b.layer !== 'L2') continue;
+        const lo = Cam.projectPose({ x: b.x, y: gy, z: b.z }, p), hi = Cam.projectPose({ x: b.x, y: gy + b.h, z: b.z }, p);
+        if (Math.abs(lo.x) > 1) continue;
+        cnt++; vis += Math.max(0, Math.min(1, hi.y) - Math.max(-1, lo.y)) / (hi.y - lo.y);
+      }
+      assert.ok(cnt > 5 && vis / cnt >= 0.45, `${tag}: ${(100 * vis / cnt).toFixed(0)}% of the mid-rise heights in view`);
+    }
+  }
+});
+
+test('camera: the skyline band is a play-mode framing — edit / place and a zoom past 1.3 give it back to the island', () => {
+  const r = rigWith({ w: 1600, h: 900, reduced: true });
+  const play = { dist: r.pose.dist, tz: r.pose.tz };
+  assert.ok(play.tz < r.home.tz - 0.5, 'play: the target slides toward the city');
+  r.setMode('edit'); r.update(0);
+  const F0 = Cam.fitFrame(r.fr, 0, 62, 16 / 9, 0);
+  assert.ok(near(r.pose.tz, r.home.tz) && near(r.pose.dist, F0.dist, 1e-9), 'edit: the centred fit of the real island, no band');
+  r.setMode('play'); r.update(0);
+  assert.ok(near(r.pose.tz, play.tz, 1e-9), 'back in play: the band again');
+  r.zoomBy(1.35); r.update(0);
+  assert.ok(near(r.pose.tz, r.goal.tz), 'zoomed in: no slide');
+  assert.equal(Cam.bandAt(1), 1); assert.equal(Cam.bandAt(1.3), 0); assert.ok(Cam.bandAt(1.15) > 0 && Cam.bandAt(1.15) < 1);
+  /* the band eases with the edit tilt (no cut) */
+  const e = rigWith({ w: 1600, h: 900 });
+  settle(e);
+  const tz0 = e.pose.tz;
+  e.setMode('edit'); e.update(1 / 60);
+  assert.ok(e.pose.tz > tz0 && e.pose.tz < e.home.tz, 'eases');
+  /* portrait phones keep the plain fit and the 1.75 home zoom (cells sized for fingers) */
+  const ph = new Cam.Rig({ aspect: 0.667, land: ['home'], touch: true });
+  ph.update(0);
+  assert.ok(near(ph.pose.dist, Cam.fitDist(ph.b, 0, 48, 0.667) / 1.75, 1e-9) && near(ph.pose.tz, ph.home.tz), 'phone: unchanged');
 });
 
 test('camera: projectPose agrees with SLGrid3D.project and groundAt inverts it', () => {
@@ -303,7 +391,7 @@ test('camera: a land unlock reframes smoothly onto the bigger island', () => {
   r.update(1 / 60);
   assert.ok(r.cur.tx > tx0 && r.cur.tx < r.goal.tx, 'eases, no cut');
   settle(r);
-  assert.ok(near(r.pose.dist, fit.dist, 1e-6), 'the new fit');
+  assert.ok(near(r.pose.dist, Cam.fitFrame(Cam.frameOf(['home', 'cove']), 0, 48, 16 / 9, Cam.FRAME.band).dist, 1e-6), 'the new fit');
 });
 
 /* ---------------- stage-cam moves ---------------- */

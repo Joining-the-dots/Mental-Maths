@@ -271,21 +271,67 @@ test('terrain3d: the sea field — R hugs the organic coast, G previews each loc
     }
     assert.ok(lockedCells.length === 0 || lockedCells.filter((p) => at(f.locked, p.c - 7.5, p.r - 4.5) < 0).length >= lockedCells.length * 0.6);
     if (!lockedCells.length) assert.ok(f.locked.every((g) => g > 0), 'all land: no hologram');
-    assert.ok(at(f.shore, 0, -9) < 0.5, 'the quay gets foam');
-    assert.ok(at(f.shore, -8, -5.4) === 0 && at(f.shore, -8, -6.4) < 0.4, 'Lantern Islet gets foam');
+    /* the other shores get their foam from A (other), never wave lines from R */
+    assert.ok(at(f.other, 0, -8.0) < 0.5, 'the quay gets foam');
+    assert.ok(at(f.other, -8, -5.4) === 0 && at(f.other, -8, -6.4) < 0.4, 'Lantern Islet gets foam');
+    assert.ok(at(f.shore, 0, -8.0) > 2.5, 'R in front of the quay is the distance back to the island');
     assert.ok(at(f.shore, 12, 8) > 2, 'open sea far out');
     assert.ok(f.lagoon.every((v, i) => v >= 0 && v <= 1 && (v === 0 || f.shore[i] > 0)));
-    /* R = the distance to the nearest shore: the island's organic coast, Lantern Islet, the stacks or the quay */
+    /* R = the distance to the island's own organic coast; A = the nearest other shore (islet, stacks,
+       quay wall), capped at maxOther, and 'none' (maxOther) under the island */
     const I = T.STRUCT.islet;
+    assert.equal(f.maxOther, T.FIELD.maxOther);
     for (let k = 0; k < f.w * f.h; k += 37) {
       const x = f.x0 + (k % f.w + 0.5) * f.texel, z = f.z0 + (Math.floor(k / f.w) + 0.5) * f.texel;
       const island = Math.max(0, T.coastAt(bk, x, z));
       const others = Math.min(Math.hypot(x - I.x, z - I.z) - I.r - 0.05, ...T.STRUCT.stacks.map((q) => Math.hypot(x - q.x, z - q.z) - q.r - 0.04), T.quayDist(x, z));
-      assert.ok(f.shore[k] <= island + 1e-4, 'never farther than the island coast');
-      if (others > island + 1e-3) assert.ok(Math.abs(f.shore[k] - island) < 1e-4, `R follows the island coast at (${x}, ${z})`);
-      else assert.ok(Math.abs(f.shore[k] - Math.max(0, others)) < 1e-3, `R follows the nearer islet / stack / quay at (${x}, ${z})`);
+      assert.ok(Math.abs(f.shore[k] - island) < 1e-4, `R follows the island coast only at (${x}, ${z})`);
+      const want = island > 0 ? Math.min(Math.max(0, others), f.maxOther) : f.maxOther;
+      assert.ok(Math.abs(f.other[k] - want) < 1e-6, `A at (${x}, ${z}): ${f.other[k]} vs ${want}`);
+      assert.ok(Math.abs(f.data[k * 4 + 3] / 255 * f.maxOther - want) <= 0.5 / 255 * f.maxOther + 1e-9, 'A packs the other-shore distance');
     }
   }
+});
+
+/* the reviewer's 'white scribble' (2026-10-03): the quay was folded into R, so the shore-following wave
+   lines drew a second family of contours from the quay side, filling the channel between the island and
+   the city with crossing strokes. R now measures the island's coast only. */
+test('terrain3d: the channel behind the island is measured from the island alone (no quay contours in R)', () => {
+  for (const combo of COMBOS) {
+    const bk = bake(combo, 'MID'), f = bk.field;
+    let quaySide = 0, n = 0;
+    for (let j = 0; j < f.h; j++) for (let i = 0; i < f.w; i++) {
+      const x = f.x0 + (i + 0.5) * f.texel, z = f.z0 + (j + 0.5) * f.texel, k = j * f.w + i;
+      if (Math.abs(x) > 12 || z > -4 || z < -8.6 || T.quayDist(x, z) === 0) continue;   /* the bay, in front of the quay wall */
+      n++;
+      const island = Math.max(0, T.coastAt(bk, x, z));
+      assert.ok(Math.abs(f.shore[k] - island) < 1e-4, `${combo} (${x}, ${z}): R ${f.shore[k]} vs the island coast ${island}`);
+      if (T.quayDist(x, z) < island) quaySide++;
+    }
+    assert.ok(n > 300 && quaySide > n * 0.2, `${combo}: a real channel (${quaySide}/${n} texels nearer the quay than the island)`);
+  }
+});
+
+test('terrain3d: quayDist is a true distance to the quay wall (never short, exact near it)', () => {
+  const Q = T.QUAY, wall = [];
+  for (let i = 0; i <= 8000; i++) {
+    const th = Math.PI * i / 8000, c = Math.cos(th), s = Math.sin(th);
+    const r = 1 / Math.pow(Math.pow(Math.abs(c) / Q.a, 4) + Math.pow(Math.abs(s) / Q.b, 4), 0.25);
+    wall.push([r * c, Q.zc - r * s]);
+  }
+  const brute = (x, z) => { let d = Infinity; for (const p of wall) d = Math.min(d, Math.hypot(p[0] - x, p[1] - z)); return d; };
+  assert.ok(Math.abs(T.quayDist(0, -6) - 2.2) < 0.01, 'the reviewer\'s point: 2.2 u from the wall (the old estimate read 3.95)');
+  let checked = 0;
+  for (let x = -15.5; x <= 15.5; x += 1.3) for (let z = -8.15; z <= -0.8; z += 0.61) {
+    const q = T.quayDist(x, z);
+    if (q === 0) continue;
+    const b = brute(x, z);
+    assert.ok(q >= b - 0.01, `(${x}, ${z}): ${q} is never shorter than the wall (${b})`);
+    if (b < 1) { assert.ok(Math.abs(q - b) < 0.02, `(${x}, ${z}): ${q} vs ${b} near the wall`); checked++; }
+  }
+  assert.ok(checked > 10);
+  assert.equal(T.quayDist(0, 1), Infinity, 'only the quay\'s back half');
+  assert.equal(T.quayDist(0, -9), 0, 'behind the wall');
 });
 
 /* ---------------- budgets and time ---------------- */

@@ -10,10 +10,14 @@
    (deg, ±35), elevation (deg, 34–67 in play, 40–67 while editing; 48 by
    default, edit / place tilt to 62), zoom (0.75–1.6; 2.45 on portrait
    phones, whose home view starts zoomed to 1.75 so a home-only island gets
-   ~45 × 33 px cells on a 360 px stage). dist = fitDist(land, yaw, elev,
-   aspect) / zoom, so the whole unlocked land (2.9 u tall items included) is
-   framed at zoom 1 from any angle (the same maths as SLGrid3D.fitCamera,
-   allocation-free). Zoomed in past 1.2 in play mode the target may also
+   ~45 × 33 px cells on a 360 px stage). Portrait phones and the stage-cam
+   moves: dist = fitDist(land, yaw, elev, aspect) / zoom (the same maths as
+   SLGrid3D.fitCamera, allocation-free). Every other view frames the island
+   as it really stands (FRAME: the organic coast, the pier / lookout, the
+   rocks the land reaches; 2.9 u tall items included) with fitFrame, and in
+   play keeps the top 18% of the frame for the city across the bay (the
+   target slides toward it; the band eases out in edit / place and from zoom
+   1 to 1.3). Zoomed in past 1.2 in play mode the target may also
    glide up to 2.5 u further toward -z (the city side of the bay). Input
    moves a GOAL; the shown state eases toward it (damping 0.12 per 60 Hz
    frame) and flicks carry inertia. Under reduced motion every change is a
@@ -24,6 +28,8 @@
      damp(dt, rate) · clamp · lerp · wrapDeg
      boundsOf(land) → {minX, maxX, minZ, maxZ, cx, cz, maxY, top, bottom}
      fitDist(b, yawDeg, elevDeg, aspect, fov?, margin?, near?) → dist
+     FRAME · frameOf(land) → frame points · fitFrame(frame, yawDeg, elevDeg, aspect, band, out) → {depth, shift, dist}
+     bandAt(zoom) → the share of the skyline band a zoom keeps
      basisInto(yawDeg, elevDeg, out) → out {Dx..Dz, Rx..Rz, Ux..Uz}
      panDelta(dxPx, dyPx, viewH, dist, fov, yawDeg, elevDeg, out) → {x, z}
      panLimit(b, zoom, slack) → {x, z} · backPanFor(zoom, mode) → extra -z travel (u)
@@ -110,6 +116,23 @@
      inside the top edge (city3d LAYERS.L3 ≤ 9 u + the 1 u mast; tested at 16:10, 16:9 and 2.4:1) */
   var SKYLINE = { elev: 14, yaw: -16, ty: 2.0, dz: -1.5, zoom: 0.8, hold: 0.9, ease: 1.8, drift: 2, release: 0.45, freezeMax: 1.5,
     wide: { from: 4 / 3, step: 16 / 9 - 4 / 3, zoom: -0.12, ty: 0.5, max: 2 } };
+  /* the play framing (landscape views and wide windows; portrait phones keep the plain fit and its
+     finger-sized 1.75 home zoom). The island is fitted as it really stands, not as its cell squares:
+     the organic coast reaches up to 0.85 u past the cells (terrain3d COAST.max with the cove / meadow
+     biases), the cove pier and the meadow lookout stick out further, and Lantern Islet / the rock stacks
+     belong in the picture once the land reaches them (rockNear). In play the top `band` of the frame is
+     kept for the city across the bay: the island fills the frame below it (the target slides toward
+     the city to centre it there), so the quay, the barges and the mid-rise skyline always show. The
+     band eases out in edit / place, when zoomed in past 1–1.3 and under every stage-cam move (which
+     keeps its own v2 pose). */
+  var FRAME = {
+    coast: 0.9, band: 0.18, bandZoom: [1, 1.3], rockNear: 1.8, edge: 0.98,
+    /* [x, y, z, region, free] scenery past the coast (terrain3d STRUCT); free: may rise into the band */
+    extras: [[4.2, 0.4, -5.85, 'home', 1] /* NE ferry jetty tip */, [9.7, 0.1, 0.4, 'cove', 0] /* cove pier tip */,
+             [-9.05, 0.5, -3.63, 'meadow', 0] /* meadow lookout */],
+    /* [x, z, r, h]: Lantern Islet and the two rock stacks (terrain3d STRUCT.islet / stacks) */
+    rocks: [[-8.0, -5.4, 0.7, 0.6], [7.15, 5.45, 0.26, 0.9], [7.72, 5.82, 0.2, 0.55]]
+  };
   var DEG_PER_PX = { yaw: 0.25, elev: 0.2 };
   var STEP_EPS = 1e-4;
 
@@ -171,6 +194,126 @@
       if (near * 2 - f > dist) dist = near * 2 - f;
     }
     return dist;
+  }
+  /* the play framing's points for a land (built on setLand; allocates): the convex hull of the cell
+     corners padded by FRAME.coast (y SAND_Y), the hull of the cell corners at the tallest item's top,
+     the scenery extras of the unlocked regions and the rocks the land reaches. cls 0 = island (below
+     the band), 1 = free (may rise into the band), 2 = rock (anywhere inside FRAME.edge).
+     → {cx, cz (the target: SLGrid3D.fitCamera's land centre), n, x, y, z, cls} */
+  function hull2(P) {
+    P.sort(function (a, b) { return a[0] - b[0] || a[1] - b[1]; });
+    function cr(o, a, b) { return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]); }
+    var lo = [], up = [], i;
+    for (i = 0; i < P.length; i++) { while (lo.length >= 2 && cr(lo[lo.length - 2], lo[lo.length - 1], P[i]) <= 0) lo.pop(); lo.push(P[i]); }
+    for (i = P.length - 1; i >= 0; i--) { while (up.length >= 2 && cr(up[up.length - 2], up[up.length - 1], P[i]) <= 0) up.pop(); up.push(P[i]); }
+    lo.pop(); up.pop();
+    return lo.concat(up);
+  }
+  function frameOf(land) {
+    var G = grid(), b = boundsOf(land), pts = [], i, k;
+    function add(x, y, z, cls) { pts.push([x, y, z, cls]); }
+    if (G && typeof G.landFrom === 'function' && typeof G.cellCenter === 'function') {
+      var set = G.landFrom(land == null ? ['home'] : land), keys = Object.keys(set), seen = {}, corners = [], regions = {};
+      var bx0 = Infinity, bx1 = -Infinity, bz0 = Infinity, bz1 = -Infinity;
+      for (i = 0; i < keys.length; i++) {
+        var p = G.parseKey(keys[i]), c = G.cellCenter(p.c, p.r);
+        if (typeof G.regionOf === 'function') regions[G.regionOf(p.c, p.r)] = 1;
+        for (k = 0; k < 4; k++) {
+          var x = c.x + (k & 1 ? 0.5 : -0.5), z = c.z + (k & 2 ? 0.5 : -0.5), key = x + ',' + z;
+          if (seen[key]) continue;
+          seen[key] = 1; corners.push([x, z]);
+          if (x < bx0) bx0 = x; if (x > bx1) bx1 = x; if (z < bz0) bz0 = z; if (z > bz1) bz1 = z;
+        }
+      }
+      /* the coast: each corner padded by a circle (8 points circumscribing radius FRAME.coast) */
+      var R = FRAME.coast / Math.cos(Math.PI / 8), pad = [];
+      for (i = 0; i < corners.length; i++) for (k = 0; k < 8; k++) {
+        var a = (k + 0.5) * Math.PI / 4;
+        pad.push([corners[i][0] + R * Math.cos(a), corners[i][1] + R * Math.sin(a)]);
+      }
+      var H = hull2(pad), Hc = hull2(corners.slice());
+      for (i = 0; i < H.length; i++) add(H[i][0], G.SAND_Y, H[i][1], 0);
+      for (i = 0; i < Hc.length; i++) add(Hc[i][0], b.top, Hc[i][1], 0);
+      FRAME.extras.forEach(function (e) { if (regions[e[3]]) add(e[0], e[1], e[2], e[4] ? 1 : 0); });
+      var near = FRAME.rockNear, sea = G.SEA_Y;
+      FRAME.rocks.forEach(function (r) {
+        if (r[0] < bx0 - near || r[0] > bx1 + near || r[1] < bz0 - near || r[1] > bz1 + near) return;
+        var rr = (r[2] + 0.2) / Math.cos(Math.PI / 8);
+        for (var j = 0; j < 8; j++) { var aa = (j + 0.5) * Math.PI / 4; add(r[0] + rr * Math.cos(aa), sea, r[1] + rr * Math.sin(aa), 2); }
+        add(r[0], sea + r[3], r[1], 2);
+      });
+    } else {
+      /* no grid: the padded bounds box */
+      [b.minX - FRAME.coast, b.maxX + FRAME.coast].forEach(function (x) {
+        [b.minZ - FRAME.coast, b.maxZ + FRAME.coast].forEach(function (z) { add(x, b.bottom, z, 0); add(x, b.top, z, 0); });
+      });
+    }
+    var n = pts.length, fr = { cx: b.cx, cz: b.cz, n: n, x: new Float64Array(n), y: new Float64Array(n), z: new Float64Array(n), cls: new Uint8Array(n) };
+    for (i = 0; i < n; i++) { fr.x[i] = pts[i][0]; fr.y[i] = pts[i][1]; fr.z[i] = pts[i][2]; fr.cls[i] = pts[i][3]; }
+    return fr;
+  }
+  /* the play fit for a frame (zero allocation). Sliding the target by δ along the ground away from the
+     camera lowers every point on screen by w = δ·sin(elev); s is the land centre's depth. Each point
+     must stay inside its window — x within ±m (rocks ±edge), y within [−m, m − 2·band] for the island
+     (free points and rocks up to +edge). The slide is the middle of the vertical slack at the smallest
+     s that fits (scaled by band / FRAME.band, so band 0 never slides: the plain, centred fit of the real
+     island), and the depth is the smallest that fits with that slide.
+     → out {depth: s, shift: δ, dist: s + δ·cos(elev) (the camera's distance from the slid target)} */
+  var _ff = {}, _fA = [0, 0, 0], _fB = [0, 0, 0], _fHi = [0, 0, 0], _fLo = [0, 0, 0], _fHx = [0, 0, 0];
+  function fitFrame(fr, yawDeg, elevDeg, aspect, band, out, fov, margin, near) {
+    out = out || {};
+    fov = fov || LIMITS.fov; aspect = aspect > 0 ? aspect : 16 / 9;
+    margin = margin == null ? LIMITS.margin : margin; near = near || LIMITS.near;
+    band = clamp(band || 0, 0, 0.4);
+    var B = basisInto(yawDeg, elevDeg, _ff), t = Math.tan(fov * DEG / 2), m = 1 - margin, e = FRAME.edge;
+    _fHi[0] = m - 2 * band; _fHi[1] = e; _fHi[2] = e;
+    _fLo[0] = m; _fLo[1] = m; _fLo[2] = e;
+    _fHx[0] = m; _fHx[1] = m; _fHx[2] = e;
+    _fA[0] = _fA[1] = _fA[2] = _fB[0] = _fB[1] = _fB[2] = -Infinity;
+    /* per class: A = max(u − hi·t·f) (the top edge), Bc = max(−u − lo·t·f) (the bottom edge) */
+    var Fx = -B.Dx, Fy = -B.Dy, Fz = -B.Dz, sH = near, i, c, ca, cb;
+    for (i = 0; i < fr.n; i++) {
+      var qx = fr.x[i] - fr.cx, qy = fr.y[i] - TARGET_Y, qz = fr.z[i] - fr.cz;
+      var f = qx * Fx + qy * Fy + qz * Fz, r = qx * B.Rx + qy * B.Ry + qz * B.Rz, u = qx * B.Ux + qy * B.Uy + qz * B.Uz;
+      c = fr.cls[i];
+      var h = Math.abs(r) / (_fHx[c] * t * aspect) - f;
+      if (h > sH) sH = h;
+      if (near * 2 - f > sH) sH = near * 2 - f;
+      var a = u - _fHi[c] * t * f, bb = -u - _fLo[c] * t * f;
+      if (a > _fA[c]) _fA[c] = a;
+      if (bb > _fB[c]) _fB[c] = bb;
+    }
+    /* the smallest depth with a free slide: every top edge against every bottom edge */
+    var s = sH;
+    for (ca = 0; ca < 3; ca++) for (cb = 0; cb < 3; cb++) {
+      if (_fA[ca] === -Infinity || _fB[cb] === -Infinity) continue;
+      var v = (_fA[ca] + _fB[cb]) / (t * (_fHi[ca] + _fLo[cb]));
+      if (v > s) s = v;
+    }
+    /* the slide's range there (w ≥ A − hi·t·s, w ≤ lo·t·s − Bc), its middle, scaled by the band */
+    var wLo = -Infinity, wHi = Infinity;
+    for (c = 0; c < 3; c++) {
+      if (_fA[c] !== -Infinity && _fA[c] - _fHi[c] * t * s > wLo) wLo = _fA[c] - _fHi[c] * t * s;
+      if (_fB[c] !== -Infinity && _fLo[c] * t * s - _fB[c] < wHi) wHi = _fLo[c] * t * s - _fB[c];
+    }
+    var w = isFinite(wLo) && isFinite(wHi) ? (wLo + wHi) / 2 : 0;
+    w *= FRAME.band > 0 ? clamp01(band / FRAME.band) : 0;
+    /* the smallest depth for that slide */
+    var d = sH;
+    for (c = 0; c < 3; c++) {
+      if (_fA[c] !== -Infinity && (_fA[c] - w) / (_fHi[c] * t) > d) d = (_fA[c] - w) / (_fHi[c] * t);
+      if (_fB[c] !== -Infinity && (w + _fB[c]) / (_fLo[c] * t) > d) d = (w + _fB[c]) / (_fLo[c] * t);
+    }
+    var se = Math.sin(elevDeg * DEG), ce = Math.cos(elevDeg * DEG);
+    out.depth = d;
+    out.shift = w / Math.max(0.05, se);
+    out.dist = d + out.shift * ce;
+    return out;
+  }
+  /* how much of FRAME.band a play view keeps at a zoom (1 up to zoom 1, 0 from 1.3) */
+  function bandAt(zoom) {
+    var z = FRAME.bandZoom, u = clamp01((zoom - z[0]) / (z[1] - z[0]));
+    return 1 - u * u * (3 - 2 * u);
   }
   /* world-space target change for a screen drag of (dx, dy) px: the content follows the finger */
   var _pb = {};
@@ -279,6 +422,9 @@
     this.orbitOn = false; this.orbitT = 0; this.orbitYaw = 0;
     this.shakeAmp = 0; this.shakeDur = 0; this.shakeT = 0;
     this.frozen = 0;           /* > 0: a finger is down, a skippable move holds still (s left) */
+    this.fr = null;            /* the play framing's points (frameOf) */
+    this.bandK = 1;            /* the skyline band's share: 1 in play, eases to 0 in edit / place */
+    this._fit = {}; this._fd = {}; this._fd2 = {}; this._sb = {}; this._zp = {}; this._zn = {}; this._zf = {};
     this.t = 0;
     this.pose = { px: 0, py: 0, pz: 0, tx: 0, ty: TARGET_Y, tz: 0, yaw: 0, elev: LIMITS.elevDefault, zoom: 1, dist: 10,
       fov: LIMITS.fov, aspect: this.aspect, near: LIMITS.near, far: LIMITS.far };
@@ -303,6 +449,7 @@
     var b = boundsOf(land), G = this.G;
     var fit = G && typeof G.fitCamera === 'function' ? G.fitCamera({ land: land, aspect: this.aspect, fov: this.lim.fov, yaw: 0, elev: this.lim.elevDefault }) : null;
     this.b = b;
+    this.fr = frameOf(land);
     this.home.tx = fit ? fit.target.x : b.cx; this.home.tz = fit ? fit.target.z : b.cz;
     this.home.yaw = 0; this.home.elev = this.lim.elevDefault; this.home.zoom = this.homeZoom();
     if (o.instant || !this._landSet) {
@@ -388,8 +535,14 @@
     if (Math.abs(z1 - z0) < 1e-6) return false;
     this._input();
     if (focus && isFinite(focus.x) && isFinite(focus.z)) {
-      g.tx = focus.x + (g.tx - focus.x) * (z0 / z1);
-      g.tz = focus.z + (g.tz - focus.z) * (z0 / z1);
+      /* where the point sits in the still view now, then the target moves so it sits there again (the
+         play framing's band and slide change with the zoom, so this is solved, not scaled) */
+      var fp = this._zf, fy = isFinite(focus.y) ? focus.y : TARGET_Y;
+      fp.x = focus.x; fp.y = fy; fp.z = focus.z;
+      var n = projectPose(fp, this._staticPose(g, this._zp), this._zn), nx = n.x, ny = n.y;
+      g.zoom = z1;
+      var at = n.depth > 0 ? groundAt(this._staticPose(g, this._zp), nx, ny, fy, this._zn) : null;
+      if (at) { g.tx += focus.x - at.x; g.tz += focus.z - at.z; }
     }
     g.zoom = z1;
     this.clampGoal();
@@ -601,6 +754,28 @@
     return this;
   };
 
+  /* the camera's distance from its target and the target's slide toward the city for a view (zero
+     allocation): the play framing (FRAME), blended to the plain v2 fit by a stage-cam move's k (mk, so
+     every move keeps its own pose) and the plain fit throughout on portrait phones → out {dist, slide} */
+  R._frameDist = function (yaw, elev, zoom, mk, out) {
+    var zk = Math.max(0.1, zoom), plain = fitDist(this.b, yaw, elev, this.aspect, this.lim.fov, this.lim.margin, this.lim.near) / zk;
+    out.dist = plain; out.slide = 0;
+    if (!this.fr || this.phone() || mk >= 1) return out;
+    var band = FRAME.band * this.bandK * bandAt(zoom) * (1 - mk);
+    var F = fitFrame(this.fr, yaw, elev, this.aspect, band, this._fit, this.lim.fov, this.lim.margin, this.lim.near);
+    out.slide = F.shift * (1 - mk);
+    out.dist = lerp(F.depth / zk + out.slide * Math.cos(elev * DEG), plain, mk);
+    return out;
+  };
+  /* the still pose of a view {tx, tz, yaw, elev, zoom} (no move, sway or shake) into out */
+  R._staticPose = function (v, out) {
+    var fd = this._frameDist(v.yaw, v.elev, v.zoom, 0, this._fd2), B = basisInto(v.yaw, v.elev, this._sb);
+    out.tx = v.tx - Math.sin(v.yaw * DEG) * fd.slide; out.ty = TARGET_Y; out.tz = v.tz - Math.cos(v.yaw * DEG) * fd.slide;
+    out.px = out.tx + B.Dx * fd.dist; out.py = out.ty + B.Dy * fd.dist; out.pz = out.tz + B.Dz * fd.dist;
+    out.yaw = v.yaw; out.elev = v.elev; out.zoom = v.zoom; out.dist = fd.dist; out.fov = this.lim.fov; out.aspect = this.aspect;
+    return out;
+  };
+
   /* ---------------- per frame (zero allocation) ---------------- */
   R.update = function (dt) {
     dt = dt > 0 ? Math.min(dt, 0.1) : 0;
@@ -626,6 +801,13 @@
       if (Math.abs(g.yaw - c.yaw) < STEP_EPS) c.yaw = g.yaw;
       if (Math.abs(g.elev - c.elev) < STEP_EPS) c.elev = g.elev;
       if (Math.abs(g.zoom - c.zoom) < STEP_EPS) c.zoom = g.zoom;
+    }
+    /* the skyline band follows the mode with the same easing as the tilt */
+    var bt = editing(this.mode) ? 0 : 1;
+    if (red) this.bandK = bt;
+    else if (this.bandK !== bt) {
+      this.bandK += (bt - this.bandK) * damp(dt, this._snapT > 0 ? this.lim.snapDamping : this.lim.damping);
+      if (Math.abs(bt - this.bandK) < STEP_EPS) this.bandK = bt;
     }
     /* the stage-cam move (a skippable one holds still while a finger is down) */
     var m = this.move, k = 0;
@@ -671,8 +853,9 @@
       if (sk <= 0 || red) this.shakeAmp = 0;
       else { tx += this.shakeAmp * sk * Math.sin(this.shakeT * 91); tz += this.shakeAmp * sk * Math.cos(this.shakeT * 77); }
     }
-    var p = this.pose, B = basisInto(yaw, elev, this._mk);
-    var dist = fitDist(this.b, yaw, elev, this.aspect, this.lim.fov, this.lim.margin, this.lim.near) / Math.max(0.1, zoom);
+    var p = this.pose, B = basisInto(yaw, elev, this._mk), fd = this._frameDist(yaw, elev, zoom, m ? k : 0, this._fd);
+    var dist = fd.dist;
+    tx -= Math.sin(yaw * DEG) * fd.slide; tz -= Math.cos(yaw * DEG) * fd.slide;      /* toward the city */
     p.tx = tx; p.ty = ty; p.tz = tz; p.yaw = yaw; p.elev = elev; p.zoom = zoom; p.dist = dist;
     p.px = tx + B.Dx * dist; p.py = ty + B.Dy * dist; p.pz = tz + B.Dz * dist;
     p.fov = this.lim.fov; p.aspect = this.aspect;
@@ -708,7 +891,7 @@
       mode: this.mode, yaw: Math.round(p.yaw * 10) / 10, elev: Math.round(p.elev * 10) / 10, zoom: Math.round(p.zoom * 100) / 100,
       dist: Math.round(p.dist * 100) / 100, target: [p.tx, p.ty, p.tz], move: this.move ? this.move.kind : null,
       frozen: this.frozen > 0, orbit: this.orbitOn, aspect: Math.round(this.aspect * 1000) / 1000, zoomMax: this.zoomMax(),
-      homeZoom: this.homeZoom(), phone: this.phone(), reduced: this.reduced
+      homeZoom: this.homeZoom(), phone: this.phone(), reduced: this.reduced, band: Math.round(this.bandK * 100) / 100
     };
   };
   R.dispose = function () { this._endMove(false); };
@@ -1053,9 +1236,10 @@
   }
 
   return {
-    VERSION: VERSION, LIMITS: LIMITS, SKYLINE: SKYLINE, TARGET_Y: TARGET_Y, DEG_PER_PX: DEG_PER_PX,
+    VERSION: VERSION, LIMITS: LIMITS, SKYLINE: SKYLINE, FRAME: FRAME, TARGET_Y: TARGET_Y, DEG_PER_PX: DEG_PER_PX,
     clamp: clamp, lerp: lerp, damp: damp, wrapDeg: wrapDeg,
-    boundsOf: boundsOf, fitDist: fitDist, basisInto: basisInto, panDelta: panDelta, panLimit: panLimit, backPanFor: backPanFor,
+    boundsOf: boundsOf, fitDist: fitDist, frameOf: frameOf, fitFrame: fitFrame, bandAt: bandAt,
+    basisInto: basisInto, panDelta: panDelta, panLimit: panLimit, backPanFor: backPanFor,
     isPhone: isPhone, zoomMaxFor: zoomMaxFor, homeZoomFor: homeZoomFor, orbitDip: orbitDip, topRayDeg: topRayDeg,
     skylineFit: skylineFit, projectPose: projectPose, groundAt: groundAt,
     Rig: Rig, Gesture: Gesture, Controls: Controls,

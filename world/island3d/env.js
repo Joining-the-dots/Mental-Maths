@@ -12,7 +12,8 @@
      var env = SLIslandEnv.create(K, SL3D, opts)       (also SL3D.makeEnv(opts) once the stage is ready)
        opts {scene, renderer, unlocked: ['home', …], world, placed, show: 0..1, member: '#RRGGBB', reduced,
              seed: the child's profile key (their own coastline), name: first name (the city's hero board),
-             terrain: false → the v1 tile ground, terrainMs: bake budget (60), city / life: false → skip them}
+             terrain: false → the v1 tile ground, terrainMs: bake budget (60), city / life: false → skip them,
+             lazyLand: true → no land (open water) until the first setLand, which is then the only bake}
      scene.add(env.group)                   sky, stars, clouds, sea, ground, scenery, dressing, buoys, pole,
                                             neon accents, cones, ambient halos, the city and the ambient life
      env.lights {hemi, sun}                 the ONLY lights; sun.target is in env.group
@@ -33,7 +34,8 @@
      env.setEdit(on)                        edit / place mode: the light eases to golden hour (k 0) for readability
      env.aim(point | null, {instant}?)      swing the 3 spot cones onto a point / release
      env.setConeMounts([{x, y, z}] | null)  cone lamps on e.g. the stage truss (P1); null = buoys + the pole
-     env.setMember(hex) · env.setUser({name, color}) · env.setSeed(seed) · env.setReduced(on) · env.setQuality(q)
+     env.setMember(hex) · env.setUser({name, color, seed}) · env.setReduced(on) · env.setQuality(q)
+     env.setSeed(seed)                      a new child's coastline: baked by the next setLand (their land), else after 0.5 s of frames
      env.invalidateShadows() · env.lockedAt(x, z) → region | null · env.heightAt(x, z) · env.wakeAt(x, z) → 0..1
      env.anchors (terrain anchors or null) · env.mode ('terrain' | 'tiles') · env.haloLayer · env.city · env.life
      env.info() → {calls, tris, instances, land, show, light, mode, bakeMs, layers: {name: {calls, tris}}}
@@ -74,18 +76,34 @@
   var PLINTH_DY = 0.002;       /* a plinth's top sits just over the terrace it covers */
   var RISE_FLOOR = 0.1;        /* rising land starts this far under the sea surface */
   var LOCKED_EDGE = 0.2;       /* v1 tiles: the hologram sandbar reaches this far beyond its cells */
-  var FIELD_PACK = { maxShore: 4, maxLocked: 2 };
+  var FIELD_PACK = { maxShore: 4, maxLocked: 2, maxOther: 1 };
   var FIELD = { w: 128, h: 80, x0: -16.125, z0: -10.125, texel: 0.25 };   /* = SLTerrain3D.FIELD (RGBA8) */
   var SEA_SIZE = 160, SKY_R = 90;
   var PLINTH_CAP = 16;
   var AIM_LIFT = 2.4, AIM_SEC = 0.3;
   var CONE_ALPHA_FACE = 0.6;   /* the open cone renders both faces: 0.2 × 0.6 per face ≈ the bible's 0.2 through the middle */
   var TERRAIN_MS = 60;         /* a bake slower than this (or one that throws) falls back to the v1 tiles */
+  var SEED_WAIT = 0.5;         /* s of frames a new seed waits for the profile switch's setLand before baking alone */
   var BAND_MAX = 5;            /* unlock rise bands (3 on LOW) */
   var EDIT_SEC = 0.6;          /* edit mode eases the light to golden hour over this */
   var HALO_CAP = 48;           /* the env-owned ambient halo layer (bollards, lamps, buoys, life3d's lanterns) */
-  /* the 'city wakes up' ripple: each light fades in 0.3 s, 40 ms per cell of distance from the home */
-  var WAKE = { perCell: 0.04, fade: 0.3 };
+  /* the 'city wakes up' ripple: each light fades in 0.3 s, 40 ms per cell of distance from the home.
+     settle: a ripple older than this has reached every light on the island (≤ 19 u from the home);
+     chain: the reversals inside one ripple wakeAt remembers exactly (a host toggles Showtime at most
+     about once a second; past 16 toggles in 1.2 s the oldest is folded in approximately) */
+  var WAKE = { perCell: 0.04, fade: 0.3, settle: 1.2, chain: 16 };
+  /* the sea (art-bible-v2 WATER; island-terrain-v2 §10). The wave lines follow the island's OWN coast
+     (field R) only, 0.3–1.6 u out (2–3 strokes), never round the quay, the islet or the stacks (field A:
+     foam only), at 0.6 × the v1 width. They calm toward Showtime — alpha 0.26 at golden hour (the bible's
+     0.35, softened) → 0.1, the stroke colour 60% of the way to the shallow water — and the shallows hug
+     the coast tighter at night (2.5 → 1.8 u), so the bay reads as dark glass under the city's light
+     pillars. Foam: the bible's 0.10 + 0.05·sin band on every shore; the broken second line on the
+     island's coast only, softer at Showtime. */
+  var SEA = {
+    spacing: 0.45, scroll: 0.04, bandIn: [0.3, 0.6], bandOut: [1.1, 1.6], clearOther: [0.2, 0.6],
+    waveW: 0.018, waveA: [0.26, 0.1], waveShowMix: 0.6, deepAt: [2.5, 1.8],
+    foamEdge: [0.1, 0.05], foam2: [0.7, 0.45]
+  };
   /* the golden ↔ blue-hour drift (P1): k_a = 0.12 − 0.12·cos(2πt / 420 s), starting at golden hour;
      reduced motion holds 0.12, edit mode eases to 0 */
   var DRIFT = { mid: 0.12, amp: 0.12, period: 420 };
@@ -153,7 +171,7 @@
 
   /* every periodic light / motion in this file (Hz) — all ≤ SLMotion.MAX_FLASH_HZ (test-enforced) */
   var FREQS = {
-    foamEdge: 1.3 / TAU, foamLine: 0.9 / TAU, waveBands: 0.04 / 0.45, glintMax: 1 / 1.6, spotRipple: 1.4 / TAU,
+    foamEdge: 1.3 / TAU, foamLine: 0.9 / TAU, waveBands: SEA.scroll / SEA.spacing, glintMax: 1 / 1.6, spotRipple: 1.4 / TAU,
     scanLines: 0.12, edgeDashes: 0.15, starTwinkle: 2 / TAU, coneSweep: 0.12, buoyBob: BUOY.hz, seaTint: 0.03,
     drift: 1 / DRIFT.period, ringBreathe: 0.25, plazaWave: 0.25, lagoonShimmer: 0.2, reflRipple: 1.2 / TAU, quayShimmer: 0.3
   };
@@ -406,8 +424,46 @@
   }
   function wakeEase(w) { return w * w * (3 - 2 * w); }
   function wakeDelay(x, z, home) { return WAKE.perCell * Math.hypot(x - home.x, z - home.z); }
+  /* the ripple as a short record of its toggles, so ANY light's level can be read at any delay with
+     no per-light state (env.wakeAt for the placed copies): {base (the settled level before the
+     first remembered toggle), on, t (s since the last toggle), n, segOn[], segDur[] (earlier
+     toggles)}. Each segment moves a light toward its target at wakeStep's rate once its delay has
+     passed, so a reversal mid-ripple carries every light on from where it is — the item lights never
+     pop back to golden hour (they used to read wakeLevel(t since the last toggle), which reset a
+     not-yet-reached light from 1 to 0 in one frame). */
+  function rippleNew(on) {
+    return { base: on ? 1 : 0, on: !!on, t: 1e3, n: 0, segOn: [], segDur: [] };
+  }
+  function rippleRun(w, on, since, delay, reduced) {
+    var run = reduced ? since / motion().SHOW_MIX_REDUCED_SEC : (since - (delay || 0)) / WAKE.fade;
+    if (!(run > 0)) return w;
+    return on ? Math.min(1, w + run) : Math.max(0, w - run);
+  }
+  /* a new ripple toward `on` (ignored when it is already the target) */
+  function rippleToggle(r, on) {
+    on = !!on;
+    if (on === r.on) return r;
+    if (r.t >= WAKE.settle) { r.base = r.on ? 1 : 0; r.n = 0; }       /* the running one has reached everything */
+    else {
+      if (r.n >= WAKE.chain) {                                         /* fold the oldest toggle (> 16 within 1.2 s) */
+        r.base = rippleRun(r.base, r.segOn[0], r.segDur[0], WAKE.settle / 2, false);
+        for (var i = 1; i < r.n; i++) { r.segOn[i - 1] = r.segOn[i]; r.segDur[i - 1] = r.segDur[i]; }
+        r.n--;
+      }
+      r.segOn[r.n] = r.on; r.segDur[r.n] = r.t; r.n++;
+    }
+    r.on = on; r.t = 0;
+    return r;
+  }
+  function rippleAdvance(r, dt) { if (dt > 0 && r.t < 1e3) r.t = Math.min(1e3, r.t + dt); return r; }
+  /* a light's eased level (0..1) for its delay; allocation-free */
+  function rippleLevel(r, delay, reduced) {
+    var w = r.base;
+    for (var i = 0; i < r.n; i++) w = rippleRun(w, r.segOn[i], r.segDur[i], delay, reduced);
+    return wakeEase(rippleRun(w, r.on, r.t, delay, reduced));
+  }
   /* the neon token colours (sRGB 0..1), resolved once */
-  var NEON_RGB = null, MEMBER_RGB = { hex: null, rgb: [1, 1, 1] };
+  var NEON_RGB = null, MEMBER_RGB = { raw: undefined, hex: null, rgb: [1, 1, 1] };
   function neonRgb() {
     if (NEON_RGB) return NEON_RGB;
     var L = look(), h = function (t) { return hexRgb(L.hex(t)); };
@@ -418,8 +474,12 @@
     };
     return NEON_RGB;
   }
+  /* the member colour as sRGB 0..1, parsed once per colour: the per-frame neon pass hands in the same
+     raw value every frame, so the RegExp / string work in normHex only runs when it changes */
   function memberRgb(member) {
+    if (member === MEMBER_RGB.raw && MEMBER_RGB.hex) return MEMBER_RGB.rgb;
     var L = look(), hx = L.normHex(member) || L.hex(L.MEMBER_FALLBACK || 'Bubblegum');
+    MEMBER_RGB.raw = member;
     if (hx !== MEMBER_RGB.hex) { MEMBER_RGB.hex = hx; MEMBER_RGB.rgb = hexRgb(hx); }
     return MEMBER_RGB.rgb;
   }
@@ -459,6 +519,28 @@
       default: return mixInto(out, N.off, 1, N.off, 1, 0, 1);
     }
   }
+
+  /* ---------------- the sea ---------------- */
+  function smoothstepJs(a, b, x) { var u = clamp01((x - a) / (b - a)); return u * u * (3 - 2 * u); }
+  /* the sea's per-light-mix numbers (uniforms) for light k → out {a, w, mix, deepAt, foam2} */
+  function seaWave(k, out) {
+    out = out || {};
+    k = clamp01(+k || 0);
+    out.a = SEA.waveA[0] + (SEA.waveA[1] - SEA.waveA[0]) * k;     /* the stroke opacity */
+    out.w = SEA.waveW;                                             /* half-width (u), the same at every k */
+    out.mix = SEA.waveShowMix * k;                                 /* how far the stroke colour sinks toward the shallows */
+    out.deepAt = SEA.deepAt[0] + (SEA.deepAt[1] - SEA.deepAt[0]) * k;
+    out.foam2 = SEA.foam2[0] + (SEA.foam2[1] - SEA.foam2[0]) * k;
+    return out;
+  }
+  /* where the wave lines may be drawn (the shader's `bands`, mirrored): sd = distance to the island's own
+     waterline, od = distance to the other shores (quay, islet, stacks) */
+  function waveBands(sd, od) {
+    return smoothstepJs(SEA.bandIn[0], SEA.bandIn[1], sd) * (1 - smoothstepJs(SEA.bandOut[0], SEA.bandOut[1], sd)) *
+      smoothstepJs(SEA.clearOther[0], SEA.clearOther[1], od == null ? 9 : od);
+  }
+  /* a GLSL float literal */
+  function glf(v) { var s = String(Math.round(v * 1e6) / 1e6); return /[.e]/.test(s) ? s : s + '.0'; }
 
   /* ---------------- cones, clouds, stars, shadows ---------------- */
   function coneAxis(i, t, reduced, out) {
@@ -535,7 +617,8 @@
       bottom: Math.max(-9, b.bottom - pad), top: Math.min(9, b.top + pad), near: 1, far: 45
     };
   }
-  /* the v1 shore / locked field resampled into the v2 RGBA8 layout (the tile fallback): R shore, G locked */
+  /* the v1 shore / locked field resampled into the v2 RGBA8 layout (the tile fallback): R shore, G locked,
+     A 255 (the v1 field has no other shores) */
   function fieldFromGrid(landArg) {
     var Gr = grid(), f = Gr.bakeField(landOf(landArg)), out = new Uint8Array(FIELD.w * FIELD.h * 4);
     for (var j = 0; j < FIELD.h; j++) {
@@ -546,6 +629,12 @@
         out[k + 2] = 0; out[k + 3] = 255;
       }
     }
+    return out;
+  }
+  /* open water everywhere (no shore, no hologram, no lagoon): the field of a lazy env before its land */
+  function openSeaField() {
+    var out = new Uint8Array(FIELD.w * FIELD.h * 4);
+    for (var k = 0; k < out.length; k += 4) { out[k] = 255; out[k + 1] = 255; out[k + 2] = 0; out[k + 3] = 255; }
     return out;
   }
   /* the unlock rise bands: the region's cells in rise order, sliced into n bands, each starting at its
@@ -604,7 +693,7 @@
     var _m = new T.Matrix4(), _m2 = new T.Matrix4(), _m3 = new T.Matrix4(), _q = new T.Quaternion(), _e = new T.Euler();
     var _p = new T.Vector3(), _s = new T.Vector3(), _v2 = new T.Vector3(), _ax = new T.Vector3();
     var _c = new T.Color(), _rim = new T.Color(), _up = new T.Vector3(0, 1, 0), _one = new T.Vector3(1, 1, 1), _nc = [0, 0, 0];
-    var _ca = {}, _cl = {}, _lr = {};
+    var _ca = {}, _cl = {}, _lr = {}, _sw = {};
     var WHITE = new T.Color(1, 1, 1);
 
     var state = {
@@ -612,11 +701,13 @@
       land: {}, sig: null, placed: [], psig: null, k: 0, kLight: -1, applied: false, exposure: 1, shadowDirty: true,
       member: opts.member || null, name: opts.name || '', seed: opts.seed != null ? String(opts.seed) : '',
       pr: 0, clear: new T.Color(-1, -1, -1), aimK: 0, aimTo: 0, motionDirty: true,
-      editK: 0, editTo: 0, editFrom: 0, editT: 0, wakeOn: false, wakeT: 1e3, waking: false, neonDirty: true, keyCal: keyCalibration(),
-      mode: opts.terrain === false ? 'tiles' : 'terrain', bakeMs: 0
+      editK: 0, editTo: 0, editFrom: 0, editT: 0, wakeOn: false, waking: false, neonDirty: true, keyCal: keyCalibration(),
+      mode: opts.terrain === false ? 'tiles' : 'terrain', bakeMs: 0,
+      seedDirty: false, seedWait: 0     /* a new child's coastline waits for the next setLand (their land) */
     };
     var blend = blendState(opts.show || 0);
     state.wakeOn = blend.k > 0.5;
+    var ripple = rippleNew(state.wakeOn);       /* the 'city wakes up' ripple (its t drives every light's delay) */
     var PT = presetTables(state.member), P = presetOut(PT);
     var rise = null, fieldFade = null, renderer = opts.renderer || null;
     var aimPt = new T.Vector3();
@@ -900,12 +991,12 @@
       var on = state.wakeOn, target = on ? 1 : 0, moving = false, k;
       for (k = 0; k < neonRecs.length; k++) {
         var r = neonRecs[k];
-        r.w = wakeStep(r.w, on, state.wakeT, r.delay, dt, state.reduced);
+        r.w = wakeStep(r.w, on, ripple.t, r.delay, dt, state.reduced);
         if (r.w !== target) moving = true;
       }
       for (k = 0; k < haloRecs.length; k++) {
         var h = haloRecs[k];
-        h.w = wakeStep(h.w, on, state.wakeT, h.delay, dt, state.reduced);
+        h.w = wakeStep(h.w, on, ripple.t, h.delay, dt, state.reduced);
         if (h.w !== target) moving = true;
       }
       state.waking = moving;
@@ -987,9 +1078,10 @@
     var seaU = T.UniformsUtils.merge([T.UniformsLib.fog, {
       uField: { value: null }, uFieldPrev: { value: null }, uFieldMix: { value: 1 },
       uFieldRect: { value: new T.Vector4(FIELD.x0, FIELD.z0, 1 / (FIELD.w * FIELD.texel), 1 / (FIELD.h * FIELD.texel)) },
-      uFieldMax: { value: new T.Vector2(FIELD_PACK.maxShore, FIELD_PACK.maxLocked) },
+      uFieldMax: { value: new T.Vector3(FIELD_PACK.maxShore, FIELD_PACK.maxLocked, FIELD_PACK.maxOther) },
       uTime: { value: 0 }, uShow: { value: 0 }, uGlints: { value: 1 }, uSpots: { value: 0 },
-      uSandReach: { value: 0 }, uLockedEdge: { value: 0 }, uHalf: { value: SEA_SIZE / 2 }, uWaveA: { value: 0.35 }, uWaveW: { value: 0.018 },
+      uSandReach: { value: 0 }, uLockedEdge: { value: 0 }, uHalf: { value: SEA_SIZE / 2 },
+      uWaveA: { value: SEA.waveA[0] }, uWaveW: { value: SEA.waveW }, uDeepAt: { value: SEA.deepAt[0] }, uFoam2: { value: SEA.foam2[0] },
       uShallow: { value: new T.Color() }, uDeep: { value: new T.Color() }, uFoam: { value: new T.Color() }, uWave: { value: new T.Color() },
       uLagoon: { value: new T.Color() }, uGlintCol: { value: new T.Color() },
       uSandbar: { value: new T.Color() }, uEdge: { value: new T.Color() }, uFogCol: { value: new T.Color() },
@@ -1089,10 +1181,13 @@
       skyU.uBand.value = 0.3 + (0.14 - 0.3) * k;               /* the Showtime city-glow band hugs the horizon (0–8°) */
       skyU.uHaloK.value = SUN_HALO.opacity * (1 - M.smoothstep(0, 0.6, k));
       setSRGB(seaU.uShallow.value, P.seaShallow); setSRGB(seaU.uDeep.value, P.seaDeep);
-      setSRGB(seaU.uFoam.value, P.foam); setSRGB(seaU.uWave.value, P.waveLine);
+      setSRGB(seaU.uFoam.value, P.foam);
       seaU.uLagoon.value.copy(seaU.uShallow.value).lerp(seaU.uFoam.value, 0.3);
       seaU.uGlintCol.value.copy(WHITE).lerp(skyU.uHaloCol.value, 1 - k);
-      seaU.uWaveA.value = 0.35 + 0.15 * k; seaU.uWaveW.value = 0.03 * (0.6 + 0.4 * k);
+      /* the wave lines calm toward Showtime: fainter, and their colour sinks toward the shallows */
+      seaWave(k, _sw);
+      setSRGB(seaU.uWave.value, P.waveLine).lerp(seaU.uShallow.value, _sw.mix);
+      seaU.uWaveA.value = _sw.a; seaU.uWaveW.value = _sw.w; seaU.uDeepAt.value = _sw.deepAt; seaU.uFoam2.value = _sw.foam2;
       seaU.uFogCol.value.copy(fog.color);
       seaU.uShow.value = k; seaU.uGlints.value = P.glints;
       starU.uAlpha.value = P.stars; starU.uZenith.value = 1 - M.smoothstep(0.2, 0.8, k);
@@ -1247,18 +1342,21 @@
       if (state.disposed) return null;
       o = o || {};
       if (unlocked == null && world) unlocked = world;
-      var land = landOf(unlocked == null ? ['home'] : unlocked), sig = landSig(land), changed = sig !== state.sig;
+      var land = landOf(unlocked == null ? ['home'] : unlocked), sig = landSig(land);
+      /* a new child's seed waiting for this call re-bakes even an unchanged land signature */
+      var reseed = state.seedDirty && state.sig !== null, changed = sig !== state.sig || reseed;
       var placed = world && Array.isArray(world.placed) ? world.placed : state.placed;
       if (changed) {
         var first = state.sig === null, oldBake = bake;
-        state.land = land; state.sig = sig; state.landFrame = state.frame;
+        state.land = land; state.sig = sig; state.landFrame = state.frame; state.seedDirty = false;
+        if (reseed) finishRise();
         var nb = bakeFor(land);
         if (nb) {
           writeField(nb.field.data);
           seaU.uSandReach.value = 0; seaU.uLockedEdge.value = 0;
           bake = nb;
-          /* a rise keeps the old ground on screen until its bands land; otherwise swap now */
-          if (!(o.rise && oldBake && !(o.reduced != null ? o.reduced : state.reduced))) showTerrain(nb);
+          /* a rise keeps the old ground on screen until its bands land (never another child's); otherwise swap now */
+          if (!(o.rise && oldBake && !reseed && !(o.reduced != null ? o.reduced : state.reduced))) showTerrain(nb);
           else pendingOld = oldBake;
         } else {
           writeField(fieldFromGrid(land));
@@ -1468,6 +1566,8 @@
       if (state.disposed) return false;
       dt = typeof dt === 'number' && dt > 0 ? Math.min(dt, 0.1) : 0;
       state.frame++;
+      /* a new seed that no setLand followed within SEED_WAIT of frames: its coastline on the current land */
+      if (state.seedDirty && (state.seedWait += dt) >= SEED_WAIT) setLand(state.land, null);
       if (!state.reduced) state.animT += dt;
       var busy = false;
       if (typeof showK === 'number' && isFinite(showK)) {
@@ -1484,7 +1584,9 @@
       }
       var kl = lightMix(blend.k, driftK(state.animT, state.reduced), state.editK);
       if (busy || Math.abs(kl - state.kLight) > 0.0015) applyLight(kl);
-      if (state.waking) { state.wakeT += dt; stepWake(dt); state.neonDirty = true; busy = true; }
+      /* the ripple clock runs every frame (env's own lights may settle before a far item's delay) */
+      rippleAdvance(ripple, dt);
+      if (state.waking) { stepWake(dt); state.neonDirty = true; busy = true; }
       if (rise) {
         rise.t += dt;
         if (rise.t >= rise.dur) finishRise(); else applyRise(rise.t);
@@ -1543,7 +1645,8 @@
     function setWake(on) {
       on = !!on;
       if (on === state.wakeOn) return;
-      state.wakeOn = on; state.wakeT = 0; state.waking = true; state.neonDirty = true;
+      rippleToggle(ripple, on);
+      state.wakeOn = on; state.waking = true; state.neonDirty = true;
     }
     function setQuality(q) {
       if (!q) return;
@@ -1623,17 +1726,17 @@
         if (u.name != null) { state.name = String(u.name); safeCall('city', function (c) { if (typeof c.setUser === 'function') c.setUser({ name: state.name, color: state.member }); }); }
         if (u.seed != null && String(u.seed) !== state.seed) env.setSeed(u.seed);
       },
-      /* a different child: their own coastline (re-bakes the current land) */
+      /* a different child: their own coastline. The bake waits for the next setLand — the profile
+         switch's sync, which brings the NEXT child's land (re-baking the previous child's land with the
+         new seed first was a wasted bake, and it used up one of the slow-bake rule's two cold-JIT
+         slots) — or, when no sync comes, for SEED_WAIT (0.5 s) of frames */
       setSeed: function (seed) {
         seed = seed == null ? '' : String(seed);
         if (seed === state.seed || state.disposed) return;
         state.seed = seed;
         if (state.mode !== 'terrain') return;
         finishRise();
-        var nb = bakeFor(state.land);
-        if (!nb) { writeField(fieldFromGrid(state.land)); rebuildTiles(); placePole(); invalidateShadows(); return; }
-        bake = nb; writeField(nb.field.data); fieldPrev.image.data.set(fieldCur.image.data);
-        showTerrain(nb); rebuildLayout(); fitShadows(); placePole(); invalidateShadows();
+        if (state.sig !== null) { state.seedDirty = true; state.seedWait = 0; }   /* a lazy env's first setLand bakes with it anyway */
       },
       setReduced: function (on) {
         state.reduced = !!on; state.motionDirty = true;
@@ -1644,7 +1747,8 @@
       invalidateShadows: invalidateShadows,
       lockedAt: function (x, z) { try { return Gr.lockedRegionAt(x, z, state.land, Gr.SAND_REACH); } catch (e) { return null; } },
       heightAt: heightAt,
-      wakeAt: function (x, z) { return wakeLevel(state.wakeT, wakeDelay(x, z, home), state.wakeOn, state.reduced); },
+      /* a placed copy's level in the ripple (reversal-safe: it never jumps, see rippleLevel) */
+      wakeAt: function (x, z) { return rippleLevel(ripple, wakeDelay(x, z, home), state.reduced); },
       info: function () {
         var all = layerInfo([group]), terr = layerInfo([terrainM]), scen = layerInfo([sceneryM]), lay = layerInfo([layoutM]);
         var inst = {};
@@ -1695,11 +1799,20 @@
 
     /* first state */
     applyLight(lightMix(blend.k, driftK(0, state.reduced), 0), true);
-    var startLand = opts.unlocked != null ? opts.unlocked : (opts.world || ['home']);
-    setLand(startLand, opts.world || null);
-    if (Array.isArray(opts.placed)) setPlaced(opts.placed);
+    if (opts.lazyLand) {
+      /* the controller syncs its view right after create: that first setLand is the ONLY bake (baking
+         a placeholder home-only coast here first was thrown away by that sync, and used up one of the
+         slow-bake rule's two cold-JIT slots). Until then: open water, the buoys and the pole. */
+      writeField(openSeaField()); fieldPrev.image.data.set(fieldCur.image.data);
+      if (state.mode === 'terrain') { buildNeon([]); buildHalos([]); }
+      placePole();
+    } else {
+      var startLand = opts.unlocked != null ? opts.unlocked : (opts.world || ['home']);
+      setLand(startLand, opts.world || null);
+      if (Array.isArray(opts.placed)) setPlaced(opts.placed);
+    }
     if (state.mode !== 'terrain') { seaU.uSandReach.value = Gr.SAND_REACH; seaU.uLockedEdge.value = LOCKED_EDGE; buildNeon([]); buildHalos([]); }
-    state.wakeT = 1e3; state.waking = false;              /* the first state is already awake (or asleep) */
+    ripple = rippleNew(state.wakeOn); state.waking = false;   /* the first state is already awake (or asleep) */
     city = mountExtra('city', 'SLCity3D', { seed: 'sl-city-v1' });
     life = mountExtra('life', 'SLLife3D', { haloLayer: halos, anchors: bake ? bake.anchors : null, terrain: bake });
     setQuality(quality);
@@ -1761,7 +1874,7 @@
     'uniform sampler2D uFieldPrev;',
     'uniform float uFieldMix;',
     'uniform vec4 uFieldRect;',
-    'uniform vec2 uFieldMax;',
+    'uniform vec3 uFieldMax;',
     'uniform float uTime;',
     'uniform float uShow;',
     'uniform float uGlints;',
@@ -1771,6 +1884,8 @@
     'uniform float uHalf;',
     'uniform float uWaveA;',
     'uniform float uWaveW;',
+    'uniform float uDeepAt;',
+    'uniform float uFoam2;',
     'uniform vec3 uShallow;',
     'uniform vec3 uDeep;',
     'uniform vec3 uFoam;',
@@ -1803,10 +1918,11 @@
     '  vec2 u = f * f * (3.0 - 2.0 * f);',
     '  return mix(mix(hash12(i), hash12(i + vec2(1.0, 0.0)), u.x), mix(hash12(i + vec2(0.0, 1.0)), hash12(i + vec2(1.0, 1.0)), u.x), u.y);',
     '}',
-    /* R = distance to the coast (u), G = signed distance to the locked future coast (u), B = lagoon */
-    'vec3 fieldAt(sampler2D tex, vec2 uv) {',
+    /* R = distance to the island's own coast (u), G = signed distance to the locked future coast (u),
+       B = lagoon, A = distance to the other shores: the quay wall, Lantern Islet, the rock stacks (u) */
+    'vec4 fieldAt(sampler2D tex, vec2 uv) {',
     '  vec4 t = texture2D(tex, uv);',
-    '  return vec3(t.r * uFieldMax.x, (t.g - 0.5) * 2.0 * uFieldMax.y, t.b);',
+    '  return vec4(t.r * uFieldMax.x, (t.g - 0.5) * 2.0 * uFieldMax.y, t.b, t.a * uFieldMax.z);',
     '}',
     /* a spotlight washing across the water from its buoy along the beam heading */
     'float streak(vec2 p, vec4 s) {',
@@ -1852,32 +1968,40 @@
     '#endif',
     'void main() {',
     '  vec2 uv = (vXZ - uFieldRect.xy) * uFieldRect.zw;',
-    '  vec3 fld = mix(fieldAt(uFieldPrev, uv), fieldAt(uField, uv), uFieldMix);',
-    '  float sd = max(fld.x - uSandReach, 0.0);',          /* distance from the waterline */
+    '  vec4 fld = mix(fieldAt(uFieldPrev, uv), fieldAt(uField, uv), uFieldMix);',
+    '  float sd = max(fld.x - uSandReach, 0.0);',          /* distance from the island's own waterline */
     '  float locked = fld.y - uLockedEdge;',               /* < 0 inside a locked region's future coast */
     '  float lagoon = fld.z;',
+    '  float od = fld.w;',                                 /* distance from the quay / islet / stacks (foam only) */
+    '  float fd = min(sd, od);',                           /* the nearest waterline of any kind */
     '  float aa = fwidth(sd) * 1.2 + 0.004;',
+    '  float aaF = fwidth(fd) * 1.2 + 0.004;',
     '  float aaL = fwidth(locked) * 1.2 + 0.004;',
-    /* body: shallow at the beach → deep, a paler lagoon in the coves, a slow tint drift */
-    '  vec3 col = mix(uShallow, uDeep, smoothstep(0.0, 2.5, sd));',
+    /* body: shallow at the island's beach → deep (tighter at Showtime), a paler lagoon in the coves,
+       a slow tint drift */
+    '  vec3 col = mix(uShallow, uDeep, smoothstep(0.0, uDeepAt, sd));',
     '  col = mix(col, uLagoon, lagoon * (0.5 + 0.08 * sin(uTime * 1.25 + vXZ.x * 0.7)));',
     '  col *= 0.95 + 0.1 * vnoise(vXZ * 0.33 + vec2(uTime * 0.03, -uTime * 0.02));',
     '  float inside = 1.0 - smoothstep(-aaL, aaL, locked);',
     '  float open = 1.0 - inside;',
-    /* wave-line bands following the shore, broken into strokes, scrolling outward at 0.04 u/s */
-    '  float q = (sd - 0.5) / 0.45 - uTime * (0.04 / 0.45);',
+    /* wave-line strokes following the island's OWN shore, near it only (SEA.bandIn → bandOut) and clear
+       of the other shores, scrolling outward at 0.04 u/s */
+    '  float q = (sd - 0.5) / ' + glf(SEA.spacing) + ' - uTime * (' + glf(SEA.scroll) + ' / ' + glf(SEA.spacing) + ');',
     '  float fq = fract(q);',
-    '  float dl = min(fq, 1.0 - fq) * 0.45;',
+    '  float dl = min(fq, 1.0 - fq) * ' + glf(SEA.spacing) + ';',
     '  float line = 1.0 - smoothstep(uWaveW - aa, uWaveW + aa, dl);',
     '  float dash = smoothstep(0.38, 0.58, vnoise(vXZ * 0.95 + vec2(floor(q + 0.5) * 3.7, 0.0)));',
-    '  float bands = smoothstep(0.3, 0.7, sd) * (1.0 - smoothstep(2.4, 3.3, sd));',
+    '  float island = smoothstep(' + glf(SEA.clearOther[0]) + ', ' + glf(SEA.clearOther[1]) + ', od);',
+    '  float bands = smoothstep(' + glf(SEA.bandIn[0]) + ', ' + glf(SEA.bandIn[1]) + ', sd) * (1.0 - smoothstep(' +
+      glf(SEA.bandOut[0]) + ', ' + glf(SEA.bandOut[1]) + ', sd)) * island;',
     '  col = mix(col, uWave, uWaveA * line * dash * bands * open);',
-    /* the foam: a breathing band hugging the organic coast plus a broken second line */
-    '  float edge = 0.12 + 0.06 * sin(uTime * 1.3 + sd * 9.0 + vnoise(vXZ * 1.1) * 3.0);',
-    '  float foam = 1.0 - smoothstep(edge - aa, edge + aa, sd);',
+    /* the foam: a breathing band hugging every waterline (0.10 + 0.05·sin), plus a broken second line
+       on the island's coast */
+    '  float edge = ' + glf(SEA.foamEdge[0]) + ' + ' + glf(SEA.foamEdge[1]) + ' * sin(uTime * 1.3 + fd * 9.0 + vnoise(vXZ * 1.1) * 3.0);',
+    '  float foam = 1.0 - smoothstep(edge - aaF, edge + aaF, fd);',
     '  float l2 = 0.3 + 0.04 * sin(uTime * 0.9 + vnoise(vXZ * 0.7 + 4.0) * 4.0);',
-    '  float foam2 = (1.0 - smoothstep(0.02 - aa, 0.02 + aa, abs(sd - l2))) * smoothstep(0.35, 0.6, vnoise(vXZ * 1.6 + 9.0));',
-    '  col = mix(col, uFoam, max(foam, foam2 * 0.7) * (1.0 - 0.4 * inside));',
+    '  float foam2 = (1.0 - smoothstep(0.02 - aa, 0.02 + aa, abs(sd - l2))) * smoothstep(0.35, 0.6, vnoise(vXZ * 1.6 + 9.0)) * island;',
+    '  col = mix(col, uFoam, max(foam, foam2 * uFoam2) * (1.0 - 0.4 * inside));',
     /* the boats' wakes (MID / HIGH) */
     '#ifndef ENV_LOW',
     '  float wake = boatWake(vXZ, uBoat[0]) + boatWake(vXZ, uBoat[1]) + boatWake(vXZ, uBoat[2]) + boatWake(vXZ, uBoat[3]);',
@@ -2025,8 +2149,8 @@
     TILE: TILE, SAND: SAND, CONE_BASE: CONE_BASE, CONE_GEO: CONE_GEO, BUOY: BUOY, POLE: POLE, CLOUDS: CLOUDS, CLOUD_SHAPE: CLOUD_SHAPE,
     CLOUD_SPAN: CLOUD_SPAN, CLOUD_EXTENT: CLOUD_EXTENT, STAR: STAR, STAR_TINTS: STAR_TINTS, FREQS: FREQS, FIELD_PACK: FIELD_PACK, FIELD: FIELD,
     ALT_DY: ALT_DY, PLINTH_DY: PLINTH_DY, RISE_FLOOR: RISE_FLOOR, LOCKED_EDGE: LOCKED_EDGE, SEA_SIZE: SEA_SIZE, SKY_R: SKY_R,
-    TERRAIN_MS: TERRAIN_MS, BAND_MAX: BAND_MAX, EDIT_SEC: EDIT_SEC, HALO_CAP: HALO_CAP, WAKE: WAKE, DRIFT: DRIFT, VIEW_ELEV: VIEW_ELEV,
-    ABUTMENT: ABUTMENT, SUN_HALO: SUN_HALO,
+    TERRAIN_MS: TERRAIN_MS, SEED_WAIT: SEED_WAIT, BAND_MAX: BAND_MAX, EDIT_SEC: EDIT_SEC, HALO_CAP: HALO_CAP, WAKE: WAKE, DRIFT: DRIFT, VIEW_ELEV: VIEW_ELEV,
+    ABUTMENT: ABUTMENT, SUN_HALO: SUN_HALO, SEA: SEA,
     /* pure helpers */
     landOf: landOf, regionsOf: regionsOf, landSig: landSig, placedSig: placedSig, landTiles: landTiles, plinths: plinths, skirtCells: skirtCells,
     dressing: dressing, polePosition: polePosition, surfaces: surfaces, hologramTokens: hologramTokens,
@@ -2035,8 +2159,10 @@
     litColor: litColor, keyCalibration: keyCalibration, neutralTone: neutralTone,
     blendState: blendState, blendTo: blendTo, blendStep: blendStep, driftK: driftK, lightMix: lightMix,
     wakeLevel: wakeLevel, wakeStep: wakeStep, wakeEase: wakeEase, wakeDelay: wakeDelay, neonColour: neonColour, slowBakeRule: slowBakeRule,
+    rippleNew: rippleNew, rippleToggle: rippleToggle, rippleAdvance: rippleAdvance, rippleLevel: rippleLevel,
+    seaWave: seaWave, waveBands: waveBands,
     coneAxis: coneAxis, cloudAt: cloudAt, starField: starField, sunBasis: sunBasis, shadowFit: shadowFit,
-    fieldFromGrid: fieldFromGrid, riseBands: riseBands,
+    fieldFromGrid: fieldFromGrid, openSeaField: openSeaField, riseBands: riseBands,
     SHADERS: { SKY_VERT: SKY_VERT, SKY_FRAG: SKY_FRAG, SEA_VERT: SEA_VERT, SEA_FRAG: SEA_FRAG, STAR_VERT: STAR_VERT, STAR_FRAG: STAR_FRAG, CONE_VERT: CONE_VERT, CONE_FRAG: CONE_FRAG }
   };
 

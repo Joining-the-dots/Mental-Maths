@@ -228,3 +228,16 @@ test('runtime-1: a copy whose per-uid state outlives the kit still dims the rebu
     assert.ok(Math.abs(on.color.r - 0.42) < 1e-6, 'and is dimmed on the next frame (got ' + on.color.r + ')');
   } finally { E.restore(); }
 });
+
+test('a kit dispose forgets the child: the next atlases are first drawn with no name until setUser', () => {
+  const E = setup();
+  try {
+    const { K, hub } = E;
+    mount(E, { name: 'Ava', color: '#FF5AA5' });
+    assert.equal(lastDrawn(K.ledAtlas().texture, NAMES), 'AVA');
+    hub.dispose();
+    /* before island3d's setUser for the next child, a fresh atlas must not paint the last one */
+    assert.notEqual(lastDrawn(K.ledAtlas().texture, NAMES), 'AVA', 'the new LED atlas never shows the previous child');
+    assert.notEqual(lastDrawn(K.signAtlas().texture, INITIALS), 'A', 'the new sign atlas never shows the previous initial');
+  } finally { E.restore(); }
+});

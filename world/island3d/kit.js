@@ -2656,6 +2656,7 @@
       instOutlines.clear(); colTmp.clear();
       INK = null; GOLD = null;
       shared.led = null; shared.sign = null;
+      shared.user = { name: '', color: null };      /* the next atlas never starts with the last child's name */
     }
 
     hub.kit = kit;

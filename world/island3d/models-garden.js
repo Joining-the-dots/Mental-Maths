@@ -1332,9 +1332,13 @@
       [0.885, LH.bands[1][0]], [0.86, LH.bands[1][1]], [0.74, 1], [0, 1]];
     var lhCfg = lampCfg('lighthouse'), lhShow = (LOOKS.lighthouse && LOOKS.lighthouse.show && LOOKS.lighthouse.show.beam) || {};
     var beamRps = lhShow.rps || 0.3, beamEvery = lhShow.every || 4, beamTok = lhShow.token || 'Lamp Halo';
-    var beamTokens = lhShow.tokens || NEON3, beamMatObj = null, beamCols = null, beamTmp = null, bc = {}, beamUp = perCopy(new Map());
+    var beamTokens = lhShow.tokens || NEON3, beamMatObj = null, beamBase = null, beamCols = null, beamTmp = null, bc = {}, beamUp = perCopy(new Map());
     function beamMat() {
+      /* factories run once per page: after a kit dispose the cached beam is rebuilt on the live kit */
+      var base = K0 && typeof K0.mat === 'function' ? K0.mat('glow:' + beamTok) : null;
+      if (beamMatObj && base !== beamBase) beamMatObj = null;
       if (!beamMatObj && K0 && typeof K0.variant === 'function') {
+        beamBase = base;
         beamMatObj = K0.variant('glow:' + beamTok, 'gardenBeam', { opacity: 0.32, visible: true, vertexColors: true });
         beamCols = { day: K0.col(beamTok), show: beamTokens.map(function (t) { return K0.col(t); }) };
         beamTmp = K0.col(beamTok);

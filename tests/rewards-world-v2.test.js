@@ -35,7 +35,7 @@ test('the light toggle is named by its action and the 2D island gets dusk + its 
   assert.match(SRC, /function lightAria\(\) \{ return esc\('Switch to '/);
   assert.match(SRC, /data-act="showtime"' \+ \(showtimeOn \? ' data-on="1"' : ''\) \+ ' aria-label="' \+ lightAria\(\)/);
   assert.ok(!/\(is3d \? '<button class="slw-btn" type="button" data-act="showtime"/.test(SRC), 'the toggle is not 3D-only');
-  assert.match(SRC, /\(is3d \? '' : ' dusk'\) \+ \(showtimeOn \? ' showtime' : ''\)/);
+  assert.match(SRC, /\(is3d \? '' : ' dusk'\) \+ \(showtimeOn \|\| \(!is3d && Date\.now\(\) < encoreUntil\) \? ' showtime' : ''\)/, 'a redraw during the 2D encore keeps the night layer');
 });
 
 test('reduced motion: no floating glyphs; LED tower shows change at most every 0.5 s and survive redraws', () => {

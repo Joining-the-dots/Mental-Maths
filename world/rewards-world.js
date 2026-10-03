@@ -477,7 +477,7 @@
     stopPets();
     var is3d = !!(use3D && stage3d);
     root.innerHTML =
-      '<div class="slw' + (mode !== 'play' ? ' slw-edit' : '') + (is3d ? '' : ' dusk') + (showtimeOn ? ' showtime' : '') + '">' +
+      '<div class="slw' + (mode !== 'play' ? ' slw-edit' : '') + (is3d ? '' : ' dusk') + (showtimeOn || (!is3d && Date.now() < encoreUntil) ? ' showtime' : '') + '">' +
         '<div class="slw-hud">' +
           '<button class="slw-learn" type="button" data-act="learn">Back to learning</button>' +
           '<div class="slw-pts" title="Your spendable points">⭐ <span id="slwPts">' + fmt(u.points) + '</span></div>' +
@@ -771,7 +771,6 @@
       case 'encore': {
         if (Date.now() < encoreUntil) return;
         encoreUntil = Date.now() + 8000;
-        go2d(el, '.slw-beam');
         var slw = root.querySelector('.slw');
         if (slw && !showtimeOn) {
           slw.classList.add('showtime');
@@ -865,7 +864,8 @@
       var cls = 'slw-cell' + (foot[ck] ? (chk.ok ? ' ok' : ' bad') : (o.reserved[ck] ? ' door' : ''));
       html += '<button type="button" class="' + cls + '" data-cx="' + x + '" data-cy="' + y + '" aria-label="Square ' + (x + 1) + ', ' + (y + 1) + '" style="left:' + pct(x * 100 + 3, STAGE_W) + ';top:' + pct(PAD + y * CH + 3, STAGE_H) + ';width:' + pct(94, STAGE_W) + ';height:' + pct(CH - 6, STAGE_H) + ';"></button>';
     });
-    var sp = ART.sprite(placing.id, artState(w));
+    /* the ghost wears the trim of the copy it becomes ('p' + nextUid is the uid C.place gives) */
+    var sp = ART.sprite(placing.id, bldState(artState(w), { id: placing.id, uid: placing.uid != null ? placing.uid : 'p' + w.nextUid }));
     if (sp) {
       var fw = it.fp[0], fh = it.fp[1], hUnits = sp.h * (fw * 100 / sp.w);
       html += '<div class="slw-ghost' + (chk.ok ? '' : ' bad') + '" style="left:' + pct(placing.x * 100, STAGE_W) + ';top:' + pct(PAD + (placing.y + fh) * CH - hUnits, STAGE_H) + ';width:' + pct(fw * 100, STAGE_W) + ';height:' + pct(hUnits, STAGE_H) + ';">' + sp.svg + '</div>';

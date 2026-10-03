@@ -12,31 +12,43 @@
          worldPos: Vector3 | [x, y, z] | {x, y, z} | Object3D (its world position). pos and opts are
          COPIED (models reuse scratch objects). kinds: sparkle sparkleRing heart note star confetti
          streamer dust splash drop bubble petal snow firework glow exhaust smoke trail glint dizzy
-         flight, and 'emote' (→ fx.emote). Unknown kinds play 'sparkle'.
+         flight, and 'emote' (→ fx.emote). Unknown kinds play 'sparkle'. Hearts belong to the
+         avatar's finger-heart only: 'heart' without opts.fingerHeart plays magenta ✦ sparkles.
          opts: {token | color ('#hex' | Color) | tokens[], member '#hex', size (u), cell (atlas name),
                 max (live cap for this kind), seed (bubbles follow SLMotion.bubbleTrack), pearl (holo
                 sheen; bubbles always have it), idle (no pop sparkle), reduced (force the reduced
                 variant), radius (ring / dust spread, u), dir [x, y, z] + dirSpeed [min, max] + cone
                 (rad), speed ×, life ×, up ×, to (flight target: a position in any form above),
-                dur (flight seconds, 0.5), delay (seconds before it sets off)}
+                dur (flight seconds, 0.5), delay (seconds before it sets off), fingerHeart}
          'flight' (an item put away → the tray): a gold sparkle that waits `delay`, then flies along
          a raised arc (flightAt) to `to` over `dur`, leaving a short trail; without `to` — or under
          reduced motion — it is a still sparkle at the emit point.
      fx.halo(key, on, pos, sizeU, token)     keyed additive glow billboard (K.billboards show pool:
                                              Showtime grows it 1 → 1.6× and 0.5 → 0.9 opacity)
+     fx.bloom(key, pos, {size, token}) → bool   a local halo bloom (the photo booth's lens, a screen
+                                             wipe): up over 0.25 s, down over 0.5 s, at most once per
+                                             FX.bloomGapSec (1.5 s) per key, ≤ 1.2 u, never under
+                                             reduced motion, never full-screen
      fx.decal(key, on, pos, token)           keyed additive light pool on the ground (r 0.7, 0.35)
+     fx.uplight(key, on, pos, token)         an emissive uplight pool under a lamp or sign (FX.uplight:
+                                             r 0.5, opacity 0.25 at golden hour → 0.4 at Showtime)
      fx.mark(key, on, pos, {cell, token|color, size, alpha, glow, flat, rot})   any keyed sprite
      fx.confetti({at?, n?, member?, tokens?, streamers?})   a burst at `at`, or (no at) cannons from
-                                             both screen edges; 40 % in the member colour, ≤ 120 alive
+                                             both screen edges: 55 % rectangles, 25 % ✦, 20 % curly
+                                             streamers; 40 % in the member colour, the rest Neon
+                                             Magenta / LED Cyan / Electric Violet / Bone White; no
+                                             hearts or circles; ≤ 120 alive
      fx.streamers({n?, member?})             curly ribbons drifting down across the view
-     fx.fireworks({at?, n = 3, height?})     soft sparkle-ring fireworks in the sky (no flash, no bang)
-     fx.emote(worldPos | Object3D, kind)     a speech bubble with heart | note | star | sparkle | dizzy
+     fx.fireworks({at?, n = 3, height?})     ring bursts with ✦ trails in the sky (no flash, no bang)
+     fx.emote(worldPos | Object3D, kind)     a dark-glass bubble with a neon rim and a note | star |
+                                             sparkle | dizzy icon ('fingerHeart' is the only heart)
      fx.shake(amp = 0.06, dur = 0.18)        decaying camera shake; never under reduced motion
-     fx.update(dt, camera) → animating       once per frame, after the camera rig (shake is applied to
-                                             camera.position and undone next frame; cannons and
-                                             firework rings use the camera's basis)
-     fx.setTier(tier) · fx.setQuality(q) · fx.setReduced(on) · fx.setMember(hex) · fx.clear()
-     fx.shakeOffset(outV3) · fx.info() · fx.dispose()
+     fx.update(dt, camera?, ctx?) → animating   once per frame, after the camera rig (shake is applied
+                                             to camera.position and undone next frame; cannons and
+                                             firework rings use the camera's basis); ctx {show,
+                                             camera} (the island's frame context) moves the uplights
+     fx.setShow(k) · fx.setTier(tier) · fx.setQuality(q) · fx.setReduced(on) · fx.setMember(hex) ·
+     fx.clear() · fx.shakeOffset(outV3) · fx.info() · fx.dispose()
 
    DRAWING: one particle mesh (InstancedBufferGeometry quads + a small ShaderMaterial on the kit's
    sparkle atlas), one keyed 'marks' mesh (decals, controller sprites, emote bubbles) with the SAME
@@ -46,8 +58,9 @@
    (splash rings, decals). Capacity per tier (LOW 128 / MID 256 / HIGH 512, halved by the adaptive
    'particles' step); confetti ≤ 120, bubbles ≤ 24, petals ≤ 40, snow 60/100/150. Everything is
    preallocated: the frame loop writes typed arrays and allocates nothing.
-   SAFETY: every shimmer / twinkle / flip is ≤ 2 Hz (MAX_FLASH_HZ); no full-screen flash; under
-   reduced motion particles become a few static sparkle fades (0.4 s), petals stop, no shake.
+   SAFETY: every shimmer / twinkle / flip is ≤ 2 Hz (MAX_FLASH_HZ); a bloom at most once per 1.5 s
+   per item; no full-screen flash; under reduced motion particles become a few static sparkle
+   fades (0.4 s), petals stop, no shake, no bloom.
    ================================================================ */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) {
@@ -71,7 +84,8 @@
   var FX_FALLBACK = {
     particles: { LOW: 128, MID: 256, HIGH: 512 }, snow: { LOW: 60, MID: 100, HIGH: 150 },
     confetti: 120, bubbles: 24, petals: 40, dustPuffs: 6, fireworkRings: 3, confettiMemberShare: 0.4,
-    haloSize: [0.5, 1.2], decal: { r: 0.7, opacity: 0.35 }, shake: { amp: 0.06, dur: 0.18 }
+    haloSize: [0.5, 1.2], decal: { r: 0.7, opacity: 0.35 }, uplight: { r: 0.5, day: 0.25, show: 0.4 },
+    shake: { amp: 0.06, dur: 0.18 }, bloomGapSec: 1.5
   };
   function fxConst() { var L = look(); return (L && L.FX) || FX_FALLBACK; }
 
@@ -79,19 +93,37 @@
   var ATLAS = { sparkle: 0, heart: 1, note: 2, star: 3, dot: 4, ring: 5, rect: 6, petal: 7, snow: 8, bubble: 9,
     puff: 10, circle: 11, curl: 12, diamond: 13, plus: 14, tri: 15 };
 
-  /* colour sets (palette / ART2D tokens only) */
+  /* colour sets (palette / v2 tokens only). Confetti: 40 % the member colour (spawn), the rest
+     these four; every LED-style set mixes ≥ 4 hues, none above 35 % */
   var TOKENS = {
-    sparkle: ['Star Gold', 'Cloud White', 'Holo Pink', 'Neon Cyan'],
-    neon: ['Neon Pink', 'Neon Cyan', 'Neon Violet', 'Star Gold'],
-    confetti: ['Neon Pink', 'Neon Cyan', 'Star Gold', 'Neon Lime', 'Neon Violet', 'Holo Pink', 'Holo Blue',
-      'Holo Mint', 'Bubblegum', 'Splash Blue'],
-    holo: ['Holo Pink', 'Holo Blue', 'Holo Mint', 'Holo Lemon']
+    sparkle: ['Star Gold', 'Bone White', 'Foil Pink', 'LED Cyan'],
+    neon: ['Neon Magenta', 'LED Cyan', 'Electric Violet', 'Laser Lime'],
+    confetti: ['Neon Magenta', 'LED Cyan', 'Electric Violet', 'Bone White'],
+    holo: ['Holo Pink', 'Holo Blue', 'Holo Mint', 'Holo Lemon'],
+    /* a 'heart' that is not the finger-heart plays these ✦ sparkles instead */
+    heartless: ['Neon Magenta', 'Foil Pink', 'Bone White']
   };
+  /* the confetti shape mix (by particle index, so every burst has the same shares) */
+  var CONFETTI_MIX = { rect: 0.55, sparkle: 0.25, curl: 0.2 };
+  var MIX_SLOTS = 20, MIX_PATTERN = (function () {
+    /* spread the shapes evenly over 20 slots: each slot takes the shape furthest behind its share */
+    var names = Object.keys(CONFETTI_MIX), have = {}, out = [];
+    names.forEach(function (n) { have[n] = 0; });
+    for (var k = 0; k < MIX_SLOTS; k++) {
+      var best = names[0], bestD = -Infinity;
+      names.forEach(function (n) { var d = CONFETTI_MIX[n] * (k + 1) - have[n]; if (d > bestD + 1e-9) { bestD = d; best = n; } });
+      have[best]++; out.push(best);
+    }
+    return out;
+  }());
+  function confettiCell(i) { return MIX_PATTERN[((i % MIX_SLOTS) + MIX_SLOTS) % MIX_SLOTS]; }
 
   /* ================================================================
      THE EMITTER TABLE (pure data)
        cells    atlas cells, picked per particle      glow   1 additive light · 0 paper (normal blend)
-       flat     lies on the ground / water            n      default count · per: particles per unit
+       mix      cells chosen by burst index from CONFETTI_MIX (exact shares) instead of at random
+       cellSize per-cell size multiplier              flat   lies on the ground / water
+       n        default count · per: particles per unit
        life     [min, max] s                          speed  [min, max] horizontal / radial u/s
        up       [min, max] vertical u/s (− falls)     spread sphere | ring | up | disc | fall | none
        jitter   start scatter radius u                g      gravity u/s² (− = buoyant) · drag 1/s
@@ -101,6 +133,7 @@
        cap      confetti | bubbles | petals | snow (shared live limits)
        reduced  'fade' (a static sparkle fade) | 'static' (its own cell, still, fading) | 'none'
        beh      track (SLMotion bubble) | orbit | hump (swell and shrink) | shell (firework launch)
+       trail    s between the ✦ trail sprites a moving particle leaves (MID/HIGH pools only)
      ================================================================ */
   var KINDS = {
     sparkle: { cells: ['sparkle'], glow: 1, n: 8, life: [0.55, 0.95], speed: [0.3, 0.9], up: [0.7, 1.5], spread: 'sphere',
@@ -108,26 +141,29 @@
       tokens: 'sparkle', reduced: 'static', reducedMax: 6 },
     sparkleRing: { cells: ['sparkle'], glow: 1, n: 12, life: [0.6, 0.8], speed: [1.4, 1.7], up: [0.1, 0.3], spread: 'ring',
       jitter: 0, g: 0.3, drag: 2.4, size: [0.14, 0.19], end: 0.35, spin: [-2, 2], twinkle: 1.5, alpha: 1,
-      tokens: ['Star Gold', 'Neon Cyan', 'Holo Pink'], reduced: 'static', reducedMax: 6 },
-    heart: { cells: ['heart'], glow: 0, n: 3, life: [0.9, 1.3], speed: [0.08, 0.28], up: [0.55, 0.85], spread: 'up',
-      jitter: 0.1, g: -0.15, drag: 1.2, size: [0.17, 0.23], end: 0.85, spin: [-0.5, 0.5], sway: [0.05, 1.1], pop: 1,
-      alpha: 1, tokens: ['Neon Pink', 'Bubblegum', 'Primary Pink'], reduced: 'static', reducedMax: 3 },
+      tokens: ['Star Gold', 'LED Cyan', 'Foil Pink'], reduced: 'static', reducedMax: 6 },
+    /* the finger-heart only (opts.fingerHeart): a neon heart glowing up from the hand */
+    heart: { cells: ['heart'], glow: 1, n: 1, life: [0.9, 1.3], speed: [0.04, 0.12], up: [0.45, 0.65], spread: 'up',
+      jitter: 0.04, g: -0.15, drag: 1.2, size: [0.17, 0.21], end: 0.9, spin: [-0.3, 0.3], sway: [0.03, 0.8], pop: 1,
+      alpha: 1, tokens: ['Neon Magenta', 'Foil Pink'], reduced: 'static', reducedMax: 1 },
     note: { cells: ['note'], glow: 0, n: 3, life: [0.9, 1.3], speed: [0.08, 0.28], up: [0.55, 0.85], spread: 'up',
       jitter: 0.1, g: -0.15, drag: 1.2, size: [0.17, 0.23], end: 0.85, spin: [-0.5, 0.5], sway: [0.06, 0.9], pop: 1,
-      alpha: 1, tokens: ['Neon Violet', 'Neon Cyan', 'Neon Pink'], reduced: 'static', reducedMax: 3 },
+      alpha: 1, tokens: ['Electric Violet', 'LED Cyan', 'Neon Magenta'], reduced: 'static', reducedMax: 3 },
     star: { cells: ['star'], glow: 0, n: 5, life: [0.7, 1.0], speed: [0.4, 1.0], up: [1.2, 1.9], spread: 'sphere',
       jitter: 0.08, g: 3.2, drag: 0.8, size: [0.14, 0.2], end: 0.5, spin: [-3, 3], pop: 1, alpha: 1,
-      tokens: ['Star Gold', 'Gold Light'], reduced: 'static', reducedMax: 4 },
-    confetti: { cells: ['rect', 'rect', 'tri', 'diamond', 'circle', 'heart', 'star'], glow: 0, n: 40, maxPerCall: 120,
+      tokens: ['Star Gold', 'Foil Gold'], reduced: 'static', reducedMax: 4 },
+    /* 55 % thin rectangles, 25 % ✦, 20 % curly streamers — never hearts or circles */
+    confetti: { cells: ['rect', 'sparkle', 'curl'], mix: 1, cellSize: { curl: 2.2 }, glow: 0, n: 40, maxPerCall: 120,
       life: [2.2, 3.2], speed: [0.8, 2.2], up: [2.8, 4.4], spread: 'sphere', jitter: 0.2, g: 3.2, drag: 1.5,
       size: [0.1, 0.15], end: 1, spin: [-4, 4], sway: [0.08, 1.2], flip: [1.0, 2.0], alpha: 1, tokens: 'confetti',
       member: 0.4, cap: 'confetti', reduced: 'fade', reducedMax: 8 },
     streamer: { cells: ['curl'], glow: 0, n: 10, maxPerCall: 40, life: [3.0, 4.0], speed: [0.1, 0.5], up: [-1.2, -0.6],
       spread: 'fall', jitter: 0.6, g: 1.2, drag: 0.8, size: [0.26, 0.36], end: 1, spin: [-1.2, 1.2], sway: [0.14, 0.6],
       flip: [0.5, 1.0], alpha: 1, tokens: 'confetti', member: 0.4, cap: 'confetti', reduced: 'fade', reducedMax: 6 },
+    /* small grey-violet puffs */
     dust: { cells: ['puff'], glow: 0, n: 6, life: [0.45, 0.65], speed: [0.9, 1.3], up: [0.15, 0.3], spread: 'ring',
-      jitter: 0, g: 0.3, drag: 3.5, size: [0.16, 0.22], end: 1.9, spin: [-0.6, 0.6], alpha: 0.75,
-      tokens: ['Cloud White', 'Pebble'], reduced: 'static', reducedMax: 3 },
+      jitter: 0, g: 0.3, drag: 3.5, size: [0.14, 0.2], end: 1.8, spin: [-0.6, 0.6], alpha: 0.7,
+      tokens: ['Concrete Light', 'Text Muted'], reduced: 'static', reducedMax: 3 },
     splash: { cells: ['ring'], glow: 0, flat: 1, n: 1, life: [0.55, 0.7], speed: [0, 0], up: [0, 0], spread: 'none',
       jitter: 0.05, g: 0, drag: 0, size: [0.3, 0.36], end: 3.6, spin: [0, 0], alpha: 0.85, tokens: ['Foam'],
       extra: 'drop', extraN: 2, reduced: 'static', reducedMax: 2 },
@@ -143,13 +179,14 @@
     snow: { cells: ['snow', 'sparkle'], glow: 1, n: 6, life: [1.8, 2.6], speed: [0.03, 0.12], up: [-0.25, 0.12],
       spread: 'sphere', jitter: 0.35, g: 0, drag: 1, size: [0.08, 0.12], end: 0.8, spin: [-0.8, 0.8], sway: [0.08, 0.5],
       twinkle: 0.8, alpha: 0.9, tokens: ['Cloud White', 'Holo Blue'], cap: 'snow', reduced: 'static', reducedMax: 4 },
+    /* ring bursts of ✦ that leave short ✦ trails */
     firework: { cells: ['sparkle'], glow: 1, n: 18, maxPerCall: 40, life: [1.0, 1.4], speed: [2.0, 2.4], up: [0, 0],
       spread: 'disc', jitter: 0, g: 0.5, drag: 1.6, size: [0.16, 0.22], end: 0.3, spin: [-2, 2], twinkle: 1.2, alpha: 1,
-      tokens: 'neon', reduced: 'fade', reducedMax: 6 },
+      tokens: 'neon', trail: 0.07, reduced: 'fade', reducedMax: 6 },
     shell: { cells: ['sparkle'], glow: 1, n: 1, life: [0.55, 0.55], speed: [0, 0], up: [0, 0], spread: 'none', jitter: 0,
       g: 0, drag: 0, size: [0.2, 0.2], end: 0.7, spin: [2, 2], alpha: 1, tokens: ['Star Gold'], beh: 'shell', reduced: 'none' },
     glow: { cells: ['dot'], glow: 1, n: 1, life: [0.45, 0.55], speed: [0, 0], up: [0, 0], spread: 'none', jitter: 0,
-      g: 0, drag: 0, size: [0.7, 0.8], end: 1.4, spin: [0, 0], alpha: 0.5, tokens: ['Cloud White'], beh: 'hump',
+      g: 0, drag: 0, size: [0.7, 0.8], end: 1.4, spin: [0, 0], alpha: 0.5, tokens: ['Bone White'], beh: 'hump',
       reduced: 'static', reducedMax: 1 },
     exhaust: { cells: ['puff'], glow: 0, n: 1, per: 3, life: [0.6, 0.9], speed: [0.15, 0.35], up: [0.3, 0.55],
       spread: 'sphere', jitter: 0.06, g: -0.2, drag: 2, size: [0.14, 0.2], end: 2.2, spin: [-0.8, 0.8], alpha: 0.8,
@@ -159,9 +196,9 @@
       tokens: ['Smoke', 'Cloud White'], reduced: 'none' },
     trail: { cells: ['sparkle'], glow: 1, n: 1, life: [0.25, 0.4], speed: [0, 0.12], up: [-0.05, 0.1], spread: 'sphere',
       jitter: 0.03, g: 0, drag: 2, size: [0.08, 0.12], end: 0.2, spin: [-1, 1], alpha: 0.9,
-      tokens: ['Star Gold', 'Cloud White'], reduced: 'none' },
+      tokens: ['Star Gold', 'Bone White'], reduced: 'none' },
     glint: { cells: ['sparkle'], glow: 1, n: 1, life: [0.5, 0.7], speed: [0, 0], up: [0, 0], spread: 'none', jitter: 0.02,
-      g: 0, drag: 0, size: [0.2, 0.26], end: 1, spin: [0.6, 1.2], alpha: 1, tokens: ['Cloud White', 'Gold Light'],
+      g: 0, drag: 0, size: [0.2, 0.26], end: 1, spin: [0.6, 1.2], alpha: 1, tokens: ['Bone White', 'Gold Light'],
       beh: 'hump', reduced: 'static', reducedMax: 1 },
     dizzy: { cells: ['star'], glow: 0, n: 3, life: [1.2, 1.2], speed: [0, 0], up: [0, 0], spread: 'none', jitter: 0,
       g: 0, drag: 0, size: [0.11, 0.11], end: 1, spin: [1.5, 1.5], orbit: [0.2, 0.9], alpha: 1, tokens: ['Star Gold'],
@@ -180,17 +217,18 @@
     var k = ALIAS[kind] || kind;
     return KINDS[k] && k !== 'shell' ? k : 'sparkle';
   }
+  /* hearts belong to the avatar's finger-heart: any other heart plays magenta ✦ sparkles */
+  function heartAllowed(o) { return !!(o && o.fingerHeart); }
 
-  /* emote bubbles: icon cell + colour per kind */
+  /* emote bubbles: icon cell + colour per kind ('fingerHeart' is the only heart) */
   var EMOTES = {
-    heart: { cell: 'heart', token: 'Neon Pink' }, note: { cell: 'note', token: 'Neon Violet' },
-    star: { cell: 'star', token: 'Star Gold' }, sparkle: { cell: 'sparkle', token: 'Neon Cyan' },
-    dizzy: { cell: 'star', token: 'Star Gold', spin: true }
+    note: { cell: 'note', token: 'Electric Violet' }, star: { cell: 'star', token: 'Star Gold' },
+    sparkle: { cell: 'sparkle', token: 'LED Cyan' }, dizzy: { cell: 'star', token: 'Star Gold', spin: true },
+    fingerHeart: { cell: 'heart', token: 'Neon Magenta' }
   };
-  var EMOTE_ALIAS = { love: 'heart', happy: 'heart', hearts: 'heart', music: 'note', sing: 'note', notes: 'note',
-    wow: 'star', stars: 'star', shine: 'sparkle', sparkles: 'sparkle', tumble: 'dizzy' };
-  function emoteOf(kind) { var k = EMOTE_ALIAS[kind] || kind; return EMOTES[k] ? k : 'heart'; }
-
+  var EMOTE_ALIAS = { love: 'star', happy: 'star', heart: 'star', hearts: 'star', music: 'note', sing: 'note', notes: 'note',
+    wow: 'star', stars: 'star', shine: 'sparkle', sparkles: 'sparkle', tumble: 'dizzy', fingerheart: 'fingerHeart' };
+  function emoteOf(kind) { var k = EMOTE_ALIAS[kind] || kind; return EMOTES[k] ? k : 'star'; }
   /* ---------------- maths ---------------- */
   function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
   function clamp01(v) { return v < 0 ? 0 : v > 1 ? 1 : v; }
@@ -253,10 +291,12 @@
     var reduced = !!o.reduced;
     var lifeMul = o.life > 0 ? o.life : 1, spMul = o.speed > 0 ? o.speed : 1, upMul = o.up > 0 ? o.up : 1;
     var cells = spec.cells;
-    out.cell = typeof o.cell === 'string' && ATLAS[o.cell] != null ? o.cell : cells[cells.length > 1 ? Math.floor(rnd() * cells.length) : 0];
+    out.cell = typeof o.cell === 'string' && ATLAS[o.cell] != null ? o.cell
+      : spec.mix ? confettiCell(i) : cells[cells.length > 1 ? Math.floor(rnd() * cells.length) : 0];
     out.glow = spec.glow ? 1 : 0; out.flat = spec.flat ? 1 : 0;
     out.life = range(spec.life, rnd) * lifeMul;
     out.size = (o.size > 0 ? o.size * (0.85 + 0.3 * rnd()) : range(spec.size, rnd));
+    if (spec.cellSize && spec.cellSize[out.cell]) out.size *= spec.cellSize[out.cell];   /* curly streamers are longer */
     out.end = spec.end; out.alpha = spec.alpha; out.pop = spec.pop ? 1 : 0;
     out.rot = rnd() * TAU; out.spin = range(spec.spin, rnd);
     out.swayA = spec.sway ? spec.sway[0] * (0.7 + 0.6 * rnd()) : 0;
@@ -513,9 +553,26 @@
   /* ================================================================
      create(K, SL3D, opts) → fx   (browser; THREE comes from K.THREE)
      ================================================================ */
-  var BEH = { none: 0, track: 1, orbit: 2, shell: 3, flight: 4 };
+  var BEH = { none: 0, track: 1, orbit: 2, shell: 3, flight: 4, trail: 5 };
   var KIND_NAMES = Object.keys(KINDS);
-  var MARK_CAP = 40, EMOTE_CAP = 8, EMOTE_SLOTS = 3;
+  /* emote bubbles take 4 sprites each: the dark-glass bubble, its neon rim, the tail, the icon */
+  var MARK_CAP = 40, EMOTE_CAP = 8, EMOTE_SLOTS = 4;
+  var BLOOM_CAP = 8, BLOOM_MAX = 1.2;
+
+  /* ---------------- the local halo bloom (pure) ----------------
+     a brightness swell at one item: up over 0.25 s, down over 0.5 s; −1 once it is over */
+  var BLOOM = { up: 0.25, down: 0.5 };
+  function bloomAt(t) {
+    if (!(t >= 0)) return 0;
+    if (t < BLOOM.up) return outQuad(t / BLOOM.up);
+    if (t < BLOOM.up + BLOOM.down) { var u = (t - BLOOM.up) / BLOOM.down; return 1 - u * u; }
+    return -1;
+  }
+  /* one bloom per item per gap (FX.bloomGapSec, 1.5 s): rapid re-taps never re-bloom */
+  function bloomAllowed(lastT, t, gap) {
+    var g = gap > 0 ? gap : (fxConst().bloomGapSec || FX_FALLBACK.bloomGapSec);
+    return lastT == null || !(t - lastT < g);
+  }
   var HALO_CAP = 48, QUEUE_CAP = 32;
 
   function create(K, SL3D, opts) {
@@ -544,7 +601,8 @@
     var _pick = { color: null, token: null, max: 0, idle: false, pearl: false };   /* per-particle colour / cap / idle / sheen */
     var _memberSave = new T.Color();
     var _popOpt = { size: 0.12, token: 'Cloud White', life: 0.8 };
-    var _fwOpt = { token: null, size: 0, radius: 0, speed: 0 }, _glowOpt = { token: null };
+    var _fwOpt = { token: null, size: 0, radius: 0, speed: 0, trail: true }, _glowOpt = { token: null };
+    var _trailOpt = { color: null }, _trailC = new T.Color();
     var _conOpt = { member: null, tokens: null, dir: null, dirSpeed: null, cone: 0.32, size: 0 };
     var _strOpt = { member: null, tokens: null };
     var _atArr = [0, 0, 0], _cannonDir = [0, 1, 0], CANNON_SPEED = [5.5, 8.0], STREAMER_SPEED = [4.0, 6.0];
@@ -744,7 +802,9 @@
 
     /* the emit core: kind index + position + count + (scratch-safe) opts */
     function emitAt(kind, x, y, z, n, o) {
-      var k = kindOf(kind), spec = KINDS[k], kindIdx = KIND_NAMES.indexOf(k);
+      var k = kindOf(kind), heartless = false;
+      if (k === 'heart' && !heartAllowed(o)) { k = 'sparkle'; heartless = true; }   /* hearts: the finger-heart only */
+      var spec = KINDS[k], kindIdx = KIND_NAMES.indexOf(k);
       var reduced = state.reduced || !!(o && o.reduced);
       var count = emitCount(k, n, reduced);
       if (!count) return 0;
@@ -766,7 +826,9 @@
         _eo.dir = _dir; _eo.cone = o.cone > 0 ? o.cone : 0.35;
         if (o.dirSpeed) { _dirSpeed[0] = o.dirSpeed[0]; _dirSpeed[1] = o.dirSpeed[1]; _eo.dirSpeed = _dirSpeed; }
       }
-      var tokens = o && Array.isArray(o.tokens) && o.tokens.length ? o.tokens : tokenList(spec);
+      var tokens = o && Array.isArray(o.tokens) && o.tokens.length ? o.tokens : heartless ? TOKENS.heartless : tokenList(spec);
+      /* ✦ trails behind a firework ring (the MID/HIGH pools have the room) */
+      var trails = !!spec.trail && !reduced && CAPS.particles >= 256 && !(o && o.trail === false);
       _pick.color = o && o.color ? o.color : null;
       _pick.token = o && !o.color && o.token ? o.token : null;
       _pick.max = o && o.max > 0 ? o.max : 0;
@@ -792,6 +854,7 @@
           if (P.beh[idx] === BEH.track) { P.a0[idx] = 0; writeParticle(idx); }     /* shown from the first step */
         }
         if (spec.beh === 'orbit') P.tmr[idx] = (i / count) * TAU;
+        if (trails && !(P.flags[idx] & F_STILL)) { P.beh[idx] = BEH.trail; P.tmr[idx] = 0; }
         if (spec.beh === 'flight') {
           if (!fly && P.beh[idx] === BEH.flight) P.beh[idx] = BEH.none;           /* no target: a still sparkle */
           if (P.beh[idx] === BEH.flight) {
@@ -874,6 +937,14 @@
           if (beh === BEH.shell) {
             P.tmr[i] += dt;
             if (P.tmr[i] >= 0.045) { P.tmr[i] = 0; emitAt('trail', P.pos[j], P.pos[j + 1], P.pos[j + 2], 1, null); }
+          } else if (beh === BEH.trail && age < P.life[i] * 0.6) {
+            /* a firework ✦ leaves a short ✦ trail in its own colour while it flies outward */
+            P.tmr[i] += dt;
+            if (P.tmr[i] >= KINDS.firework.trail) {
+              P.tmr[i] = 0;
+              _trailC.setRGB(P.rgb[j], P.rgb[j + 1], P.rgb[j + 2]); _trailOpt.color = _trailC;
+              emitAt('trail', P.pos[j], P.pos[j + 1], P.pos[j + 2], 1, _trailOpt);
+            }
           }
         }
         P.rot[i] += P.spin[i] * dt;
@@ -924,12 +995,38 @@
       _decalOpt.alpha = DECAL.opacity != null ? DECAL.opacity : 0.35;
       return markSet('decal:' + key, on, pos, _decalOpt);
     }
+    /* uplight pools (FX.uplight): r 0.5 under lamps and signs, 0.25 opacity at golden hour → 0.4 at
+       Showtime, following the island's Showtime mix (setShow / update ctx.show) */
+    var UPL = fxConst().uplight || FX_FALLBACK.uplight, uplights = new Map(), showK = 0;
+    var _upOpt = { cell: 'dot', token: null, size: 0, alpha: 0, glow: true, flat: true };
+    function writeUplight(u, key) {
+      _upOpt.token = u.token; _upOpt.size = UPL.r * 2 / 0.875; _upOpt.alpha = UPL.day + (UPL.show - UPL.day) * showK;
+      markSet(key, true, u, _upOpt);
+    }
+    function uplight(key, on, pos, token) {
+      if (state.disposed || key == null) return false;
+      key = 'up:' + key;
+      if (!on) { uplights.delete(key); return markSet(key, false); }
+      if (!readPos(pos, _v)) return false;
+      var u = uplights.get(key) || { x: 0, y: 0, z: 0, token: '' };
+      u.x = _v.x; u.y = _v.y; u.z = _v.z; u.token = token || 'Window Warm';
+      uplights.set(key, u);
+      writeUplight(u, key);
+      return marks.has(key);
+    }
+    function setShow(k) {
+      k = clamp01(+k || 0);
+      if (k === showK) return;
+      showK = k;
+      uplights.forEach(writeUplight);
+    }
 
-    /* emotes: a white bubble, a small tail and the icon, in fixed slots so the icon draws on top */
+    /* emotes: a dark-glass bubble with a neon rim, a small tail and the glowing icon, in fixed slots
+       so the icon draws on top */
     var EM = { alive: new Uint8Array(EMOTE_CAP), t: new Float32Array(EMOTE_CAP), cell: new Uint8Array(EMOTE_CAP),
       spin: new Uint8Array(EMOTE_CAP), pos: new Float32Array(EMOTE_CAP * 3), target: new Array(EMOTE_CAP), color: [] };
     for (var ei = 0; ei < EMOTE_CAP; ei++) { EM.color.push(new T.Color()); EM.target[ei] = null; }
-    var emoteN = 0, emoteNext = 0, WHITE = new T.Color(1, 1, 1);
+    var emoteN = 0, emoteNext = 0, GLASS = colorOf('Panel Glass');
     function emote(worldPos, kind) {
       if (state.disposed) return -1;
       var target = worldPos && worldPos.isObject3D ? worldPos : null;
@@ -963,10 +1060,11 @@
       var rot = EM.spin[e] && !state.reduced ? TAU * 0.5 * EM.t[e] : 0;      /* a dizzy star turns at 0.5 rev/s */
       /* the tail hangs below-left of the bubble on screen (camera right / up) */
       var tx = -0.05 * s, ty = -0.16 * s;
-      MK.write(base, x, y, z, 1, WHITE, a * 0.94, 0.38 * s, 0, ATL.circle, 0);
-      MK.write(base + 1, x + B.rx * tx + B.ux * ty, y + B.ry * tx + B.uy * ty, z + B.rz * tx + B.uz * ty, 1, WHITE,
-        a * 0.94, 0.13 * s, PI, ATL.tri, 0);
-      MK.write(base + 2, x, y, z, 1, EM.color[e], a, 0.24 * s, rot, EM.cell[e], 0);
+      MK.write(base, x, y, z, 1, GLASS, a * 0.85, 0.38 * s, 0, ATL.circle, 0);
+      MK.write(base + 1, x, y, z, 1, EM.color[e], a * 0.7, 0.38 * s, 0, ATL.ring, 1);
+      MK.write(base + 2, x + B.rx * tx + B.ux * ty, y + B.ry * tx + B.uy * ty, z + B.rz * tx + B.uz * ty, 1, GLASS,
+        a * 0.85, 0.13 * s, PI, ATL.tri, 0);
+      MK.write(base + 3, x, y, z, 1, EM.color[e], a, 0.24 * s, rot, EM.cell[e], 1);
     }
     function stepEmotes(dt) {
       if (!emoteN) return;
@@ -1005,6 +1103,45 @@
       halos.commit();
       return true;
     }
+    /* the local halo bloom (a lens flash, a screen wipe): at most once per FX.bloomGapSec per key,
+       ≤ 1.2 u, a smooth swell and fade (never a pop, never full-screen), none under reduced motion */
+    var blooms = new Map(), bloomLast = new Map();
+    function bloom(key, pos, o) {
+      if (state.disposed || key == null || state.reduced) return false;
+      key = String(key);
+      if (!bloomAllowed(bloomLast.get(key), state.t)) return false;
+      if (!readPos(pos, _v)) return false;
+      o = o || NOOPT;
+      var b = blooms.get(key);
+      if (!b) {
+        if (blooms.size >= BLOOM_CAP) return false;
+        var k = halos.alloc();
+        if (k < 0) return false;
+        b = { k: k, t0: 0, x: 0, y: 0, z: 0, size: 0, color: null };
+        blooms.set(key, b);
+      }
+      b.t0 = state.t; b.x = _v.x; b.y = _v.y; b.z = _v.z;
+      b.size = clamp(o.size > 0 ? o.size : 0.8, 0.2, BLOOM_MAX);
+      b.color = colorOf(o.token || o.color || 'Bone White');
+      bloomLast.set(key, state.t);
+      writeBloom(b, key);
+      return true;
+    }
+    function writeBloom(b, key) {
+      var e = bloomAt(state.t - b.t0);
+      if (e < 0) { halos.free(b.k); blooms.delete(key); return; }
+      halos.set(b.k, b.x, b.y, b.z, b.size * (0.6 + 0.4 * e), b.color, e, 0, 0);
+    }
+    function stepBlooms() {
+      if (!blooms.size) return;
+      blooms.forEach(writeBloom);
+      halos.commit();
+    }
+    function clearBlooms() {
+      blooms.forEach(function (b) { halos.free(b.k); });
+      blooms.clear();
+      halos.commit();
+    }
 
     /* ================================================================
        SHOWS — confetti cannons, streamers, fireworks (a small fixed queue)
@@ -1038,14 +1175,15 @@
       _sp.vx = 0; _sp.vz = 0; _sp.vy = h / FW.rise; _sp.life = FW.rise; _sp.x = 0; _sp.z = 0;
       addParticle(KIND_SHELL, _shellSpec, _sp, x, y, z, TOKENS.neon, null);
     }
-    /* one burst: an outer ring, a slower inner ring in another colour and a soft glow (never a flash) */
+    /* one burst: an outer ✦ ring with ✦ trails, a slower inner ring in another colour and a soft
+       glow (never a flash) */
     function burst(x, y, z, colIdx) {
       var big = CAPS.particles >= 256 ? 20 : 14, nn = TOKENS.neon.length;
-      _fwOpt.token = TOKENS.neon[colIdx % nn]; _fwOpt.size = 0; _fwOpt.speed = 0;
+      _fwOpt.token = TOKENS.neon[colIdx % nn]; _fwOpt.size = 0; _fwOpt.speed = 0; _fwOpt.trail = true;
       emitAt('firework', x, y, z, big, _fwOpt);
-      _fwOpt.token = TOKENS.neon[(colIdx + 2) % nn]; _fwOpt.size = 0.13; _fwOpt.speed = 0.5;
+      _fwOpt.token = TOKENS.neon[(colIdx + 2) % nn]; _fwOpt.size = 0.13; _fwOpt.speed = 0.5; _fwOpt.trail = false;
       emitAt('firework', x, y, z, Math.round(big * 0.45), _fwOpt);
-      _fwOpt.speed = 0;
+      _fwOpt.speed = 0; _fwOpt.trail = true;
       _glowOpt.token = TOKENS.neon[colIdx % nn];
       emitAt('glow', x, y, z, 1, _glowOpt);
     }
@@ -1179,15 +1317,20 @@
     /* ================================================================
        public API
        ================================================================ */
-    function update(dt, camera) {
+    /* camera: the island camera (or the frame clock, ignored); ctx: the island's frame context
+       {show, camera} — the uplights follow its Showtime mix */
+    function update(dt, camera, ctx) {
       if (state.disposed) return false;
       dt = dt > 0 ? Math.min(dt, 0.1) : 0;
       if (camera && camera.isCamera) state.camera = camera;
+      else if (ctx && ctx.camera && ctx.camera.isCamera) state.camera = ctx.camera;
+      if (ctx && typeof ctx.show === 'number') setShow(ctx.show);
       state.t += dt;
       try {
         if (Q.n) runQueue();
         stepParticles(dt);
         stepEmotes(dt);
+        stepBlooms();
         stepShake(dt, state.camera);
       } catch (e) {
         note('update', e);
@@ -1195,7 +1338,7 @@
       }
       P.spr.flush();
       MK.flush();
-      return P.n > 0 || emoteN > 0 || Q.n > 0 || shakeS.on;
+      return P.n > 0 || emoteN > 0 || Q.n > 0 || shakeS.on || blooms.size > 0;
     }
     function setTier(t) {
       var tt = parseTier(t);
@@ -1225,6 +1368,7 @@
         }
         Q.n = 0;
         shakeS.on = false; unshake();
+        clearBlooms();
       }
     }
     function clear() {
@@ -1232,12 +1376,14 @@
       P.spr.clear(); P.counts.fill(0);
       for (var e = 0; e < EMOTE_CAP; e++) if (EM.alive[e]) freeEmote(e);
       Q.n = 0;
+      clearBlooms();
     }
     function info() {
       return {
         tier: state.tier, capacity: P.cap, limit: Math.min(P.cap, CAPS.particles), alive: P.n,
         counts: { confetti: P.counts[1], bubbles: P.counts[2], petals: P.counts[3], snow: P.counts[4] },
-        caps: CAPS, halos: haloSlots.size, marks: marks.size, emotes: emoteN, queued: Q.n, shaking: shakeS.on,
+        caps: CAPS, halos: haloSlots.size, blooms: blooms.size, uplights: uplights.size, marks: marks.size, emotes: emoteN,
+        queued: Q.n, shaking: shakeS.on, show: showK,
         reduced: state.reduced, instances: P.spr.hi + MK.hi
       };
     }
@@ -1258,7 +1404,7 @@
 
     var fx = {
       group: group,
-      emit: emit, halo: halo, decal: decal, mark: markSet,
+      emit: emit, halo: halo, bloom: bloom, decal: decal, uplight: uplight, mark: markSet, setShow: setShow,
       confetti: confetti, streamers: streamers, fireworks: fireworks, emote: emote, shake: shake,
       update: update, setTier: setTier, setQuality: setQuality, setReduced: setReduced, setMember: setMember,
       clear: clear, info: info, dispose: dispose,
@@ -1279,6 +1425,8 @@
     alphaAt: alphaAt, sizeAt: sizeAt, flipAt: flipAt, integrate: integrate, holoAt: holoAt, emoteTrack: emoteTrack, flightAt: flightAt,
     FLIGHT_ARC: FLIGHT_ARC,
     shakeOffset: shakeOffset, fireworkPlan: fireworkPlan, cannonPlan: cannonPlan, rng: rng, safeHz: safeHz,
+    confettiCell: confettiCell, heartAllowed: heartAllowed, bloomAt: bloomAt, bloomAllowed: bloomAllowed,
+    CONFETTI_MIX: CONFETTI_MIX, MIX_PATTERN: MIX_PATTERN, BLOOM: BLOOM, BLOOM_MAX: BLOOM_MAX, EMOTE_SLOTS: EMOTE_SLOTS,
     SHADERS: { SPRITE_VERT: SPRITE_VERT, SPRITE_FRAG: SPRITE_FRAG }
   };
 

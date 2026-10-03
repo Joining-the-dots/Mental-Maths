@@ -431,7 +431,11 @@
     }
     return '<span class="slw-pc" data-pc="' + esc(id) + '"' + (pst ? ' data-st="' + esc(JSON.stringify(pst)) + '"' : '') + '>' + ART.icon(id, st) + '</span>';
   }
-  function fillPhotocards(el) { if (use3D && window.SLPhotocard && el) { try { SLPhotocard.fill(el); } catch (e) {} } }
+  function fillPhotocards(el) {
+    if (!use3D || !window.SLPhotocard || !el) return;
+    /* the studio rim is the current player's colour (cheap and idempotent; icons are keyed by it) */
+    try { if (SLPhotocard.setUser) SLPhotocard.setUser({ color: userInfo().color }); SLPhotocard.fill(el); } catch (e) {}
+  }
 
   /* ---------------- top-level render ---------------- */
   function render() {

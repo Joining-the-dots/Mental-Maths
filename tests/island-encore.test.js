@@ -170,7 +170,8 @@ const V2_HOOKS = ['dusk', 'sl-low', 'slw-ico', 'slg-ring', 'slw-hatch', 'slw-pea
   'slw-onair', 'slw-eq', 'slw-floor', 'slw-bean', 'slw-beam', 'slw-neon', 'slw-win'];
 /* hooks this sheet adds itself */
 const OWN_HOOKS = ['sparkle'];
-const ACT_HOOKS = ['slw-hatch', 'slw-pearls', 'slw-strip', 'slw-marquee', 'slw-onair', 'slw-eq', 'slw-floor', 'slw-bean', 'slw-beam'];
+/* the beams are not an act: they belong to .showtime (the toggle, or the 8 s encore) */
+const ACT_HOOKS = ['slw-hatch', 'slw-pearls', 'slw-strip', 'slw-marquee', 'slw-onair', 'slw-eq', 'slw-floor', 'slw-bean'];
 
 test('the stylesheet parses: balanced braces, no stray text', () => {
   assert.ok(rules.length > 180, 'expected a full stylesheet, got ' + rules.length + ' rules');
@@ -497,8 +498,10 @@ test('nothing loops faster than 2 Hz; UI chrome no faster than 0.5 Hz', () => {
     });
   }));
   assert.ok(loops >= 7, 'expected the looping animations to be found');
-  /* the beat-driven rings are clamped too */
-  assert.match(CSS, /animation-duration:\s*max\(0\.5s, var\(--slg-beat, 1s\)\)/);
+  /* the beat-driven rings are clamped too: the looping fallback ring is a beat pulse
+     (≤ 1.97 Hz), the shell's one-shot ring lives ≥ 0.5 s */
+  assert.match(CSS, /animation-duration:\s*max\(0\.51s, var\(--slg-beat, 1s\)\)/);
+  assert.ok(1 / 0.51 <= 1.97);
   assert.match(CSS, /animation-duration:\s*max\(0\.5s, calc\(var\(--slg-beat, 1s\) \* 0\.9\)\)/);
   /* the injected 2D label pulses are slowed to 0.5 Hz */
   assert.equal(declOf(baseRule('html body .slw-tag.play', (r) => /animation-duration/.test(r.body)), 'animation-duration'), '2s');
@@ -622,4 +625,190 @@ test('custom keyframes are all defined, and every @property is registered once',
   defined.forEach((n) => assert.ok(used.has(n), 'unused @keyframes ' + n));
   const props = blocks.filter((b) => /^@property /.test(b.head)).map((b) => b.head.split(/\s+/)[1]);
   assert.deepEqual(props, ['--sle-foil']);
+});
+
+/* ================================================================
+   review fixes: flash safety and the 2D fallback look (fix2/twod)
+   ================================================================ */
+/* specificity [ids, classes, types] — enough for this sheet (no ids) */
+function specificity(sel) {
+  const s = sel.replace(/:not\(([^)]*)\)/g, ' $1').replace(/::[\w-]+/g, ' pseudo');
+  return [(s.match(/#[\w-]+/g) || []).length, (s.match(/\.[\w-]+|\[[^\]]*\]|:[\w-]+/g) || []).length, (s.match(/(^|[\s>+~])[a-z][\w-]*/gi) || []).length];
+}
+/* does a plain descendant selector (tags + classes) match the last node of `chain`
+   (root → element, each {tag, cls: []})? */
+function matches(sel, chain) {
+  const parts = sel.trim().split(/\s+/).map((p) => ({ tag: (/^[a-z][\w-]*/i.exec(p) || [null])[0], cls: (p.match(/\.[\w-]+/g) || []).map((c) => c.slice(1)) }));
+  const ok = (p, n) => (!p.tag || p.tag === n.tag) && p.cls.every((c) => n.cls.indexOf(c) >= 0);
+  if (!ok(parts[parts.length - 1], chain[chain.length - 1])) return false;
+  let i = parts.length - 2;
+  for (let j = chain.length - 2; i >= 0 && j >= 0; j--) if (ok(parts[i], chain[j])) i--;
+  return i < 0;
+}
+/* the winning `prop` for that element: base rules, plus the reduced-motion block when asked
+   (higher specificity wins, then the later rule) */
+function cascade(chain, prop, reduced) {
+  const wins = (a, b) => { for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return a[i] > b[i]; return false; };
+  let best = null;
+  rules.forEach((r, order) => {
+    if (r.at.length && !(reduced && r.at.length === 1 && inReduced(r))) return;
+    const v = declOf(r, prop);
+    if (v === undefined) return;
+    selectorsOf(r).forEach((sel) => {
+      if (/[:>+~[]/.test(sel) || !matches(sel, chain)) return;
+      const key = specificity(sel).concat(order);
+      if (!best || wins(key, best.key)) best = { key, v };
+    });
+  });
+  return best ? best.v : undefined;
+}
+/* the stops of @keyframes `name` as sorted fractions with their blocks */
+function keyframes(name) {
+  const b = blocks.find((x) => x.head === '@keyframes ' + name);
+  assert.ok(b, 'no @keyframes ' + name);
+  const out = [];
+  for (const m of b.body.matchAll(/([^{}]+)\{([^}]*)\}/g)) {
+    m[1].split(',').map((k) => k.trim()).forEach((k) => out.push({ at: k === 'from' ? 0 : k === 'to' ? 1 : parseFloat(k) / 100, body: m[2] }));
+  }
+  return out.sort((a, b) => a.at - b.at);
+}
+/* CSS ease-in-out = cubic-bezier(0.42, 0, 0.58, 1) */
+function easeInOut(t) {
+  const bx = (s) => 3 * (1 - s) * (1 - s) * s * 0.42 + 3 * (1 - s) * s * s * 0.58 + s * s * s;
+  const by = (s) => 3 * (1 - s) * s * s + s * s * s;
+  let lo = 0, hi = 1;
+  for (let i = 0; i < 40; i++) { const m = (lo + hi) / 2; if (bx(m) < t) lo = m; else hi = m; }
+  return by((lo + hi) / 2);
+}
+/* the largest share of a `dur`-second fade (linear or ease-in-out) inside any `win` seconds */
+function maxShare(dur, win, ease) {
+  const f = ease === 'linear' ? (t) => t : easeInOut;
+  let best = 0;
+  for (let t = 0; t <= 1; t += 0.001) best = Math.max(best, f(Math.min(1, t + win / dur)) - f(t));
+  return best;
+}
+const colourStops = (v) => v.match(/rgba?\([^)]*\)|#[0-9a-f]{6}\b/gi) || [];
+
+test('count-in rings: the shell draws its own (≤ 1.97 Hz), so the CSS fallback loop stays off', () => {
+  assert.equal(declOf(baseRule('html body .slg .slg-count.slg-rings::after'), 'content'), 'none');
+  assert.ok(SHELL.indexOf("'slg-count slg-rings'") >= 0, 'the shell marks its count element');
+  assert.ok(/BEAT_PULSE_HZ = 1\.97/.test(SHELL), 'the shell caps ring onsets at the beat-pulse limit');
+});
+
+test('2D encore beams: lit only while .showtime is on; lifting it never replays an act (motion and reduced)', () => {
+  const chain = (slw, beam) => [{ tag: 'html', cls: [] }, { tag: 'body', cls: [] }, { tag: 'div', cls: ['slw', 'dusk'].concat(slw) },
+    { tag: 'div', cls: ['slw-stagewrap'] }, { tag: 'div', cls: ['slw-stage'] }, { tag: 'button', cls: ['slw-obj'] }, { tag: 'g', cls: ['slw-beam'].concat(beam) }];
+  const names = (c, red) => { const v = cascade(c, 'animation', red); return !v || v === 'none' ? [] : splitTop(v).map((l) => (/\bsle[A-Z]\w*/.exec(l) || [])[0]).filter(Boolean); };
+  for (const red of [false, true]) {
+    const tag = red ? 'reduced: ' : '', rest = chain([], []), encore = chain(['showtime'], ['go']), after = chain([], ['go']);
+    assert.equal(cascade(rest, 'opacity', red), '0', tag + 'dark at golden hour');
+    assert.equal(cascade(encore, 'opacity', red), '0.8', tag + 'lit during the encore');
+    assert.equal(cascade(after, 'opacity', red), '0', tag + 'dark again once the encore lifts .showtime');
+    /* the encore → after step: an animation name that was not running starts again (a replay) */
+    const restart = names(after, red).filter((n) => names(encore, red).indexOf(n) < 0);
+    assert.deepEqual(restart, [], tag + 'nothing starts when .showtime lifts');
+    if (red) assert.deepEqual(names(encore, red), [], 'reduced: the beams hold still');
+    else assert.deepEqual(names(encore, red), ['sleBeam'], 'the Showtime sweep');
+  }
+  /* the cascade helper itself: the injected-style tie-break picks the later, more specific rule */
+  assert.equal(cascade(chain(['showtime'], []), 'animation', false), 'sleBeam 4s ease-in-out infinite alternate');
+});
+
+test('no steps() flicker: every stepped layer switches ≤ LED_CHASE_HZ 1.5; the EQ moves smoothly', () => {
+  let stepped = 0;
+  rules.filter((r) => !inReduced(r)).forEach((r) => decls(r.body).filter((d) => d.prop === 'animation').forEach((d) => splitTop(d.value).forEach((layer) => {
+    const st = /steps\((\d+)/.exec(layer);
+    if (!st) return;
+    stepped++;
+    const name = (/\bsle[A-Z]\w*/.exec(layer) || [])[0], dur = sec((layer.match(/(^|\s)(\d*\.?\d+m?s)\b/) || [])[2]);
+    const segs = new Set(keyframes(name).map((k) => k.at)).size - 1;
+    /* a change every dur / (segs × n) s, and an on + an off make one flash */
+    const hz = segs * +st[1] / (2 * dur);
+    assert.ok(hz <= 1.5 + 1e-9, r.selector + ': ' + name + ' switches at ' + hz.toFixed(2) + ' Hz');
+  })));
+  assert.ok(stepped >= 1, 'the floor chase is still stepped (never full contrast)');
+  /* the EQ eases between heights; a bar pixel lights and darkens once per peak */
+  const eq = declOf(baseRule('html body .slw-eq.go'), 'animation');
+  assert.ok(!/steps\(/.test(eq), 'the EQ eases between heights: ' + eq);
+  const ys = keyframes('sleEq').map((k) => +(/scaleY\(([\d.]+)\)/.exec(k.body) || [])[1]);
+  const peaks = ys.filter((y, i) => i > 0 && i < ys.length - 1 && y > ys[i - 1] && y > ys[i + 1]).length, cycle = sec(eq.split(/\s+/)[1]);
+  assert.ok(peaks >= 2, 'still an EQ, not a pump');
+  assert.ok(peaks / cycle <= 1.5, 'EQ: ' + peaks + ' peaks per ' + cycle + ' s = ' + (peaks / cycle).toFixed(2) + ' Hz');
+});
+
+test('2D Showtime: the stage night layer always exists and only fades, so no 0.5 s window moves luminance > 0.2', () => {
+  const ART = require('../world/world-art.js').SLWorldArt;
+  const STAGE = 'html body .slw-stagewrap:not(.slw-is3d) .slw-stage';
+  const base = (p) => baseRule(STAGE + p, (r) => /content:/.test(r.body));
+  for (const p of ['::before', '::after']) {
+    const r = base(p);
+    assert.ok(r, p + ': the layer exists without .showtime / .dusk (adding the class must not create a box)');
+    assert.equal(declOf(r, 'content'), '""');
+    assert.equal(declOf(r, 'opacity'), '0');
+    const tr = /^opacity (\d*\.?\d+m?s) (linear|ease-in-out)$/.exec(declOf(r, 'transition') || '');
+    assert.ok(tr && sec(tr[1]) >= 0.6, p + ' fades its opacity over ≥ 0.6 s: ' + declOf(r, 'transition'));
+    /* no media block shortens it (under reduced motion a fade is still a fade, not motion) */
+    rules.filter((x) => x.at.length && selectorsOf(x).some((s) => s.indexOf('.slw-stage' + p) >= 0)).forEach((x) => assert.ok(!/transition/.test(x.body), p + ' shortened in ' + x.at.join(' ')));
+  }
+  /* the class toggles change opacity, nothing else */
+  for (const sel of ['html body .slw.showtime .slw-stagewrap:not(.slw-is3d) .slw-stage::after', 'html body .slw.dusk .slw-stagewrap:not(.slw-is3d) .slw-stage::before']) {
+    const r = rules.find((x) => !x.at.length && x.selector === sel);
+    assert.ok(r, sel);
+    assert.deepEqual(decls(r.body).map((d) => d.prop + ':' + d.value), ['opacity:1'], sel + ' toggles opacity only');
+  }
+  /* luminance: the night layer over every 2D backdrop — the dusk sky stops, world-art's dusk
+     bay, turf and dune — under the golden-hour haze, worst-case pairings */
+  const art = ART.defs();
+  const grad = (id) => {
+    const m = new RegExp('id="' + id + '"[\\s\\S]*?</linearGradient>').exec(art);
+    assert.ok(m, 'world-art defines ' + id);
+    return (m[0].match(/stop-color="#[0-9a-f]{6}"/gi) || []).map((x) => x.slice(12, 19));
+  };
+  const grounds = colourStops(declOf(baseRule('html body .slw-stagewrap:not(.slw-is3d)'), 'background')).concat(grad('slwSeaDusk'), grad('slwTurf'), ['#E9C9A0']);
+  const paint = (p) => colourStops(declOf(baseRule(STAGE + p, (r) => /background/.test(r.body)), 'background'));
+  const haze = paint('::before'), night = paint('::after');
+  assert.ok(grounds.length >= 8 && haze.length === 3 && night.length === 3);
+  const tr = /^opacity (\d*\.?\d+m?s) (linear|ease-in-out)$/.exec(declOf(base('::after'), 'transition'));
+  const dur = sec(tr[1]), share = maxShare(dur, 0.5, tr[2]);
+  /* (an ease-in-out fade of the same length would put 51% of the change in its steepest 0.5 s) */
+  assert.ok(Math.abs(maxShare(1.6, 0.5, 'ease-in-out') - 0.507) < 0.01 && Math.abs(maxShare(1.6, 0.5, 'linear') - 0.3125) < 0.002);
+  let worst = 0, at = '';
+  grounds.forEach((g) => haze.forEach((h) => night.forEach((n) => {
+    const gold = over(h, solid(g)), show = over(n, gold), d = Math.abs(lum(gold) - lum(show));
+    if (d > worst) { worst = d; at = g + ' under ' + n; }
+  })));
+  assert.ok(worst * share <= 0.2, 'golden hour → Showtime: ' + worst.toFixed(3) + ' in all (' + at + '), ' + (worst * share).toFixed(3) + ' in the steepest 0.5 s of the ' + dur + ' s fade');
+  /* the lit windows and the neon glow fade too; the 2D .slw always carries .dusk, and
+     Showtime's brighter window fill still wins over it */
+  assert.match(declOf(baseRule('html body .slw-win', (r) => /transition/.test(r.body)), 'transition'), /^fill 0\.6s/);
+  const win = (slw) => [{ tag: 'html', cls: [] }, { tag: 'body', cls: [] }, { tag: 'div', cls: ['slw'].concat(slw) }, { tag: 'div', cls: ['slw-stage'] }, { tag: 'rect', cls: ['slw-win'] }];
+  assert.equal(cascade(win(['dusk']), 'fill', false), '#FFD08A', 'Window Warm at golden hour');
+  assert.equal(cascade(win(['dusk', 'showtime']), 'fill', false), '#FFE9A8', 'Showtime lights the windows over the dusk default');
+  assert.match(declOf(baseRule('html body .slw-neon', (r) => /transition/.test(r.body)), 'transition'), /^filter 0\.6s/);
+});
+
+test('2D island: a Dusk Zenith sky replaces the injected v1 sky blue, horizon on the island art', () => {
+  const r = baseRule('html body .slw-stagewrap:not(.slw-is3d)');
+  assert.ok(r, 'a 2D stage background rule');
+  const bg = declOf(r, 'background');
+  assert.ok(/#2B1E5C/i.test(bg) && /#6A3D8F/i.test(bg) && /#FF9A7A/i.test(bg), 'Dusk Zenith → Dusk Mid → Dusk Horizon: ' + bg);
+  assert.ok(!/#7fd6ff/i.test(CSS.replace(/\/\*[\s\S]*?\*\//g, '')), 'no v1 sky blue here');
+  /* the horizon sits where the island art starts: PAD 80 above ROWS × 78 */
+  const C = require('../world/world-core.js');
+  const horizon = (80 / (C.ROWS * 78 + 80) * 100).toFixed(1);
+  assert.ok(new RegExp('#FF9A7A ' + horizon + '%, #1E3F86 ' + horizon + '%', 'i').test(bg), 'horizon at ' + horizon + '%: ' + bg);
+  /* it beats the injected `.slw-stagewrap{…background:#7fd6ff}` (+0,1,0) while that exists */
+  if (/\.slw-stagewrap\{[^}]*#7fd6ff/.test(RW)) assert.ok(specificity(r.selector)[1] > 1 && specificity(r.selector)[2] >= 2);
+});
+
+test('reduced motion: a floating tap glyph (.slw-fx) fades in place, no rise, no scale', () => {
+  const r = rules.find((x) => inReduced(x) && selectorsOf(x).indexOf('html body .slw-fx') >= 0 && /animation/.test(x.body));
+  assert.ok(r, 'a reduced-motion rule for .slw-fx');
+  const anim = declOf(r, 'animation'), name = (/\bsle[A-Z]\w*/.exec(anim) || [])[0];
+  assert.ok(anim === 'none' || name, anim);
+  if (name) assert.ok(!/transform/.test(blocks.find((b) => b.head === '@keyframes ' + name).body), name + ' moves nothing');
+  const tf = declOf(r, 'transform');
+  assert.ok(tf && !/scale|rotate/.test(tf), 'a still transform: ' + tf);
+  /* what it replaces: the injected float (it out-ranks .slw-fx at +0,1,2) */
+  if (/\.slw-fx\{/.test(RW)) assert.match(RW, /\.slw-fx\{[^}]*animation:slwFloat/);
 });

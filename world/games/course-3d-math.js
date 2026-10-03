@@ -622,8 +622,9 @@
   /* curtain cover 0..1 over 1.0 s (instant under reduced motion) */
   function curtainK(endT, reduced) { return reduced ? 1 : inOutSine(endT / VIEW.CURTAIN_T); }
 
-  /* the in-world sticker for an event (row in the sticker atlas) */
-  var STICKERS = ['PERFECT!', 'GREAT', 'BOING!', '+3', '+6', '+9', '+12', 'CLEAN STAGE +25'];
+  /* the in-world sticker for an event (row in the sticker atlas). Row 2 is the cushion
+     bounce: 'BOUNCE!', the HUD's word (the v2 copy voice bans 'boing') */
+  var STICKERS = ['PERFECT!', 'GREAT', 'BOUNCE!', '+3', '+6', '+9', '+12', 'CLEAN STAGE +25'];
   function snackSticker(mult) { return 3 + clamp((mult | 0) - 1, 0, 3); }
 
   /* ================================================================

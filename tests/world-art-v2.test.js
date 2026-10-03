@@ -69,32 +69,49 @@ const V1_IDS = ['house_cottage', 'att_course', 'pet_puppy', 'wall_cream', 'roof_
   'ball_classic', 'ball_rainbow', 'ball_planet', 'ball_gold', 'stadium_day', 'stadium_night', 'stadium_beach', 'stadium_snow', 'kart_red', 'kart_blue', 'kart_lime', 'kart_unicorn',
   'kart_gold', 'track_loop', 'track_volcano', 'track_beach'];
 function fnv(h, s) { for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; } return h; }
-function v1Fingerprint(A, extra) {
+/* The pet face is the one v1 drawing v2 changes on purpose (review fix ui-4: the 2D crew
+   lost the big glossy eye, the U smile and the permanent blush for the v2 lidded eye and
+   smirk, all inside <g class="slw-face">). So the fingerprint is taken with the face cut
+   out: V1_FACE is how the pin was made from the pre-v2 art (the raw pre-v2 fingerprint was
+   130c5e61; with v1's eye + glint and smile + blush removed it is 8ff51ccb), and V2_FACE
+   cuts the v2 group out of today's art. Equal pins = every house, icon, sprite, pet body,
+   PETCOL colour and accessory anchor is still byte-identical; only the face moved. */
+const V1_FACE = (s) => s.replace(/<circle cx="[\d.]+" cy="[\d.]+" r="3\.8" fill="#3b2f4a"\/><circle cx="[\d.]+" cy="[\d.]+" r="1\.3" fill="#fff"\/>/g, '')
+  .replace(/<path d="M[\d.]+ [\d.]+ q 4 4 8 0" fill="none" stroke="#3b2f4a" stroke-width="2" stroke-linecap="round"\/><circle cx="[\d.]+" cy="[\d.]+" r="3\.5" fill="#ff9db8" opacity="0\.6"\/>/g, '');
+const V2_FACE = (s) => s.replace(/<g class="slw-face">[\s\S]*?<\/g>/g, '');
+function v1Fingerprint(A, extra, N) {
+  N = N || V2_FACE;
   let h = 2166136261;
   const walls = ['wall_cream', 'wall_pink', 'wall_mint', 'wall_sky', 'wall_lilac'], roofs = ['roof_red', 'roof_blue', 'roof_thatch', 'roof_candy', 'roof_castle'];
   const doors = ['door_blue', 'door_red', 'door_green', 'door_gold'], dets = ['detail_windowbox', 'detail_chimney', 'detail_lights', 'detail_flag'];
   for (const w of walls) for (const r of roofs) for (const d of doors) for (let m = 0; m < 16; m++) {
     const details = {}; dets.forEach((k, i) => { if (m & (1 << i)) details[k] = true; });
-    h = fnv(h, A.sprite('house_cottage', Object.assign({ wall: w, roof: r, door: d, details }, extra)).svg);
+    h = fnv(h, N(A.sprite('house_cottage', Object.assign({ wall: w, roof: r, door: d, details }, extra)).svg));
   }
   const st = Object.assign({ wall: 'wall_mint', roof: 'roof_candy', door: 'door_gold', details: { detail_lights: true }, course: 'course_snow', ball: 'ball_planet', stadium: 'stadium_night', kart: 'kart_unicorn' }, extra);
   for (const id of V1_IDS) {
-    h = fnv(h, A.icon(id)); h = fnv(h, A.icon(id, st));
-    const s = A.sprite(id, Object.assign({ lit: true }, st)); h = fnv(h, s ? s.svg + s.w + 'x' + s.h : 'null');
+    h = fnv(h, N(A.icon(id))); h = fnv(h, N(A.icon(id, st)));
+    const s = A.sprite(id, Object.assign({ lit: true }, st)); h = fnv(h, s ? N(s.svg) + s.w + 'x' + s.h : 'null');
   }
   const hats = [null, 'acc_partyhat', 'acc_crown'], necks = [null, 'acc_bow', 'acc_scarf'], faces = [null, 'acc_shades'], backs = [null, 'acc_cape'];
   for (const p of ['pet_puppy', 'pet_kitten', 'pet_bunny', 'pet_dragon']) for (const hat of hats) for (const neck of necks) for (const face of faces) for (const back of backs) for (const frame of [0, 1]) {
-    h = fnv(h, A.pet(p, { frame, acc: { hat, neck, face, back } }));
+    h = fnv(h, N(A.pet(p, { frame, acc: { hat, neck, face, back } })));
   }
   return (h >>> 0).toString(16);
 }
 
-/* ---------------- v1 stays byte-identical ---------------- */
-test('art v2: every v1 render is byte-identical to the pre-v2 art (pinned fingerprint)', () => {
-  /* 130c5e61 = the rewards-world world-art.js before Encore City v2 */
-  assert.equal(v1Fingerprint(ART, {}), '130c5e61');
-  assert.equal(v1Fingerprint(ART, { shape: 'shape_cottage' }), '130c5e61', 'shape_cottage draws the v1 cottage');
-  assert.equal(v1Fingerprint(ART, { shape: 'shape_split', variant: 1, member: '#12ab9f', name: 'Zoe' }), '130c5e61', 'unknown shapes fall back to the cottage; trim/member/name never touch v1 art');
+/* ---------------- v1 stays byte-identical (all but the de-babied pet face) ---------------- */
+test('art v2: every v1 render is byte-identical to the pre-v2 art, the pet face aside (pinned fingerprint)', () => {
+  /* 8ff51ccb = the rewards-world world-art.js before Encore City v2, pet face cut out (see V1_FACE) */
+  assert.equal(v1Fingerprint(ART, {}), '8ff51ccb');
+  assert.equal(v1Fingerprint(ART, { shape: 'shape_cottage' }), '8ff51ccb', 'shape_cottage draws the v1 cottage');
+  assert.equal(v1Fingerprint(ART, { shape: 'shape_split', variant: 1, member: '#12ab9f', name: 'Zoe' }), '8ff51ccb', 'unknown shapes fall back to the cottage; trim/member/name never touch v1 art');
+  /* the cut is not vacuous: every pet render has exactly one v2 face, and none of v1's */
+  for (const p of ['pet_puppy', 'pet_kitten', 'pet_bunny', 'pet_dragon']) for (const acc of [{}, { hat: 'acc_crown', face: 'acc_shades', back: 'acc_cape' }]) {
+    const s = ART.pet(p, { acc });
+    assert.equal((s.match(/<g class="slw-face">/g) || []).length, 1, p);
+    assert.equal(V1_FACE(s), s, p + ' carries nothing of the v1 face');
+  }
 });
 
 test('art v2: the house without a shape, with shape_cottage and with an unknown shape are the same drawing', () => {
@@ -336,4 +353,100 @@ test('art v2: exports and the look tables agree (shapes, PALETTE_V2 tokens once 
     }
   }
   if (C.DEFAULTS.shape) assert.ok(SHAPES.includes(C.DEFAULTS.shape), 'the default shape has 2D art');
+});
+
+/* ---------------- review fixes (fix2/twod) ---------------- */
+test('art v2: the 2D island is golden hour by default (Deep Bay, Lagoon shallows, Dune, Turf, no white waves); opts.day is v1', () => {
+  const crypto = require('node:crypto');
+  const sha = (s) => crypto.createHash('sha1').update(s).digest('hex');
+  const all = {};
+  Object.keys(C.REGIONS).forEach((k) => { all[k] = 1; });
+  /* opts.day is the pre-v2 island byte for byte (sha1 of island() before this change) */
+  assert.equal(sha(ART.island(C.COLS, C.ROWS, C.REGION_CELLS, { home: 1 }, { day: true })), 'f49119f6425882672f9b4f1d141b21b810752fea');
+  assert.equal(sha(ART.island(C.COLS, C.ROWS, C.REGION_CELLS, all, { day: true })), 'afb8159f568ea1687eb062087b3e6348f1f55ef5');
+  for (const un of [{ home: 1 }, all]) {
+    const s = ART.island(C.COLS, C.ROWS, C.REGION_CELLS, un);
+    assertSvg(s, 'dusk island', C.COLS * 100, C.ROWS * ART.CH);
+    assert.ok(s.includes('fill="url(#slwSeaDusk)"') && s.includes('fill="url(#slwTurf)"'), 'the dusk bay and Turf');
+    assert.ok(s.includes('<g fill="#e9c9a0">'), 'Dune beaches');
+    assert.ok(/<g fill="#3fb8d0" opacity="0\.3">/.test(s), 'Lagoon shallows');
+    assert.ok(!/#7fd6ff|#2f8fd8|#93e07c|#5fbf55|#f3dc9a|#f6e7bd|url\(#slwSea\)|url\(#slwGrass\)/i.test(s), 'none of the v1 cartoon palette');
+    /* no white strokes: the wave lines are Wave Dusk at 0.6× width */
+    for (const m of s.matchAll(/stroke="(#[0-9a-f]{3,6})"/gi)) assert.ok(!/^#(f{3}|f{6}|e8f8ff)$/i.test(m[1]), 'white stroke ' + m[1]);
+    const waves = [...s.matchAll(/<path class="slw-wave"[^>]*>/g)].map((m) => m[0]);
+    assert.equal(waves.length, 9);
+    waves.forEach((w) => assert.ok(w.includes('stroke="#ffc7b0"') && w.includes('stroke-width="2.4"'), w));
+  }
+  /* the defs: the dusk bay starts at Deep Bay (where the CSS sky's horizon meets it), Turf → Turf Shade;
+     the v1 gradients stay for opts.day */
+  const defs = ART.defs();
+  assert.match(defs, /<linearGradient id="slwSeaDusk"[^>]*><stop offset="0" stop-color="#1e3f86"\/>/);
+  assert.match(defs, /<linearGradient id="slwTurf"[^>]*><stop offset="0" stop-color="#4fa36a"\/><stop offset="1" stop-color="#3c8456"\/>/);
+  assert.match(defs, /<linearGradient id="slwSea" [^>]*><stop offset="0" stop-color="#7fd6ff"\/>/);
+  if (L.PALETTE_V2) for (const n of ['Turf', 'Turf Shade', 'Dune', 'Wet Dune', 'Deep Bay', 'Lagoon', 'Wave Dusk', 'Leaf Deep', 'Text Muted']) assert.ok(SRC.toLowerCase().includes(String(L.PALETTE_V2[n]).toLowerCase()), n + ' is drawn with its v2 hex');
+});
+
+test('art v2: the LED tower pixel pet is the active pet (st.pet) in its own shape and locked colours; st.prog keeps the show', () => {
+  const PETS = ['pet_puppy', 'pet_kitten', 'pet_bunny', 'pet_dragon'];
+  const p1 = (st) => /<g class="slw-prog p1"[^>]*>([\s\S]*?)<\/g>/.exec(ART.sprite('bld_ledtower', st).svg)[1];
+  const cells = (s) => [...s.matchAll(/<rect x="([\d.]+)" y="([\d.]+)" width="5" height="5" fill="(#[0-9a-f]{6})"\/>/g)];
+  const shapes = new Set();
+  for (const id of PETS) {
+    const s = p1({ pet: id, name: 'Mia', variant: 1 }), c = ART.PETCOL[id], px = cells(s);
+    assert.ok(px.length >= 36, id + ' draws ' + px.length + ' pixels');
+    for (const k of ['body', 'light', 'nose']) assert.ok(s.includes('fill="' + c[k] + '"'), id + ' ' + k + ' ' + c[k]);
+    assert.ok(s.includes('fill="#14101f"'), id + ' Midnight Ink eyes');
+    px.forEach((m) => assert.ok(+m[1] >= 0 && +m[1] + 5 <= 66 && +m[2] >= 0 && +m[2] + 5 <= 50, id + ' pixel inside the 66×50 screen'));
+    shapes.add(px.map((m) => m[1] + ',' + m[2]).join(' '));
+  }
+  assert.equal(shapes.size, 4, 'four species, four silhouettes (not one face recoloured)');
+  /* tall pink-lined ears for the bunny, gold horns for the dragon */
+  assert.ok(p1({ pet: 'pet_bunny' }).includes('fill="#f6b7c9"'));
+  assert.ok(p1({ pet: 'pet_dragon' }).includes('fill="#ffd23f"'));
+  /* no pet, an unknown id or an inherited name: the puppy, never junk */
+  const pup = p1({ pet: 'pet_puppy' });
+  for (const pet of [undefined, null, 'pet_nope', 'toString', '__proto__', 'constructor', 7]) {
+    const s = ART.sprite('bld_ledtower', { pet }).svg;
+    assert.equal(p1({ pet }), pup, String(pet));
+    assert.ok(!/undefined|NaN|function/.test(s), String(pet) + ' draws no junk');
+  }
+  /* the shop icon is not personal */
+  assert.equal(ART.icon('bld_ledtower', { pet: 'pet_dragon', name: 'Mia' }), ART.icon('bld_ledtower'));
+  /* st.prog: the host keeps the child's show across a redraw */
+  const progOf = (st) => {
+    const s = ART.sprite('bld_ledtower', st).svg;
+    return [/class="slw-screen" data-prog="(\d)"/.exec(s)[1], [...s.matchAll(/class="slw-prog p(\d)"( display="none")?/g)].filter((m) => !m[2]).map((m) => m[1]).join('')];
+  };
+  assert.deepEqual(progOf({}), ['0', '0']);
+  for (const n of [0, 1, 2, 3]) assert.deepEqual(progOf({ prog: n, pet: 'pet_kitten' }), [String(n), String(n)], 'program ' + n + ' alone shows');
+  assert.deepEqual(progOf({ prog: 9 }), ['3', '3']);
+  assert.deepEqual(progOf({ prog: -2 }), ['0', '0']);
+  assertSvg(ART.sprite('bld_ledtower', { prog: 2, pet: 'pet_dragon', name: 'Mia' }).svg, 'tower on the EQ show', 100, 170);
+});
+
+test('art v2: the 2D crew is de-babied — smaller lidded eye, a side smirk, blush only in cheer', () => {
+  for (const p of ['pet_puppy', 'pet_kitten', 'pet_bunny', 'pet_dragon']) for (const frame of [0, 1]) {
+    const s = ART.pet(p, { frame }), face = /<g class="slw-face">([\s\S]*?)<\/g>/.exec(s);
+    assert.ok(face, p + ' has the v2 face');
+    assertSvg(s, p + ' v2 face', 120, 100);
+    assert.ok(!/#ff9db8/.test(s), p + ' no permanent blush');
+    const eye = /<ellipse cx="([\d.]+)" cy="([\d.]+)" rx="([\d.]+)" ry="([\d.]+)" fill="#14101f" transform="rotate\(8 /.exec(face[1]);
+    assert.ok(eye, p + ': a Midnight Ink almond eye, rolled 8° outer-up');
+    const [ex, ey, rx, ry] = eye.slice(1).map(Number), area = Math.PI * rx * ry, v1 = Math.PI * 3.8 * 3.8;
+    assert.ok(area <= 0.6 * v1, p + ' eye area ' + area.toFixed(1) + ' vs v1 ' + v1.toFixed(1));
+    assert.ok(ry < rx, p + ' a lidded almond, wider than tall');
+    assert.equal(ex, 92, 'the eye keeps its place (anchors unchanged)');
+    const paths = [...face[1].matchAll(/<path d="M([\d.]+) ([\d.]+) Q([\d.]+) ([\d.]+) ([\d.]+) ([\d.]+)" fill="none" stroke="#14101f"/g)].map((m) => m.slice(1).map(Number));
+    assert.equal(paths.length, 2, p + ': an upper lid and a mouth');
+    const [lid, mouth] = paths;
+    assert.ok(lid[0] < ex && lid[4] > ex && Math.max(lid[1], lid[5]) < ey, p + ' the lid spans the top of the eye');
+    assert.ok(lid[1] < lid[5], p + ' its outer end sits higher');
+    assert.ok(Math.abs(mouth[1] - mouth[5]) >= 1, p + ' a side smirk (one corner up), not v1\'s level U');
+    const glint = /<circle cx="[\d.]+" cy="[\d.]+" r="([\d.]+)" fill="#fff"\/>/.exec(face[1]);
+    assert.ok(glint && +glint[1] < 1.3, p + ' a smaller glint');
+    /* cheer: the blush comes back, softer */
+    assert.ok(/<circle [^>]*fill="#ff9db8" opacity="0\.3"\/>/.test(ART.pet(p, { frame, cheer: true })), p + ' cheer blush at 0.3');
+  }
+  /* the locked colours (PETCOL) are the same object the look table pins */
+  assert.deepEqual(Object.keys(ART.PETCOL), ['pet_puppy', 'pet_kitten', 'pet_bunny', 'pet_dragon']);
 });

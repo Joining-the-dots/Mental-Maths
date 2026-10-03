@@ -334,6 +334,10 @@ test('small timelines: hat flight lands at 0.5 s, zips end at their target, curt
   assert.equal(M.curtainK(0, true), 1);
   assert.equal(M.STICKERS[M.snackSticker(1)], '+3'); assert.equal(M.STICKERS[M.snackSticker(4)], '+12');
   assert.equal(M.STICKERS[M.snackSticker(9)], '+12');
+  /* the sticker atlas speaks the v2 copy voice: the bounce row matches the HUD's BOUNCE! */
+  const W = require('../world/world-copy.js');
+  assert.equal(M.STICKERS[2], 'BOUNCE!');
+  M.STICKERS.forEach((t) => assert.deepEqual(W.bannedIn(t), [], 'sticker ' + t));
 });
 
 /* ---------------- particles ---------------- */

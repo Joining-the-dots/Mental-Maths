@@ -609,3 +609,29 @@ test('runner: def wiring — count-in, two verbs, 3D view src, tutorial key card
   assert.ok(d.pbText({ score: 2995, extra: Course.encodeExtra({ medal: 3, letters: 0, maxHype: 41, fan: false }) }).includes('score 2,995 · 🥇 Superstar'));
   assert.ok(d.pbText({ score: 120 }).startsWith('🏆 Your best: score 120'));
 });
+
+/* the v2 copy voice holds in the games too (plan-v2 'Ban list in island and game UI'):
+   every displayed string literal in world/games/*.js — anything with a capital or a
+   space, so event / sound ids like 'boing' stay code — is free of the banned words */
+test('copy: no game shows a banned word (the cushion bounce reads BOUNCE!, never BOING!)', () => {
+  const fs = require('node:fs'), path = require('node:path');
+  const W = require('../world/world-copy.js');
+  const dir = path.join(__dirname, '..', 'world', 'games');
+  const hits = [];
+  let n = 0;
+  for (const f of fs.readdirSync(dir).filter((x) => /\.js$/.test(x))) {
+    const src = fs.readFileSync(path.join(dir, f), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/mg, '');
+    for (const lit of src.match(/'(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*"|`(?:[^`\\]|\\.)*`/g) || []) {
+      const t = lit.slice(1, -1);
+      if (!/[A-Z ]/.test(t)) continue;
+      n++;
+      const b = W.bannedIn(t);
+      if (b.length) hits.push(f + ': ' + t.slice(0, 60) + ' → ' + b.join(', '));
+    }
+  }
+  assert.ok(n > 200, 'the scan found the games\' strings (' + n + ')');
+  assert.deepEqual(hits, []);
+  /* the Debut Run's own lines: the bounce fx and the missed-letter hint */
+  const src = fs.readFileSync(path.join(dir, 'pet-course.js'), 'utf8');
+  assert.ok(src.includes("fx.text(px, feet - 40, 'BOUNCE!'"), 'the 2D cushion bounce matches the HUD pop');
+});

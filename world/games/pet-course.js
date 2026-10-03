@@ -7,7 +7,9 @@
    (docs/island3d/spec-runner.json). Taking off ON the beat is both the
    safest and the best-scoring move (PERFECT). Mistakes cost something:
    a bump takes a heart, wipes Hype, spills treats and loses exactly two
-   beats; losing every heart brings a kind CURTAIN CALL.
+   beats. Every show has exactly 3 hearts and a lost heart never comes
+   back (no Stage Door heal, no refill, no heart pickup); losing the 3rd
+   brings a kind CURTAIN CALL.
 
    This file is the pure, Node-testable rules (UMD: window.SLCourse in
    the browser, module.exports in Node) plus the shell wiring and the
@@ -38,7 +40,7 @@
     PICK_UP: 40, PICK_UP_SLIDE: 14, PICK_X: 40, PICK_Y: 46, MAGNET: 70,
     PERFECT: 0.070, GREAT: 0.140, JUDGE_MIN: -0.2, JUDGE_MAX: 1.0,
     HYPE_X2: 8, HYPE_X3: 20, FEVER: 32,
-    HEARTS: 3, FAN_HEARTS: 5, BONUS_HEARTS: 3,
+    HEARTS: 3, BONUS_HEARTS: 3,                         /* 3 hearts in every run, never regained; the finish bonus counts ≤ 3 */
     GRACE_BUMP: 1.4, GRACE_SPLASH: 1.15, GRACE_SHIELD: 0.6,
     /* tumble: knocked back at f=-0.5 for 0.18 s, stopped until 0.5 s, then a linear
        ramp back to full speed over R, chosen so the total lag is exactly 2 beats */
@@ -307,7 +309,8 @@
     { name: 'Rising Star', icon: '🥈', kind: 'silver' }, { name: 'Superstar', icon: '🥇', kind: 'gold' },
     { name: 'Encore Legend', icon: '👑', kind: 'crown' }
   ];
-  /* extra bitfield: bits 0-2 medal, 3-8 letters E N C O R E, 9-15 maxHype (≤127), 16 Fan support */
+  /* extra bitfield: bits 0-2 medal, 3-8 letters E N C O R E, 9-15 maxHype (≤127), 16 Timing rings were on
+     (the bit and its 'fan' field name are kept from V4.53's Fan support, so stored PB records decode the same) */
   function encodeExtra(o) {
     o = o || {};
     return ((o.medal | 0) & 7) | (((o.letters | 0) & 63) << 3) | (Math.max(0, Math.min(127, o.maxHype | 0)) << 9) | (o.fan ? 65536 : 0);
@@ -377,15 +380,23 @@
     return 1;
   }
 
-  /* ---------------- Fan support + streaks: session memory per child (never stored) ---------------- */
+  /* ---------------- Timing rings: an opt-in assist, session memory per child (never stored) ----------------
+     The only thing it does is put a glow cue ring on every prop (the ideal take-off spot); it never
+     touches hearts or shields. OFF unless the child switches it on in the menu (or cfg.fan says so —
+     the menu option id and the cfg key stay 'fan', as in V4.53, so callers keep working).
+     V4.53 kept 'Fan support' here as { fan, manual, curtains } and switched it ON by itself for a
+     first run and after 2 curtain calls; such a legacy entry is migrated to OFF (its meaning changed). */
   var session = {};
-  function sess(cfg) { var k = String((cfg && cfg.profileKey) || '_'); return session[k] || (session[k] = { fan: null, manual: false, curtains: 0 }); }
-  function fanFor(cfg) {
+  function sess(cfg) {
+    var k = String((cfg && cfg.profileKey) || '_'), m = session[k] || (session[k] = { rings: false });
+    if ('fan' in m || 'manual' in m || 'curtains' in m) { delete m.fan; delete m.manual; delete m.curtains; m.rings = false; }
+    if (typeof m.rings !== 'boolean') m.rings = false;
+    return m;
+  }
+  function ringsFor(cfg) {
     if (!cfg || cfg.demo) return false;
     if (cfg.fan != null) return !!cfg.fan;
-    var m = sess(cfg);
-    if (m.fan === null) m.fan = cfg.tutSeen === false;          /* ON for the very first Debut Run */
-    return !!m.fan;
+    return sess(cfg).rings;
   }
 
   /* ---------------- a round ---------------- */
@@ -396,9 +407,9 @@
     var seed = (cfg.seed != null && cfg.seed !== '') ? (cfg.seed >>> 0) || 7 : cfg.demo ? 2026 : seedFor(cfg.day || localDay(), variant || 'course_meadow');
     var course = cfg.course || buildCourse(seed);
     var obs = course.obs, items = course.items, enc = course.enc;
-    var fan = fanFor(cfg), H = fan ? T.FAN_HEARTS : T.HEARTS;
+    var rings = ringsFor(cfg), H = T.HEARTS;                     /* every run, every mode: 3 hearts */
     var petIdx = { pet_puppy: 0, pet_kitten: 1, pet_bunny: 2, pet_dragon: 3 }[(cfg.pet && cfg.pet.id) || 'pet_puppy'] || 0;
-    obs.forEach(function (o) { o.cue = o.rehearsal || fan; });
+    obs.forEach(function (o) { o.cue = o.rehearsal || rings; });
     var spill = [];
     for (var p = 0; p < T.SPILL_POOL; p++) spill.push({ on: false, x: 0, y: 0, vx: 0, vy: 0, landed: false, age: 0, landT: 0 });
     var s = {
@@ -407,7 +418,7 @@
       eff: null, effT: 0, effStart: 0, effL: 0, inv: 0, shield: false, ready: false,
       hearts: H, maxHearts: H, hype: 0, mult: 1, fever: false, streak: 0,
       treats: 0, stars: 0, lettersMask: 0, score: 0, perfects: 0, greats: 0, bounces: 0, bumps: 0, splashes: 0, bonks: 0, regrabs: 0, spilled: 0,
-      maxHype: 0, fan: fan, section: 0, phase: 'run', endT: 0, finished: false, encoreCleared: false, timeUp: false, curtain: false,
+      maxHype: 0, rings: rings, section: 0, phase: 'run', endT: 0, finished: false, encoreCleared: false, timeUp: false, curtain: false,
       clean: true, secClears: 0, encMult: 1, progress: 0, grade: 0, endV: 0,
       toT: -9, toObs: -1, bounceT: -9, bounceObs: -1, djT: -9, landT: -9,
       oc: 0, ic: 0, ec: 0, lastBeat: -1, cdBeat: -999, needSync: true, snd: 0, spillNext: 0, curtainSaid: false, demoMiss: -1,
@@ -623,10 +634,7 @@
       /* CLEAN STAGE: no bump or splash, and the section was actually played (≥ 1 clean clear) */
       if (s.clean && s.secClears > 0) { s.score += SC.CLEAN; snd('star', 0.6); emit('cleanStage', 'sec', ended); }
       s.clean = true; s.secClears = 0;
-      var before = s.hearts;
-      if (s.fan) { s.hearts = s.maxHearts; if (!s.shield) { s.shield = true; emit('shieldGet', 'free', true); } }
-      else s.hearts = Math.min(s.maxHearts, s.hearts + 1);
-      if (s.hearts > before) { snd('chip'); emit('heal'); if (before === 1) mu('set', 'lastHeart', false); }
+      /* a Stage Door never heals and never hands out a shield: a lost heart stays lost */
       snd('whoosh', 0.5);
       emit('door', 'sec', sec, 'name', SECTIONS[sec].name);
       mu('set', 'section', sec);
@@ -635,7 +643,7 @@
     function finish() {
       s.finished = true;
       if (s.clean && s.secClears > 0) { s.score += SC.CLEAN; emit('cleanStage', 'sec', 5); }
-      s.score += SC.FINISH + SC.HEART * Math.min(T.BONUS_HEARTS, s.hearts);   /* Fan support's extra hearts never count */
+      s.score += SC.FINISH + SC.HEART * Math.min(T.BONUS_HEARTS, s.hearts);   /* never more than 3 hearts' worth */
       s.endV = speedNow(s);
       snd('tada'); snd('applause');
       emit('finish', 'medal', curMedal());
@@ -762,13 +770,7 @@
         }
         return '';
       },
-      onFinish: function () {
-        if (cfg.demo || cfg.fan != null) return;
-        var m = sess(cfg);
-        if (s.curtain) m.curtains++; else if (s.finished) m.curtains = 0;
-        if (!m.manual) m.fan = false;                          /* the first-run default lasts one show */
-        if (m.curtains >= 2 && !m.fan) { m.fan = true; m.manual = true; s.fanAutoOn = true; }
-      },
+      /* no onFinish: nothing switches an assist on behind the child's back any more */
       musicState: function () {
         ms.section = s.section; ms.mult = s.mult; ms.fever = s.fever; ms.lastHeart = s.hearts === 1 && !s.finished;
         ms.tumble = s.eff === 'tumble'; ms.phase = s.phase; ms.curtain = s.curtain;
@@ -783,7 +785,7 @@
       },
       score: clampScore,
       result: function () {
-        return { score: clampScore(), extra: encodeExtra({ medal: curMedal(), letters: s.lettersMask, maxHype: s.maxHype, fan: s.fan }) };
+        return { score: clampScore(), extra: encodeExtra({ medal: curMedal(), letters: s.lettersMask, maxHype: s.maxHype, fan: s.rings }) };
       },
       summaryTitle: function () {
         if (s.timeUp) return 'Time’s up!';
@@ -793,16 +795,16 @@
       /* 'score', never 'pts' — arcade scores must not look like reward points */
       summaryBig: function () { return 'Score ' + fmt(clampScore()); },
       summaryText: function () {
-        var fanTxt = s.fan ? ' · 🎟️ with Fan support' : '';
+        var ringsTxt = s.rings ? ' · 🎯 with Timing rings' : '';
         if (!s.finished) {
           var sec = Math.min(5, s.section), pct = Math.floor(s.progress * 100);
           var next = sec < 5 ? 'the ' + SECTIONS[sec + 1].name : 'the FINISH';
-          return 'You reached the ' + SECTIONS[sec].name + ' (' + pct + '%). Next time: ' + next + '!' + fanTxt;
+          return 'You reached the ' + SECTIONS[sec].name + ' (' + pct + '%). Next time: ' + next + '!' + ringsTxt;
         }
         var hs = ''; for (var i = 0; i < s.maxHearts; i++) hs += i < s.hearts ? '❤' : '🤍';
         var lt = ''; for (var k = 0; k < 6; k++) lt += (k ? ' ' : '') + (s.lettersMask & (1 << k) ? LETTERS[k] : '_');
         return round.treatIcon + ' ' + s.treats + ' treats · ✦ ' + s.stars + ' glow star' + (s.stars === 1 ? '' : 's') + ' · ' + lt +
-          ' · Best Hype ' + s.maxHype + ' · ' + hs + ' left' + fanTxt;
+          ' · Best Hype ' + s.maxHype + ' · ' + hs + ' left' + ringsTxt;
       },
       summaryBadges: function () {
         var md = curMedal(), sc = clampScore(), out = [{ text: MEDALS[md].icon + ' ' + MEDALS[md].name, kind: MEDALS[md].kind }];
@@ -815,7 +817,6 @@
         for (var k = 0; k <= reached && missed < 2; k++) {
           if (!(s.lettersMask & (1 << k))) { out.push({ text: 'Missed ' + LETTERS[k] + ': ' + LETTER_HINT[k], kind: 'hint' }); missed++; }
         }
-        if (s.fanAutoOn) out.push({ text: '🎟️ Fan support is on for your next show', kind: 'hint' });
         return out;
       },
       render: function (ctx) {
@@ -964,7 +965,6 @@
             if (fx) fx.burst(px + 20, GROUND, { n: 10, colors: [th.obs.puddle, '#FFFFFF'], speed: 220, life: 0.55, gravity: 700, size: 5, spread: 1.6, angle: -Math.PI / 2 });
             break;
           case 'regrab': if (fx) fx.burst(e.x, e.y, { n: 3, colors: ['#FFFFFF', STAR_GOLD], speed: 120, life: 0.3, gravity: 0, size: 4, shape: 'star' }); break;
-          case 'heal': if (fx) fx.text(px, feet - 120, '❤', { color: ucol, size: 30, life: 0.8, vy: -80 }); break;
           case 'door':
             confetti(px + 60, GROUND - 230, 60, 2.2, -Math.PI / 2);
             popText(SECTIONS[e.sec].pop, e.sec >= 3 ? NEON_PINK : STAR_GOLD);
@@ -1367,16 +1367,18 @@
      plays even when the child turned the island music off; null when SLMusic can't say */
   function musicApi() { return HAS_WIN && window.SLMusic && typeof window.SLMusic.gameEnabled === 'function' ? window.SLMusic : null; }
   /* the cfg the shell is showing right now (menu → tutorial → rounds), so the tutorial cards
-     can match this child's Fan support */
+     can match this child's Timing rings */
   var shownCfg = null;
-  /* what Fan support does, in full (an option-level note, for a shell that shows one) */
-  var FAN_NOTE = 'Fan support: ' + T.FAN_HEARTS + ' hearts instead of ' + T.HEARTS + ', your hearts refill and you get a free bubble shield at every Stage Door, and glow rings show when to jump.';
+  /* what Timing rings do, in full (an option-level note, for a shell that shows one) */
+  var RINGS_NOTE = 'Timing rings: a glow ring on the runway before every prop shows the best spot to jump. ' +
+    'They never change your hearts: every show has ' + T.HEARTS + ' and a lost heart never comes back.';
   function menuOptions(cfg) {
     if (cfg && !cfg.demo) shownCfg = cfg;
-    var on = fanFor(cfg), out = [
-      /* the label itself says what it does: today's shell shows option notes only for locked chips */
-      { id: 'fan', label: '🎟️ Fan support — ' + T.FAN_HEARTS + ' hearts + a free shield at each door', value: on,
-        note: FAN_NOTE, options: [{ value: true, label: 'ON' }, { value: false, label: 'OFF' }] }
+    var on = ringsFor(cfg), out = [
+      /* the label itself says what it does: today's shell shows option notes only for locked chips.
+         The id stays 'fan' (V4.53's Fan support chip) so stored/forwarded option ids keep working. */
+      { id: 'fan', label: '🎯 Timing rings — glow rings show when to jump', value: on,
+        note: RINGS_NOTE, options: [{ value: true, label: 'ON' }, { value: false, label: 'OFF' }] }
     ];
     var mus = musicApi();
     if (mus) {
@@ -1388,20 +1390,20 @@
   }
   function setOption(cfg, id, value) {
     if (id === 'music') { var mus = musicApi(); if (mus) { try { mus.setGameEnabled('course', !!value); } catch (e) { /* not saved */ } } return; }
-    if (id !== 'fan') return;
-    var m = sess(cfg); m.fan = !!value; m.manual = true;
+    if (id !== 'fan' && id !== 'rings') return;                 /* 'fan' is the chip's id; 'rings' is accepted too */
+    sess(cfg).rings = !!value;
   }
-  /* the How-to-play cards for this child: the heart count is the one their run will have, and
-     Fan support (ON for a very first run) gets its own card */
+  /* the How-to-play cards for this child: 3 hearts that never come back, and Timing rings (only
+     when the child switched them on) get their own card */
   function tutorialFor(cfg) {
-    var fan = fanFor(cfg), n = fan ? T.FAN_HEARTS : T.HEARTS;
+    var n = T.HEARTS;
     var cards = [
       ['👆', 'Tap or Space to jump. Tap again in the air to double jump.'],
       ['⬇️', 'LED gate ahead? Hold ⬇ SLIDE to slip under it.'],
-      ['💔', 'Bumps cost a heart and spill treats. Lose all ' + n + ' and the show ends!'],
+      ['💔', 'You get ' + n + ' hearts and a lost heart never comes back. Bumps cost a heart and spill treats. Lose all ' + n + ' and the show ends!'],
       ['💗', 'Bounce on pink cushions. Jump on the beat for PERFECT!']
     ];
-    if (fan) cards.push(['🎟️', 'Fan support is ON: ' + n + ' hearts, a refill and a free bubble shield at every Stage Door, and glow rings that show when to jump. Turn it off in the menu any time.']);
+    if (ringsFor(cfg)) cards.push(['🎯', 'Timing rings are ON: a glow ring on the runway shows the best spot to jump. Turn them off in the menu any time.']);
     return cards;
   }
   function pbText(rec) {
@@ -1414,9 +1416,8 @@
   var def = {
     key: 'course', title: 'Debut Run', emoji: '🐾', LW: LW, LH: LH, defaultVariant: 'course_meadow',
     /* the shell reads def.tutorial when it shows the cards (always after the menu, which hands us
-       its cfg): a getter, so the cards match THIS child's run — 5 hearts and a Fan support card
-       on a very first run, 3 hearts otherwise. tutorialFor(cfg) is the same, for a shell that
-       passes cfg itself. */
+       its cfg): a getter, so the cards match THIS child's run — a Timing rings card only when the
+       child switched them on. tutorialFor(cfg) is the same, for a shell that passes cfg itself. */
     get tutorial() { return tutorialFor(shownCfg); },
     tutorialFor: tutorialFor,
     controls: [{ id: 'slide', label: '⬇ SLIDE', side: 'left', aria: 'Slide' }, { id: 'jump', label: '⬆ JUMP', side: 'right', wide: true, aria: 'Jump' }],
@@ -1436,7 +1437,8 @@
     buildCourse: buildCourse, newRound: newRound, seedFor: seedFor, schedDist: schedDist, schedV: schedV, schedTime: schedTime,
     SECTIONS: SECTIONS, KINDS: KINDS, BEAT: BEAT, RUN_T: RUN_T, TUNING: TUNING, WIN: WIN, THEMES: THEMES, PATH: PATH, LETTERS: LETTERS,
     decodeExtra: decodeExtra, encodeExtra: encodeExtra, medal: medal, MEDALS: MEDALS, autopilotWants: autopilotWants,
-    tierOf: tierOf, tumbleL: tumbleL, speedNow: speedNow, def: def
+    tierOf: tierOf, tumbleL: tumbleL, speedNow: speedNow, ringsFor: ringsFor, def: def,
+    _session: sess                                     /* test seam: this child's session memory (migrated on read) */
   };
   if (HAS_WIN) window.SLCourse = API;
   if (Shell) Shell.define(def);

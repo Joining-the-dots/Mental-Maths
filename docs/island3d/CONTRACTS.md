@@ -36,7 +36,7 @@ Classic scripts under `world/island3d/`, loaded by `stage.js`.
 - `countIn: { beats, bpm, labels[] }` — beat count-in used for start AND resume (instead of `countdown` seconds).
 - `controlsFor(cfg)` → pad list (instead of `controls`).
 - `menuVariants(cfg)` → `[{id, name, icon, tip, locked, lockText, medal, best}]`, `menuVariantsTitle`, `menuVariantsLabel` — a game-owned variant list (e.g. penalty rivals). Selection is remembered in `localStorage 'slgVar:'+key` and does NOT call `cfg.onSelectVariant`.
-- `menuOptions(cfg)` → `[{id, label, value, options:[{value, label, locked, note}]}]` + `setOption(cfg, id, value)` — chips on the menu (modes, toggles like Fan support / Easy Drive).
+- `menuOptions(cfg)` → `[{id, label, value, options:[{value, label, locked, note}]}]` + `setOption(cfg, id, value)` — chips on the menu (modes, toggles like Debut Run's Timing rings — option id `fan`, kept from V4.53's Fan support — / Easy Drive).
 - `pbText(rec, variant, cfg)` → string for the menu's best line.
 - `music: { track }` — with `window.SLMusic`: shell calls `play(track, {countInSec})` at round start, `menuMode(true/false)`, `pause(200)`, `resume(300)`, `stop(200)`; big-moment sounds duck the music.
 - `resultsGlass: true` — results sheet becomes a glass panel over the 3D scene.

@@ -310,6 +310,36 @@ test('marquee bulbs, cue rings, spill pulses and fans all stay at or under 2 Hz'
   assert.ok(member > 700 && member < 900, 'member wands ' + member);
 });
 
+/* hearts never come back (3 per show), and the HUD draws hearts as ✦-headed wands in the child's
+   colour — so where V4.53 played its heal (a Stage Door, the fans) nothing heart- or ✦-shaped
+   may appear in the child's colour, or it reads as a heart coming back */
+test('three hearts: a CLEAN STAGE, the last-heart fans and door confetti never look like a heart back', () => {
+  const atlas = ['sparkle', 'heart', 'note', 'star', 'dot', 'ring', 'rect', 'petal', 'snow', 'bubble', 'puff', 'circle', 'curl', 'diamond', 'plus', 'tri'];
+  const { clean, fans } = M.CHEER;
+  for (const c of [clean, fans]) {
+    assert.ok(atlas.includes(c.cell), c.cell + ' is in the sparkle atlas');
+    assert.ok(c.cell !== 'heart' && c.cell !== 'sparkle', 'not a heart, not the wand head ✦: ' + c.cell);
+  }
+  /* fixed palette colours — never the member colour (which is the HUD wand colour) */
+  assert.equal(clean.color, M.COL.STAR_GOLD, 'CLEAN STAGE is points: Star Gold');
+  assert.ok(fans.colors.length > 0);
+  fans.colors.forEach((h) => assert.match(h, HEX));
+  assert.deepEqual(fans.colors, M.FAN_NEON, "the fans cheer in their own neon");
+  /* confetti: still 40 % in the child's colour, hearts still fly — just never a member-coloured heart */
+  const o = {};
+  let memberN = 0, memberHearts = 0, hearts = 0;
+  for (let i = 0; i < 120; i++) {
+    M.confettiPiece(i, o);
+    assert.ok(atlas.includes(o.cell) && M.CONFETTI_CELLS.includes(o.cell), 'piece ' + i + ': ' + o.cell);
+    if (o.member) { memberN++; if (o.cell === 'heart' || o.cell === 'sparkle') memberHearts++; }
+    if (o.cell === 'heart') { hearts++; assert.equal(o.member, false, 'piece ' + i + ' is a heart, so it is neon'); }
+  }
+  assert.equal(memberN, 48, '40 % member colour');
+  assert.equal(memberHearts, 0);
+  assert.ok(hearts >= 12, 'neon hearts still fly: ' + hearts);
+  assert.equal(M.confettiPiece(1).cell, 'rect', 'piece 1 (member colour, once a heart) is a rect');
+});
+
 test('recycled strips cover their window exactly once (also left of the origin)', () => {
   for (const base of [-7, -1, 0, 3, 41, 1000]) {
     for (const n of [12, 13, 17, 24]) {

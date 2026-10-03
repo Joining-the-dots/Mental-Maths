@@ -1479,9 +1479,10 @@
 
   /* ---------------- games ---------------- */
   /* deps: extra world/games/ scripts loaded (in order) after shell.js + fx.js and
-     before the game file; tutKey: which tutSeen flag the game's tutorial uses */
+     before the game file; tutKey: which tutSeen flag the game's tutorial uses (course_v3: the
+     cards now say 3 hearts that never come back, so every child sees them once more) */
   var GAMES = {
-    course: { name: 'Debut Run', att: 'att_course', file: 'pet-course.js', deps: ['course-hud.js'], tutKey: 'course_v2', grad: 'linear-gradient(135deg,#43c66f,#2a9d8f)', emoji: '🐾' },
+    course: { name: 'Debut Run', att: 'att_course', file: 'pet-course.js', deps: ['course-hud.js'], tutKey: 'course_v3', grad: 'linear-gradient(135deg,#43c66f,#2a9d8f)', emoji: '🐾' },
     penalty: { name: 'Encore Shootout', att: 'att_pitch', file: 'penalty.js', tutKey: 'penalty2', grad: 'linear-gradient(135deg,#4a8ff0,#6c5ce7)', emoji: '⚽' },
     kart: { name: 'Neon Grand Prix', att: 'att_kart', file: 'kart.js', deps: ['kart-logic.js'], tutKey: 'kart2', grad: 'linear-gradient(135deg,#ff8a3d,#e94b4b)', emoji: '🏎️' }
   };

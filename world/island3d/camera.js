@@ -7,22 +7,29 @@
    taps, long-presses and item drags back to the scene (island3d.js).
 
    STATE  {tx, tz, yaw, elev, zoom}: target (x, 0.3, z) on the land, yaw
-   (deg, ±35), elevation (deg, 40–67), zoom (0.75–1.6; 2.2 on portrait
-   phones). dist = fitDist(land, yaw, elev, aspect) / zoom, so the whole
-   unlocked land (2.9 u tall items included) is framed at zoom 1 from any
-   angle (the same maths as SLGrid3D.fitCamera, allocation-free). Input
+   (deg, ±35), elevation (deg, 34–67 in play, 40–67 while editing; 48 by
+   default, edit / place tilt to 62), zoom (0.75–1.6; 2.45 on portrait
+   phones, whose home view starts zoomed to 1.75 so a home-only island gets
+   ~45 × 33 px cells on a 360 px stage). dist = fitDist(land, yaw, elev,
+   aspect) / zoom, so the whole unlocked land (2.9 u tall items included) is
+   framed at zoom 1 from any angle (the same maths as SLGrid3D.fitCamera,
+   allocation-free). Zoomed in past 1.2 in play mode the target may also
+   glide up to 2.5 u further toward -z (the city side of the bay). Input
    moves a GOAL; the shown state eases toward it (damping 0.12 per 60 Hz
-   frame) and flicks carry inertia. Under reduced motion every change is
-   a static cut and there is no inertia, orbit or shake.
+   frame) and flicks carry inertia. Under reduced motion every change is a
+   static cut and there is no inertia, orbit, dip or shake.
 
    API (pure)
-     LIMITS, TARGET_Y, DEG_PER_PX
+     LIMITS, SKYLINE, TARGET_Y, DEG_PER_PX
      damp(dt, rate) · clamp · lerp · wrapDeg
      boundsOf(land) → {minX, maxX, minZ, maxZ, cx, cz, maxY, top, bottom}
      fitDist(b, yawDeg, elevDeg, aspect, fov?, margin?, near?) → dist
      basisInto(yawDeg, elevDeg, out) → out {Dx..Dz, Rx..Rz, Ux..Uz}
      panDelta(dxPx, dyPx, viewH, dist, fov, yawDeg, elevDeg, out) → {x, z}
-     panLimit(b, zoom, slack) → {x, z} · zoomMaxFor(touch, aspect) · isPhone(touch, aspect)
+     panLimit(b, zoom, slack) → {x, z} · backPanFor(zoom, mode) → extra -z travel (u)
+     zoomMaxFor(touch, aspect) · homeZoomFor(touch, aspect) · isPhone(touch, aspect)
+     orbitDip(orbitYaw, elev) → degrees the Showtime orbit lowers the view (≤ 6, never below 40)
+     topRayDeg(pose) → the top frustum edge's angle above the horizontal (≥ 0: the sky shows)
      projectPose(p, pose, out) → {x, y, depth} (NDC) · groundAt(pose, nx, ny, y, out) → point | null
    Rig(o) → rig            o {grid, motion, reduced, touch, aspect, land}
      rig.setLand(land, {smooth}) · rig.resize(w, h) · rig.setTouch(on) · rig.setReduced(on)
@@ -32,12 +39,19 @@
      rig.orbitBy(dYaw, dElev) · rig.panBy(dxPx, dyPx) · rig.zoomBy(f, focus?) → changed
      rig.fling(vx, vy, mode) · rig.command('left'|'right'|'up'|'down'|'in'|'out'|'reset')
      rig.reset(instant) · rig.focusOn(point, {zoom, instant}) · rig.keepInView(point, frac)
-     rig.reveal() · rig.crane(point) → Promise · rig.pushIn(point, {zoom}) → Promise
-     rig.dance(point, sec) · rig.releaseMove(kind?) · rig.showOrbit(on) · rig.shake(amp, dur)
+     rig.skyline({easeIn, hold, at}?) → Promise   the establishing hero shot (SKYLINE): elev 14, yaw -16,
+                                             target raised to y 2.0 and 1.5 u toward the city, zoom 0.8; hold
+                                             0.9 s, then 1.8 s inOutSine back to the user view. On mount it
+                                             starts in the pose (easeIn 0); the stage encore eases in. Any user
+                                             camera input releases it (0.45 s); reduced motion skips it
+     rig.reveal() (= skyline()) · rig.crane(point) → Promise · rig.pushIn(point, {zoom}) → Promise
+     rig.dance(point, sec) · rig.releaseMove(kind?) · rig.interrupt() → released a skippable move?
+     rig.freeze(on)    a finger is down: a skippable move holds still (the press picks what it sees)
+     rig.showOrbit(on) · rig.shake(amp, dur)
      rig.update(dt) → changed     (once per frame; zero allocation)
      rig.pose {px, py, pz, tx, ty, tz, yaw, elev, zoom, dist, fov, aspect, near, far}
      rig.version (bumps whenever the pose changes) · rig.moving · rig.apply(camera)
-     rig.project(p, out) · rig.groundAt(nx, ny, y, out) · rig.zoomedIn() · rig.canOrbit() · rig.info()
+     rig.project(p, out) · rig.groundAt(nx, ny, y, out) · rig.zoomedIn() · rig.canOrbit() · rig.homeZoom() · rig.info()
    Gesture(o) → pure pointer recognizer (tap 8 px / up to 1 s — a slow press released in place is
      still a tap, also after the long-press —, long-press 450 ms, hold 1 s (no tap after it),
      claimed item drag 10 px, double tap 320 ms / 24 px, pinch + twist)
@@ -46,7 +60,9 @@
              orbit | orbitX | pan {dx, dy} · pinch {scale, rotate, dx, dy, cx, cy} · release {vx, vy, mode}
    Controls(el, rig, hooks) → {key(e) → handled, setEnabled(on), cancel(), dispose()}   (browser only)
      hooks {press(x, y, e) → 'item' | 'ghost' | null, tap(x, y, count, long), longPress(x, y, claim),
-            hold(x, y, claim), dragStart(x, y, x0, y0), drag(x, y), dragEnd(x, y, cancelled), camera(), input()}
+            hold(x, y, claim), dragStart(x, y, x0, y0), drag(x, y), dragEnd(x, y, cancelled), camera(),
+            input(kind)   ('press' | 'wheel' | 'key': any input, before it is handled),
+            up()          (the last finger lifted or was cancelled)}
      dragEnd(…, cancelled = true) is a cancel, never a release: pointercancel, a second finger,
      cancel() / setEnabled(false), or a lost pointer capture that cannot be taken back (a capture lost
      while the finger is down — the element was re-parented — is re-taken and the gesture goes on).
@@ -62,21 +78,31 @@
 }(typeof self !== 'undefined' ? self : typeof globalThis !== 'undefined' ? globalThis : this, function (root) {
   'use strict';
 
-  var VERSION = 1;
+  var VERSION = 2;
   var DEG = Math.PI / 180;
   var TARGET_Y = 0.3;
 
   var LIMITS = {
     fov: 30, near: 0.5, far: 200, margin: 0.06,
-    yaw: 35, elevMin: 40, elevMax: 67, elevDefault: 52, editElev: 62,
-    zoomMin: 0.75, zoomMax: 1.6, zoomPhone: 2.2, placeZoomPhone: 1.4,
+    /* v2: a lower, more cinematic default (the media barges and the quay's LED lip in frame);
+       a deliberate downward drag in play reaches 34° and shows more of the city */
+    yaw: 35, elevMin: 34, elevMinEdit: 40, elevMax: 67, elevDefault: 48, editElev: 62,
+    zoomMin: 0.75, zoomMax: 1.6, zoomPhone: 2.45, zoomHomePhone: 1.75, placeZoomPhone: 1.4, pushZoomMax: 2.2,
     damping: 0.12,            /* per 60 Hz frame (the bible's inertia damping) */
     snapDamping: 0.2,         /* mode tilts / resets / framing: settle within ~0.4 s */
     snapSec: 0.45,
     flingKeep: 0.03,          /* velocity left after 1 s of coasting */
     panSlack: 0.35,           /* u the target may leave the framed centre at zoom ≤ 1 */
+    /* zoomed in, the target may glide this much further toward -z (over the channel) */
+    backPan: 2.5, backPanFrom: 1.2, backPanFull: 1.5,
+    /* the Showtime orbit's elevation dip at full sway, never taking the view below the floor */
+    orbitDeg: 8, orbitDip: 6, orbitDipFloor: 40,
     keyYaw: 15, keyElev: 5, keyZoom: 1.25, keyPanPx: 48
   };
+  /* the establishing hero shot: low over the bay, the target raised and pulled toward the city so
+     the towers, the Halo Wheel and the Lantern Bridge fill the top of the frame (top ray ≈ +1°).
+     The shot is never quite still: its yaw creeps 2° over the whole move (a slow dolly) */
+  var SKYLINE = { elev: 14, yaw: -16, ty: 2.0, dz: -1.5, zoom: 0.8, hold: 0.9, ease: 1.8, drift: 2, release: 0.45, freezeMax: 1.5 };
   var DEG_PER_PX = { yaw: 0.25, elev: 0.2 };
   var STEP_EPS = 1e-4;
 
@@ -162,6 +188,28 @@
   }
   function isPhone(touch, aspect) { return !!touch && aspect > 0 && aspect < 1; }
   function zoomMaxFor(touch, aspect) { return isPhone(touch, aspect) ? LIMITS.zoomPhone : LIMITS.zoomMax; }
+  /* the zoom of the home view: a portrait phone's width-limited fit starts zoomed in */
+  function homeZoomFor(touch, aspect) { return isPhone(touch, aspect) ? LIMITS.zoomHomePhone : 1; }
+  /* extra target travel toward -z (the city side only) once zoomed in past 1.2 in play mode,
+     ramping smoothly to the full 2.5 u so zooming back out glides home instead of snapping */
+  function backPanFor(zoom, mode) {
+    if (mode === 'edit' || mode === 'place') return 0;
+    var u = clamp01((zoom - LIMITS.backPanFrom) / (LIMITS.backPanFull - LIMITS.backPanFrom));
+    return LIMITS.backPan * u * u * (3 - 2 * u);
+  }
+  /* the Showtime orbit's elevation dip: up to 6° at the full ±8° sway, never below 40° (a view
+     already lower than that keeps its elevation) */
+  function orbitDip(orbitYaw, elev) {
+    var d = LIMITS.orbitDip * Math.min(1, Math.abs(orbitYaw || 0) / LIMITS.orbitDeg);
+    return Math.max(0, Math.min(d, elev - LIMITS.orbitDipFloor));
+  }
+  /* the top frustum edge's angle above the horizontal for a pose (the camera never rolls) */
+  var _tr = {};
+  function topRayDeg(pose) {
+    var B = basisInto(pose.yaw, pose.elev, _tr), t = Math.tan((pose.fov || LIMITS.fov) * DEG / 2);
+    var dx = -B.Dx + B.Ux * t, dy = -B.Dy + B.Uy * t, dz = -B.Dz + B.Uz * t;
+    return Math.atan2(dy, Math.sqrt(dx * dx + dz * dz)) / DEG;
+  }
 
   /* NDC of a world point for a pose {px, py, pz, yaw, elev, fov, aspect} (= THREE lookAt) */
   var _pj = {};
@@ -215,12 +263,13 @@
     this.move = null;
     this.orbitOn = false; this.orbitT = 0; this.orbitYaw = 0;
     this.shakeAmp = 0; this.shakeDur = 0; this.shakeT = 0;
+    this.frozen = 0;           /* > 0: a finger is down, a skippable move holds still (s left) */
     this.t = 0;
     this.pose = { px: 0, py: 0, pz: 0, tx: 0, ty: TARGET_Y, tz: 0, yaw: 0, elev: LIMITS.elevDefault, zoom: 1, dist: 10,
       fov: LIMITS.fov, aspect: this.aspect, near: LIMITS.near, far: LIMITS.far };
     this.version = 0;
     this.moving = false;
-    this._last = { px: NaN, py: 0, pz: 0, tx: 0, tz: 0, fov: 0, aspect: 0 };
+    this._last = { px: NaN, py: 0, pz: 0, tx: 0, ty: 0, tz: 0, fov: 0, aspect: 0 };
     this._camAspect = 0; this._camFov = 0;
     this._pd = {}; this._mk = {}; this._kv = {}; this._snapT = 0;
     this.setLand(o.land == null ? ['home'] : o.land, { instant: true });
@@ -228,6 +277,7 @@
   var R = Rig.prototype;
 
   R.zoomMax = function () { return zoomMaxFor(this.touch, this.aspect); };
+  R.homeZoom = function () { return homeZoomFor(this.touch, this.aspect); };
   R.phone = function () { return isPhone(this.touch, this.aspect); };
   R.zoomedIn = function () { return this.goal.zoom > 1.05; };
   R.canOrbit = function () { return !editing(this.mode); };
@@ -239,7 +289,7 @@
     var fit = G && typeof G.fitCamera === 'function' ? G.fitCamera({ land: land, aspect: this.aspect, fov: this.lim.fov, yaw: 0, elev: this.lim.elevDefault }) : null;
     this.b = b;
     this.home.tx = fit ? fit.target.x : b.cx; this.home.tz = fit ? fit.target.z : b.cz;
-    this.home.yaw = 0; this.home.elev = this.lim.elevDefault; this.home.zoom = 1;
+    this.home.yaw = 0; this.home.elev = this.lim.elevDefault; this.home.zoom = this.homeZoom();
     if (o.instant || !this._landSet) {
       if (!this._landSet) { copyView(this.goal, this.home); copyView(this.cur, this.home); }
       else { this.goal.tx = this.home.tx; this.goal.tz = this.home.tz; this.cur.tx = this.goal.tx; this.cur.tz = this.goal.tz; }
@@ -251,20 +301,35 @@
     this.clampGoal();
     return this;
   };
+  /* the device turned into (or out of) a portrait phone: the home zoom follows, and a view
+     nobody has moved yet goes along with it (at once while nothing has been shown) */
+  R._rehome = function () {
+    var z = this.homeZoom(), old = this.home.zoom;
+    if (z === old) return;
+    this.home.zoom = z;
+    var g = this.goal, c = this.cur, untouched = Math.abs(g.zoom - old) < 1e-6 && Math.abs(g.yaw) < 1e-6 &&
+      Math.abs(g.tx - this.home.tx) < 1e-6 && Math.abs(g.tz - this.home.tz) < 1e-6;
+    if (this.saved && Math.abs(this.saved.zoom - old) < 1e-6) this.saved.zoom = z;
+    if (!untouched) return;
+    g.zoom = z;
+    if (this.version === 0 || Math.abs(c.zoom - old) < 1e-6) c.zoom = z;
+  };
   R.resize = function (w, h) {
     if (!(w > 0 && h > 0)) return this;
     this.viewW = w; this.viewH = h;
     this.aspect = w / h;
+    this._rehome();
     this.clampGoal();
     return this;
   };
-  R.setTouch = function (on) { this.touch = !!on; this.clampGoal(); return this; };
+  R.setTouch = function (on) { this.touch = !!on; this._rehome(); this.clampGoal(); return this; };
   R.setReduced = function (on) {
     this.reduced = !!on;
     if (this.reduced) {
       this.vel.yaw = this.vel.elev = this.vel.tx = this.vel.tz = 0;
       this.shakeAmp = 0; this.orbitYaw = 0;
       copyView(this.cur, this.goal);
+      if (this.move && this.move.skippable) this._endMove(true);     /* the hero shot is skipped outright */
     }
     return this;
   };
@@ -273,27 +338,29 @@
     var g = this.goal, l = this.lim, b = this.b;
     if (editing(this.mode)) g.yaw = 0;
     else g.yaw = clamp(g.yaw, -l.yaw, l.yaw);
-    g.elev = clamp(g.elev, l.elevMin, l.elevMax);
+    g.elev = clamp(g.elev, editing(this.mode) ? l.elevMinEdit : l.elevMin, l.elevMax);
     g.zoom = clamp(g.zoom, l.zoomMin, this.zoomMax());
     if (b) {
-      var pl = panLimit(b, g.zoom, l.panSlack, this._pd);
+      var pl = panLimit(b, g.zoom, l.panSlack, this._pd), back = backPanFor(g.zoom, this.mode);
       g.tx = clamp(g.tx, this.home.tx - pl.x, this.home.tx + pl.x);
-      g.tz = clamp(g.tz, this.home.tz - pl.z, this.home.tz + pl.z);
+      g.tz = clamp(g.tz, this.home.tz - pl.z - back, this.home.tz + pl.z);
     }
     if (this.reduced) copyView(this.cur, g);
     return this;
   };
   R._stopFling = function () { var v = this.vel; v.yaw = v.elev = v.tx = v.tz = 0; };
 
-  /* ---------------- user input ---------------- */
+  /* ---------------- user input ----------------
+     Any camera input from the child hands a running hero shot back to them. */
+  R._input = function () { this.frozen = 0; this.interrupt(); this._stopFling(); };
   R.orbitBy = function (dYaw, dElev) {
     if (!this.canOrbit()) return this;
-    this._stopFling();
+    this._input();
     this.goal.yaw += dYaw || 0; this.goal.elev += dElev || 0;
     return this.clampGoal();
   };
   R.panBy = function (dxPx, dyPx) {
-    this._stopFling();
+    this._input();
     var d = panDelta(dxPx, dyPx, this.viewH || 600, this.pose.dist, this.lim.fov, this.pose.yaw, this.pose.elev, this._pd);
     this.goal.tx += d.x; this.goal.tz += d.z;
     return this.clampGoal();
@@ -304,6 +371,7 @@
   R.zoomBy = function (f, focus) {
     var g = this.goal, z0 = g.zoom, z1 = clamp(z0 * (f > 0 ? f : 1), this.lim.zoomMin, this.zoomMax());
     if (Math.abs(z1 - z0) < 1e-6) return false;
+    this._input();
     if (focus && isFinite(focus.x) && isFinite(focus.z)) {
       g.tx = focus.x + (g.tx - focus.x) * (z0 / z1);
       g.tz = focus.z + (g.tz - focus.z) * (z0 / z1);
@@ -345,7 +413,7 @@
     return true;
   };
   R.reset = function (instant) {
-    this._stopFling();
+    this._input();
     this._snapT = this.lim.snapSec;
     copyView(this.goal, this.home);
     if (editing(this.mode)) { this.goal.yaw = 0; this.goal.elev = this.lim.editElev; }
@@ -357,7 +425,7 @@
   R.focusOn = function (p, o) {
     if (!p) return this;
     o = o || {};
-    this._stopFling();
+    this._input();
     this._snapT = Math.max(this._snapT, 0.6);       /* the 0.6 s dolly */
     this.goal.tx = p.x; this.goal.tz = p.z;
     if (o.zoom != null) this.goal.zoom = o.zoom;
@@ -384,6 +452,7 @@
     this._stopFling();
     if (editing(mode) && !editing(this.mode)) this.saved = { yaw: g.yaw, elev: g.elev, zoom: g.zoom };
     if (editing(mode) !== editing(this.mode)) this._snapT = this.lim.snapSec;      /* the 0.4 s tilt */
+    if (editing(mode)) this.interrupt();                 /* editing takes the camera back from the hero shot */
     this.mode = mode;
     if (editing(mode)) {
       g.yaw = 0; g.elev = this.lim.editElev;
@@ -397,8 +466,9 @@
   };
 
   /* ---------------- stage-cam moves ----------------
-     One at a time: {kind, t, dur, kAt(t) → 0..1, tx, tz, elev, zoom, dyaw, hold, relT, resolve}.
-     The shown pose = lerp(user view, move pose, k); a new move ends the old one. */
+     One at a time: {kind, t, dur, kAt(t) → 0..1, tx, tz, ty?, elev, zoom, yaw? (absolute, + yawDrift × t / dur) | dyaw,
+     hold, skippable, relT, relDur, resolve}. The shown pose = lerp(user view, move pose, k); a new
+     move ends the old one. */
   R._startMove = function (m) {
     this._endMove(false);
     m.t = 0; m.relT = -1;
@@ -412,16 +482,46 @@
     var m = this.move;
     if (!m) return;
     this.move = null;
+    this.frozen = 0;
     if (m.resolve) m.resolve(ok !== false);
   };
-  /* mount: a short crane down from high and wide onto the default view */
-  R.reveal = function () {
+  /* the establishing hero shot over the bay (SKYLINE). o.easeIn > 0 eases into it first (the stage
+     encore); o.at {x, z} pulls the target halfway toward a point; o.hold overrides the hold.
+     Reduced motion skips it: the user view is simply there. */
+  R.skyline = function (o) {
+    o = o || {};
     if (this.reduced) return P() ? P().resolve(true) : null;
-    var c = this.cur;
+    var S = SKYLINE, h = this.home;
+    var easeIn = o.easeIn > 0 ? o.easeIn : 0, hold = o.hold > 0 ? o.hold : S.hold, ease = S.ease;
+    var at = o.at && isFinite(o.at.x) && isFinite(o.at.z) ? o.at : null;
     return this._startMove({
-      kind: 'reveal', dur: 1.6, tx: c.tx, tz: c.tz, elev: 66, zoom: 0.82, dyaw: -12,
-      kAt: function (t) { return 1 - inOutSine(clamp01(t / 1.6)); }
+      kind: 'skyline', skippable: true, dur: easeIn + hold + ease,
+      tx: at ? lerp(h.tx, at.x, 0.5) : h.tx, tz: h.tz + S.dz, ty: S.ty,
+      elev: S.elev, yaw: S.yaw, yawDrift: S.drift, zoom: S.zoom,
+      kAt: function (t, reduced) {
+        if (reduced) return 0;
+        if (t < easeIn) return inOutSine(t / easeIn);
+        if (t < easeIn + hold) return 1;
+        return 1 - inOutSine(clamp01((t - easeIn - hold) / ease));
+      }
     });
+  };
+  /* kept for callers of the v1 mount reveal: the hero shot replaced it */
+  R.reveal = function () { return this.skyline(); };
+  /* hand a skippable move back to the user view over 0.45 s (a cut under reduced motion) */
+  R.interrupt = function () {
+    var m = this.move;
+    if (!m || !m.skippable) return false;
+    this.frozen = 0;
+    if (this.reduced) { this._endMove(true); return true; }
+    if (m.relT < 0) { m.relT = m.t; m.relK = m.k; m.relDur = SKYLINE.release; }
+    return true;
+  };
+  /* a finger is down: a skippable move holds still so a tap picks exactly what the child saw
+     (never longer than SKYLINE.freezeMax, so a lost pointer cannot strand the shot) */
+  R.freeze = function (on) {
+    this.frozen = on && this.move && this.move.skippable ? SKYLINE.freezeMax : 0;
+    return this;
   };
   /* land unlock: crane 52° → 40° toward the region over 1.4 s, hold 1.5 s, back over 1.0 s */
   R.crane = function (p) {
@@ -446,8 +546,8 @@
     var M = this.M, c = this.cur;
     var m = {
       kind: 'push', dur: 0.7, hold: true,
-      tx: p ? p.x : c.tx, tz: p ? p.z : c.tz, elev: Math.max(this.lim.elevMin, c.elev - 6),
-      zoom: o.zoom || clamp(Math.max(c.zoom * 1.6, 1.8), 1, LIMITS.zoomPhone), dyaw: 0,
+      tx: p ? p.x : c.tx, tz: p ? p.z : c.tz, elev: Math.max(this.lim.elevMinEdit, c.elev - 6),
+      zoom: o.zoom || clamp(Math.max(c.zoom * 1.6, 1.8), 1, LIMITS.pushZoomMax), dyaw: 0,
       kAt: function (t, reduced) { return M && typeof M.pushIn === 'function' ? M.pushIn(t, reduced) : (reduced ? 1 : inOutSine(clamp01(t / 0.7))); }
     };
     m.arrive = true;            /* resolve on arrival, not on release */
@@ -476,7 +576,8 @@
     if (m.relT < 0) { m.relT = m.t; m.relK = m.k; }
     return this;
   };
-  /* Showtime: a slow 8° orbit over 8 s and back, alternating sides */
+  /* Showtime: a slow 8° orbit over 8 s and back, alternating sides, the view dipping up to 6° at
+     full sway (orbitDip) so more of the lit quay and its reflections enter the frame */
   R.showOrbit = function (on) { this.orbitOn = !!on; if (on) this.orbitT = 0; return this; };
   R.shake = function (amp, dur) {
     if (this.reduced) return this;
@@ -511,12 +612,13 @@
       if (Math.abs(g.elev - c.elev) < STEP_EPS) c.elev = g.elev;
       if (Math.abs(g.zoom - c.zoom) < STEP_EPS) c.zoom = g.zoom;
     }
-    /* the stage-cam move */
+    /* the stage-cam move (a skippable one holds still while a finger is down) */
     var m = this.move, k = 0;
     if (m) {
-      m.t += dt;
+      if (this.frozen > 0 && m.skippable && m.relT < 0) this.frozen = Math.max(0, this.frozen - dt);
+      else m.t += dt;
       if (m.relT >= 0) {
-        var u = clamp01((m.t - m.relT) / 0.5);
+        var u = clamp01((m.t - m.relT) / (m.relDur || 0.5));
         k = m.relK * (1 - inOutSine(u));
         if (u >= 1) { this._endMove(true); m = null; k = 0; }
       } else {
@@ -537,13 +639,16 @@
       this.orbitYaw += (0 - this.orbitYaw) * (red ? 1 : damp(dt, editing(this.mode) ? this.lim.snapDamping : 0.05));
       if (Math.abs(this.orbitYaw) < 1e-3) this.orbitYaw = 0;
     }
-    /* compose */
-    var yaw = c.yaw + this.orbitYaw, elev = c.elev, zoom = c.zoom, tx = c.tx, tz = c.tz;
+    /* compose: the user view, the Showtime sway and its elevation dip, then the move on top */
+    var yaw = c.yaw + this.orbitYaw, elev = c.elev, zoom = c.zoom, tx = c.tx, tz = c.tz, ty = TARGET_Y;
+    if (this.orbitYaw) elev -= orbitDip(this.orbitYaw, elev);
     if (m && k > 0) {
       tx = lerp(tx, m.tx, k); tz = lerp(tz, m.tz, k);
+      if (m.ty != null) ty = lerp(ty, m.ty, k);
       if (m.elev != null) elev = lerp(elev, m.elev, k);
       if (m.zoom != null) zoom = lerp(zoom, m.zoom, k);
-      if (m.dyaw) yaw += m.dyaw * k;
+      if (m.yaw != null) yaw = lerp(yaw, m.yaw + (m.yawDrift ? m.yawDrift * clamp01(m.t / m.dur) : 0), k);
+      else if (m.dyaw) yaw += m.dyaw * k;
     }
     if (this.shakeAmp > 0) {
       this.shakeT += dt;
@@ -553,13 +658,13 @@
     }
     var p = this.pose, B = basisInto(yaw, elev, this._mk);
     var dist = fitDist(this.b, yaw, elev, this.aspect, this.lim.fov, this.lim.margin, this.lim.near) / Math.max(0.1, zoom);
-    p.tx = tx; p.ty = TARGET_Y; p.tz = tz; p.yaw = yaw; p.elev = elev; p.zoom = zoom; p.dist = dist;
-    p.px = tx + B.Dx * dist; p.py = TARGET_Y + B.Dy * dist; p.pz = tz + B.Dz * dist;
+    p.tx = tx; p.ty = ty; p.tz = tz; p.yaw = yaw; p.elev = elev; p.zoom = zoom; p.dist = dist;
+    p.px = tx + B.Dx * dist; p.py = ty + B.Dy * dist; p.pz = tz + B.Dz * dist;
     p.fov = this.lim.fov; p.aspect = this.aspect;
     var L = this._last, changed = !(Math.abs(L.px - p.px) < 1e-5 && Math.abs(L.py - p.py) < 1e-5 && Math.abs(L.pz - p.pz) < 1e-5 &&
-      Math.abs(L.tx - p.tx) < 1e-5 && Math.abs(L.tz - p.tz) < 1e-5 && L.fov === p.fov && L.aspect === p.aspect);
+      Math.abs(L.tx - p.tx) < 1e-5 && Math.abs(L.ty - p.ty) < 1e-5 && Math.abs(L.tz - p.tz) < 1e-5 && L.fov === p.fov && L.aspect === p.aspect);
     if (changed) {
-      L.px = p.px; L.py = p.py; L.pz = p.pz; L.tx = p.tx; L.tz = p.tz; L.fov = p.fov; L.aspect = p.aspect;
+      L.px = p.px; L.py = p.py; L.pz = p.pz; L.tx = p.tx; L.ty = p.ty; L.tz = p.tz; L.fov = p.fov; L.aspect = p.aspect;
       this.version++;
     }
     this.moving = changed;
@@ -587,7 +692,8 @@
     return {
       mode: this.mode, yaw: Math.round(p.yaw * 10) / 10, elev: Math.round(p.elev * 10) / 10, zoom: Math.round(p.zoom * 100) / 100,
       dist: Math.round(p.dist * 100) / 100, target: [p.tx, p.ty, p.tz], move: this.move ? this.move.kind : null,
-      orbit: this.orbitOn, aspect: Math.round(this.aspect * 1000) / 1000, zoomMax: this.zoomMax(), reduced: this.reduced
+      frozen: this.frozen > 0, orbit: this.orbitOn, aspect: Math.round(this.aspect * 1000) / 1000, zoomMax: this.zoomMax(),
+      homeZoom: this.homeZoom(), phone: this.phone(), reduced: this.reduced
     };
   };
   R.dispose = function () { this._endMove(false); };
@@ -824,7 +930,7 @@
     function onDown(e) {
       if (!enabled || disposed) return;
       if (e.pointerType === 'mouse' && e.button > 2) return;
-      call('input');
+      call('input', 'press');
       var p = local(e);
       var claim = g.active() ? null : (call('press', p.x, p.y, e) || null);
       kinds[e.pointerId] = e.pointerType;
@@ -849,12 +955,14 @@
       dispatch(g.up(e.pointerId, p.x, p.y, nowMs()));
       try { el.releasePointerCapture(e.pointerId); } catch (er) {}
       delete kinds[e.pointerId];
+      if (!g.active()) call('up');
     }
     function onCancel(e) {
       if (disposed || !g.has(e.pointerId)) return;
       clearTimeout(lpTimer);
       dispatch(g.cancel(e.pointerId));
       delete kinds[e.pointerId];
+      if (!g.active()) call('up');
     }
     /* capture lost while the finger is still down: the canvas was re-parented (the host redrew its
        page around the persistent stage) — take the capture back and carry on; only when that is
@@ -871,7 +979,7 @@
     }
     function onWheel(e) {
       if (!enabled || disposed) return;
-      call('input');
+      call('input', 'wheel');
       var dy = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1);
       if (!dy) return;
       var p = local(e), n = ndcOf(p.x, p.y), f = rig.groundAt(n.x, n.y, TARGET_Y, {});   /* target height: the point stays put */
@@ -879,6 +987,12 @@
       if (changed) { e.preventDefault(); call('camera'); }     /* at a zoom limit the page scrolls on */
     }
     function onContext(e) { e.preventDefault(); }
+    function cancelAll() {
+      var had = g.active();
+      clearTimeout(lpTimer);
+      dispatch(g.cancelAll());
+      if (had) call('up');
+    }
     el.addEventListener('pointerdown', onDown);
     el.addEventListener('pointermove', onMove);
     el.addEventListener('pointerup', onUp);
@@ -902,11 +1016,11 @@
         }
         if (!cmd) return false;
         rig.command(cmd);
-        call('input'); call('camera');
+        call('input', 'key'); call('camera');
         return true;
       },
-      setEnabled: function (on) { enabled = !!on; if (!enabled) { clearTimeout(lpTimer); dispatch(g.cancelAll()); } },
-      cancel: function () { clearTimeout(lpTimer); dispatch(g.cancelAll()); },
+      setEnabled: function (on) { enabled = !!on; if (!enabled) cancelAll(); },
+      cancel: function () { cancelAll(); },
       busy: function () { return g.active(); },
       dispose: function () {
         if (disposed) return;
@@ -924,10 +1038,11 @@
   }
 
   return {
-    VERSION: VERSION, LIMITS: LIMITS, TARGET_Y: TARGET_Y, DEG_PER_PX: DEG_PER_PX,
+    VERSION: VERSION, LIMITS: LIMITS, SKYLINE: SKYLINE, TARGET_Y: TARGET_Y, DEG_PER_PX: DEG_PER_PX,
     clamp: clamp, lerp: lerp, damp: damp, wrapDeg: wrapDeg,
-    boundsOf: boundsOf, fitDist: fitDist, basisInto: basisInto, panDelta: panDelta, panLimit: panLimit,
-    isPhone: isPhone, zoomMaxFor: zoomMaxFor, projectPose: projectPose, groundAt: groundAt,
+    boundsOf: boundsOf, fitDist: fitDist, basisInto: basisInto, panDelta: panDelta, panLimit: panLimit, backPanFor: backPanFor,
+    isPhone: isPhone, zoomMaxFor: zoomMaxFor, homeZoomFor: homeZoomFor, orbitDip: orbitDip, topRayDeg: topRayDeg,
+    projectPose: projectPose, groundAt: groundAt,
     Rig: Rig, Gesture: Gesture, Controls: Controls,
     create: function (o) { return new Rig(o); }
   };

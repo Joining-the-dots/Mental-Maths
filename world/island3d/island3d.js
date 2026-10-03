@@ -4,9 +4,13 @@
    created (never replaces it). In Node, module.exports is the PURE layer
    (view diffing, pick priority, ray/box maths, labels) for tests.
 
-   SLIsland3D.mount({reduced, user: {name, color, avatar}, on: {tapItem(uid),
+   SLIsland3D.mount({reduced, user: {name, color, avatar, seed}, on: {tapItem(uid),
      tapPet(petId), tapAvatar(), tapLand(landId), tapCell(x, y), dragStart(uid),
-     dragCell(x, y), dragEnd(), dragCancel()?, ready(), fail(reason)}, srList = true}) → stage
+     dragCell(x, y), dragEnd(), dragCancel()?, ready(), fail(reason)}, srList = true,
+     skyline = true}) → stage
+     user.seed (v2): the profile key's hash. env.create gets it (the per-child coastline) and the
+     home's trim (shape variant) falls back to fnv(seed) % 2 when view.style carries no variant.
+     A new seed on setUser (a profile switch) rebuilds the environment for that child's coast.
      dragEnd() means the finger was LIFTED (the host may confirm the move). A cancelled drag
      (pointercancel, a lost pointer capture that cannot be re-taken, a second finger, a sheet,
      suspend) never calls dragEnd: it calls the optional on.dragCancel(), and without that hook
@@ -20,14 +24,24 @@
                            restyle (one ItemBatch per (id, stateKey)), lit lamps, mode, selection,
                            placement visuals, actors, the keyboard list; shadow refresh only on change
      act(uid, name) → Promise<bool>   CATALOG act ('launch' push-in + spot aim, 'home', 'homeClose',
-                           'bounce', 'splash', 'swing', 'bubbles', 'spin', 'wave', 'glow'); one live
-                           act per uid (a new one supersedes it: the old promise resolves false)
+                           'bounce', 'splash', 'swing', 'bubbles', 'spin', 'wave', 'glow', and the city
+                           buildings' 'snap', 'serve', 'screen', 'record', 'dance', 'hangout', 'encore');
+                           one live act per uid (a new one supersedes it: the old promise resolves false).
+                           'encore' (the Concert Stage) also takes 8 s of Showtime (showtime(true,
+                           {encoreMs: 8000}) — the host may make the same call, it only re-arms the timer),
+                           runs the skyline shot eased in toward the stage, and owns the crew's 8-count
+                           (no controller dance break meanwhile). While it runs, taps on that stage are
+                           ignored (no squish, no on.tapItem). The child's own Golden hour / Showtime
+                           choice comes back when it ends.
      emote(target, kind)   'pet:<id>' | 'me' (avatar wave + finger-heart); kind heart | note | star
      setLit(uid, on)       the lamp flicker act (the view's lit map is the source of truth)
      unlockLand(region) → Promise     the land rises (+ crane, splash rings, sparkles, applause)
      debut(uid) → Promise · storeFx(uid, trayEl?) → Promise
-     showtime(on, {encoreMs}?)        Day ↔ Showtime (env + rim + rigs + music context + orbit);
-                           with encoreMs: an ENCORE (Showtime for encoreMs, then back, with a dance break)
+     showtime(on, {encoreMs}?)        Golden hour (the default: env k 0 = DUSK) ↔ Showtime (env + rim + rigs +
+                           music context + orbit with its elevation dip); with encoreMs: an ENCORE (Showtime
+                           for encoreMs, then back to whatever the child chose, with a dance break). The
+                           host keeps localStorage 'slwShowtime' ('1' = Showtime) and calls showtime(true)
+                           after mount; the meaning is unchanged.
      danceNow()            the 8-count dance break (actors) + the push-in on the house
      setAnchors([{el, uid | pet | me | region, dy (u), dyPx}])   HTML labels projected every
                            camera change (≤ 15 Hz while things move); wrapped in .slw-tag3d
@@ -39,6 +53,25 @@
    no tap. An edit-mode drag > 10 px on an item calls on.dragStart(uid), then on.dragCell /
    on.dragEnd; in place mode the ghost can be dragged the same way. Pick priority: pets/avatar >
    items > locked land (env.lockedAt) > cells. Camera: camera.js (window.SLIslandCamera).
+   ENCORE CITY (v2)
+     · On ready (play mode, unless opts.skyline === false or reduced motion) the camera opens on the
+       skyline hero shot over the bay and eases to the child's view; a press holds it still (so a tap
+       picks what was seen), any release or camera gesture hands it back, edit mode ends it.
+     · Per-copy style: the house {wall, roof, door, details, shape, variant (view.style.variant, else
+       fnv(user.seed) % 2)}; a city building {variant: SLIslandLook.variantOf(uid, id)} (stateKey
+       'v:n'); organic decor and small decor get SLIslandLook.jitter2(uid, id, sameIdNeighbours) in
+       K.batch(…).add(…, {jitter}) (re-jittered when a same-id neighbour comes or goes); houses,
+       buildings, attractions and paths never get transform jitter. Path models that set
+       `pieces: true` get the auto-tiled stateKey 'p:<piece>' plus its yaw (SLIslandLook.pathPiece).
+     · env.create receives {seed, name, tier}; env.setEdit(on) on mode changes (edit / place ease the
+       light to k 0); env.setConeMounts(the stage's 'cone0..2' truss anchors | null) when bld_stage is
+       placed. A v2 env (setEdit) owns the city across the bay (SLCity3D) and the ambient life
+       (SLLife3D) and disposes them; with an older env the controller hosts both itself.
+     · actors' brain.setAnchorFn(fn(uid, name, out?) → {x, y, z} | null): live item anchors for the
+       crew's building performs (an anchor the template lacks is null, never 'top').
+     · SLIsland3D.debug.grid(on) (also ?grid=1 under SL_WORLD_TRIAL) draws the edit grid in play
+       mode, so testers can check the pads under the organic ground. html.sl-low marks the LOW tier
+       (solid UI panels). The camera buttons use SLWorldArt.uiIcon line icons when present.
 
    SIBLINGS (wave C, feature-detected; built-in fallbacks keep the island whole without them).
    The controller drives every sibling through the ISLAND PROTOCOL below. buildSystem wraps a
@@ -50,8 +83,9 @@
              {sync(v), update(dt, t, ctx) → busy, pick(origin, dir) → {target, t}, emote(target, kind),
               tap(target)?, perform(kind, uid) → lead s (0 = no pet), active(), dance(o) → s,
               anchor(target, out) → out|null, setShow(k), setMode(m), setReduced(on), setUser(u),
-              setQuality(q), dispose()}      v = actorState(…): {pets, avatar, user, placed, unlocked,
-              land, world, mode, reduced}; host.voice = false (rewards-world plays the pet voice)
+              setQuality(q), setAnchorFn(fn)?, dispose()}      v = actorState(…): {pets, avatar, user,
+              placed, unlocked, land, world, mode, reduced}; host.voice = false (rewards-world plays the
+              pet voice)
      fx3d    SL3D.makeFx(host) | SLFx3D.create(K, SL3D, host) | SLIslandFx.create(…)
              {emit(kind, pos, n, opts), halo(key, on, pos, sizeU, token), decal(key, on, pos, token),
               update(dt, t) → busy, setMember(hex), setReduced(on), setQuality(q), clear(), dispose()}
@@ -59,9 +93,11 @@
              fx3d names: {token | tokens[], radius, to, dur, delay, …} ('flight' flies to `to`)
      edit3d  SL3D.makeEdit(host) | SLEdit3D.create(K, SL3D, host) | SLIslandEdit.create(…)
              {setState(editState(…)): {mode, land, unlocked, placing, ghost: {id, st, stateKey,
-              template, material}, selectedUid}, update(dt, t, ctx) → busy, ghostBox() → {min, max} |
-              null, ghostShown() → bool, setReduced(on), dispose()}   the real copy of an item being
-              moved is hidden only while a ghost is actually shown
+              template, material}, selectedUid, grid}, update(dt, t, ctx) → busy, ghostBox() → {min,
+              max} | null, ghostShown() → bool, setReduced(on), dispose()}   the real copy of an item
+              being moved is hidden only while a ghost is actually shown; grid: true asks for the
+              plain grid in play mode too (the QA debug grid); host.jitter(uid, id) gives edit3d a
+              copy's exact placement jitter
      A sibling whose call throws is dropped for the built-in fallback (logged in QA mode).
 
    THE ANIMATION HANDLE a (one per placed copy, reused every frame — CONTRACTS §5):
@@ -80,13 +116,23 @@
 }(typeof self !== 'undefined' ? self : typeof globalThis !== 'undefined' ? globalThis : this, function (root, HAS_DOM) {
   'use strict';
 
-  var VERSION = 1;
+  var VERSION = 2;
   var DEG = Math.PI / 180;
   var MODES = { play: 1, edit: 1, place: 1 };
   var OCCLUDE_U = 0.6;          /* a pet still wins a tap unless an item box is this much nearer */
   var DANCE_EVERY_BARS = 16, DANCE_BPM = 118, DANCE_COUNTS = 8;
   var ANCHOR_HZ = 15;
   var EMOTES = ['heart', 'note', 'star'];
+  /* the stage encore's camera: eased into the skyline shot, held through the sting and the beams,
+     back to the child's view as the confetti flies (the 3 s act ends inside the hold) */
+  var ENCORE_CAM = { easeIn: 1.0, hold: 1.4 };
+  var ENCORE_SEC = 8;
+  /* placement jitter never moves architecture or the paths (identity even when a LOOK entry
+     would allow it) */
+  var NO_JITTER = { house: 1, building: 1, attraction: 1, path: 1, land: 1, style: 1 };
+  var NO_JIT = { yaw: 0, sx: 1, sy: 1, sz: 1, lean: 0, leanAxis: 0, tint: null };
+  /* the QA debug grid (SLIsland3D.debug.grid / ?grid=1 under SL_WORLD_TRIAL), shared by every stage */
+  var DEBUG = { grid: false, listeners: [] };
 
   /* ================================================================
      PURE HELPERS (exported for Node tests)
@@ -172,9 +218,13 @@
     if (normMode(mode) !== 'play') return it.name + (selected ? ' (selected)' : '') + ' — select to move it';
     return it.name + (it.act === 'launch' ? ' — tap to play' : it.act ? ' — tap to play with it' : '');
   }
-  function petLabel(C, p) {
+  /* a crew member's label ('Pets' are the 'Crew' in labels: SLWorldCopy 'label.crew') */
+  function petLabel(C, p, copy) {
     var it = C && C.item ? C.item(p.id) : null;
-    return (p.name || 'Pet') + ' the ' + (it ? it.name.toLowerCase() : 'pet') + (p.active ? ' (runs your obstacle course)' : '');
+    var crew = copy && typeof copy.t === 'function' ? String(copy.t('label.crew', null, 'Crew')) : 'Crew';
+    var lc = crew.toLowerCase();
+    return (p.name || crew + ' member') + ' the ' + (it ? it.name.toLowerCase() : lc + ' member') +
+      ' (' + lc + (p.active ? ', runs your obstacle course' : '') + ')';
   }
   /* the next dance break bar: every 16 bars while Showtime is on (-1 = not scheduled) */
   function nextDance(bar, scheduled, every) {
@@ -194,10 +244,12 @@
     out.x = (nx + 1) / 2 * w; out.y = (1 - ny) / 2 * h;
     return out;
   }
-  /* a user / avatar record → {name, color, avatar} (an 'emoji' field is accepted as the avatar) */
+  /* a user / avatar record → {name, color, avatar, seed} (an 'emoji' field is accepted as the avatar;
+     seed = the profile key's hash, a string or a number, null when the host has none) */
   function normUser(u) {
     u = u || {};
-    return { name: u.name || '', color: typeof u.color === 'string' ? u.color : null, avatar: u.avatar || u.emoji || '🙂' };
+    var seed = typeof u.seed === 'string' || (typeof u.seed === 'number' && isFinite(u.seed)) ? u.seed : null;
+    return { name: u.name || '', color: typeof u.color === 'string' ? u.color : null, avatar: u.avatar || u.emoji || '🙂', seed: seed };
   }
   /* what actors.sync(v) receives (the island protocol). view = rewards-world's island view;
      o = {user (normUser), placed (the placeable list), unlocked (the risen land), land, mode, reduced} */
@@ -215,11 +267,12 @@
       mode: normMode(o.mode || view.mode), reduced: !!o.reduced
     };
   }
-  /* what edit.setState(s) receives (the island protocol) */
-  function editState(mode, land, unlocked, placing, ghost, selectedUid) {
+  /* what edit.setState(s) receives (the island protocol); grid: the QA debug grid in play mode */
+  function editState(mode, land, unlocked, placing, ghost, selectedUid, grid) {
     return {
       mode: normMode(mode), land: land || null, unlocked: Array.isArray(unlocked) ? unlocked : ['home'],
-      placing: placing && placing.id ? placing : null, ghost: ghost || null, selectedUid: selectedUid == null ? null : selectedUid
+      placing: placing && placing.id ? placing : null, ghost: ghost || null, selectedUid: selectedUid == null ? null : selectedUid,
+      grid: !!grid
     };
   }
   /* ray (o, d unit) against a sphere → entry t ≥ 0 (0 when the origin is inside it), or -1 */
@@ -267,6 +320,90 @@
     if (c.to) c.to = toPoint(c.to, {});
     return c;
   }
+
+  /* ---------------- Encore City: per-copy style, variety, auto-tiling, layers ---------------- */
+  /* FNV-1a 32-bit (the same hash as SLIslandLook / SLMotion / SLGrid3D) */
+  function fnv(s) {
+    s = String(s);
+    var h = 0x811c9dc5;
+    for (var i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193); }
+    return h >>> 0;
+  }
+  /* the home's trim from the profile seed: one of the 2 shape trims, stable for a child (0 with no seed) */
+  function seedVariant(seed) { return seed == null || seed === '' ? 0 : fnv(String(seed)) % 2; }
+  /* view.style with the home trim filled in (the host's own variant wins) */
+  function houseStyle(style, seed) {
+    style = style || {};
+    if (typeof style.variant === 'number' && isFinite(style.variant)) return style;
+    var out = {};
+    for (var k in style) if (Object.prototype.hasOwnProperty.call(style, k)) out[k] = style[k];
+    out.variant = seedVariant(seed);
+    return out;
+  }
+  /* the style a placed copy is resolved from: the house → houseStyle; a city building → its own trim
+     by uid (never the child's or the view's); everything else → the shared view style */
+  function copyStyle(L, id, uid, style, seed) {
+    var e = L && L.LOOK ? L.LOOK[id] : null;
+    if (id === 'house_cottage') return houseStyle(style, seed);
+    if (e && e.kind === 'building' && typeof L.variantOf === 'function') return { variant: uid == null ? 0 : L.variantOf(uid, id) };
+    return style || {};
+  }
+  /* SLIslandLook.jitter2 for one copy, or null when it must not move: houses, buildings, attractions,
+     paths (and anything whose jitter is the identity) stay exactly on their cells */
+  function jitterFor(L, uid, id, sameIdNeighbours) {
+    var e = L && L.LOOK ? L.LOOK[id] : null;
+    if (!e || NO_JITTER[e.kind] || typeof L.jitter2 !== 'function') return null;
+    var j = L.jitter2(uid, id, sameIdNeighbours && sameIdNeighbours.length ? sameIdNeighbours : null);
+    if (!j || (!j.yaw && j.sx === 1 && j.sy === 1 && j.sz === 1 && !j.lean && !j.tint)) return null;
+    return j;
+  }
+  /* the 4-adjacent copies of the same id for every copy `want(id)` asks about:
+     list [{uid, id, x, y}], fpOf(id) → [w, h] → {uid: [neighbour uids, sorted]} */
+  function idNeighbours(list, fpOf, want) {
+    var occ = {}, out = {}, i, dx, dy;
+    for (i = 0; i < list.length; i++) {
+      var p = list[i], fp = (fpOf && fpOf(p.id)) || [1, 1];
+      for (dy = 0; dy < fp[1]; dy++) for (dx = 0; dx < fp[0]; dx++) occ[(p.x + dx) + ',' + (p.y + dy)] = p;
+    }
+    var STEP = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+    for (i = 0; i < list.length; i++) {
+      var q = list[i];
+      if (want && !want(q.id)) continue;
+      var f = (fpOf && fpOf(q.id)) || [1, 1], seen = {}, nb = [];
+      for (dy = 0; dy < f[1]; dy++) for (dx = 0; dx < f[0]; dx++) {
+        for (var s = 0; s < 4; s++) {
+          var o = occ[(q.x + dx + STEP[s][0]) + ',' + (q.y + dy + STEP[s][1])];
+          if (o && o.id === q.id && o.uid !== q.uid && !seen[o.uid]) { seen[o.uid] = 1; nb.push(o.uid); }
+        }
+      }
+      out[q.uid] = nb.sort();
+    }
+    return out;
+  }
+  /* path auto-tiling: every path cell's neighbour mask (N 1 · E 2 · S 4 · W 8, N = the row above,
+     any path id connects) → {uid: {mask, piece, yawDeg}} through SLIslandLook.pathPiece */
+  function pathPieces(list, isPath, pathPiece) {
+    var cells = {}, out = {}, i;
+    for (i = 0; i < list.length; i++) if (isPath(list[i].id)) cells[list[i].x + ',' + list[i].y] = 1;
+    for (i = 0; i < list.length; i++) {
+      var p = list[i];
+      if (!isPath(p.id)) continue;
+      var m = (cells[p.x + ',' + (p.y - 1)] ? 1 : 0) | (cells[(p.x + 1) + ',' + p.y] ? 2 : 0) |
+              (cells[p.x + ',' + (p.y + 1)] ? 4 : 0) | (cells[(p.x - 1) + ',' + p.y] ? 8 : 0);
+      var pc = pathPiece(m);
+      out[p.uid] = { mask: m, piece: pc.piece, yawDeg: pc.yawDeg };
+    }
+    return out;
+  }
+  /* who hosts the city across the bay and the ambient life: a v2 env (it has setEdit, or exposes
+     its layers) creates, drives and disposes them; with an older env the controller does */
+  function layerOwner(env) {
+    if (!env || typeof env !== 'object') return 'host';
+    if ((env.city && typeof env.city === 'object') || (env.life && typeof env.life === 'object')) return 'env';
+    return typeof env.setEdit === 'function' ? 'env' : 'host';
+  }
+  /* ?grid=1 asks for the QA grid only while the parent's test mode (SL_WORLD_TRIAL) is on */
+  function gridFromQuery(search, trial) { return !!trial && /[?&]grid=1(?:[&#]|$)/.test(String(search || '')); }
 
   /* ================================================================
      SIBLING ADAPTERS (pure; Node-tested against the real actors.js / edit3d.js)
@@ -321,6 +458,12 @@
       setShowtime: function () {},                 /* the Showtime mix (setShow) drives wands and tails */
       setUser: function () {},                     /* the avatar follows view.avatar on the next sync */
       setQuality: function () {},
+      /* live item anchors for the building performs (actors.js or its brain takes them) */
+      setAnchorFn: function (fn) {
+        if (typeof A.setAnchorFn === 'function') return A.setAnchorFn(fn);
+        if (A.brain && typeof A.brain.setAnchorFn === 'function') return A.brain.setAnchorFn(fn);
+        return undefined;
+      },
       info: function () { return call0(A, 'info') || null; },
       dispose: function () { call0(A, 'dispose'); }
     };
@@ -347,8 +490,11 @@
         s = s || {};
         var mode = normMode(s.mode);
         if (mode === 'play') {
-          if (shown || ghostOn) E.hide();
-          shown = false; ghostOn = false;
+          if (ghostOn) E.ghost(null);
+          ghostOn = false;
+          if (s.grid) { E.show(s.land || null, 'grid'); shown = true; return; }     /* the QA debug grid */
+          if (shown) E.hide();
+          shown = false;
           return;
         }
         var pl = mode === 'place' && s.placing && s.placing.id ? s.placing : null;
@@ -383,6 +529,20 @@
     IS.mount = mount;
     IS.mount.__island3d = VERSION;
     IS.sceneVersion = VERSION;
+    var dbg = IS.debug || (IS.debug = {});
+    dbg.grid = debugGrid;
+  }
+  /* QA: SLIsland3D.debug.grid(true) draws the edit grid in play mode on every mounted island;
+     grid() alone reads the setting */
+  function debugGrid(on) {
+    if (arguments.length) {
+      DEBUG.grid = !!on;
+      DEBUG.listeners.slice().forEach(function (f) { try { f(); } catch (e) { /* a disposed stage */ } });
+    }
+    return DEBUG.grid;
+  }
+  function queryGrid() {
+    try { return gridFromQuery(root.location && root.location.search, root.SL_WORLD_TRIAL); } catch (e) { return false; }
   }
 
   function perfNow() { return (root.performance && root.performance.now) ? root.performance.now() : Date.now(); }
@@ -456,7 +616,7 @@
     /* ---------------- modules ---------------- */
     var T = SL3D.THREE, tier = SL3D.tier, K = SL3D.kit(tier);
     var C = root.SLWorldCore, L = root.SLIslandLook, Gr = root.SLGrid3D, Mo = root.SLMotion;
-    var CamApi = root.SLIslandCamera, Snd = root.SLSound, Mus = root.SLMusic;
+    var CamApi = root.SLIslandCamera, Snd = root.SLSound, Mus = root.SLMusic, Copy = root.SLWorldCopy;
     if (!C || !Gr) { fail('SLWorldCore / SLGrid3D missing'); return stubStage(stage, function () { dead = true; }); }
 
     var reduced = !!opts.reduced;
@@ -481,6 +641,10 @@
     var drag = null, grabCell = null, newTemplates = false, srSig = '', unsubQ = null;
     var sound = Snd && typeof Snd.make === 'function' ? safeMake(function () { return Snd.make({}); }) : null;
     var riseFx = null;
+    /* v2: the city / life layers when this controller hosts them, the stage encore, cone mounts */
+    var layers = { owner: 'env', city: null, life: null, halo: null };
+    var encoreLock = null, coneSig = null;
+    var _anc = new T.Vector3();
 
     /* scratch (frame loop: no allocation) */
     var _v = new T.Vector3(), _v2 = new T.Vector3(), _ro = new T.Vector3(), _rd = new T.Vector3();
@@ -529,10 +693,14 @@
       ringEl = el('div', 'slw-focusring', { 'aria-hidden': 'true' });
       ringEl.style.display = 'none';
       camctlEl = el('div', 'slw-camctl', { role: 'group', 'aria-label': 'Island camera' });
-      [['left', '⟲', 'Turn the island left'], ['right', '⟳', 'Turn the island right'],
-       ['in', '＋', 'Zoom in'], ['out', '－', 'Zoom out'], ['reset', '⌂', 'Reset the view']].forEach(function (b) {
+      /* the v2 line icons (SLWorldArt.uiIcon, aria-hidden SVG.slw-ico) when the 2D art is loaded */
+      var ART = root.SLWorldArt, icon = ART && typeof ART.uiIcon === 'function' ? ART.uiIcon : null;
+      [['left', '⟲', 'Turn the island left', 'rotL'], ['right', '⟳', 'Turn the island right', 'rotR'],
+       ['in', '＋', 'Zoom in', 'zoomIn'], ['out', '－', 'Zoom out', 'zoomOut'], ['reset', '⌂', 'Reset the view', 'reset']].forEach(function (b) {
         var btn = el('button', 'slw-cam-' + b[0], { type: 'button', 'aria-label': b[2], 'data-cam': b[0], title: b[2] });
-        btn.textContent = b[1];
+        var svg = '';
+        try { svg = icon ? String(icon(b[3]) || '') : ''; } catch (e) { svg = ''; }
+        if (svg) btn.innerHTML = svg; else btn.textContent = b[1];
         camctlEl.appendChild(btn);
       });
       camctlEl.addEventListener('click', onCamClick);
@@ -598,15 +766,74 @@
       editRoot = new T.Group(); editRoot.name = 'edit';
       scene.add(itemsRoot, actorsRoot, fxRoot, editRoot);
     }
+    /* the environment: a v2 env bakes the child's own coastline from the seed (SLTerrain3D, when
+       loaded), names the city's hero board and hosts the city and the ambient life itself */
     function buildEnv() {
       var Env = root.SLIslandEnv;
       if (!Env || typeof Env.create !== 'function') throw new Error('env.js missing');
       env = Env.create(K, SL3D, {
         scene: scene, renderer: lease ? lease.renderer : null, unlocked: envUnlocked,
         world: lastView && lastView.world ? lastView.world : { placed: placedList },
-        show: showK, member: user.color, reduced: reduced
+        show: showK, member: user.color, reduced: reduced,
+        seed: user.seed, name: user.name, tier: tier, terrain: !!root.SLTerrain3D
       });
       scene.add(env.group);
+      if (mode !== 'play') envEdit(true);
+      buildLayers();
+    }
+    function envEdit(on) {
+      if (env && typeof env.setEdit === 'function') { try { env.setEdit(!!on); } catch (e) { issue('env.setEdit: ' + errText(e)); } }
+      layerCall('life', 'setEdit', !!on);
+    }
+
+    /* ---------------- the city across the bay + ambient life (when the env does not host them) ---------------- */
+    function buildLayers() {
+      layers.owner = layerOwner(env);
+      if (layers.owner !== 'host') return;
+      var City = root.SLCity3D, Life = root.SLLife3D;
+      if (!layers.city && City && typeof City.create === 'function') {
+        try {
+          layers.city = City.create(K, SL3D, { tier: tier, member: user.color, reduced: reduced, name: user.name, seed: 'sl-city-v1' });
+          if (layers.city && layers.city.group) scene.add(layers.city.group); else dropLayer('city');
+          if (layers.city && typeof layers.city.setShow === 'function') layers.city.setShow(showK);
+        } catch (e) { issue('city3d: ' + errText(e)); dropLayer('city'); }
+      }
+      if (!layers.life && Life && typeof Life.create === 'function') {
+        try {
+          /* the lanterns' glow: an ambient halo layer of its own (fx keeps its 48 halos) */
+          if (!layers.halo && typeof K.billboards === 'function') {
+            layers.halo = K.billboards({ capacity: 48, texture: 'halo', additive: true, show: true, name: 'life:halos', renderOrder: 4 });
+            scene.add(layers.halo.mesh);
+          }
+          layers.life = Life.create(K, SL3D, { tier: tier, member: user.color, reduced: reduced, haloLayer: layers.halo });
+          if (layers.life && layers.life.group) scene.add(layers.life.group); else dropLayer('life');
+          if (layers.life && mode !== 'play') layerCall('life', 'setEdit', true);
+        } catch (e2) { issue('life3d: ' + errText(e2)); dropLayer('life'); }
+      }
+    }
+    /* call a hosted layer; one that throws is disposed and dropped (the island goes on without it) */
+    function layerCall(name, method, a, b, c) {
+      var o = layers[name];
+      if (!o || typeof o[method] !== 'function') return undefined;
+      try { return o[method](a, b, c); } catch (e) {
+        issue(name + '.' + method + ' threw: ' + errText(e));
+        dropLayer(name);
+        return undefined;
+      }
+    }
+    function dropLayer(name) {
+      var o = layers[name];
+      if (!o) return;
+      layers[name] = null;
+      try { if (o.group && o.group.parent) o.group.parent.remove(o.group); } catch (e) {}
+      try { if (typeof o.dispose === 'function') o.dispose(); } catch (e2) { issue(name + ' dispose: ' + errText(e2)); }
+    }
+    function disposeLayers() {
+      dropLayer('life'); dropLayer('city');
+      if (layers.halo) {
+        try { if (layers.halo.mesh && layers.halo.mesh.parent) layers.halo.mesh.parent.remove(layers.halo.mesh); layers.halo.dispose(); } catch (e) {}
+        layers.halo = null;
+      }
     }
 
     /* ---------------- sibling systems (external or built-in) ---------------- */
@@ -625,8 +852,11 @@
         renderer: lease ? lease.renderer : null, budget: SL3D.budget, quality: SL3D.quality,
         reduced: reduced, user: user, grid: Gr, motion: Mo, core: C, look: L,
         member: user.color,                    /* '#hex' (fx3d, env); setUser passes the next one on */
+        seed: user.seed,                       /* the profile key's hash (per-child variety) */
         voice: false,                          /* rewards-world plays the pet voice on tapPet */
         sound: siblingSound,
+        /* a placed copy's exact placement jitter (edit3d's borrowed drop / store copies) */
+        jitter: function (uid) { var r = recs.get(uid); return r && r.jit ? r.jit : null; },
         emit: function (k, pos, n, o) { fxEmit(k, pos, n, o); },
         sfx: function (name, vol, step, x) { sfx(name, vol, step, x); },
         itemPoint: function (uid, anchor, out) { return itemPoint(uid, anchor, out); },
@@ -668,7 +898,7 @@
           try { if (typeof s.obj.dispose === 'function') s.obj.dispose(); } catch (er2) {}
           sys[kind] = null;
           try { sys[kind] = { obj: SYS[kind].make(hostFor(kind)), external: false, name: 'built-in' }; } catch (er3) { issue(kind + ' fallback failed: ' + errText(er3)); }
-          if (kind === 'actors' && lastView) syncActors(lastView);
+          if (kind === 'actors') { wireAnchors(); if (lastView) syncActors(lastView); }
           if (kind === 'edit') applyEdit();
         }
         return undefined;
@@ -762,8 +992,11 @@
       var busy = false;
       if (compileState === 2) { compileFrames++; if (compileFrames >= 2) fireReady(); }
       updateBeat(dt);
-      /* environment + the Day ↔ Showtime mix */
+      /* environment + the Golden hour ↔ Showtime mix (k 0 = DUSK) */
       if (env) { if (env.update(dt, clockT)) busy = true; if (env.show !== showK) { showK = env.show; showDirty = true; } }
+      /* the hosted city / life (a v2 env drives its own) */
+      if (layers.city && layerCall('city', 'update', dt, showK)) busy = true;
+      if (layers.life && layerCall('life', 'update', dt, showK, showK)) busy = true;
       /* camera */
       if (rig) {
         if (rig.update(dt)) { rig.apply(camera); busy = true; }
@@ -968,16 +1201,21 @@
     }
     function addLive(rec) { if (!rec.inLive && !rec.dead) { rec.inLive = true; live.push(rec); } }
 
+    /* where a copy stands: its cells, plus the auto-tiled path yaw */
+    function placeOf(n, fp) {
+      var p = { x: n.x, y: n.y, fp: fp };
+      if (typeof n.yaw === 'number') p.yaw = n.yaw;
+      return p;
+    }
     function addRec(n) {
       var it = C.item(n.id), fp = (it && it.fp) || [1, 1];
       var b = batchFor(n.id, n.sk, n.st);
-      var j = Gr.jitter ? Gr.jitter(n.uid, n.id) : { yaw: 0, yawDeg: 0, scale: 1 };
-      b.batch.add(n.uid, { x: n.x, y: n.y, fp: fp }, { jitter: { yaw: j.yawDeg, scale: j.scale } });
+      b.batch.add(n.uid, placeOf(n, fp), n.jit ? { jitter: n.jit } : undefined);
       b.n++;
       var model = SL3D.models[n.id] || null;
       var rec = {
         uid: n.uid, id: n.id, it: it, x: n.x, y: n.y, fp: fp, st: n.st, sk: n.sk, b: b, batch: b.batch, tpl: b.tpl, model: model,
-        jyaw: j.yaw || 0, jscale: j.scale || 1, wx: 0, wy: 0, wz: 0, hit: null, h: 1, rad: 1, inView: true,
+        jit: n.jit || null, jsig: n.jsig || '', pyaw: typeof n.yaw === 'number' ? n.yaw : 0, wx: 0, wy: 0, wz: 0, hit: null, h: 1, rad: 1, inView: true,
         a: null, act: null, anims: { squish: animSlot(), drop: animSlot(), debut: animSlot(), store: animSlot() }, animOn: 0,
         rootModel: { rx: 0, ry: 0, rz: 0, px: 0, py: 0, pz: 0, sx: 1, sy: 1, sz: 1 }, rootDirty: false, rootOn: false, inLive: false,
         idleOn: idleOnFor(model, n.sk), idlePending: true, hidden: false, storing: false, removeAfter: false,
@@ -993,10 +1231,20 @@
     }
     function moveRec(rec, n) {
       rec.x = n.x; rec.y = n.y;
-      rec.batch.move(rec.uid, n.x, n.y);
+      rec.batch.move(rec.uid, n.x, n.y, varyPlace(rec, n));
       placeRec(rec);
       refreshAttachments(rec);
       rec.idlePending = true;
+    }
+    /* a copy whose same-id neighbours (its jitter) or path piece yaw changed → the place to re-write
+       ({jitter, yaw}), else undefined; the record keeps what the batch now shows */
+    function varyPlace(rec, n) {
+      var jitCh = (n.jsig || '') !== rec.jsig, yawCh = typeof n.yaw === 'number' && n.yaw !== rec.pyaw;
+      if (!jitCh && !yawCh) return undefined;
+      var p = {};
+      if (jitCh) { p.jitter = n.jit || NO_JIT; rec.jit = n.jit || null; rec.jsig = n.jsig || ''; }
+      if (yawCh) { p.yaw = n.yaw; rec.pyaw = n.yaw; }
+      return p;
     }
     /* per-copy state a model keeps for a uid (lamp levels, halos, pivots) ends with the copy */
     function forgetCopy(rec) {
@@ -1004,14 +1252,17 @@
       if (m && typeof m.forget === 'function') { try { m.forget(rec.uid); } catch (e) { issue(rec.id + '.forget threw: ' + errText(e)); } }
     }
     function restyleRec(rec, n) {
+      /* a path piece that turned into another (a neighbour came or went) is not a new look: no sparkle */
+      var pieceSwap = rec.id === n.id && /^p:/.test(String(rec.sk)) && /^p:/.test(String(n.sk));
       cancelAct(rec, false);
       forgetCopy(rec);
       var old = rec.b, it = C.item(n.id);
       old.batch.remove(rec.uid);
       releaseBatch(old);
       var b = batchFor(n.id, n.sk, n.st);
-      b.batch.add(rec.uid, { x: n.x, y: n.y, fp: (it && it.fp) || rec.fp }, { jitter: { yaw: rec.jyaw / DEG, scale: rec.jscale } });
+      b.batch.add(rec.uid, placeOf(n, (it && it.fp) || rec.fp), n.jit ? { jitter: n.jit } : undefined);
       b.n++;
+      rec.jit = n.jit || null; rec.jsig = n.jsig || ''; rec.pyaw = typeof n.yaw === 'number' ? n.yaw : 0;
       rec.id = n.id; rec.it = it; rec.x = n.x; rec.y = n.y; rec.st = n.st; rec.sk = n.sk;
       rec.b = b; rec.batch = b.batch; rec.tpl = b.tpl; rec.model = SL3D.models[n.id] || null;
       rec.idleOn = idleOnFor(rec.model, n.sk); rec.idlePending = true; rec.badIdle = rec.badShow = false; rec.bad = 0;
@@ -1024,9 +1275,9 @@
       if (litMem[rec.uid]) snapLit(rec);
       if (selectedUid === rec.uid) rec.batch.setHighlight(rec.uid, 2);
       else if (focusKey === 'u:' + rec.uid) rec.batch.setHighlight(rec.uid, 1);
-      if (env) env.invalidateShadows();
+      if (env) env.invalidateShadows();                 /* restyles and shape changes re-bake the shadow map */
       /* the restyle debut sparkle */
-      if (readyFired) emitFor(rec, 'sparkle', 'top', reduced ? 6 : 16);
+      if (readyFired && !pieceSwap) emitFor(rec, 'sparkle', 'top', reduced ? 6 : 16);
     }
     function removeRec(rec) {
       if (rec.dead) return;
@@ -1068,11 +1319,14 @@
       }
       return rec.batch.anchorWorld(rec.uid, name || 'top', out);
     }
+    /* item space → world for a copy: its per-axis jitter scale, then its yaw (jitter + path piece);
+       the ≤ 3° lean is left out (emit points and pivot origins only) */
     function localToWorld(rec, x, y, z, out) {
-      var c = Math.cos(rec.jyaw), s = Math.sin(rec.jyaw), k = rec.jscale;
-      out.x = rec.wx + (x * c + z * s) * k;
-      out.y = rec.wy + y * k;
-      out.z = rec.wz + (-x * s + z * c) * k;
+      var j = rec.jit || NO_JIT, a = (j.yaw + rec.pyaw) * DEG, c = Math.cos(a), s = Math.sin(a);
+      var lx = x * j.sx, lz = z * j.sz;
+      out.x = rec.wx + lx * c + lz * s;
+      out.y = rec.wy + y * j.sy;
+      out.z = rec.wz - lx * s + lz * c;
       return out;
     }
     function itemPoint(uid, anchor, out) {
@@ -1277,16 +1531,16 @@
       var envLand = unlocked.filter(function (r) { return !(pendingRise && r === pendingRise.region); });
       /* the placed list: known, placeable ids only */
       var style = view.style || {};
-      var list = [], next = [];
+      var list = [];
       (Array.isArray(view.placed) ? view.placed : []).forEach(function (p) {
         if (!p || p.uid == null) return;
         var it = C.item(p.id);
         if (!it || (typeof C.isPlaceable === 'function' && !C.isPlaceable(it))) return;
         list.push(p);
-        var st = resolveStyle(p.id, style);
-        next.push({ uid: p.uid, id: p.id, x: p.x | 0, y: p.y | 0, st: st, sk: K.stateKey(p.id, st) });
       });
       placedList = list;
+      var next = nextCopies(list, style), nextBy = {};
+      next.forEach(function (n) { if (!nextBy[n.uid]) nextBy[n.uid] = n; });
       var world = view.world && Array.isArray(view.world.placed) ? view.world : { placed: list };
       /* environment: re-bakes only when the land or layout really changed */
       var sigL = envLand.slice().sort().join(',');
@@ -1318,11 +1572,17 @@
         var rec = addRec(n);
         if (rec.it && rec.it.kind === 'path') pathChanged = true;
       });
-      /* a stored copy that came back (undo) */
+      /* a stored copy that came back (undo); a copy whose neighbours re-jittered it or whose path
+         piece turned */
+      var varied = false;
       d.same.forEach(function (uid) {
         var rec = recs.get(uid);
-        if (rec && rec.hidden && !(placing && placing.uid === uid)) { rec.removeAfter = false; setHidden(rec, false); }
+        if (!rec) return;
+        if (rec.hidden && !(placing && placing.uid === uid)) { rec.removeAfter = false; setHidden(rec, false); }
+        var pl = nextBy[uid] ? varyPlace(rec, nextBy[uid]) : undefined;
+        if (pl) { rec.batch.move(uid, rec.x, rec.y, pl); placeRec(rec); refreshAttachments(rec); varied = true; }
       });
+      if (varied && env) env.invalidateShadows();
       if (pathChanged || firstSync) updatePaths();
       /* the drop-in (placement / move confirmed), once per placement */
       if (anim.dropUid != null) {
@@ -1339,6 +1599,7 @@
       setMode(newMode);
       setSelected(view.selectedUid != null && recs.has(view.selectedUid) ? view.selectedUid : null);
       placementState(view.placing || null);
+      updateConeMounts();                   /* a stage being moved hands the cones back to the buoys */
       /* actors */
       syncActors(view);
       /* the keyboard list */
@@ -1350,6 +1611,50 @@
       anchorsDirty = true;
       maybeReady();
       wake();
+    }
+    /* the copies the view asks for → [{uid, id, x, y, st, sk, jit, jsig, yaw}]: the house with the
+       child's trim, each city building with its own (by uid), organic and small decor with their
+       placement jitter (jsig = the same-id neighbours it depends on), auto-tiled paths with their
+       piece and yaw when the path model builds pieces */
+    function nextCopies(list, style) {
+      var nbs = L ? idNeighbours(list, fpOf, isOrganic) : {};
+      var pieced = !!(L && typeof L.pathPiece === 'function') && list.some(function (p) { return piecedPath(p.id); });
+      var pieces = pieced ? pathPieces(list, isPath, L.pathPiece) : {};
+      return list.map(function (p) {
+        var st = resolveStyle(p.id, copyStyle(L, p.id, p.uid, style, user.seed));
+        var n = { uid: p.uid, id: p.id, x: p.x | 0, y: p.y | 0, st: st, sk: K.stateKey(p.id, st), jit: null, jsig: '', yaw: undefined };
+        var pc = pieces[p.uid];
+        if (pc && piecedPath(p.id)) { n.st = { piece: pc.piece }; n.sk = 'p:' + pc.piece; n.yaw = pc.yawDeg; }
+        var nb = nbs[p.uid];
+        n.jit = jitterFor(L, p.uid, p.id, nb);
+        if (n.jit && nb && nb.length) n.jsig = nb.join(',');
+        return n;
+      });
+    }
+    function fpOf(id) { var it = C.item(id); return (it && it.fp) || [1, 1]; }
+    function isOrganic(id) { var e = L && L.LOOK && L.LOOK[id]; return !!(e && L.ORGANIC_KINDS && L.ORGANIC_KINDS[e.kind]); }
+    function isPath(id) { var it = C.item(id); return !!(it && it.kind === 'path'); }
+    /* a path model opts into auto-tiling with `pieces: true` (it builds ctx.stateKey 'p:<piece>') */
+    function piecedPath(id) { var m = SL3D.models && SL3D.models[id]; return isPath(id) && !!(m && m.pieces); }
+    /* the Showtime cones ride the Concert Stage's truss ('cone0..2') while it is placed (a v2 env) */
+    function updateConeMounts() {
+      if (!env || typeof env.setConeMounts !== 'function') return;
+      var st = null, pts = null, sig = '';
+      for (var i = 0; i < recList.length && !st; i++) { var r = recList[i]; if (r.id === 'bld_stage' && !r.hidden && !r.storing && !r.dead) st = r; }
+      if (st && st.tpl && st.tpl.anchors) {
+        pts = [];
+        for (var k = 0; k < 3; k++) {
+          var nm = 'cone' + k;
+          if (!st.tpl.anchors[nm]) continue;
+          anchorOf(st, nm, _v2);
+          pts.push({ x: _v2.x, y: _v2.y, z: _v2.z });
+          sig += nm + ':' + _v2.x.toFixed(3) + ',' + _v2.y.toFixed(3) + ',' + _v2.z.toFixed(3) + ';';
+        }
+        if (!pts.length) pts = null;
+      }
+      if (sig === coneSig) return;
+      coneSig = sig;
+      try { env.setConeMounts(pts); } catch (e) { issue('env.setConeMounts: ' + errText(e)); }
     }
     function updatePaths() {
       var nets = [];
@@ -1366,6 +1671,7 @@
       mode = m;
       /* an edit-mode drag turns into place mode mid-gesture: keep the gesture and the zoom */
       if (rig) rig.setMode(m, { keepZoom: !!drag });
+      envEdit(m !== 'play');                 /* editing eases the light to k 0, the brightest */
       xcall('actors', 'setMode', m);
       syncCamButtons();
       applyTouchAction();
@@ -1404,10 +1710,11 @@
     function applyEdit() {
       var ghost = null;
       if (placing) {
-        var tf = templateFor(placing.id, lastView ? lastView.style : {});
+        /* the ghost wears the copy's own look (a moved building keeps its trim, the home its shape) */
+        var tf = templateFor(placing.id, copyStyle(L, placing.id, placing.uid, lastView ? lastView.style : {}, user.seed));
         ghost = { id: placing.id, st: tf.st, stateKey: tf.stateKey, template: tf.tpl, material: tf.material };
       }
-      xcall('edit', 'setState', editState(mode, landKeys, envUnlocked, placing, ghost, selectedUid));
+      xcall('edit', 'setState', editState(mode, landKeys, envUnlocked, placing, ghost, selectedUid, DEBUG.grid));
     }
 
     /* ================================================================
@@ -1498,10 +1805,12 @@
     }
     function tapItemUid(uid) {
       var rec = recs.get(uid);
-      if (!rec) return;
+      if (!rec || encoreHeld(uid)) return;      /* a stage mid-encore ignores its taps */
       startAnim(rec, 'squish', false);          /* the universal squish + 'pop' */
       tell('tapItem', uid);
     }
+    function encoreLive() { return !!(encoreLock && perfNow() < encoreLock.until); }
+    function encoreHeld(uid) { return encoreLive() && encoreLock.uid === uid; }
     /* a tap on a pet / the avatar: the actors' own tap reaction (a happy hop + emote; the avatar's
        wave + finger-heart + 'pop'), then the host's hook (its emote of the same target is the same
        moment, so the dedupe in localEmote drops it) */
@@ -1789,7 +2098,7 @@
         items.push({ key: 'u:' + r.uid, label: itemLabel(r.it, mode, r.uid === selectedUid) });
       });
       if (mode === 'play') {
-        (Array.isArray(view.pets) ? view.pets : []).forEach(function (p) { if (p && p.id) items.push({ key: 'pet:' + p.id, label: petLabel(C, p) }); });
+        (Array.isArray(view.pets) ? view.pets : []).forEach(function (p) { if (p && p.id) items.push({ key: 'pet:' + p.id, label: petLabel(C, p, Copy) }); });
         var hasHouse = placedList.some(function (p) { return p.id === 'house_cottage'; });
         if (hasHouse && view.avatar !== false) items.push({ key: 'me', label: 'That’s you!' });
       }
@@ -1847,8 +2156,22 @@
       wake();
       if (name === 'glow') return setLitInternal(uid, !litMem[uid], true);
       if (name === 'launch') return launchAct(rec);
-      /* 'homeClose' supersedes a held 'home' act: the model closes the door from its pose */
+      if (name === 'encore') return encoreAct(rec);
+      /* 'homeClose' supersedes a held 'home' act: the model closes the door from its pose;
+         the city buildings' acts (snap, serve, screen, record, dance, hangout) restart on a re-tap */
       return runAct(rec, modelAct(name, !!litMem[uid]));
+    }
+    /* the Concert Stage's encore: the model act (sting, the LED wall, moving heads, the crew's 'stage'
+       perform, confetti), 8 s of Showtime that then gives back the child's own setting, and the
+       skyline shot eased in toward the stage. A re-tap while it runs is ignored. */
+    function encoreAct(rec) {
+      if (encoreHeld(rec.uid)) return resolved(false);
+      var sec = (L && L.TEMPO && L.TEMPO.encoreSec) || ENCORE_SEC;
+      encoreLock = { uid: rec.uid, until: perfNow() + sec * 1000 };
+      var p = runAct(rec, 'encore');
+      if (rig && !reduced && mode === 'play') rig.skyline({ easeIn: ENCORE_CAM.easeIn, hold: ENCORE_CAM.hold, at: { x: rec.wx, z: rec.wz } });
+      showtime(true, { encoreMs: sec * 1000, quiet: true });
+      return p;
     }
     function launchAct(rec) {
       var spot = anchorOf(rec, 'spot', new T.Vector3());
@@ -1981,7 +2304,9 @@
       wake();
       if (o.encoreMs > 0) {
         if (suspended || revoked) return resolved(false);    /* off screen (a game is starting): no encore */
-        if (userShow) { later(encoreDance, reduced ? 200 : 1200); return resolved(true); }
+        /* the stage encore owns the crew's 8-count: no controller dance break meanwhile */
+        var stageLed = encoreLive();
+        if (userShow) { if (!stageLed) later(encoreDance, reduced ? 200 : 1200); return resolved(true); }
         if (encore) { cancelLater(encore.timer); cancelLater(encore.danceTimer); }
         var first = !encore;
         encore = { timer: later(endEncore, Math.max(1000, +o.encoreMs)), danceTimer: 0 };
@@ -1989,10 +2314,10 @@
           if (env) env.showtime(true, { reduced: reduced });
           if (rig) rig.showOrbit(true);
           musicContext('island_showtime');
-          sfx('sting', 0.8); sfx('whoosh', 0.7);
+          if (!o.quiet && !stageLed) { sfx('sting', 0.8); sfx('whoosh', 0.7); }    /* the stage act plays its own sting */
           xcall('actors', 'setShowtime', true);
         }
-        encore.danceTimer = later(encoreDance, reduced ? 300 : 1800);
+        if (!stageLed) encore.danceTimer = later(encoreDance, reduced ? 300 : 1800);
         return resolved(true);
       }
       onOff = !!onOff;
@@ -2022,6 +2347,7 @@
     /* the island left the screen (a game, another tab, a profile switch) mid-encore: back to day at
        once, with no sound and no music change (rewards-world sets the music when the island returns) */
     function endEncoreQuietly() {
+      encoreLock = null;
       if (!encore) return;
       cancelLater(encore.timer); cancelLater(encore.danceTimer);
       encore = null;
@@ -2031,11 +2357,12 @@
       if (rig) rig.showOrbit(false);
       xcall('actors', 'setShowtime', false);
     }
-    /* the encore's dance break (a timer): only while the island is on screen and the show is still on */
-    function encoreDance() { if (!suspended && !revoked && showOn()) danceNow(); }
+    /* the encore's dance break (a timer): only while the island is on screen, the show is still on
+       and no stage encore leads the crew */
+    function encoreDance() { if (!suspended && !revoked && showOn() && !encoreLive()) danceNow(); }
     function scheduleDance() {
       if (!showOn() || showK < 0.98) { if (!showOn()) nextDanceBar = -1; return; }
-      if (dance || mode !== 'play' || covered || suspended) return;
+      if (dance || mode !== 'play' || covered || suspended || encoreLive()) return;
       var nd = nextDance(beat.bar, nextDanceBar, DANCE_EVERY_BARS);
       nextDanceBar = nd.next;
       if (nd.due) danceNow();
@@ -2045,7 +2372,7 @@
       return { x: 0, y: 0, z: 0 };
     }
     function danceNow() {
-      if (dead || dance || mode !== 'play' || suspended || revoked) return;
+      if (dead || dance || mode !== 'play' || suspended || revoked || encoreLive()) return;
       var sec = DANCE_COUNTS * 60 / DANCE_BPM;
       var total = xcall('actors', 'dance', { bpm: DANCE_BPM, counts: DANCE_COUNTS, reduced: reduced });
       total = typeof total === 'number' && total > 0 ? total : sec + (reduced ? 0 : 2);
@@ -2060,6 +2387,29 @@
       _v2.set(dn.x, dn.y + 1.2, dn.z);
       fxEmit('sparkle', _v2, reduced ? 8 : 24);
       sfx('cheer', 0.8);
+    }
+
+    /* ---------------- crew anchors, the QA grid, the LOW tier mark ---------------- */
+    /* the crew's building performs (the booth's front, the café 'seat', the rooftop 'roof', the stage
+       deck) resolve item anchors live, so a moved building is followed; an anchor the template does
+       not have is null (never the 'top' fallback: no crew member is sent onto a roof by mistake) */
+    function anchorFn(uid, name, out) {
+      var rec = recs.get(uid);
+      if (!rec || rec.dead || rec.hidden || rec.storing || !rec.tpl) return null;
+      var nm = name || 'top', tpl = rec.tpl;
+      if (nm !== 'top' && !(tpl.anchors && tpl.anchors[nm]) && !(tpl.pivots && tpl.pivots[nm])) return null;
+      anchorOf(rec, nm, _anc);
+      out = out && typeof out === 'object' ? out : {};
+      out.x = _anc.x; out.y = _anc.y; out.z = _anc.z;
+      return out;
+    }
+    function wireAnchors() { xcall('actors', 'setAnchorFn', anchorFn); }
+    function onDebugGrid() { if (!dead && !failed) { applyEdit(); wake(); } }
+    function markTier() {
+      try {
+        var de = root.document && root.document.documentElement;
+        if (de && de.classList) { if (tier === 'LOW') de.classList.add('sl-low'); else de.classList.remove('sl-low'); }
+      } catch (e) { /* no document element: nothing to mark */ }
     }
 
     /* ================================================================
@@ -2080,7 +2430,8 @@
       cancelLater(readyTimer);
       if (canvas) canvas.style.opacity = '1';
       if (container) container.classList.add('is-ready');
-      if (rig && !reduced) rig.reveal();
+      /* the establishing shot over the bay (play mode; reduced motion opens on the child's view) */
+      if (rig && !reduced && mode === 'play' && opts.skyline !== false) rig.skyline();
       musicContext(userShow ? 'island_showtime' : 'island_day');
       tell('ready');
       wake();
@@ -2141,13 +2492,17 @@
       xcall('actors', 'setReduced', reduced);
       xcall('fx', 'setReduced', reduced);
       xcall('edit', 'setReduced', reduced);
+      layerCall('city', 'setReduced', reduced);
+      layerCall('life', 'setReduced', reduced);
       for (var i = 0; i < recList.length; i++) { recList[i].a.reduced = reduced; recList[i].idlePending = true; }
       wake();
     }
     function setUser(u) {
+      var prev = user;
       user = normUser(u);
       if (env && typeof env.setMember === 'function') env.setMember(user.color);
       xcall('fx', 'setMember', user.color);
+      userLayers(prev);
       recList.forEach(function (r) {
         cancelAct(r, false);
         var an = r.anims;
@@ -2163,6 +2518,38 @@
       hideBubble();
       wake();
     }
+    /* a new child: the member colour and first name reach the city (its hero board); a new seed is a
+       new coastline — env.setUser / env.setSeed when the env offers them, else the env is rebuilt */
+    function userLayers(prev) {
+      var seedCh = String(prev.seed) !== String(user.seed), nameCh = prev.name !== user.name;
+      layerCall('city', 'setMember', user.color);
+      if (nameCh) layerCall('city', 'setUser', { name: user.name });
+      if (!env || (!seedCh && !nameCh)) return;
+      if (typeof env.setUser === 'function') {
+        try { env.setUser({ name: user.name, seed: user.seed, color: user.color }); } catch (e) { issue('env.setUser: ' + errText(e)); }
+        return;
+      }
+      if (seedCh && typeof env.setSeed === 'function') {
+        try { env.setSeed(user.seed); } catch (e2) { issue('env.setSeed: ' + errText(e2)); }
+        return;
+      }
+      if (seedCh && root.SLTerrain3D) rebuildEnv();
+    }
+    /* the environment alone, rebuilt in place (items, actors and effects stay) */
+    function rebuildEnv() {
+      try { if (env) { if (env.group && env.group.parent) env.group.parent.remove(env.group); env.dispose(); } } catch (e) { issue('env dispose: ' + errText(e)); }
+      env = null;
+      disposeLayers();
+      try {
+        buildEnv();
+        env.setLand(envUnlocked, lastView && lastView.world && Array.isArray(lastView.world.placed) ? lastView.world : { placed: placedList });
+        if (typeof env.setShow === 'function') env.setShow(showOn() ? 1 : 0);
+        if (typeof env.show === 'number') { showK = env.show; showDirty = true; }
+        coneSig = null;
+        updateConeMounts();
+      } catch (e3) { fail('env rebuild: ' + errText(e3)); }
+      wake();
+    }
     function info() {
       var out = {
         version: VERSION, tier: tier, mode: mode, ready: readyFired, failed: failed, reduced: reduced,
@@ -2170,8 +2557,12 @@
         show: Math.round(showK * 1000) / 1000, showtime: userShow, encore: !!encore, dancing: !!dance,
         suspended: suspended, covered: covered, lost: lost, revoked: revoked,
         systems: { actors: sys.actors ? sys.actors.name : null, fx: sys.fx ? sys.fx.name : null, edit: sys.edit ? sys.edit.name : null },
+        layers: { owner: layers.owner, city: !!layers.city, life: !!layers.life, terrain: !!root.SLTerrain3D },
+        stageEncore: encoreLive() ? encoreLock.uid : null, debugGrid: DEBUG.grid, seeded: user.seed != null,
         camera: rig ? rig.info() : null, beat: { bpm: beat.bpm, bar: beat.bar, music: !!beat.music }, issues: issues.slice()
       };
+      try { if (layers.city && typeof layers.city.info === 'function') out.city = layers.city.info(); } catch (e) {}
+      try { if (layers.life && typeof layers.life.info === 'function') out.life = layers.life.info(); } catch (e) {}
       try { if (env) out.env = env.info(); } catch (e) {}
       try { if (lease) out.lease = lease.info(); } catch (e) {}
       out.actors = xcall('actors', 'info') || null;
@@ -2187,7 +2578,8 @@
         teardownContent();
         buildEnv();
         buildSystems();
-        envUnlocked = ['home']; landSig = ''; firstSync = true; srSig = '';
+        wireAnchors();
+        envUnlocked = ['home']; landSig = ''; firstSync = true; srSig = ''; coneSig = null;
         if (v) syncView(v);
         if (userShow && env) env.setShow(1);
         anchorsDirty = true;
@@ -2203,8 +2595,9 @@
       batchList.slice().forEach(function (b) { try { b.batch.dispose(); } catch (e) {} });
       batchList.length = 0; batches.clear();
       disposeSystems();
-      if (env) { try { env.dispose(); } catch (e) { issue('env dispose: ' + errText(e)); } env = null; }
-      riseFx = null; dance = null;
+      if (env) { try { env.dispose(); } catch (e) { issue('env dispose: ' + errText(e)); } env = null; }    /* a v2 env takes its city and life with it */
+      disposeLayers();
+      riseFx = null; dance = null; encoreLock = null;
     }
     function dispose() {
       if (dead) return;
@@ -2212,6 +2605,8 @@
       dead = true;
       timers.slice().forEach(function (id) { clearTimeout(id); });
       timers.length = 0;
+      var di = DEBUG.listeners.indexOf(onDebugGrid);
+      if (di >= 0) DEBUG.listeners.splice(di, 1);
       if (unsubQ) { try { unsubQ(); } catch (e) {} unsubQ = null; }
       if (controls) { controls.dispose(); controls = null; }
       if (rig) { rig.dispose(); rig = null; }
@@ -2234,13 +2629,24 @@
       takeLease();
       buildEnv();
       buildSystems();
+      wireAnchors();
       placeCanvas();
+      markTier();
+      if (queryGrid()) DEBUG.grid = true;
+      DEBUG.listeners.push(onDebugGrid);
       if (!CamApi || typeof CamApi.Rig !== 'function') throw new Error('camera.js missing');
       rig = new CamApi.Rig({ grid: Gr, motion: Mo, reduced: reduced, land: ['home'], aspect: 16 / 9 });
       rig.update(0); rig.apply(camera);
       controls = CamApi.Controls(canvas, rig, {
         press: onPress, tap: onTap, longPress: onLongPress, hold: onHold, dragStart: onDragStart, drag: onDrag, dragEnd: onDragEnd,
-        camera: afterCamera, input: function () { if (lease) lease.input(); },
+        camera: afterCamera,
+        /* a finger on the glass holds the hero shot still (the tap picks what was seen); a wheel or a
+           key hands it back at once, and so does lifting the finger */
+        input: function (kind) {
+          if (lease) lease.input();
+          if (rig) { if (kind === 'press') rig.freeze(true); else rig.interrupt(); }
+        },
+        up: function () { if (rig) { rig.freeze(false); rig.interrupt(); wake(); } },
         error: function (e) { issue('pointer: ' + errText(e)); }
       });
       if (typeof SL3D.onQuality === 'function') {
@@ -2530,6 +2936,7 @@
   ].join('\n');
   var CELL_FRAG = [
     'uniform float uTime;',
+    'uniform float uFade;',
     'varying vec2 vUv;',
     'varying vec3 vFill;',
     'varying vec3 vEdge;',
@@ -2543,12 +2950,13 @@
     '  float dash = 1.0;',
     '  if (vStyle.z > 0.5) { float s = abs(p.x) > abs(p.y) ? p.y : p.x; dash = step(0.45, fract(s * 6.0 + 0.25)); }',
     '  float pulse = vStyle.w > 0.5 ? 0.72 + 0.28 * sin(uTime * 9.42478) : 1.0;',   /* 1.5 Hz */
-    '  float a = mix(vStyle.x, vStyle.y * dash, edge) * pulse;',
+    '  float a = mix(vStyle.x, vStyle.y * dash, edge) * pulse * uFade;',
     '  if (a < 0.01) discard;',
     '  gl_FragColor = vec4(mix(vFill, vEdge, edge), a);',
     '  #include <colorspace_fragment>',
     '}'
   ].join('\n');
+  var MINI_WASH = 0.07, MINI_FADE = 0.2;          /* = SLEdit3D GRID_WASH / FADE_SEC */
   function MiniEdit(h) {
     var K = h.K, T = h.THREE;
     this.h = h; this.K = K; this.T = T;
@@ -2562,7 +2970,8 @@
     geo.setAttribute('aEdge', this.edge);
     geo.setAttribute('aStyle', this.style);
     this.geo = geo;
-    this.uni = { uTime: { value: 0 } };
+    this.uni = { uTime: { value: 0 }, uFade: { value: 1 } };
+    this.fadeT = MINI_FADE;
     this.mat = new T.ShaderMaterial({
       uniforms: this.uni, vertexShader: CELL_VERT, fragmentShader: CELL_FRAG,
       transparent: true, depthWrite: false, toneMapped: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2
@@ -2594,7 +3003,7 @@
     var G = this.h.grid, C = this.h.core, L = this.h.look, E = (L && L.EDIT) || {};
     var mode = s.mode === 'edit' || s.mode === 'place' ? s.mode : 'play';
     var land = s.land || {}, keys = Object.keys(land), pl = s.placing, n = 0, i;
-    var gridA = (E.grid && E.grid.opacity) || 0.55;
+    var gridA = (E.grid && E.grid.opacity) || 0.55, wasShown = this.cells.visible;
     var special = {};
     if (mode === 'place' && pl) {
       var it = C.item(pl.id) || {};
@@ -2603,11 +3012,12 @@
       ent.forEach(function (k) { special[k] = 'ent'; });
       cells.forEach(function (k) { special[k] = pl.ok ? 'ok' : 'bad'; });
     }
-    if (mode !== 'play') {
+    if (mode !== 'play' || s.grid) {
+      /* the dashed squares lie flush on the pads (+ 0.012) over a faint Cloud White wash */
       for (i = 0; i < keys.length && n < this.cap; i++) {
         if (special[keys[i]]) continue;
         var p = G.parseKey(keys[i]);
-        this._cell(n++, p.c, p.r, G.surfaceY(p.c, p.r) + 0.012, 'Cloud White', 0, 'Cloud White', gridA, true, false);
+        this._cell(n++, p.c, p.r, G.surfaceY(p.c, p.r) + 0.012, 'Cloud White', MINI_WASH, 'Cloud White', gridA, true, false);
       }
       var self = this;
       Object.keys(special).forEach(function (k) {
@@ -2624,6 +3034,7 @@
     this.pulsing = mode === 'place' && !!pl && !pl.ok;
     this.cells.count = n;
     this.cells.visible = n > 0;
+    if (n > 0 && !wasShown) { this.fadeT = this.reduced ? MINI_FADE : 0; this.uni.uFade.value = this.reduced ? 1 : 0; }
     this.cells.instanceMatrix.needsUpdate = true;
     if (this.cells.instanceColor) this.cells.instanceColor.needsUpdate = true;
     this.edge.needsUpdate = true; this.style.needsUpdate = true;
@@ -2673,6 +3084,11 @@
     if (!this.reduced) this.t += dt;               /* reduced motion: no pulse, no wobble */
     this.uni.uTime.value = this.t;
     var busy = !this.reduced && this.pulsing && this.cells.visible;
+    if (this.fadeT < MINI_FADE) {                  /* the grid's 0.2 s fade-in (a cut when reduced) */
+      this.fadeT = this.reduced ? MINI_FADE : this.fadeT + dt;
+      this.uni.uFade.value = Math.min(1, this.fadeT / MINI_FADE);
+      if (this.fadeT < MINI_FADE) busy = true;
+    }
     if (!this.ghost || !this.ghost.has('ghost')) return busy;
     if (this.reduced && !this.wobbled) return busy;
     var E = (this.h.look && this.h.look.EDIT && this.h.look.EDIT.ghost) || {};
@@ -2686,7 +3102,7 @@
     this.wobbled = !this.reduced;              /* one last level write after reduced motion turns on */
     return !this.reduced || busy;
   };
-  EP.setReduced = function (on) { this.reduced = !!on; };
+  EP.setReduced = function (on) { this.reduced = !!on; if (this.reduced) { this.fadeT = MINI_FADE; this.uni.uFade.value = 1; } };
   EP.dispose = function () {
     if (this.ghost) { this.ghost.dispose(); this.ghost = null; }
     this.blob.dispose();
@@ -2708,6 +3124,7 @@
     this._v = new this.T.Vector3();
     this.user = h.user || {};
     this.camPos = new this.T.Vector3();
+    this.anchorFn = null;
   }
   var AP = MiniActors.prototype;
   function accSig(acc) { acc = acc || {}; return ['hat', 'neck', 'face', 'back'].map(function (k) { return acc[k] || '-'; }).join('|'); }
@@ -2892,7 +3309,8 @@
     for (i = 0; i < this.pets.length; i++) if (this.pets[i].active) p = this.pets[i];
     if (!p) p = this.pets[0];
     if (!p) return 0;
-    var seat = this.h.itemPoint(uid, 'seat', new this.T.Vector3()) || this.h.itemPoint(uid, 'top', new this.T.Vector3());
+    var v = new this.T.Vector3();
+    var seat = (this.anchorFn && this.anchorFn(uid, 'seat', v)) || this.h.itemPoint(uid, 'top', v);
     if (!seat) return 0;
     var M = this.h.motion, B = (M && M.BOUNCE) || { length: 2.2, maxLead: 1.2 };
     var dist = Math.hypot(seat.x - p.x, seat.z - p.z), lead = Math.max(0.4, Math.min(B.maxLead || 1.2, dist / 1.6));
@@ -2909,6 +3327,8 @@
     return { pets: this.pets.map(function (p) { return { id: p.id, cell: p.cell, active: p.active }; }), avatar: !!this.avatar, dancing: this.danceT >= 0 };
   };
   AP.setShow = function (k) { this.showK = k; };
+  /* live item anchors: the trampoline's 'seat' (the top when a model has none) */
+  AP.setAnchorFn = function (fn) { this.anchorFn = typeof fn === 'function' ? fn : null; };
   AP.setShowtime = function (on) { this.showtime = !!on; };
   AP.setMode = function (m) { this.mode = m; };
   AP.setReduced = function (on) { this.reduced = !!on; };
@@ -2928,6 +3348,10 @@
     normMode: normMode, batchKey: batchKey, diffPlaced: diffPlaced, litChanges: litChanges, rayBox: rayBox,
     choosePick: choosePick, dragTarget: dragTarget, itemLabel: itemLabel, petLabel: petLabel,
     nextDance: nextDance, modelAct: modelAct, toScreen: toScreen, FX_PRESETS: FX_PRESETS,
+    /* Encore City: per-copy style, placement variety, auto-tiling, layer ownership, the QA grid */
+    ENCORE_CAM: ENCORE_CAM, ENCORE_SEC: ENCORE_SEC, NO_JITTER: NO_JITTER,
+    seedVariant: seedVariant, houseStyle: houseStyle, copyStyle: copyStyle, jitterFor: jitterFor, idNeighbours: idNeighbours,
+    pathPieces: pathPieces, layerOwner: layerOwner, gridFromQuery: gridFromQuery, debugGrid: debugGrid,
     /* the sibling seams (tests/fix-seams.test.js); mount() itself, for the Node harness that injects
        a fake DOM, kit, lease and siblings through the same globals the browser uses */
     mount: mount, normUser: normUser, actorState: actorState, editState: editState, raySphere: raySphere, pickHits: pickHits,
